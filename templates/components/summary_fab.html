@@ -1,0 +1,54 @@
+<div id="summary-widget-root"
+     class="summary-widget"
+     data-sidebar-course-pk="{% if sidebar_course %}{{ sidebar_course.pk }}{% endif %}"
+     data-generate-url-pattern="{% url 'analytics_professor:course_summary_generate' 0 %}">
+    {{ summary_courses|json_script:"summary-courses-data" }}
+    <input type="hidden" id="summary-csrf" value="">
+
+    <div id="summary-panel" class="summary-panel" aria-live="polite" role="dialog" aria-labelledby="summary-panel-title" aria-hidden="true">
+        <div class="summary-panel-card">
+            <div class="summary-panel-header">
+                <div class="summary-panel-header-text">
+                    <h2 id="summary-panel-title" class="summary-panel-title">This week in class</h2>
+                    <p id="summary-panel-course" class="summary-panel-course-label"></p>
+                </div>
+                <div class="summary-panel-actions">
+                    <button type="button" id="summary-refresh-btn" class="summary-panel-btn" aria-label="Refresh summary" title="Refresh">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                        </svg>
+                    </button>
+                    <button type="button" id="summary-close-btn" class="summary-panel-btn" aria-label="Close summary" title="Close">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="summary-course-picker-wrap" class="summary-course-picker-wrap hidden">
+                <label for="summary-course-picker" class="sr-only">Select course</label>
+                <select id="summary-course-picker" class="summary-course-picker"></select>
+            </div>
+            <div id="summary-panel-content" class="summary-panel-content">
+                <p class="text-sm text-examiq-slate">Click the lightbulb to generate your weekly summary.</p>
+            </div>
+            <p id="summary-panel-timestamp" class="summary-panel-timestamp hidden"></p>
+        </div>
+    </div>
+
+    <div class="summary-fab-wrap">
+        <button type="button" id="summary-recall-btn" class="summary-fab summary-fab--recall" aria-label="Show latest summary" title="Show latest summary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <path d="M12 19V5M5 12l7-7 7 7"/>
+            </svg>
+        </button>
+        <div class="summary-fab-primary-wrap">
+            <span class="summary-fab-tooltip">Generate weekly summary</span>
+            <button type="button" id="summary-fab" class="summary-fab" aria-label="Generate weekly summary">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26A7 7 0 0012 2z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>

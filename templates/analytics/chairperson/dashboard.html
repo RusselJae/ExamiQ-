@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Programs - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Programs Dashboard" subtitle="Math performance by degree program in your department." %}
+
+{% if department %}
+<p class="text-sm text-examiq-slate mb-4">Department: <strong>{{ department.name }}</strong></p>
+{% endif %}
+
+<div class="bento-grid mb-6">
+    {% for summary in program_summaries %}
+    <div class="span-half">
+        <div class="bento-card bento-card--elevated bento-card-inner">
+            {% include "components/section_header.html" with title=summary.program.name %}
+            <p class="text-xs text-examiq-slate mb-4">{{ summary.topic_count }} math topics</p>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bento-card bento-card--kpi stat-card stat-card--good bento-card-inner !p-3">
+                    <div class="stat-card-value stat-value-good text-xl">{{ summary.accuracy }}%</div>
+                    <div class="stat-card-label text-xs">Accuracy</div>
+                </div>
+                <div class="bento-card bento-card--kpi stat-card stat-card--primary bento-card-inner !p-3">
+                    <div class="stat-card-value stat-value-primary text-xl">{{ summary.sessions_completed }}</div>
+                    <div class="stat-card-label text-xs">Sessions</div>
+                </div>
+                <div class="bento-card bento-card--kpi stat-card stat-card--navy bento-card-inner !p-3">
+                    <div class="stat-card-value stat-value-navy text-xl">{{ summary.total_answers }}</div>
+                    <div class="stat-card-label text-xs">Answers</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="span-full">
+        {% include "components/empty_state.html" with title="No programs in scope" body="Programs managed by your department will appear here." %}
+    </div>
+    {% endfor %}
+</div>
+
+<div class="bento-card bento-card-inner">
+    {% include "components/section_header.html" with title="All Degree Programs" %}
+    <ul class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-examiq-slate">
+        {% for prog in all_programs %}
+        <li class="py-2 px-3 rounded-lg bg-[var(--color-primary-soft)] border border-[rgba(26,86,50,0.12)]">{{ prog.name }}</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<div class="mt-6 flex justify-end">
+    <a href="{% url 'analytics_chairperson:research_export' %}" class="btn-secondary">Download Research CSV</a>
+</div>
+{% endblock %}

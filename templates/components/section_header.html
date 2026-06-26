@@ -1,0 +1,11 @@
+<div class="section-header">
+    <div>
+        {% if label %}
+        <p class="section-header-label">{{ label }}</p>
+        {% endif %}
+        <h2 class="section-header-title">{{ title }}</h2>
+    </div>
+    {% if action_url and action_label %}
+    <a href="{{ action_url }}" class="text-link">{{ action_label }}</a>
+    {% endif %}
+</div>

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Session Summary - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Session Complete" subtitle=session.topic.name|add:" — "|add:session.get_difficulty_display %}
+
+<div class="bento-grid mb-6">
+    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.total_questions label="Questions" accent="cyan" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.correct_count label="Correct" accent="success" %}</div>
+    <div class="span-kpi">
+        <div class="bento-card bento-card--kpi bento-card-inner">
+            <div class="text-2xl font-bold stat-value-good">{{ session_summary.accuracy }}%</div>
+            <div class="text-sm text-examiq-slate mt-1">Accuracy</div>
+        </div>
+    </div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.avg_confidence label="Avg Confidence" accent="cyan" %}</div>
+
+    <div class="span-half">
+        <div class="bento-card bento-card-inner h-full">
+            <h2 class="text-lg font-semibold text-examiq-navy mb-3">Calibration Insight</h2>
+            <p class="text-sm text-examiq-slate mb-4">{{ session_summary.narrative }}</p>
+            <p class="text-xs text-examiq-slate mb-3">
+                Calibration gap: <strong class="{% if session_summary.calibration_gap > 10 %}text-examiq-mistake{% else %}text-examiq-navy{% endif %}">{{ session_summary.calibration_gap }} pts</strong>
+                (confidence vs accuracy)
+            </p>
+            <ul class="space-y-1 text-sm">
+                {% for key, count in session_summary.calibration_matrix.items %}
+                <li class="flex justify-between py-1 border-b border-slate-50">
+                    <span class="capitalize text-examiq-navy">{{ key|cut:"_" }}</span>
+                    <span class="font-medium text-examiq-slate">{{ count }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="span-half">
+        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col">
+            <h2 class="text-lg font-semibold text-examiq-navy mb-3">Recommended Next Reviews</h2>
+            {% if recommendations %}
+            <ul class="space-y-3 bento-card-scroll flex-1">
+                {% for rec in recommendations %}
+                <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b border-slate-100">
+                    <div>
+                        <p class="font-medium text-examiq-navy">{{ rec.topic_name }}</p>
+                        <p class="text-xs text-examiq-slate">{{ rec.reason }}</p>
+                        <span class="inline-block mt-1 text-xs px-2 py-0.5 rounded-full {% if rec.priority == 'high' %}bg-red-50 text-red-700{% else %}bg-amber-50 text-amber-800{% endif %}">
+                            {{ rec.priority|capfirst }} priority{% if rec.is_due %} — due now{% endif %}
+                        </span>
+                    </div>
+                    <a href="{% url 'reviews:setup' %}?topic={{ rec.topic.pk }}" class="btn-primary btn-primary-sm shrink-0">Review</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            {% include "components/empty_state.html" with compact=True title="You're caught up" body="No urgent topics flagged. Keep practicing to stay sharp." %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if session.mode == 'timed_exam' and answers %}
+<div class="bento-card p-6 mt-8">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Question Review &amp; Explanations</h2>
+    <div class="space-y-4">
+        {% for answer in answers %}
+        <details class="rounded-xl border border-slate-200 overflow-hidden group">
+            <summary class="cursor-pointer px-4 py-3 bg-examiq-bg flex items-center justify-between gap-3">
+                <span class="text-sm font-medium text-examiq-navy line-clamp-1">{{ answer.question.stem|truncatechars:80 }}</span>
+                <span class="shrink-0 text-xs font-semibold px-2 py-1 rounded-full {% if answer.is_correct %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                    {% if answer.timed_out %}Timed out{% elif answer.is_correct %}Correct{% else %}Incorrect{% endif %}
+                </span>
+            </summary>
+            <div class="px-4 py-4 space-y-3 text-sm border-t border-slate-100">
+                <p class="text-examiq-navy">{{ answer.question.stem|linebreaks }}</p>
+                {% if answer.selected_choice %}
+                <p><span class="font-semibold text-examiq-slate">Your answer:</span> {{ answer.selected_choice.label }}. {{ answer.selected_choice.text }}</p>
+                {% elif answer.timed_out %}
+                <p class="text-examiq-slate italic">No answer submitted (time expired).</p>
+                {% endif %}
+                {% with correct=answer.question.choices.all %}
+                {% for choice in correct %}
+                {% if choice.is_correct %}
+                <p><span class="font-semibold text-examiq-slate">Correct answer:</span> {{ choice.label }}. {{ choice.text }}</p>
+                {% endif %}
+                {% endfor %}
+                {% endwith %}
+                {% if answer.question.concept_tag %}
+                <p><span class="font-semibold text-examiq-slate">Concept:</span> {{ answer.question.concept_tag }}</p>
+                {% endif %}
+                {% if answer.question.explanation_steps.all %}
+                <div class="rounded-xl bg-examiq-bg border border-slate-100 p-3 space-y-2">
+                    <p class="font-semibold text-examiq-navy">Explanation</p>
+                    {% for step in answer.question.explanation_steps.all %}
+                    <p class="text-examiq-slate">{{ step.content|linebreaks }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="flex gap-4 justify-center flex-wrap">
+    <a href="{% url 'reviews:setup' %}" class="btn-primary">Review Again</a>
+    <a href="{% url 'analytics_student:dashboard' %}" class="btn-secondary">View Dashboard</a>
+</div>
+{% endblock %}

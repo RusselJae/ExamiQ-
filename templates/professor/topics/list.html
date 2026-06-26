@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Topics - {{ course.code }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Topics</h1>
+    <p class="text-examiq-slate text-sm mt-1">Manage topics for each course in your program curriculum.</p>
+</div>
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+<div class="bento-card bento-card--elevated p-6 shadow-sm mb-6">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Select course</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+            <label for="topics-year-level" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Year Level</label>
+            <select id="topics-year-level" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
+                <option value="">---------</option>
+                {% for yl in year_levels %}
+                <option value="{{ yl.pk }}">{{ yl.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Program</label>
+            <input type="text" readonly value="{{ program.name }}" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-examiq-navy shadow-sm">
+        </div>
+        <div>
+            <label for="topics-subject" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course Code</label>
+            <select id="topics-subject" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
+                <option value="">---------</option>
+            </select>
+            <p id="topics-subjects-fallback" class="text-xs text-amber-700 mt-1 hidden"></p>
+        </div>
+        <div>
+            <label for="topics-course-title" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course Title</label>
+            <input type="text" id="topics-course-title" readonly class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-examiq-navy shadow-sm" placeholder="Select a course code">
+        </div>
+    </div>
+</div>
+
+<div class="bento-card p-6 overflow-x-auto shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-examiq-navy">Topics</h2>
+        {% if selected_subject %}
+        <button type="button" id="open-add-topic-btn" class="btn-primary btn-primary-sm">Add topic</button>
+        {% endif %}
+    </div>
+
+    {% if not selected_subject %}
+    {% include "components/empty_state.html" with compact=True title="Select a course code" body="Choose a year level and course code above to view and manage topics." %}
+    {% elif topics %}
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-200">
+                <th class="pb-3 pr-4 font-medium">Topic name</th>
+                <th class="pb-3 font-medium w-32"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for topic in topics %}
+            <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                <td class="py-3 pr-4 text-examiq-navy">{{ topic.name }}</td>
+                <td class="py-3 whitespace-nowrap text-right">
+                    <button type="button"
+                            class="edit-topic-btn text-link text-sm font-medium mr-3"
+                            data-id="{{ topic.pk }}"
+                            data-name="{{ topic.name|escape }}">Edit</button>
+                    <form method="post"
+                          action="{% url 'analytics_professor:topic_delete' course.pk topic.pk %}"
+                          class="inline"
+                          onsubmit="return confirm('Delete this topic?');">
+                        {% csrf_token %}
+                        <button type="submit" class="text-link text-sm font-medium text-red-600 hover:text-red-700">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% include "components/empty_state.html" with compact=True title="No topics yet" body="Add your first topic for this course." %}
+    {% endif %}
+</div>
+
+<div id="topic-modal-container" class="hidden">
+    {% include "professor/topics/partials/topic_form_modal.html" %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const programId = "{{ program.pk }}";
+    const subjectsUrl = "{% url 'analytics_professor:curriculum_subjects' course.pk %}";
+    const listBaseUrl = "{% url 'analytics_professor:topic_list' course.pk %}";
+    const createUrl = "{% url 'analytics_professor:topic_create' course.pk %}";
+    const selectedSubjectId = "{{ selected_subject_id|default:'' }}";
+
+    const yearSelect = document.getElementById("topics-year-level");
+    const subjectSelect = document.getElementById("topics-subject");
+    const courseTitleInput = document.getElementById("topics-course-title");
+    const fallbackEl = document.getElementById("topics-subjects-fallback");
+    const modalContainer = document.getElementById("topic-modal-container");
+    const topicForm = document.getElementById("topic-form");
+    const topicNameInput = document.getElementById("topic-name-input");
+    const topicSubjectInput = document.getElementById("topic-subject-input");
+    const topicModalTitle = document.getElementById("topic-modal-title");
+
+    function updateCourseTitle() {
+        const selected = subjectSelect.options[subjectSelect.selectedIndex];
+        courseTitleInput.value = selected && selected.dataset.name ? selected.dataset.name : "";
+    }
+
+    function navigateToSubject(subjectId) {
+        if (subjectId) {
+            window.location.href = listBaseUrl + "?subject=" + subjectId;
+        } else {
+            window.location.href = listBaseUrl;
+        }
+    }
+
+    async function loadSubjects(preserveSubjectId) {
+        const yearLevel = yearSelect.value;
+        subjectSelect.innerHTML = '<option value="">---------</option>';
+        courseTitleInput.value = "";
+        if (fallbackEl) {
+            fallbackEl.textContent = "";
+            fallbackEl.classList.add("hidden");
+        }
+        if (!yearLevel) return;
+        const resp = await fetch(subjectsUrl + "?program=" + programId + "&year_level=" + yearLevel);
+        const data = await resp.json();
+        data.subjects.forEach(function(s) {
+            const opt = document.createElement("option");
+            opt.value = s.id;
+            opt.textContent = s.code;
+            opt.dataset.name = s.name;
+            if (preserveSubjectId && String(s.id) === String(preserveSubjectId)) {
+                opt.selected = true;
+            }
+            subjectSelect.appendChild(opt);
+        });
+        updateCourseTitle();
+        if (data.fallback_message && fallbackEl) {
+            fallbackEl.textContent = data.fallback_message;
+            fallbackEl.classList.remove("hidden");
+        }
+    }
+
+    function openModal(mode, topicId, topicName) {
+        topicModalTitle.textContent = mode === "edit" ? "Edit topic" : "Add topic";
+        topicNameInput.value = topicName || "";
+        topicSubjectInput.value = subjectSelect.value;
+        if (mode === "edit" && topicId) {
+            topicForm.action = "{% url 'analytics_professor:topic_edit' course.pk 0 %}".replace("/0/", "/" + topicId + "/");
+        } else {
+            topicForm.action = createUrl;
+        }
+        modalContainer.classList.remove("hidden");
+    }
+
+    function closeModal() {
+        modalContainer.classList.add("hidden");
+    }
+
+    yearSelect.addEventListener("change", function() {
+        loadSubjects();
+    });
+
+    subjectSelect.addEventListener("change", function() {
+        updateCourseTitle();
+        navigateToSubject(subjectSelect.value);
+    });
+
+    document.getElementById("open-add-topic-btn")?.addEventListener("click", function() {
+        openModal("add");
+    });
+
+    document.querySelectorAll(".edit-topic-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            openModal("edit", btn.dataset.id, btn.dataset.name);
+        });
+    });
+
+    document.getElementById("close-topic-modal")?.addEventListener("click", closeModal);
+    document.getElementById("cancel-topic-modal")?.addEventListener("click", closeModal);
+
+    if (selectedSubjectId) {
+        {% if selected_subject %}
+        yearSelect.value = "{{ selected_subject.year_level_id }}";
+        {% endif %}
+        loadSubjects(selectedSubjectId);
+    }
+})();
+</script>
+{% endblock %}

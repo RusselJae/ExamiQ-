@@ -1,0 +1,39 @@
+<div class="span-full filter-bar-container">
+    <div class="bento-card filter-bar-card">
+        <form method="get" class="filter-bar" role="search">
+            <div class="filter-bar__grid">
+                {% for field in filter_form_fields %}
+                    {% if field.type == "search" %}
+                    <label class="filter-bar__field filter-bar__field--search">
+                        <span class="filter-bar__label">{{ field.label|default:"Search" }}</span>
+                        <input
+                            type="search"
+                            name="{{ field.name }}"
+                            value="{{ field.value }}"
+                            placeholder="{{ field.placeholder }}"
+                            class="filter-bar__input"
+                            {% if field.autofocus %}autofocus{% endif %}
+                        >
+                    </label>
+                    {% elif field.type == "select" %}
+                    <label class="filter-bar__field">
+                        <span class="filter-bar__label">{{ field.label }}</span>
+                        <select name="{{ field.name }}" class="filter-bar__select">
+                            <option value="">{{ field.all_label|default:"All" }}</option>
+                            {% for value, label in field.choices %}
+                            <option value="{{ value }}" {% if value == field.selected %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            <div class="filter-bar__actions">
+                <button type="submit" class="btn-primary btn-primary-sm">Apply filters</button>
+                {% if filter_has_active %}
+                <a href="{{ request.path }}" class="btn-secondary btn-primary-sm">Reset</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>

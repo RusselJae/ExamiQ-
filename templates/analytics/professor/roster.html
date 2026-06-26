@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+
+
+{% block title %}Roster - {{ course.code }}{% endblock %}
+
+
+
+{% block content %}
+
+<div class="mb-6">
+
+    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
+
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Student Roster</h1>
+
+</div>
+
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+
+
+<div class="bento-grid">
+
+    {% include "components/filter_bar.html" %}
+
+
+
+    <div class="span-full">
+
+        <div class="bento-card bento-card-inner overflow-x-auto">
+
+            <table class="w-full text-sm">
+
+        <thead>
+
+            <tr class="text-left text-examiq-slate border-b border-slate-100">
+
+                <th class="pb-2 font-medium">Student</th>
+
+                <th class="pb-2 font-medium">Sessions</th>
+
+                <th class="pb-2 font-medium">Accuracy</th>
+
+                <th class="pb-2 font-medium">Avg Confidence</th>
+
+                <th class="pb-2 font-medium">Review Hours</th>
+
+                <th class="pb-2 font-medium"></th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            {% for row in roster %}
+
+            <tr class="border-b border-slate-50">
+
+                <td class="py-2">
+
+                    <a href="{% url 'analytics_professor:student_detail' course.pk row.student.pk %}" class="text-link font-medium">
+
+                        {{ row.student.get_full_name|default:row.student.email }}
+
+                    </a>
+
+                    <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+
+                </td>
+
+                <td class="py-2 text-examiq-slate">{{ row.sessions_completed }}</td>
+
+                <td class="py-2 stat-value-good font-medium">{{ row.accuracy }}%</td>
+
+                <td class="py-2 text-examiq-slate">{{ row.avg_confidence }}</td>
+
+                <td class="py-2 text-examiq-slate">{{ row.review_hours }}h</td>
+
+                <td class="py-2 text-right">
+
+                    <a href="{% url 'analytics_professor:course_heatmap' course.pk %}#student-{{ row.student.pk }}" class="text-link text-xs">Heatmap</a>
+
+                </td>
+
+            </tr>
+
+            {% empty %}
+
+            <tr>
+
+                <td colspan="6" class="py-4 text-examiq-slate">
+
+                    {% if filter_has_active %}No students match your filters.{% else %}No students have practiced in this offering yet.{% endif %}
+
+                </td>
+
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+

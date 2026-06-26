@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Review Windows - {{ course.code }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Review Windows</h1>
+</div>
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+<div class="flex justify-between items-center mb-4">
+    <p class="text-examiq-slate text-sm">Schedule official review periods tied to exams.</p>
+    <a href="{% url 'analytics_professor:window_create' course.pk %}" class="btn-primary">Create window</a>
+</div>
+
+{% if active_windows %}
+<div class="bento-card p-6 mb-6">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Active now</h2>
+    {% include "professor/windows/_window_list.html" with windows=active_windows %}
+</div>
+{% endif %}
+
+{% if upcoming_windows %}
+<div class="bento-card p-6 mb-6">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Upcoming</h2>
+    {% include "professor/windows/_window_list.html" with windows=upcoming_windows %}
+</div>
+{% endif %}
+
+<div class="bento-card p-6">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Past / inactive</h2>
+    {% if past_windows %}
+    {% include "professor/windows/_window_list.html" with windows=past_windows %}
+    {% else %}
+    <p class="text-examiq-slate">No past windows yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

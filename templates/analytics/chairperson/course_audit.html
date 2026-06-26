@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+
+
+{% block title %}Course Audit - EXAMIQ+{% endblock %}
+
+
+
+{% block content %}
+
+{% include "components/page_header.html" with title="Course Audit" subtitle="Read-only view of course offerings used by your students." %}
+
+
+
+<div class="bento-grid">
+
+    {% include "components/filter_bar.html" %}
+
+
+
+    <div class="span-full overflow-x-auto">
+
+        <table class="w-full bento-card bento-card-inner">
+
+        <thead>
+
+            <tr class="text-left text-xs uppercase text-examiq-slate border-b border-slate-100">
+
+                <th class="p-4">Code</th>
+
+                <th class="p-4">Title</th>
+
+                <th class="p-4">Program</th>
+
+                <th class="p-4">Term</th>
+
+                <th class="p-4">Professor</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            {% for course in courses %}
+
+            <tr class="border-b border-slate-50">
+
+                <td class="p-4 font-medium text-examiq-navy">{{ course.code }}</td>
+
+                <td class="p-4">{{ course.name }}</td>
+
+                <td class="p-4 text-sm text-examiq-slate">{{ course.program.name }}</td>
+
+                <td class="p-4 text-sm">{{ course.term }} {{ course.academic_year }}</td>
+
+                <td class="p-4 text-sm">{{ course.professor.get_full_name|default:"—" }}</td>
+
+            </tr>
+
+            {% empty %}
+
+            <tr>
+
+                <td colspan="5" class="p-8 text-center text-examiq-slate">
+
+                    {% if filter_has_active %}No courses match your filters.{% else %}No offerings linked to your students yet.{% endif %}
+
+                </td>
+
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+        </table>
+
+    </div>
+
+
+
+    <div class="span-full">
+
+        {% include "components/pagination.html" %}
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+

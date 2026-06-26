@@ -1,0 +1,39 @@
+<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="edit-question-modal">
+    <div class="bento-card bento-card--elevated p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto shadow-xl" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+        <div class="flex justify-between items-center mb-5">
+            <h2 id="edit-modal-title" class="text-lg font-semibold text-examiq-navy">Edit Question <span id="edit-modal-number"></span></h2>
+            <button type="button" id="close-edit-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="edit-stem" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
+                <textarea id="edit-stem" rows="3" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400" placeholder="Enter question text..."></textarea>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {% for letter in "ABCD" %}
+                <div>
+                    <label for="edit-choice-{{ letter }}" class="block text-sm font-medium text-examiq-slate mb-1">Choice {{ letter }}</label>
+                    <input type="text" id="edit-choice-{{ letter }}" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400">
+                </div>
+                {% endfor %}
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="edit-correct" class="block text-sm font-medium text-examiq-slate mb-1">Correct Answer</label>
+                    <input type="text" id="edit-correct" value="A" maxlength="1" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy uppercase shadow-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400">
+                </div>
+                <div>
+                    <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
+                    <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400" placeholder="AI-generated concept summary">
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-100">
+            <button type="button" id="save-edit-modal" class="btn-primary">Save</button>
+            <button type="button" id="validate-edit-modal" class="btn-secondary">Validate</button>
+            <button type="button" id="cancel-edit-modal" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load examiq_tags %}
+
+{% block title %}Question Distribution - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Question Bank Distribution" subtitle="How questions are spread across programs and topics." %}
+
+{% if distribution %}
+<div class="bento-card overflow-hidden">
+    <table class="w-full text-sm">
+        <thead class="bg-examiq-bg">
+            <tr class="text-left text-examiq-slate">
+                <th class="px-4 py-3 font-medium">Program</th>
+                <th class="px-4 py-3 font-medium">Topic</th>
+                <th class="px-4 py-3 font-medium">Difficulty</th>
+                <th class="px-4 py-3 font-medium">Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in distribution %}
+            <tr class="border-t border-slate-100">
+                <td class="px-4 py-3 text-examiq-navy">{{ item.topic__program__name }}</td>
+                <td class="px-4 py-3 text-examiq-slate">{{ item.topic__name }}</td>
+                <td class="px-4 py-3 text-examiq-slate">{{ item.difficulty|difficulty_label }}</td>
+                <td class="px-4 py-3 font-semibold text-examiq-cyan">{{ item.count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="bento-card p-8 text-center">
+    <p class="text-examiq-slate">No questions in the bank yet.</p>
+</div>
+{% endif %}
+{% endblock %}

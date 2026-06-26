@@ -1,0 +1,18 @@
+{% if course %}
+<nav class="flex flex-wrap gap-2 mb-6" aria-label="Course navigation">
+    <a href="{% url 'analytics_professor:course_detail' course.pk %}"
+       class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
+    <a href="{% url 'analytics_professor:course_roster' course.pk %}"
+       class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Roster</a>
+    <a href="{% url 'analytics_professor:window_list' course.pk %}"
+       class="course-nav-link {% if active_tab == 'windows' %}course-nav-link-active{% endif %}">Review Windows</a>
+    <a href="{% url 'analytics_professor:course_heatmap' course.pk %}"
+       class="course-nav-link {% if active_tab == 'heatmap' %}course-nav-link-active{% endif %}">Heatmap</a>
+    <a href="{% url 'analytics_professor:topic_list' course.pk %}"
+       class="course-nav-link {% if active_tab == 'topics' %}course-nav-link-active{% endif %}">Topics</a>
+    <a href="{% url 'analytics_professor:question_list' course.pk %}"
+       class="course-nav-link {% if active_tab == 'questions' %}course-nav-link-active{% endif %}">Question Bank</a>
+    <a href="{% url 'analytics_professor:feedback_list' course.pk %}"
+       class="course-nav-link {% if active_tab == 'feedback' %}course-nav-link-active{% endif %}">Feedback</a>
+</nav>
+{% endif %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Question Bank - {{ program.name }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_chairperson:program_detail' program.pk %}" class="text-link">&larr; Back to program</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ program.name }}: Question Bank</h1>
+</div>
+
+<div class="flex justify-between items-center mb-4">
+    <span class="ai-assist-badge">AI Assist — coming soon</span>
+    <a href="{% url 'analytics_chairperson:question_create' program.pk %}" class="btn-primary">Add question</a>
+</div>
+
+<div class="bento-card p-6 overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-100">
+                <th class="pb-2 font-medium">Stem</th>
+                <th class="pb-2 font-medium">Topic</th>
+                <th class="pb-2 font-medium">Difficulty</th>
+                <th class="pb-2 font-medium">Mistakes</th>
+                <th class="pb-2 font-medium"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for question in questions %}
+            <tr class="border-b border-slate-50">
+                <td class="py-2 text-examiq-navy max-w-xs truncate">{{ question.stem|truncatechars:60 }}</td>
+                <td class="py-2 text-examiq-slate">{{ question.topic.name }}</td>
+                <td class="py-2 text-examiq-slate">{{ question.get_difficulty_display }}</td>
+                <td class="py-2 text-examiq-mistake">{{ question.mistake_count }}</td>
+                <td class="py-2 text-right space-x-2">
+                    <a href="{% url 'analytics_chairperson:question_edit' program.pk question.pk %}" class="text-link">Edit</a>
+                    <a href="{% url 'analytics_chairperson:question_delete' program.pk question.pk %}" class="text-link text-examiq-mistake">Deactivate</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

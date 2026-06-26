@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Review Question - EXAMIQ+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    {% include "components/page_header.html" with title="Edit & Approve" subtitle="Refine the question before publishing." %}
+    <form method="post" class="bento-card p-6 space-y-4">
+        {% csrf_token %}
+        {{ form|crispy }}
+        {{ choice_formset.management_form }}
+        {{ step_formset.management_form }}
+        <button type="submit" class="btn-primary">Approve & publish</button>
+    </form>
+</div>
+{% endblock %}

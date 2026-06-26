@@ -1,0 +1,13 @@
+<div class="page-header">
+    <div>
+        <h1 class="text-3xl font-bold text-examiq-navy mb-2">{{ title }}</h1>
+        {% if subtitle %}
+        <p class="text-examiq-slate">{{ subtitle }}</p>
+        {% endif %}
+    </div>
+    {% if cta_url and cta_label %}
+    <div class="page-header-actions">
+        <a href="{{ cta_url }}" class="btn-primary">{{ cta_label }}</a>
+    </div>
+    {% endif %}
+</div>

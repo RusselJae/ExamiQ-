@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block app_shell %}
+<div class="auth-screen">
+    <div class="auth-screen__visual">
+        <div class="auth-screen__bg" style="background-image: url('{% static 'assets/cvsu_background.jpg' %}');" aria-hidden="true"></div>
+        <div class="auth-screen__overlay" aria-hidden="true"></div>
+        <div class="auth-screen__brand">
+            <h1 class="auth-screen__title">EXAMIQ+</h1>
+            <p class="auth-screen__tagline">
+                Self-regulated math exam review. Build confidence, track mistakes, crush the exam.
+            </p>
+        </div>
+    </div>
+
+    <div class="auth-screen__form-side">
+        <div class="auth-screen__panel">
+            <div class="auth-card">
+                {% block auth_content %}{% endblock %}
+            </div>
+            {% block auth_footer %}{% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/auth-forms.js' %}"></script>
+{% endblock %}

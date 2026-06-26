@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Campus Admin - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Campus Admin" subtitle="Provision faculty accounts and manage campus users." %}
+
+<div class="bento-grid mb-6">
+    <div class="span-third">
+        <div class="bento-card bento-card--kpi stat-card stat-card--primary bento-card-inner">
+            <div class="stat-card-value stat-value-primary">{{ student_count }}</div>
+            <div class="stat-card-label">Students</div>
+        </div>
+    </div>
+    <div class="span-third">
+        <div class="bento-card bento-card--kpi stat-card stat-card--navy bento-card-inner">
+            <div class="stat-card-value stat-value-navy">{{ professor_count }}</div>
+            <div class="stat-card-label">Professors</div>
+        </div>
+    </div>
+    <div class="span-third">
+        <div class="bento-card bento-card--kpi stat-card stat-card--good bento-card-inner">
+            <div class="stat-card-value stat-value-good">{{ chairperson_count }}</div>
+            <div class="stat-card-label">Chairpersons</div>
+        </div>
+    </div>
+</div>
+
+<div class="flex flex-wrap gap-3">
+    <a href="{% url 'campus:user_list' %}" class="btn-primary btn-primary-sm">Manage users</a>
+    <a href="{% url 'campus:create_professor' %}" class="btn-secondary btn-primary-sm">Create professor</a>
+    <a href="{% url 'campus:create_chairperson' %}" class="btn-secondary btn-primary-sm">Create chairperson</a>
+</div>
+{% endblock %}

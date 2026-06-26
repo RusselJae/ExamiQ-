@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Campus Users - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Campus Users" subtitle="Search, filter, and manage user accounts." %}
+
+<div class="bento-card bento-card-inner mb-4">
+    <form method="get" class="flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-[12rem]">
+            <label for="q" class="block text-xs font-medium text-examiq-slate mb-1">Search</label>
+            <input type="search"
+                   name="q"
+                   id="q"
+                   value="{{ search_query }}"
+                   placeholder="Email or name"
+                   class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green focus:ring-2 focus:ring-green-100 outline-none">
+        </div>
+        <div>
+            <label for="role" class="block text-xs font-medium text-examiq-slate mb-1">Role</label>
+            <select name="role" id="role" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+                <option value="">All roles</option>
+                {% for value, label in role_choices %}
+                <option value="{{ value }}" {% if role_filter == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn-primary btn-primary-sm">Filter</button>
+        <a href="{% url 'campus:create_professor' %}" class="btn-secondary btn-primary-sm">New professor</a>
+        <a href="{% url 'campus:create_chairperson' %}" class="btn-secondary btn-primary-sm">New chairperson</a>
+    </form>
+</div>
+
+<div class="bento-card bento-card-inner overflow-x-auto">
+    <table class="data-table w-full">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for campus_user in users %}
+            <tr>
+                <td>{{ campus_user.email }}</td>
+                <td>{{ campus_user.get_full_name|default:"—" }}</td>
+                <td>{{ campus_user.get_role_display }}</td>
+                <td>{{ campus_user.department.name|default:"—" }}</td>
+                <td>
+                    {% if campus_user.is_active %}
+                    <span class="profile-pill profile-pill--role">Active</span>
+                    {% else %}
+                    <span class="profile-pill">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="post" action="{% url 'campus:toggle_active' campus_user.pk %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-link">
+                            {% if campus_user.is_active %}Deactivate{% else %}Activate{% endif %}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-sm text-examiq-slate py-8">No users match your filters.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination-bar">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&role={{ role_filter }}" class="text-link text-sm">Previous</a>
+    {% endif %}
+    <span class="pagination-bar__info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&role={{ role_filter }}" class="text-link text-sm">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

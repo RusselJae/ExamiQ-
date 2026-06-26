@@ -1,0 +1,4 @@
+{% load examiq_tags %}
+{% if difficulty %}
+<span class="difficulty-pill difficulty-pill--{{ difficulty|lower }}">{{ difficulty|difficulty_label }}</span>
+{% endif %}

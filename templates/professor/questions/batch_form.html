@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ form_title }} - {{ course.code }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:question_list' course.pk %}" class="text-link">&larr; Back to questions</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ form_title }}</h1>
+</div>
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+<form method="post" id="batch-question-form" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="bento-card bento-card--elevated p-6 shadow-sm">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-1">Exam Topic Settings</h2>
+        <p class="text-xs text-examiq-slate mb-4">Select these once. All questions added below will use these settings.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div>
+                <label for="settings-year-level" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Year Level</label>
+                <select id="settings-year-level" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
+                    <option value="">---------</option>
+                    {% for yl in year_levels %}
+                    <option value="{{ yl.pk }}">{{ yl.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Program</label>
+                <input type="text" readonly value="{{ program.name }}" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-examiq-navy shadow-sm">
+            </div>
+            <div>
+                <label for="settings-subject" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course Code</label>
+                <select id="settings-subject" name="subject_display" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
+                    <option value="">---------</option>
+                </select>
+                <p id="subjects-fallback-message" class="text-xs text-amber-700 mt-1 hidden"></p>
+            </div>
+            <div>
+                <label for="settings-course-title" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course Title</label>
+                <input type="text" id="settings-course-title" readonly class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-examiq-navy shadow-sm" placeholder="Select a course code">
+            </div>
+            <div>
+                <label for="settings-topic" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Topic</label>
+                <select id="settings-topic" name="topic" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
+                    <option value="">---------</option>
+                </select>
+            </div>
+            <div>
+                <label for="settings-difficulty" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Difficulty</label>
+                <select id="settings-difficulty" name="difficulty" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
+                    {% for value, label in difficulty_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-center">
+        <button type="button"
+                id="ai-generate-btn"
+                class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition shadow-md hover:shadow-lg">
+            <span aria-hidden="true">&#10022;</span> AI Generate
+        </button>
+    </div>
+
+    <div id="generate-modal-container"></div>
+    <div id="validate-modal-container"></div>
+
+    <div class="bento-card p-6 overflow-x-auto shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-examiq-navy">Questions</h2>
+            <span id="question-count-label" class="text-sm text-examiq-slate">0 questions</span>
+        </div>
+
+        <div id="questions-empty" class="empty-state empty-state--compact">
+            <p class="empty-state-title">No questions yet</p>
+            <p class="empty-state-body">Use AI Generate or add a question manually to get started.</p>
+        </div>
+
+        <table id="questions-table" class="w-full text-sm hidden">
+            <thead>
+                <tr class="text-left text-examiq-slate border-b border-slate-200">
+                    <th class="pb-3 pr-4 font-medium w-12">#</th>
+                    <th class="pb-3 pr-4 font-medium">Question</th>
+                    <th class="pb-3 pr-4 font-medium w-20">Correct</th>
+                    <th class="pb-3 pr-4 font-medium w-40">Concept</th>
+                    <th class="pb-3 font-medium w-44"></th>
+                </tr>
+            </thead>
+            <tbody id="questions-table-body"></tbody>
+        </table>
+    </div>
+
+    <div id="question-fields-store" class="sr-only" aria-hidden="true"></div>
+
+    <input type="hidden" name="question_count" id="question-count" value="0">
+
+    <div class="flex flex-col sm:flex-row gap-3 justify-between">
+        <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2">
+            <span>+</span> Add Another Question
+        </button>
+        <button type="submit" class="btn-primary inline-flex items-center gap-2">
+            Submit All Questions
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/batch-questions.js' %}"></script>
+<script>
+(function() {
+    const coursePk = "{{ course.pk }}";
+    const programId = "{{ program.pk }}";
+    const subjectsUrl = "{% url 'analytics_professor:curriculum_subjects' course.pk %}";
+    const topicsUrl = "{% url 'analytics_professor:curriculum_topics' course.pk %}";
+    const generateUrl = "{% url 'analytics_professor:question_ai_generate' course.pk %}";
+    const validateUrl = "{% url 'analytics_professor:question_ai_validate' course.pk %}";
+    const editUrlBase = "{% url 'analytics_professor:question_batch_edit' course.pk 0 %}".replace("/0/", "/");
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    const yearSelect = document.getElementById("settings-year-level");
+    const subjectSelect = document.getElementById("settings-subject");
+    const courseTitleInput = document.getElementById("settings-course-title");
+    const topicSelect = document.getElementById("settings-topic");
+    const difficultySelect = document.getElementById("settings-difficulty");
+    const fallbackMessage = document.getElementById("subjects-fallback-message");
+    const fieldsStore = document.getElementById("question-fields-store");
+    const tableBody = document.getElementById("questions-table-body");
+    const questionsTable = document.getElementById("questions-table");
+    const questionsEmpty = document.getElementById("questions-empty");
+    const countInput = document.getElementById("question-count");
+    const countLabel = document.getElementById("question-count-label");
+    const generateBtn = document.getElementById("ai-generate-btn");
+    const addQuestionBtn = document.getElementById("add-question-btn");
+    const batchForm = document.getElementById("batch-question-form");
+
+    let questionIndex = 0;
+    let restoring = false;
+
+    const batchConfig = {
+        coursePk: coursePk,
+        yearSelect: yearSelect,
+        subjectSelect: subjectSelect,
+        topicSelect: topicSelect,
+        difficultySelect: difficultySelect,
+        fieldsStore: fieldsStore,
+        tableBody: tableBody,
+        get questionIndex() { return questionIndex; },
+        set questionIndex(v) { questionIndex = v; },
+        ensureFieldsForIndex: ensureFieldsForIndex,
+        setQuestionData: setQuestionData,
+        getQuestionData: getQuestionData,
+        renderTableRow: renderTableRow,
+        syncCountInput: syncCountInput,
+    };
+
+    function truncate(text, max) {
+        if (!text) return "—";
+        return text.length > max ? text.slice(0, max) + "…" : text;
+    }
+
+    function syncCountInput() {
+        countInput.value = questionIndex;
+        const n = questionIndex;
+        countLabel.textContent = n + (n === 1 ? " question" : " questions");
+        const hasQuestions = n > 0;
+        questionsTable.classList.toggle("hidden", !hasQuestions);
+        questionsEmpty.classList.toggle("hidden", hasQuestions);
+    }
+
+    function getField(name) {
+        return fieldsStore.querySelector('[name="' + name + '"]');
+    }
+
+    function ensureFieldsForIndex(index) {
+        if (getField("stem_" + index)) return;
+        const wrapper = document.createElement("div");
+        wrapper.dataset.index = index;
+        wrapper.innerHTML =
+            '<textarea name="stem_' + index + '"></textarea>' +
+            ["A", "B", "C", "D"].map(function(letter) {
+                return '<input type="text" name="choice_' + index + "_" + letter + '">';
+            }).join("") +
+            '<input type="text" name="correct_' + index + '" value="A">' +
+            '<input type="text" name="concept_tag_' + index + '">';
+        fieldsStore.appendChild(wrapper);
+    }
+
+    function getQuestionData(index) {
+        ensureFieldsForIndex(index);
+        const data = {
+            stem: getField("stem_" + index).value,
+            correct: getField("correct_" + index).value || "A",
+            concept: getField("concept_tag_" + index).value,
+            choices: {},
+        };
+        ["A", "B", "C", "D"].forEach(function(letter) {
+            data.choices[letter] = getField("choice_" + index + "_" + letter).value;
+        });
+        return data;
+    }
+
+    function setQuestionData(index, data) {
+        ensureFieldsForIndex(index);
+        getField("stem_" + index).value = data.stem || "";
+        getField("correct_" + index).value = (data.correct || "A").toUpperCase();
+        getField("concept_tag_" + index).value = data.concept || "";
+        ["A", "B", "C", "D"].forEach(function(letter) {
+            getField("choice_" + index + "_" + letter).value =
+                (data.choices && data.choices[letter]) || "";
+        });
+    }
+
+    function editUrlFor(index) {
+        return editUrlBase + index + "/";
+    }
+
+    function renderTableRow(index) {
+        const data = getQuestionData(index);
+        let row = tableBody.querySelector('tr[data-index="' + index + '"]');
+        if (!row) {
+            row = document.createElement("tr");
+            row.dataset.index = index;
+            row.className = "border-b border-slate-50 hover:bg-slate-50/60 transition-colors";
+            tableBody.appendChild(row);
+        }
+        row.innerHTML =
+            '<td class="py-3 pr-4 text-examiq-slate font-medium">' + (index + 1) + "</td>" +
+            '<td class="py-3 pr-4 text-examiq-navy max-w-md">' + truncate(data.stem, 80) + "</td>" +
+            '<td class="py-3 pr-4 text-examiq-navy font-medium">' + (data.correct || "—") + "</td>" +
+            '<td class="py-3 pr-4 text-examiq-slate max-w-[10rem] truncate">' + truncate(data.concept, 24) + "</td>" +
+            '<td class="py-3 whitespace-nowrap">' +
+            '<a href="' + editUrlFor(index) + '" class="text-link text-sm font-medium mr-3">Edit</a>' +
+            '<button type="button" class="validate-btn text-link text-sm font-medium mr-2" data-index="' + index + '">Validate</button>' +
+            '<button type="button" class="delete-question-btn btn-icon-delete" data-index="' + index + '" aria-label="Delete question">' +
+            window.ExamiQBatch.trashIconSvg() + "</button></td>";
+    }
+
+    function addQuestion(data, openEdit) {
+        const index = questionIndex;
+        ensureFieldsForIndex(index);
+        if (data) setQuestionData(index, data);
+        renderTableRow(index);
+        questionIndex += 1;
+        syncCountInput();
+        if (!restoring) window.ExamiQBatch.persist(batchConfig);
+        if (openEdit) window.location.href = editUrlFor(index);
+        return index;
+    }
+
+    function findNextEmptyIndex() {
+        for (let i = 0; i < questionIndex; i++) {
+            if (!getQuestionData(i).stem.trim()) return i;
+        }
+        return questionIndex;
+    }
+
+    function updateCourseTitle() {
+        const selected = subjectSelect.options[subjectSelect.selectedIndex];
+        courseTitleInput.value = selected && selected.dataset.name ? selected.dataset.name : "";
+    }
+
+    async function loadSubjects(selectedSubjectId) {
+        const yearLevel = yearSelect.value;
+        subjectSelect.innerHTML = '<option value="">---------</option>';
+        if (!restoring) {
+            topicSelect.innerHTML = '<option value="">---------</option>';
+            courseTitleInput.value = "";
+        }
+        if (fallbackMessage) {
+            fallbackMessage.textContent = "";
+            fallbackMessage.classList.add("hidden");
+        }
+        if (!yearLevel) return;
+        const resp = await fetch(subjectsUrl + "?program=" + programId + "&year_level=" + yearLevel);
+        const data = await resp.json();
+        data.subjects.forEach(function(s) {
+            const opt = document.createElement("option");
+            opt.value = s.id;
+            opt.textContent = s.code;
+            opt.dataset.name = s.name;
+            if (selectedSubjectId && String(s.id) === String(selectedSubjectId)) opt.selected = true;
+            subjectSelect.appendChild(opt);
+        });
+        updateCourseTitle();
+        if (data.fallback_message && fallbackMessage) {
+            fallbackMessage.textContent = data.fallback_message;
+            fallbackMessage.classList.remove("hidden");
+        }
+    }
+
+    async function loadTopics(selectedTopicId) {
+        const subjectId = subjectSelect.value;
+        topicSelect.innerHTML = '<option value="">---------</option>';
+        if (!subjectId) return;
+        const resp = await fetch(topicsUrl + "?subject=" + subjectId);
+        const data = await resp.json();
+        data.topics.forEach(function(t) {
+            const opt = document.createElement("option");
+            opt.value = t.id;
+            opt.textContent = t.name;
+            if (selectedTopicId && String(t.id) === String(selectedTopicId)) opt.selected = true;
+            topicSelect.appendChild(opt);
+        });
+    }
+
+    async function restoreDraft() {
+        const draft = window.ExamiQBatch.loadDraft(coursePk);
+        if (!draft.questions.length && !draft.settings.yearLevel) return;
+
+        restoring = true;
+        if (draft.settings.yearLevel) {
+            yearSelect.value = draft.settings.yearLevel;
+            await loadSubjects(draft.settings.subjectId);
+            if (draft.settings.subjectId) {
+                await loadTopics(draft.settings.topicId);
+            }
+        }
+        if (draft.settings.difficulty) difficultySelect.value = draft.settings.difficulty;
+
+        window.ExamiQBatch.syncDomFromDraft(batchConfig, draft);
+        restoring = false;
+    }
+
+    function getSettingsFormData() {
+        const fd = new FormData();
+        fd.append("csrfmiddlewaretoken", csrfToken);
+        fd.append("topic", topicSelect.value);
+        fd.append("difficulty", difficultySelect.value);
+        return fd;
+    }
+
+    function runValidate(index, triggerBtn) {
+        const data = getQuestionData(index);
+        const fd = getSettingsFormData();
+        fd.append("stem", data.stem);
+        fd.append("correct_label", data.correct);
+        ["A", "B", "C", "D"].forEach(function(letter) {
+            fd.append("choice_" + letter, data.choices[letter] || "");
+        });
+
+        const validateContainer = document.getElementById("validate-modal-container");
+        validateContainer.innerHTML =
+            '<div class="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">' +
+            '<div class="bento-card p-8 shadow-xl flex flex-col items-center gap-3">' +
+            '<span class="btn-spinner btn-spinner-lg" style="border-color:#1A5632;border-top-color:transparent"></span>' +
+            '<p class="text-sm text-examiq-slate">Validating question…</p></div></div>';
+
+        if (triggerBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(triggerBtn, true, "Validating…");
+        }
+
+        fetch(validateUrl, { method: "POST", body: fd })
+            .then(function(r) { return r.text(); })
+            .then(function(html) { validateContainer.innerHTML = html; })
+            .catch(function() {
+                validateContainer.innerHTML = "";
+                if (window.showToast) window.showToast("Validation failed. Please try again.", "error");
+            })
+            .finally(function() {
+                if (triggerBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+                    window.ExamiQUI.setButtonLoading(triggerBtn, false);
+                }
+            });
+    }
+
+    function onSettingsChange() {
+        if (restoring) return;
+        window.ExamiQBatch.persist(batchConfig);
+    }
+
+    yearSelect.addEventListener("change", function() {
+        loadSubjects().then(onSettingsChange);
+    });
+    subjectSelect.addEventListener("change", function() {
+        updateCourseTitle();
+        loadTopics().then(onSettingsChange);
+    });
+    topicSelect.addEventListener("change", onSettingsChange);
+    difficultySelect.addEventListener("change", onSettingsChange);
+
+    batchForm.addEventListener("submit", function() {
+        window.ExamiQBatch.clearDraft(coursePk);
+    });
+
+    window.addEventListener("beforeunload", function(e) {
+        if (questionIndex > 0) {
+            e.preventDefault();
+            e.returnValue = "";
+        }
+    });
+
+    generateBtn.addEventListener("click", async function() {
+        if (!topicSelect.value) {
+            if (window.showToast) window.showToast("Select a topic before generating questions.", "warning");
+            return;
+        }
+        if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(generateBtn, true, "Generating…");
+        }
+        try {
+            const fd = getSettingsFormData();
+            const resp = await fetch(generateUrl, { method: "POST", body: fd });
+            document.getElementById("generate-modal-container").innerHTML = await resp.text();
+        } catch (err) {
+            if (window.showToast) window.showToast("Generation failed. Please try again.", "error");
+        } finally {
+            if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+                window.ExamiQUI.setButtonLoading(generateBtn, false);
+            }
+        }
+    });
+
+    addQuestionBtn.addEventListener("click", function() {
+        addQuestion(null, true);
+    });
+
+    tableBody.addEventListener("click", function(e) {
+        const deleteBtn = e.target.closest(".delete-question-btn");
+        if (deleteBtn) {
+            const index = parseInt(deleteBtn.dataset.index, 10);
+            if (confirm("Delete this question?")) {
+                window.ExamiQBatch.removeQuestion(batchConfig, index);
+            }
+            return;
+        }
+        const validateBtn = e.target.closest(".validate-btn");
+        if (validateBtn) {
+            runValidate(parseInt(validateBtn.dataset.index, 10), validateBtn);
+        }
+    });
+
+    document.addEventListener("click", function(e) {
+        if (e.target.id === "apply-generated-btn") {
+            const checked = document.querySelectorAll('input[name="selected_variation"]:checked');
+            let nextIndex = findNextEmptyIndex();
+            checked.forEach(function(cb) {
+                const data = {
+                    stem: cb.dataset.stem || "",
+                    concept: cb.dataset.concept || "",
+                    correct: cb.dataset.correct || "A",
+                    choices: {},
+                };
+                ["A", "B", "C", "D"].forEach(function(letter) {
+                    data.choices[letter] = cb.dataset["choice" + letter] || "";
+                });
+                if (nextIndex < questionIndex && !getQuestionData(nextIndex).stem.trim()) {
+                    setQuestionData(nextIndex, data);
+                    renderTableRow(nextIndex);
+                    nextIndex += 1;
+                } else {
+                    addQuestion(data, false);
+                    nextIndex = questionIndex;
+                }
+            });
+            document.getElementById("generate-modal-container").innerHTML = "";
+            window.ExamiQBatch.persist(batchConfig);
+            if (window.showToast && checked.length) {
+                window.showToast("Applied " + checked.length + " question(s) to the form.", "success");
+            }
+        }
+        if (e.target.id === "close-generate-modal" || e.target.id === "close-generate-modal-footer") {
+            document.getElementById("generate-modal-container").innerHTML = "";
+        }
+        if (e.target.classList.contains("close-validate-modal")) {
+            document.getElementById("validate-modal-container").innerHTML = "";
+        }
+    });
+
+    restoreDraft().then(function() {
+        if (!questionIndex) syncCountInput();
+    });
+})();
+</script>
+{% endblock %}

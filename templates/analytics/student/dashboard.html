@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Your Performance" subtitle="Track progress. Spot weak spots. Crush the exam." cta_url="/student/review/setup/" cta_label="Start Review" %}
+
+<div class="bento-grid mb-6">
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" variant="primary" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.total_answers label="Total Answers" variant="navy" %}</div>
+    <div class="span-kpi">
+        {% if summary.accuracy >= 70 %}
+        {% include "components/stat_card.html" with value=summary.accuracy label="Overall Accuracy" variant="good" suffix="%" %}
+        {% elif summary.accuracy >= 50 %}
+        {% include "components/stat_card.html" with value=summary.accuracy label="Overall Accuracy" variant="warning" suffix="%" %}
+        {% else %}
+        {% include "components/stat_card.html" with value=summary.accuracy label="Overall Accuracy" variant="good" suffix="%" %}
+        {% endif %}
+    </div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.avg_confidence label="Avg Confidence" variant="accent" %}</div>
+
+    <div class="span-chart">
+        <div class="bento-card bento-card--chart bento-card--elevated bento-card-inner h-full">
+            {% include "components/section_header.html" with label="Performance" title="Accuracy Over Time" %}
+            <div id="accuracy-chart-wrap">
+                <canvas id="accuracyChart" height="200"></canvas>
+            </div>
+            <div id="accuracy-chart-empty" class="chart-empty-state hidden">
+                <svg class="chart-sparkline-placeholder" viewBox="0 0 200 48" fill="none" aria-hidden="true">
+                    <path d="M0 36 L40 28 L80 32 L120 20 L160 24 L200 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <p class="empty-state-title">Not enough data yet</p>
+                <p class="empty-state-body">Complete a few review sessions to see your accuracy trend.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="span-list">
+        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col">
+            {% include "components/section_header.html" with label="Study plan" title="Recommended Reviews" %}
+            {% if recommendations %}
+            <div class="bento-card-scroll flex-1">
+                <ul class="list-none m-0 p-0">
+                    {% for rec in recommendations %}
+                    {% include "components/topic_row.html" with name=rec.topic_name reason=rec.reason topic_pk=rec.topic.pk %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            {% include "components/empty_state.html" with compact=True title="No recommendations yet" body="Complete more reviews to get personalized topic suggestions." %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="span-list">
+        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col">
+            {% include "components/section_header.html" with label="Focus areas" title="Weak Topics" action_url="/student/mistakes/" action_label="View all" %}
+            {% if summary.weak_topics %}
+            <div class="bento-card-scroll flex-1">
+                <ul class="list-none m-0 p-0">
+                    {% for topic in summary.weak_topics %}
+                    {% include "components/topic_row.html" with name=topic.topic__name mistake_count=topic.mistake_count %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            {% include "components/empty_state.html" with compact=True title="No mistakes logged yet" body="That's a good sign — or you haven't started reviewing." cta_url="/student/review/setup/" cta_label="Start your first review" icon='<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="span-full">
+        <div class="bento-card bento-card-inner">
+            {% include "components/section_header.html" with label="History" title="Recent Sessions" action_url="/student/sessions/" action_label="View all" %}
+            {% if summary.recent_sessions %}
+            <div class="overflow-x-auto">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Topic</th>
+                            <th>Difficulty</th>
+                            <th>Date</th>
+                            <th>Accuracy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in summary.recent_sessions %}
+                        <tr>
+                            <td class="text-examiq-navy font-medium">{{ s.topic.name }}</td>
+                            <td>{% include "components/difficulty_pill.html" with difficulty=s.difficulty %}</td>
+                            <td class="text-examiq-slate">{{ s.started_at|date:"M d, Y" }}</td>
+                            <td>
+                                <div class="data-table-accuracy">
+                                    <div class="progress-bar">
+                                        <div class="progress-bar-fill {% if s.accuracy >= 70 %}progress-bar-fill--good{% elif s.accuracy >= 50 %}progress-bar-fill--warning{% else %}progress-bar-fill--mistake{% endif %}"
+                                             style="width: {{ s.accuracy }}%"></div>
+                                    </div>
+                                    <span class="text-sm font-medium stat-value-good">{{ s.accuracy }}%</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            {% include "components/empty_state.html" with compact=True title="No sessions yet" body="Start a review to build your performance history." cta_url="/student/review/setup/" cta_label="Start your first review" %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ summary.accuracy_trend|json_script:"accuracy-trend-data" }}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const trendData = JSON.parse(document.getElementById("accuracy-trend-data").textContent);
+    if (window.ExamiQUI && window.ExamiQUI.renderAccuracyChart) {
+        window.ExamiQUI.renderAccuracyChart(
+            document.getElementById("accuracyChart"),
+            trendData,
+            {
+                emptyEl: document.getElementById("accuracy-chart-empty"),
+                wrapEl: document.getElementById("accuracy-chart-wrap"),
+            }
+        );
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Verification Sent - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Check your email" subtitle="We sent a verification link to confirm your new login email." %}
+
+<div class="bento-card p-6 max-w-lg">
+    <p class="text-examiq-slate">
+        Follow the link in the email to finalize the change. If you do not see it in your inbox, check your spam folder.
+    </p>
+    <a href="{% url 'users:profile' %}" class="btn-primary mt-6 inline-flex">Back to profile</a>
+</div>
+{% endblock %}

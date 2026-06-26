@@ -1,0 +1,9 @@
+Django>=5.0,<6.0
+django-environ>=0.11.2
+django-allauth>=65.0.0
+django-crispy-forms>=2.3
+crispy-tailwind>=1.0.3
+django-model-utils>=5.0.0
+django-axes>=7.0.0
+google-generativeai>=0.8.0
+openai>=1.0.0

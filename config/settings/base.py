@@ -1,0 +1,156 @@
+"""Base settings shared across all environments."""
+from pathlib import Path
+
+import environ
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+env = environ.Env(
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list, []),
+)
+environ.Env.read_env(BASE_DIR / ".env")
+
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env.bool("DEBUG", default=False)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.humanize",
+    "django.contrib.staticfiles",
+    "django.contrib.sites",
+    # Third-party
+    "allauth",
+    "allauth.account",
+    "axes",
+    "crispy_forms",
+    "crispy_tailwind",
+    "model_utils",
+    # Local apps
+    "apps.core",
+    "apps.users",
+    "apps.questions",
+    "apps.reviews",
+    "apps.analytics",
+    "apps.ai",
+    "apps.research",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
+    "axes.middleware.AxesMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "apps.core.context_processors.navigation_context",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "config.wsgi.application"
+
+DATABASES = {
+    "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+}
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+AUTH_USER_MODEL = "users.User"
+
+SITE_ID = 1
+
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+LOGIN_URL = "account_login"
+LOGIN_REDIRECT_URL = "core:home"
+LOGOUT_REDIRECT_URL = "account_login"
+
+ACCOUNT_LOGOUT_ON_GET = True
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_CHANGE_EMAIL = True
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_ADAPTER = "apps.users.adapters.ExamiQAccountAdapter"
+ACCOUNT_FORMS = {
+    "login": "apps.users.forms.ExamiQLoginForm",
+    "signup": "apps.users.forms.ExamiQSignupForm",
+    "change_password": "apps.users.forms.ExamiQChangePasswordForm",
+}
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
+CRISPY_TEMPLATE_PACK = "tailwind"
+
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1
+
+SESSION_COOKIE_AGE = 86400
+
+DEFAULT_SECONDS_PER_QUESTION = 30
+
+AI_ENABLED = env.bool("AI_ENABLED", default=False)
+LLM_PROVIDER = env("LLM_PROVIDER", default="openai")
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+OPENAI_MODEL = env("OPENAI_MODEL", default="gpt-4o-mini")
+GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-2.0-flash")
+GEMINI_FALLBACK_MODELS = env.list(
+    "GEMINI_FALLBACK_MODELS",
+    default=["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"],
+)
+GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=2048)
+OLLAMA_API_KEY = env("OLLAMA_API_KEY", default="")
+OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="https://ollama.com")
+OLLAMA_MODEL = env("OLLAMA_MODEL", default="gpt-oss:120b")
+OLLAMA_FALLBACK_MODELS = env.list(
+    "OLLAMA_FALLBACK_MODELS",
+    default=["gpt-oss:20b", "gpt-oss:120b"],
+)

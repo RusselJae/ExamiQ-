@@ -1,0 +1,39 @@
+<div class="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" id="validate-modal">
+    <div class="bento-card bento-card--elevated p-6 max-w-lg w-full mx-4 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="validate-modal-title">
+        <div class="flex justify-between items-center mb-5">
+            <h2 id="validate-modal-title" class="text-lg font-semibold text-examiq-navy">AI Validation</h2>
+            <button type="button" class="close-validate-modal text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="space-y-4 text-sm">
+            <div class="flex items-center justify-between gap-3 py-2 border-b border-slate-100">
+                <span class="font-medium text-examiq-navy">Overall valid</span>
+                {% if result.is_valid %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Yes</span>
+                {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">Needs review</span>
+                {% endif %}
+            </div>
+            <div class="flex items-center justify-between gap-3 py-2 border-b border-slate-100">
+                <span class="font-medium text-examiq-navy">Topic relevant</span>
+                <span class="text-examiq-slate">{% if result.topic_relevant %}Yes{% else %}No{% endif %}</span>
+            </div>
+            <div class="flex items-center justify-between gap-3 py-2 border-b border-slate-100">
+                <span class="font-medium text-examiq-navy">Answer correct</span>
+                <span class="text-examiq-slate">{% if result.answer_correct %}Yes{% else %}No{% endif %}</span>
+            </div>
+            {% if result.suggested_concept_tag %}
+            <div class="py-2 border-b border-slate-100">
+                <span class="font-medium text-examiq-navy block mb-1">Suggested concept tag</span>
+                <p class="text-examiq-slate">{{ result.suggested_concept_tag }}</p>
+            </div>
+            {% endif %}
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 shadow-inner">
+                <span class="font-medium text-examiq-navy block mb-2">AI Feedback</span>
+                <p class="text-examiq-slate leading-relaxed">{{ result.feedback }}</p>
+            </div>
+        </div>
+
+        <button type="button" class="close-validate-modal btn-primary w-full mt-6">Close</button>
+    </div>
+</div>

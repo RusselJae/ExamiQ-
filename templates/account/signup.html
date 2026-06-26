@@ -1,0 +1,37 @@
+{% extends "account/auth_base.html" %}
+
+{% block title %}Sign Up - EXAMIQ+{% endblock %}
+
+{% block auth_content %}
+<h2 class="auth-card__heading">Create your account</h2>
+<p class="auth-card__subheading">Join EXAMIQ+ and start reviewing smarter.</p>
+
+<form method="post" action="{% url 'account_signup' %}" class="auth-form" novalidate>
+    {% csrf_token %}
+    {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+
+    {% if form.non_field_errors %}
+    <div class="auth-form__errors" role="alert">
+        {% for error in form.non_field_errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <p class="text-xs text-examiq-slate mb-4">Professors and department chairpersons are provisioned by your campus administrator.</p>
+
+    {% include "components/auth_field.html" with field=form.email %}
+    {% include "components/auth_password_field.html" with field=form.password1 strength_target=True %}
+    {% include "components/auth_password_strength.html" %}
+    {% include "components/auth_password_field.html" with field=form.password2 %}
+
+    <button type="submit" class="btn-primary w-full mt-4">Sign Up</button>
+</form>
+{% endblock %}
+
+{% block auth_footer %}
+<p class="auth-card__footer">
+    Already have an account?
+    <a href="{% url 'account_login' %}" class="text-link auth-card__footer-link">Sign in</a>
+</p>
+{% endblock %}

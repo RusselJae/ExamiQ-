@@ -1,0 +1,500 @@
+# Django Cursor Rules
+# Comprehensive guide for clean code, better UI, and best practices
+
+## 🧠 General Philosophy
+- Favor clarity over cleverness — code is read more than written
+- Follow Django's "batteries included" philosophy; don't reinvent what Django provides
+- Keep views thin, models fat (but not obese) — business logic belongs in services or model methods
+- Write code as if the next developer is a senior who values simplicity
+- Prefer explicit over implicit
+
+- Please do NOT make random guesses on variable names or include paths. Always reference the codebase to see if we have something existing before deciding to randomly make new classes or make up member variable names. DO not hallucinate variable names, feel free to ask if you need context for a file.
+
+- If you are the composer, don't be afraid to search the codebase for files you need to.
+
+-When doing creative writing, such as app filler text, hero text, calls to action, descriptions, instructions to users, etc:
+
+-Write with confidence. No fluff, no filler—just direct, no-nonsense communication. Every word should be intentional. Keep it sharp, bold, and a little irreverent, but always clear. Inject wit where it fits, but never at the cost of clarity. Assume the user knows what they’re doing and just needs the tool to work—no hand-holding, no corporate nonsense. Speak like a brand that delivers, not one that tries too hard. Straight-up, efficient, and brutally effective. But funny enough to make people laugh when necessary!
+
+-When we are debugging, think critically, step by step, consider each possibility, considering and reading each relevant file, and select the most likely resolution, but if we spend a while trying to fix something with no resolution, we should add temporary debug or print statements, and I should copy them to you so you can examine them to understand how the behavior does not align with our goals. Do not suggest the same resolution to a problem if we have previously tried that and it failed, come up with something new.
+
+-Do not be afraid to rewrite large swaths of code to fix or consolidate things, but be very careful not to have us backtrack and lose existing functionality, so always consider the functionality of a function, interface, or class, before, and after your changes, and ensure we do not delete anything we previously needed.
+
+---
+
+## 📁 Project Structure
+
+```
+project_root/
+├── config/                  # Project-level settings (replaces the default project name folder)
+│   ├── settings/
+│   │   ├── base.py          # Shared settings
+│   │   ├── local.py         # Local dev overrides
+│   │   └── production.py    # Production overrides
+│   ├── urls.py
+│   ├── wsgi.py
+│   └── asgi.py
+├── apps/                    # All Django apps live here
+│   ├── core/                # Shared utilities, base models, mixins
+│   ├── users/
+│   └── <feature>/
+├── static/
+│   ├── css/
+│   ├── js/
+│   └── images/
+├── templates/
+│   ├── base.html
+│   ├── components/          # Reusable partials
+│   └── <app>/
+├── media/
+├── requirements/
+│   ├── base.txt
+│   ├── local.txt
+│   └── production.txt
+├── .env.example
+├── manage.py
+└── README.md
+```
+
+- Never put business logic directly in `urls.py` or `admin.py`
+- Never use the default project folder name as a package; rename it to `config/`
+- Keep each app focused on a single responsibility (SRP)
+- Use `apps/` subdirectory to group all apps cleanly
+
+---
+
+## ⚙️ Settings
+
+- Always split settings into `base.py`, `local.py`, and `production.py`
+- Never hardcode secrets — use `python-decouple` or `django-environ`
+- Always set `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, and `DATABASES` from environment variables
+- Use `django-environ` or `python-decouple` for `.env` file management
+
+```python
+# config/settings/base.py
+import environ
+
+env = environ.Env()
+environ.Env.read_env()
+
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env.bool("DEBUG", default=False)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
+```
+
+- Always define `AUTH_USER_MODEL` to a custom user model from the start
+- Set `DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"` in base settings
+
+---
+
+## 🗃️ Models
+
+- Always use a custom user model (`AbstractUser` or `AbstractBaseUser`) — do this before the first migration
+- Add `__str__` to every model
+- Add `class Meta` with `verbose_name`, `verbose_name_plural`, and meaningful `ordering`
+- Use `related_name` on all ForeignKey/ManyToMany fields
+- Use `get_absolute_url()` for models that have detail pages
+- Avoid `null=True` on string fields (`CharField`, `TextField`) — use `blank=True` with empty string default
+- Use `blank=True, null=True` only on non-string fields where NULL is semantically meaningful
+
+```python
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True)
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="articles",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Article"
+        verbose_name_plural = "Articles"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse("articles:detail", kwargs={"pk": self.pk})
+```
+
+- Use `TimeStampedModel` base class (via `django-model-utils`) or define your own
+- Avoid logic in model `save()` — prefer signals or service functions for side effects
+- Use database-level constraints (`unique_together`, `CheckConstraint`) where applicable
+- Prefer `select_related()` and `prefetch_related()` in querysets, never in model methods
+
+---
+
+## 👁️ Views
+
+- Prefer **Class-Based Views (CBVs)** for CRUD; use **Function-Based Views (FBVs)** for simple or one-off logic
+- Keep views thin — delegate to service functions or model methods
+- Always use `LoginRequiredMixin` or `@login_required` for protected views
+- Use `PermissionRequiredMixin` for role-based access
+- Never query the database directly in templates — pass context from views
+
+```python
+# Good
+class ArticleDetailView(LoginRequiredMixin, DetailView):
+    model = Article
+    template_name = "articles/detail.html"
+    context_object_name = "article"
+
+    def get_queryset(self):
+        return Article.objects.select_related("author")
+```
+
+- Use `get_object_or_404()` instead of `Model.objects.get()`
+- Return meaningful HTTP status codes (404, 403, etc.)
+- For APIs, use **Django REST Framework (DRF)** or **django-ninja**
+
+---
+
+## 📋 Forms
+
+- Always use `ModelForm` for model-backed forms
+- Define `fields` explicitly (never use `__all__` in production)
+- Override `clean_<field>()` for field-level validation
+- Override `clean()` for cross-field validation
+- Use `crispy-forms` or `django-widget-tweaks` for clean form rendering
+
+```python
+class ArticleForm(forms.ModelForm):
+    class Meta:
+        model = Article
+        fields = ["title", "body"]
+
+    def clean_title(self):
+        title = self.cleaned_data.get("title")
+        if len(title) < 5:
+            raise forms.ValidationError("Title must be at least 5 characters.")
+        return title
+```
+
+---
+
+## 🌐 URLs
+
+- Use `app_name` for namespacing in every app's `urls.py`
+- Use named URL patterns everywhere — never hardcode URLs
+- Group related URLs logically with comments
+- Include app URLs in the root `urls.py` under a logical prefix
+
+```python
+# apps/articles/urls.py
+app_name = "articles"
+
+urlpatterns = [
+    path("", views.ArticleListView.as_view(), name="list"),
+    path("<int:pk>/", views.ArticleDetailView.as_view(), name="detail"),
+    path("create/", views.ArticleCreateView.as_view(), name="create"),
+]
+```
+
+---
+
+## 🎨 Templates & UI
+
+- Use a single `base.html` that all templates extend
+- Use `{% block %}` tags for: `title`, `meta`, `content`, `extra_css`, `extra_js`
+- Keep templates DRY — extract reusable elements into `templates/components/`
+- Use `{% include %}` for partials; avoid duplicating markup
+- Escape user input always — Django auto-escapes by default; never use `|safe` on user-generated content
+- Use `{% url 'namespace:name' %}` — never hardcode URLs in templates
+
+### UI Best Practices
+- Use a CSS framework (Tailwind CSS preferred, or Bootstrap 5) consistently
+- Use CSS custom properties (variables) for your color palette and spacing
+- Keep all custom CSS in organized files — not inline styles
+- Follow a mobile-first responsive design approach
+- Use semantic HTML5 elements (`<main>`, `<nav>`, `<article>`, `<section>`, `<aside>`)
+- Add `aria-*` attributes and `role` for accessibility (a11y)
+- Always add `alt` text to images
+- Use `<label>` properly linked to form inputs via `for`/`id`
+- Flash messages: always display Django messages using the messages framework and style them clearly
+- Loading states: show feedback for async actions (spinners, disabled buttons)
+
+### Template Structure
+
+```html
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}My App{% endblock %}</title>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  {% include "components/navbar.html" %}
+
+  <main class="container mx-auto px-4 py-8">
+    {% include "components/messages.html" %}
+    {% block content %}{% endblock %}
+  </main>
+
+  {% include "components/footer.html" %}
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
+```
+
+---
+
+## 🔐 Security
+
+- Always keep `DEBUG = False` in production
+- Set `SECURE_SSL_REDIRECT = True` in production
+- Set `SESSION_COOKIE_SECURE = True` and `CSRF_COOKIE_SECURE = True`
+- Set `X_FRAME_OPTIONS = "DENY"`
+- Use `SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`, and `SECURE_HSTS_PRELOAD` in production
+- Never expose tracebacks in production (`DEBUG = False` handles this)
+- Use `django-axes` to rate-limit login attempts
+- Validate and sanitize all user inputs via forms/serializers — never trust raw request data
+- Avoid raw SQL queries; if needed, use parameterized queries only
+- Use `{% csrf_token %}` in every POST form
+
+---
+
+<!-- ## 🔄 Services & Business Logic
+
+- Create a `services.py` inside each app for complex business logic
+- Service functions should be plain Python functions (not methods on models or views)
+- Services are easily testable and reusable
+
+```python
+# apps/articles/services.py
+
+def publish_article(article, user):
+    """Publish an article and notify followers."""
+    if article.author != user:
+        raise PermissionError("Only the author can publish this article.")
+    article.status = "published"
+    article.save(update_fields=["status"])
+    notify_followers.delay(article.pk)  # Celery task
+    return article
+```
+
+--- -->
+
+<!-- ## ✅ Testing
+
+- Write tests for every view, form, model method, and service function
+- Use `pytest-django` over the built-in test runner
+- Structure tests to mirror the app structure: `tests/test_models.py`, `tests/test_views.py`, etc.
+- Use `factory_boy` for test data; avoid hardcoded fixtures
+- Aim for 80%+ coverage; use `pytest-cov` to measure
+- Use `TestCase` for DB tests, `SimpleTestCase` for no-DB tests
+- Name tests descriptively: `test_user_cannot_publish_others_article`
+
+```python
+# apps/articles/tests/test_services.py
+import pytest
+from apps.articles.services import publish_article
+
+def test_publish_article_raises_if_not_author(article_factory, user_factory):
+    author = user_factory()
+    other_user = user_factory()
+    article = article_factory(author=author)
+
+    with pytest.raises(PermissionError):
+        publish_article(article, other_user)
+``` -->
+
+---
+
+## 🚀 Performance
+
+- Use `select_related()` for FK and OneToOne, `prefetch_related()` for ManyToMany and reverse FK
+- Use `only()` or `defer()` to limit fields fetched from DB when appropriate
+- Cache expensive querysets with `django.core.cache` or `django-redis`
+- Use `django-debug-toolbar` in development to catch N+1 queries
+- Add database indexes on fields used in `filter()`, `order_by()`, and `join` conditions
+- Use `bulk_create()` and `bulk_update()` for batch operations
+- Offload heavy tasks (emails, file processing) to Celery + Redis
+- Use pagination for all list views — never return unbounded querysets to templates
+
+```python
+# Always paginate
+class ArticleListView(ListView):
+    model = Article
+    paginate_by = 20
+    template_name = "articles/list.html"
+```
+
+---
+
+## 🛠️ Admin
+
+- Register all models in `admin.py`
+- Use `list_display`, `list_filter`, `search_fields`, and `ordering` in every `ModelAdmin`
+- Use `readonly_fields` for auto-generated fields
+- Use `inlines` for related models
+- Override `get_queryset()` to optimize admin queries
+- Never expose sensitive fields in admin without proper staff/superuser restrictions
+
+```python
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    list_display = ["title", "author", "created_at", "status"]
+    list_filter = ["status", "created_at"]
+    search_fields = ["title", "author__email"]
+    readonly_fields = ["created_at", "updated_at"]
+    ordering = ["-created_at"]
+```
+
+---
+
+## 📦 Dependencies & Tooling
+
+### Recommended Packages
+- `django-environ` or `python-decouple` — environment variable management
+- `django-model-utils` — useful model mixins (`TimeStampedModel`, `StatusModel`)
+- `django-crispy-forms` + `crispy-tailwind` or `crispy-bootstrap5` — form rendering
+- `django-allauth` — authentication (social login, email verification)
+- `django-axes` — brute-force login protection
+- `django-debug-toolbar` — dev query inspection
+- `celery` + `redis` — async task queue
+- `django-storages` + `boto3` — S3 file storage (production)
+- `whitenoise` — static file serving in production
+- `sentry-sdk` — error monitoring in production
+- `pytest-django` + `factory-boy` + `pytest-cov` — testing
+
+### Code Quality Tools
+- `ruff` — fast linter and formatter (replaces flake8 + isort + black)
+- `mypy` + `django-stubs` — static type checking
+- `pre-commit` — run linters before each commit
+
+### pre-commit config example
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+```
+
+---
+
+## 🔑 Environment Variables
+
+Always document required env vars in `.env.example`:
+
+```env
+# .env.example
+SECRET_KEY=your-secret-key-here
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1
+DATABASE_URL=postgres://user:password@localhost:5432/dbname
+REDIS_URL=redis://localhost:6379/0
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+```
+
+---
+
+## 📝 Code Style
+
+- Follow PEP 8 strictly (enforced by `ruff`)
+- Max line length: **88 characters** (Black/Ruff default)
+- Use type hints on all function signatures
+- Write docstrings for all public functions, classes, and modules
+- Sort imports: stdlib → third-party → local (enforced by `ruff`)
+- No unused imports, no commented-out code in version control
+- Prefer f-strings over `.format()` or `%`
+
+```python
+def get_published_articles(user: "User") -> QuerySet["Article"]:
+    """Return all published articles authored by the given user."""
+    return Article.objects.filter(author=user, status="published").select_related("author")
+```
+
+---
+
+## 🗂️ Git & Version Control
+
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- Never commit `.env`, `*.pyc`, `__pycache__`, `media/`, or migration conflicts
+- Always review migrations before committing — squash when needed
+- One feature per branch; merge via pull request with code review
+- Write meaningful commit messages that describe *why*, not just *what*
+
+---
+
+## 🐳 Docker (Recommended for Dev)
+
+- Use `docker-compose` for local dev with services: `web`, `db` (postgres), `redis`
+- Use multi-stage `Dockerfile` for production images
+- Never run as root inside Docker
+- Pin all base image versions
+
+---
+
+## 🔍 Logging
+
+- Configure structured logging using Python's `logging` module in settings
+- Use `django.request` logger for request-level logging
+- Log warnings and errors in production; avoid verbose debug logs
+- Never log sensitive data (passwords, tokens, PII)
+
+```python
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+}
+```
+
+---
+
+## 📡 API Development (DRF / django-ninja)
+
+- Version your API from day one: `/api/v1/`
+- Use serializers/schemas for all input validation and output formatting — never return raw model data
+- Use `IsAuthenticated` as the default permission class globally; override per view where needed
+- Return consistent error response shapes
+- Use `drf-spectacular` or `django-ninja`'s built-in OpenAPI for auto-generated docs
+- Paginate all list endpoints
+- Use `throttling` to rate-limit public endpoints
+
+---
+
+## ✨ Summary Checklist
+
+- [ ] Custom user model defined before first migration
+- [ ] Settings split into base/local/production
+- [ ] No secrets in source code (use `.env`)
+- [ ] All models have `__str__`, `Meta`, and `related_name`
+- [ ] Views are thin — logic lives in services
+- [ ] All forms use `ModelForm` with explicit fields
+- [ ] URL namespacing enabled in every app
+- [ ] Base template with blocks for title, content, extra_css, extra_js
+- [ ] CSRF token in all POST forms
+- [ ] Security settings configured for production
+- [ ] `select_related`/`prefetch_related` used to prevent N+1 queries
+- [ ] All list views paginated
+- [ ] Tests written with `pytest-django` and `factory_boy`
+- [ ] `ruff`, `mypy`, and `pre-commit` configured
+- [ ] Admin registered and optimized for all models
+- [ ] Celery set up for async tasks
+- [ ] Logging configured
+- [ ] Docker Compose for local development
+
+
+Refer to Django documentation for best practices in views, models, forms, and security considerations.

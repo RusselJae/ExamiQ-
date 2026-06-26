@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}{{ student.get_full_name|default:student.email }} - {{ course.code }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:course_roster' course.pk %}" class="text-link">&larr; Back to roster</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ student.get_full_name|default:student.email }}</h1>
+    <p class="text-examiq-slate">{{ student.email }}</p>
+</div>
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    {% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions" accent="cyan" %}
+    {% include "components/stat_card.html" with value=summary.review_hours label="Review Hours" accent="cyan" %}
+    <div class="bento-card p-6">
+        <div class="text-2xl font-bold stat-value-success">{{ summary.accuracy }}%</div>
+        <div class="text-sm text-examiq-slate mt-1">Accuracy</div>
+    </div>
+    {% include "components/stat_card.html" with value=summary.avg_confidence label="Avg Confidence" accent="cyan" %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Confidence Calibration</h2>
+        <ul class="space-y-2 text-sm mb-4">
+            {% for key, count in summary.calibration_matrix.items %}
+            <li class="flex justify-between py-1 border-b border-slate-50">
+                <span class="capitalize text-examiq-navy">{{ key|cut:"_" }}</span>
+                <span class="font-medium text-examiq-slate">{{ count }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <p class="text-sm text-examiq-slate">{{ calibration_narrative }}</p>
+        {% if ai_enabled %}
+        <span class="ai-assist-badge mt-4">AI Assist</span>
+        {% else %}
+        <span class="ai-assist-badge mt-4">Rule-based insights</span>
+        {% endif %}
+    </div>
+    <div class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Top Mistake Topics</h2>
+        {% if summary.weak_topics %}
+        <ul class="space-y-2">
+            {% for topic in summary.weak_topics %}
+            <li class="flex justify-between py-2 border-b border-slate-100">
+                <span class="text-examiq-navy">{{ topic.topic__name }}</span>
+                <span class="text-examiq-mistake font-semibold">{{ topic.mistake_count }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-examiq-slate">No mistakes recorded yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ summary.accuracy_trend|json_script:"student-trend-data" }}
+<script>
+const trendData = JSON.parse(document.getElementById("student-trend-data").textContent);
+if (trendData.length > 0) {
+    const canvas = document.createElement("canvas");
+    canvas.id = "studentTrendChart";
+    canvas.height = 200;
+    document.querySelector(".grid").after(canvas);
+    new Chart(canvas, {
+        type: "line",
+        data: {
+            labels: trendData.map(d => d.date),
+            datasets: [{
+                label: "Accuracy %",
+                data: trendData.map(d => d.accuracy),
+                borderColor: "#0284C7",
+                tension: 0.3,
+            }]
+        },
+        options: { scales: { y: { min: 0, max: 100 } } }
+    });
+}
+</script>
+{% endblock %}

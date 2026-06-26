@@ -1,0 +1,26 @@
+<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="topic-form-modal">
+    <div class="bento-card bento-card--elevated p-6 max-w-md w-full mx-4 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="topic-modal-title">
+        <div class="flex justify-between items-center mb-5">
+            <h2 id="topic-modal-title" class="text-lg font-semibold text-examiq-navy">Add topic</h2>
+            <button type="button" id="close-topic-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+        </div>
+        <form method="post" id="topic-form" action="{% url 'analytics_professor:topic_create' course.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="subject" id="topic-subject-input" value="{{ selected_subject_id|default:'' }}">
+            <div class="mb-5">
+                <label for="topic-name-input" class="block text-sm font-medium text-examiq-slate mb-1">Topic name</label>
+                <input type="text"
+                       name="name"
+                       id="topic-name-input"
+                       required
+                       maxlength="200"
+                       class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400"
+                       placeholder="e.g. Quantifier negation">
+            </div>
+            <div class="flex gap-3">
+                <button type="submit" class="btn-primary">Save</button>
+                <button type="button" id="cancel-topic-modal" class="btn-secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>

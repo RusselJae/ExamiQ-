@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}Confirm Email - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Confirm email address" subtitle="Verify your new login email to complete the change." %}
+
+<div class="bento-card p-6 max-w-lg">
+    {% if confirmation %}
+        {% if can_confirm %}
+        <p class="text-examiq-slate mb-6">
+            Please confirm that
+            <a href="mailto:{{ confirmation.email_address.email }}" class="text-link">{{ confirmation.email_address.email }}</a>
+            is your new login email for EXAMIQ+.
+        </p>
+        <form method="post" action="{% url 'account_confirm_email' confirmation.key %}">
+            {% csrf_token %}
+            {{ redirect_field }}
+            <button type="submit" class="btn-primary">Confirm email</button>
+        </form>
+        {% else %}
+        <p class="text-examiq-slate">
+            Unable to confirm {{ confirmation.email_address.email }} because it is already in use by another account.
+        </p>
+        {% endif %}
+    {% else %}
+    <p class="text-examiq-slate mb-4">
+        This confirmation link expired or is invalid.
+    </p>
+    <a href="{% url 'users:profile' %}" class="text-link">Return to profile</a> to request a new verification email.
+    {% endif %}
+</div>
+{% endblock %}

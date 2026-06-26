@@ -1,0 +1,9 @@
+{% load examiq_tags %}
+<p class="text-sm text-examiq-cyan mt-2">
+    Suggested difficulty: <strong>{{ difficulty|difficulty_label }}</strong> (applied)
+</p><script>
+    const field = document.getElementById("id_difficulty");
+    if (field) {
+        field.value = "{{ difficulty }}";
+    }
+</script>

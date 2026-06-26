@@ -1,0 +1,99 @@
+<div class="focus-card question-card-timed p-6 lg:p-8"
+     id="question-card"
+     data-seconds="{{ session.seconds_per_question }}"
+     data-timed-exam="{% if is_timed_exam %}true{% else %}false{% endif %}">
+    <div class="flex items-center justify-between mb-6">
+        <span class="focus-question-type-badge">
+            {{ question.get_question_type_display }}
+        </span>
+        {% if is_timed_exam %}
+        <div class="flex items-center gap-2">
+            <div id="question-timer-ring" class="question-timer-ring" aria-live="polite">
+                <span id="question-timer-display" class="question-timer-display">{{ session.seconds_per_question }}</span>
+            </div>
+            <span class="text-xs text-examiq-slate uppercase tracking-wide" id="question-timer-label">
+                <span id="question-timer-seconds">{{ session.seconds_per_question }}</span> seconds left
+            </span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="examiq-math-block my-6 rounded-xl bg-examiq-bg border border-slate-200 px-6 py-8 lg:px-8 lg:py-10 text-center text-xl lg:text-2xl text-examiq-navy font-medium leading-relaxed">
+        {{ question.stem|linebreaks }}
+    </div>
+
+    <form hx-post="{% url 'reviews:submit_answer' session.pk question.pk %}"
+          hx-target="#question-container"
+          hx-swap="innerHTML"
+          class="space-y-8"
+          id="answer-form"
+          data-confidence-form>
+        {% csrf_token %}
+        <input type="hidden" name="time_spent_seconds" value="0" id="time-spent">
+        <input type="hidden" name="timed_out" value="false" id="timed-out-input">
+
+        {% if form.selected_choice %}
+        <fieldset>
+            <legend class="focus-field-legend">Select your answer</legend>
+            <div class="grid grid-cols-1 gap-3">
+                {% for choice in form.selected_choice %}
+                <label class="choice-tile block cursor-pointer">
+                    <input type="radio" name="selected_choice" value="{{ choice.choice_value }}" class="sr-only" {% if not is_timed_exam %}required{% endif %}>
+                    <div class="choice-tile-content flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 transition">
+                        <span class="choice-letter flex-shrink-0 w-8 h-8 rounded-full bg-examiq-bg border border-slate-200 flex items-center justify-center text-sm font-bold text-examiq-navy">
+                            {{ choice.choice_label }}
+                        </span>
+                        <span class="text-examiq-navy pt-1">{{ choice.choice_label.instance.text }}</span>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+        {% endif %}
+
+        {% if form.numeric_response %}
+        <div>
+            <label for="id_numeric_response" class="focus-field-legend block mb-3">Your answer</label>
+            <input type="text"
+                   name="numeric_response"
+                   id="id_numeric_response"
+                   placeholder="Enter your answer"
+                   {% if not is_timed_exam %}required{% endif %}
+                   class="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-lg text-examiq-navy focus:border-examiq-cyan focus:ring-2 focus:ring-sky-200 outline-none transition">
+        </div>
+        {% endif %}
+
+        <fieldset class="confidence-fieldset">
+            <legend class="focus-field-legend">How confident are you?</legend>
+            {{ form.confidence }}
+            <div class="confidence-slider-wrap">
+                <input type="range"
+                       id="confidence-slider"
+                       class="confidence-slider"
+                       min="1"
+                       max="5"
+                       step="1"
+                       value="3"
+                       aria-valuemin="1"
+                       aria-valuemax="5"
+                       aria-valuenow="3"
+                       aria-label="Confidence level">
+                <div class="confidence-slider-thumb-label" id="confidence-slider-display" aria-hidden="true">3</div>
+                <div class="confidence-slider-labels">
+                    <span>Not confident</span>
+                    <span>Very confident</span>
+                </div>
+            </div>
+        </fieldset>
+
+        {% if errors %}
+        <div class="rounded-xl bg-red-50 border border-red-200 text-examiq-mistake text-sm px-4 py-3">
+            Please select an answer and your confidence level.
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn-primary w-full">
+            {% if is_timed_exam %}Submit and next{% else %}Submit and next{% endif %}
+        </button>
+    </form>
+</div>

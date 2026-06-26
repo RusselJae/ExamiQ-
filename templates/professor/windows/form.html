@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}{{ form_title }} - {{ course.code }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:window_list' course.pk %}" class="text-link">&larr; Back to windows</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ form_title }}</h1>
+</div>
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+<form method="post" class="bento-card p-6 w-full">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="space-y-4">
+            {{ form.title|as_crispy_field }}
+            {{ form.exam_type|as_crispy_field }}
+            {{ form.opens_at|as_crispy_field }}
+            {{ form.closes_at|as_crispy_field }}
+            {{ form.duration_minutes|as_crispy_field }}
+            {{ form.seconds_per_question|as_crispy_field }}
+            {{ form.mode|as_crispy_field }}
+            {{ form.is_active|as_crispy_field }}
+        </div>
+        <div class="space-y-4">
+            {{ form.topics|as_crispy_field }}
+            {{ form.allowed_difficulties|as_crispy_field }}
+        </div>
+    </div>
+    <div class="mt-6 pt-4 border-t border-slate-100 sticky bottom-0 bg-white">
+        <button type="submit" class="btn-primary">Save window</button>
+    </div>
+</form>
+{% endblock %}

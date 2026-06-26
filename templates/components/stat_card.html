@@ -1,0 +1,16 @@
+{% firstof variant accent "primary" as card_variant %}
+<div class="bento-card bento-card--kpi bento-card-inner stat-card stat-card--{{ card_variant }}">
+    <div class="stat-card-icon" aria-hidden="true">
+        {% if card_variant == "navy" %}
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        {% elif card_variant == "good" or card_variant == "soft" %}
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        {% elif card_variant == "warning" %}
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        {% else %}
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        {% endif %}
+    </div>
+    <div class="stat-card-value stat-value-{% if card_variant == 'soft' %}good{% elif card_variant == 'warning' %}warning{% else %}{{ card_variant }}{% endif %}">{{ value }}{% if suffix %}{{ suffix }}{% endif %}</div>
+    <div class="stat-card-label">{{ label }}</div>
+</div>

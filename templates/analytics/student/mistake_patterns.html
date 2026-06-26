@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Weak Areas - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Weak Area Analysis" subtitle="Topics where you stumble most. Focus here." %}
+
+{% if patterns %}
+<div class="bento-grid">
+    {% for pattern in patterns %}
+    <div class="span-full">
+        <div class="bento-card bento-card-inner flex items-center justify-between">
+            <span class="font-medium text-examiq-navy">{{ pattern.topic__name }}</span>
+            <div class="flex items-center gap-3">
+                <div class="w-32 bg-slate-100 rounded-full h-2.5">
+                    <div class="bg-examiq-mistake h-2.5 rounded-full" style="width: {% widthratio pattern.mistake_count patterns.0.mistake_count 100 %}%"></div>
+                </div>
+                <span class="text-examiq-mistake font-semibold w-24 text-right text-sm">{{ pattern.mistake_count }} mistakes</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bento-grid">
+    <div class="span-full">
+        {% include "components/empty_state.html" with title="No patterns yet" body="Complete some review sessions to see where you need the most work." cta_url="/reviews/setup/" cta_label="Start reviewing" %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

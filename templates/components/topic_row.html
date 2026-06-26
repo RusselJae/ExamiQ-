@@ -1,0 +1,24 @@
+<li class="topic-row">
+    <div class="topic-row-header">
+        <span class="topic-row-name">{{ name }}</span>
+        {% if topic_pk %}
+        <a href="{% url 'reviews:setup' %}?topic={{ topic_pk }}" class="btn-outline btn-outline-sm">Start</a>
+        {% elif action_url and action_label %}
+        <a href="{{ action_url }}" class="btn-outline btn-outline-sm">{{ action_label }}</a>
+        {% elif mistake_count %}
+        <span class="mistake-badge">{{ mistake_count }} mistake{{ mistake_count|pluralize }}</span>
+        {% endif %}
+    </div>
+    {% if reason %}
+    <p class="reason-pill mt-2">{{ reason }}</p>
+    {% endif %}
+    {% if progress is not None %}
+    <div class="topic-row-meta">
+        <div class="progress-bar flex-1">
+            <div class="progress-bar-fill {% if progress >= 70 %}progress-bar-fill--good{% elif progress >= 50 %}progress-bar-fill--warning{% else %}progress-bar-fill--mistake{% endif %}"
+                 style="width: {{ progress }}%"></div>
+        </div>
+        <span class="text-xs font-medium text-examiq-slate">{{ progress }}%</span>
+    </div>
+    {% endif %}
+</li>

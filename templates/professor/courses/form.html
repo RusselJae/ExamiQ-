@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Create Course - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Create Course Offering" %}
+
+<form method="post" class="bento-card bento-card--elevated p-6 shadow-sm space-y-6">
+    {% csrf_token %}
+
+    <div>
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-examiq-slate mb-4">Course details</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="id_code" class="block text-sm font-medium text-examiq-slate mb-1">Code <span class="text-examiq-coral">*</span></label>
+                {{ form.code }}
+                {% if form.code.errors %}<p class="text-xs text-examiq-coral mt-1">{{ form.code.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="id_name" class="block text-sm font-medium text-examiq-slate mb-1">Name <span class="text-examiq-coral">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<p class="text-xs text-examiq-coral mt-1">{{ form.name.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="md:col-span-2">
+                <label for="id_program" class="block text-sm font-medium text-examiq-slate mb-1">Program <span class="text-examiq-coral">*</span></label>
+                {{ form.program }}
+                {% if form.program.errors %}<p class="text-xs text-examiq-coral mt-1">{{ form.program.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="id_term" class="block text-sm font-medium text-examiq-slate mb-1">Term <span class="text-examiq-coral">*</span></label>
+                {{ form.term }}
+                {% if form.term.errors %}<p class="text-xs text-examiq-coral mt-1">{{ form.term.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="id_academic_year" class="block text-sm font-medium text-examiq-slate mb-1">Academic year <span class="text-examiq-coral">*</span></label>
+                {{ form.academic_year }}
+                {% if form.academic_year.errors %}<p class="text-xs text-examiq-coral mt-1">{{ form.academic_year.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="id_section" class="block text-sm font-medium text-examiq-slate mb-1">Section <span class="text-examiq-coral">*</span></label>
+                {{ form.section }}
+                {% if form.section.errors %}<p class="text-xs text-examiq-coral mt-1">{{ form.section.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 sm:flex-none sm:min-w-[12rem]">Create offering</button>
+        <a href="{% url 'analytics_professor:course_list' %}" class="btn-secondary flex-1 sm:flex-none sm:min-w-[12rem] text-center">Cancel</a>
+    </div>
+</form>
+{% endblock %}

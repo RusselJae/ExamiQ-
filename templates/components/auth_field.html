@@ -1,0 +1,16 @@
+<label class="auth-field" for="{{ field.id_for_label }}">
+    <span class="auth-field__label">{{ field.label }}</span>
+    <input
+        type="{{ field.field.widget.input_type|default:'text' }}"
+        name="{{ field.html_name }}"
+        id="{{ field.id_for_label }}"
+        value="{{ field.value|default:'' }}"
+        class="auth-field__input"
+        {% if field.field.required %}required{% endif %}
+        {% if field.field.widget.attrs.autocomplete %}autocomplete="{{ field.field.widget.attrs.autocomplete }}"{% endif %}
+        {% if field.field.widget.attrs.placeholder %}placeholder="{{ field.field.widget.attrs.placeholder }}"{% endif %}
+    >
+    {% if field.errors %}
+    <p class="auth-field__error">{{ field.errors.0 }}</p>
+    {% endif %}
+</label>

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Overview - EXAMIQ+{% endblock %}
+
+{% block content %}
+<div class="overview-header mb-6">
+    <p class="overview-eyebrow">Dashboard</p>
+    <div class="overview-header__main">
+        <h1 class="overview-title">Overview</h1>
+        <p class="overview-as-of">Data as of {{ overview.as_of|date:"M j, Y" }} · {{ overview.as_of|date:"g:i A" }}</p>
+    </div>
+    <div class="overview-meta">
+        <span class="overview-meta__item">
+            <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            {{ overview.as_of|date:"l, F j, Y" }}
+        </span>
+        <span class="overview-meta__item">
+            <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            Week of {{ overview.week_start|date:"M j" }} – {{ overview.week_end|date:"M j, Y" }}
+        </span>
+        <span class="overview-live-badge">
+            <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Live
+        </span>
+    </div>
+</div>
+
+<div class="overview-kpi-grid mb-8">
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.course_count label="Active courses" icon="book" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students practicing" icon="users" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.accuracy label="Overall accuracy" suffix="%" subtext="Across all sessions" icon="target" variant="accent" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.sessions_this_week label="Sessions this week" subtext=overview.sessions_subtext icon="clock" variant="warning" %}</div>
+</div>
+
+{% if course_cards %}
+<p class="overview-section-label">Your courses</p>
+<div class="overview-course-grid">
+    {% for card in course_cards %}
+    {% with course=card.course %}
+    <article class="overview-course-card {% if card.active_windows or card.sessions_this_week %}overview-course-card--active{% endif %}">
+        <div class="overview-course-card__header">
+            <div>
+                <h2 class="overview-course-card__title">{{ course.name }}</h2>
+                <p class="overview-course-card__subtitle">
+                    {{ course.program.name }} · {{ course.term }} {{ course.academic_year }} · Sec {{ course.section }}
+                </p>
+            </div>
+            {% if card.active_windows %}
+            <span class="overview-course-badge overview-course-badge--open">{{ card.active_windows }} open</span>
+            {% elif card.sessions_this_week or card.last_session_at %}
+            <span class="overview-course-badge overview-course-badge--open">{{ card.sessions_this_week }} this week</span>
+            {% else %}
+            <span class="overview-course-badge overview-course-badge--muted">No activity</span>
+            {% endif %}
+        </div>
+        <div class="overview-course-card__stats">
+            <div>
+                <span class="overview-course-stat-label">Students</span>
+                <span class="overview-course-stat-value">{{ card.enrolled_count }}</span>
+            </div>
+            <div>
+                <span class="overview-course-stat-label">Accuracy</span>
+                <span class="overview-course-stat-value overview-course-stat-value--good">{{ card.accuracy }}%</span>
+            </div>
+            <div>
+                <span class="overview-course-stat-label">This week</span>
+                <span class="overview-course-stat-value">{{ card.sessions_this_week }}</span>
+            </div>
+            <div>
+                <span class="overview-course-stat-label">Last session</span>
+                <span class="overview-course-stat-value {% if card.last_session_at %}overview-course-stat-value--recent{% endif %}">
+                    {% if card.last_session_at %}{{ card.last_session_at|naturaltime }}{% else %}—{% endif %}
+                </span>
+            </div>
+        </div>
+        <div class="overview-course-card__actions">
+            <a href="{% url 'analytics_professor:course_detail' course.pk %}" class="overview-course-action">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                Analytics
+            </a>
+            <a href="{% url 'analytics_professor:course_roster' course.pk %}" class="overview-course-action">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Roster
+            </a>
+        </div>
+    </article>
+    {% endwith %}
+    {% endfor %}
+</div>
+{% else %}
+{% include "components/empty_state.html" with title="No courses yet" body="Create a course offering to start tracking student performance." cta_url="/professor/courses/create/" cta_label="Create course offering" %}
+{% endif %}
+{% endblock %}

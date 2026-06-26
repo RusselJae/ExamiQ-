@@ -1,0 +1,60 @@
+{% load examiq_tags %}
+<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="generate-modal">
+    <div class="bento-card bento-card--elevated p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto shadow-xl" role="dialog" aria-modal="true" aria-labelledby="generate-modal-title">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h2 id="generate-modal-title" class="text-lg font-semibold text-examiq-navy">AI Generated Questions</h2>
+                <p class="text-sm text-examiq-slate mt-1">
+                    Topic: <strong>{{ topic.name }}</strong> &middot; Difficulty: <strong>{{ difficulty|difficulty_label }}</strong>
+                </p>
+            </div>
+            <button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+        </div>
+
+        {% if ai_error %}
+        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 mb-4">
+            {{ ai_error }}
+        </div>
+        {% elif variations %}
+        <div class="space-y-3 mb-6">
+            {% for variation in variations %}
+            <div class="border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white">
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox"
+                           name="selected_variation"
+                           value="{{ forloop.counter0 }}"
+                           checked
+                           class="mt-1 rounded border-slate-300"
+                           data-stem="{{ variation.stem|escape }}"
+                           data-concept="{{ variation.concept_tag|default:''|escape }}"
+                           data-correct="{{ variation.correct_label|default:'A' }}"
+                           {% for choice in variation.choices %}
+                           data-choice-{{ choice.label|lower }}="{{ choice.text|escape }}"
+                           {% endfor %}>
+                    <span class="flex-1 min-w-0">
+                        <span class="text-examiq-navy font-medium block">{{ variation.stem }}</span>
+                        {% if variation.concept_tag %}
+                        <span class="text-xs text-examiq-slate mt-1 block">Concept: {{ variation.concept_tag }}</span>
+                        {% endif %}
+                        {% if variation.choices %}
+                        <ul class="text-sm text-examiq-slate mt-2 space-y-1">
+                            {% for choice in variation.choices %}
+                            <li><strong>{{ choice.label }}.</strong> {{ choice.text }}{% if choice.is_correct %} &#10003;{% endif %}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </span>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <button type="button" id="apply-generated-btn" class="btn-primary">Apply selected to form</button>
+            <button type="button" id="close-generate-modal-footer" class="btn-secondary">Cancel</button>
+        </div>
+        {% else %}
+        <p class="text-examiq-slate mb-4">No questions generated. Enable AI or try again.</p>
+        <button type="button" id="close-generate-modal-footer" class="btn-secondary">Close</button>
+        {% endif %}
+    </div>
+</div>

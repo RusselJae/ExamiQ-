@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block app_shell %}
+<div class="focus-shell w-full min-h-screen">
+<header class="focus-header">
+    <a href="{% url 'core:home' %}" class="focus-header__logo">EXAMIQ+</a>
+    <div class="focus-header__actions">
+        <a href="{% url 'analytics_student:dashboard' %}" class="focus-header__exit">Exit focus</a>
+    </div>
+</header>
+
+<div class="focus-layout grid grid-cols-1 lg:grid-cols-[auto_1fr_auto] gap-4 px-4 pb-4 min-h-[calc(100vh-4rem)]">
+    {# Left sidebar #}
+    <aside id="left-sidebar" class="focus-sidebar w-64 shrink-0" data-sidebar="left">
+        <button type="button"
+                class="sidebar-toggle focus-sidebar-toggle"
+                data-target="left-sidebar"
+                aria-label="Toggle left sidebar">
+            <svg class="w-3 h-3 sidebar-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
+
+        <div class="sidebar-collapsed-only flex-col items-center gap-3 pt-2">
+            <span class="text-xs font-bold text-examiq-green writing-mode-vertical" title="{{ session.topic.name }}">Q</span>
+        </div>
+
+        <div class="sidebar-content space-y-3">
+            <div class="focus-card">
+                <p class="focus-card__label">Topic</p>
+                <h2 class="focus-card__title">{{ session.topic.name }}</h2>
+                <span class="focus-badge mt-2">{{ session.get_difficulty_display }}</span>
+            </div>
+
+            <div class="focus-card">
+                <p class="focus-card__label">Progress</p>
+                {% if session.planned_question_count %}
+                <div class="focus-progress-bar progress-bar mt-2" role="progressbar"
+                     aria-valuenow="{{ answered_count }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ session.planned_question_count }}"
+                     id="focus-progress-bar">
+                    <div class="progress-bar-fill progress-bar-fill--good focus-progress-bar__fill"
+                         id="focus-progress-fill"
+                         style="width: {{ progress_percent }}%;"></div>
+                </div>
+                <p class="focus-progress-copy mt-2" id="focus-progress-copy">
+                    <span id="answered-count">{{ answered_count }}</span> answered,
+                    <span id="remaining-count">{{ remaining_questions }}</span> remaining
+                </p>
+                <div class="focus-question-dots mt-3"
+                     id="focus-question-dots"
+                     data-planned="{{ session.planned_question_count }}"
+                     data-answered="{{ answered_count }}"
+                     data-position="{{ question_position }}">
+                    {% for i in question_dot_range %}
+                    {% if i <= answered_count %}
+                    <span class="focus-dot focus-dot--answered" title="Question {{ i }} answered" aria-label="Question {{ i }} answered">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </span>
+                    {% elif i == question_position %}
+                    <span class="focus-dot focus-dot--current" title="Question {{ i }}" aria-current="step">{{ i }}</span>
+                    {% else %}
+                    <span class="focus-dot focus-dot--upcoming" title="Question {{ i }}">{{ i }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="focus-progress-copy mt-2">
+                    <span id="answered-count">{{ answered_count }}</span> answered
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </aside>
+
+    {# Center — question container #}
+    <div class="min-w-0">
+        {% block focus_center %}{% endblock %}
+    </div>
+
+    {# Right sidebar #}
+    <aside id="right-sidebar" class="focus-sidebar w-56 shrink-0" data-sidebar="right">
+        <button type="button"
+                class="sidebar-toggle focus-sidebar-toggle focus-sidebar-toggle--right"
+                data-target="right-sidebar"
+                aria-label="Toggle right sidebar">
+            <svg class="w-3 h-3 sidebar-chevron transition-transform rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
+
+        <div class="sidebar-collapsed-only flex-col items-center justify-center pt-8">
+            <span id="timer-collapsed" class="text-sm font-mono font-bold text-examiq-navy">--:--</span>
+        </div>
+
+        <div class="sidebar-content space-y-3">
+            <div class="focus-card focus-card--center">
+                <p class="focus-card__label">Time Remaining</p>
+                <div id="timer"
+                     class="focus-timer text-4xl font-mono font-bold text-examiq-navy"
+                     data-remaining="{{ remaining_seconds }}">
+                    --:--
+                </div>
+                <p class="text-xs text-examiq-slate mt-2">{{ session.duration_minutes }} min session</p>
+            </div>
+            <div class="focus-card focus-card--center">
+                <p class="focus-card__label">Status</p>
+                <p class="focus-status flex items-center justify-center gap-2 text-sm font-medium text-examiq-navy mt-1">
+                    <span class="focus-status-dot" id="session-status-dot" aria-hidden="true"></span>
+                    <span id="session-status" data-session-status="in-progress">In progress</span>
+                </p>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<form id="expire-form" method="post" action="{% url 'reviews:expire' session.pk %}" class="hidden">
+    {% csrf_token %}
+</form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/review-focus.js' %}"></script>
+<script>
+(function() {
+    const timerEl = document.getElementById("timer");
+    const timerCollapsed = document.getElementById("timer-collapsed");
+    if (!timerEl) return;
+
+    let remaining = parseInt(timerEl.dataset.remaining, 10);
+    let warned = false;
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+
+    function updateDisplay() {
+        const text = formatTime(remaining);
+        timerEl.textContent = text;
+        if (timerCollapsed) timerCollapsed.textContent = text;
+        if (remaining <= 60) {
+            timerEl.classList.add("timer-urgent");
+            if (timerCollapsed) timerCollapsed.classList.add("timer-urgent");
+            if (!warned && typeof showToast === "function") {
+                showToast("Less than 1 minute remaining!", "warning");
+                warned = true;
+            }
+        }
+    }
+
+    function tick() {
+        if (remaining <= 0) {
+            if (typeof showToast === "function") {
+                showToast("Time's up! Ending session...", "info");
+            }
+            setTimeout(function() {
+                document.getElementById("expire-form").submit();
+            }, 800);
+            return;
+        }
+        updateDisplay();
+        remaining--;
+        setTimeout(tick, 1000);
+    }
+    tick();
+})();
+</script>
+{% block focus_extra_js %}{% endblock %}
+{% endblock %}

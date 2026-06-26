@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}{{ program.name }} - EXAMIQ+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_chairperson:dashboard' %}" class="text-link">&larr; Back to programs</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ program.name }}</h1>
+    <a href="{% url 'analytics_chairperson:question_list' program.pk %}" class="btn-primary mt-4 inline-flex">Manage Question Bank</a>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    {% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" accent="cyan" %}
+    <div class="bento-card p-6">
+        <div class="text-2xl font-bold stat-value-success">{{ summary.accuracy }}%</div>
+        <div class="text-sm text-examiq-slate mt-1">Program Accuracy</div>
+    </div>
+    {% include "components/stat_card.html" with value=summary.total_answers label="Total Answers" accent="cyan" %}
+    {% include "components/stat_card.html" with value=summary.feedback_usage label="Feedback Views" accent="cyan" %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Recurring Mistakes</h2>
+        {% if summary.recurring_mistakes %}
+        <ul class="space-y-2">
+            {% for item in summary.recurring_mistakes %}
+            <li class="flex justify-between py-2 border-b border-slate-100">
+                <span class="text-examiq-navy">{{ item.topic__name }}</span>
+                <span class="text-examiq-mistake font-semibold">{{ item.mistake_count }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-examiq-slate">No recurring mistakes.</p>
+        {% endif %}
+    </div>
+
+    <div class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Confidence Patterns</h2>
+        {% if summary.confidence_patterns %}
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-examiq-slate border-b border-slate-100">
+                    <th class="pb-2 font-medium">Topic</th>
+                    <th class="pb-2 font-medium">Avg Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in summary.confidence_patterns %}
+                <tr class="border-b border-slate-50">
+                    <td class="py-2 text-examiq-navy">{{ item.question__topic__name }}</td>
+                    <td class="py-2 text-examiq-cyan font-medium">{{ item.avg_confidence|floatformat:1 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-examiq-slate">No confidence data.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="bento-card p-6">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Course Comparison</h2>
+    {% if summary.course_summaries %}
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-100">
+                <th class="pb-2 font-medium">Course</th>
+                <th class="pb-2 font-medium">Enrolled</th>
+                <th class="pb-2 font-medium">Sessions</th>
+                <th class="pb-2 font-medium">Accuracy</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cs in summary.course_summaries %}
+            <tr class="border-b border-slate-50">
+                <td class="py-2 text-examiq-navy font-medium">{{ cs.course.code }}</td>
+                <td class="py-2 text-examiq-slate">{{ cs.summary.enrolled_count }}</td>
+                <td class="py-2 text-examiq-slate">{{ cs.summary.sessions_completed }}</td>
+                <td class="py-2 text-examiq-cyan font-medium">{{ cs.summary.accuracy }}%</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-examiq-slate">No courses in this program.</p>
+    {% endif %}
+</div>
+{% endblock %}

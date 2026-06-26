@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+
+
+{% block title %}Question Bank - {{ course.code }}{% endblock %}
+
+
+
+{% block content %}
+
+<div class="mb-6">
+
+    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
+
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Question Bank</h1>
+
+    <p class="text-examiq-slate text-sm mt-1">Program: {{ course.program.name }}</p>
+
+</div>
+
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+
+
+<div class="flex justify-between items-center mb-4">
+
+    <span class="ai-assist-badge">AI: {{ ai_provider_label|default:"Off" }}</span>
+
+    <a href="{% url 'analytics_professor:question_create' course.pk %}" class="btn-primary">Add question</a>
+
+</div>
+
+
+
+<div id="variation-modal-container"></div>
+
+
+
+<div class="bento-grid">
+
+    {% include "components/filter_bar.html" %}
+
+
+
+    <div class="span-full">
+
+        <div class="bento-card p-6 overflow-x-auto">
+
+            <table class="w-full text-sm">
+
+                <thead>
+
+                    <tr class="text-left text-examiq-slate border-b border-slate-100">
+
+                        <th class="pb-2 font-medium">Stem</th>
+
+                        <th class="pb-2 font-medium">Topic</th>
+
+                        <th class="pb-2 font-medium">Difficulty</th>
+
+                        <th class="pb-2 font-medium">Type</th>
+
+                        <th class="pb-2 font-medium">Mistakes</th>
+
+                        <th class="pb-2 font-medium">Active</th>
+
+                        <th class="pb-2 font-medium"></th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for question in questions %}
+
+                    <tr class="border-b border-slate-50">
+
+                        <td class="py-2 text-examiq-navy max-w-xs truncate">{{ question.stem|truncatechars:60 }}</td>
+
+                        <td class="py-2 text-examiq-slate">{{ question.topic.name }}</td>
+
+                        <td class="py-2 text-examiq-slate">{{ question.get_difficulty_display }}</td>
+
+                        <td class="py-2 text-examiq-slate">{{ question.get_question_type_display }}</td>
+
+                        <td class="py-2 text-examiq-mistake font-medium">{{ question.mistake_count }}</td>
+
+                        <td class="py-2">{% if question.is_active %}Yes{% else %}No{% endif %}</td>
+
+                        <td class="py-2 text-right space-x-2 whitespace-nowrap">
+
+                            <button type="button"
+
+                                    class="text-link text-xs"
+
+                                    hx-post="{% url 'analytics_professor:question_generate_variations' course.pk question.pk %}"
+
+                                    hx-target="#variation-modal-container"
+
+                                    hx-swap="innerHTML">
+
+                                Variations
+
+                            </button>
+
+                            <a href="{% url 'analytics_professor:question_edit' course.pk question.pk %}" class="text-link">Edit</a>
+
+                            <a href="{% url 'analytics_professor:question_delete' course.pk question.pk %}" class="text-examiq-mistake">Deactivate</a>
+
+                        </td>
+
+                    </tr>
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="7" class="py-4 text-examiq-slate">
+
+                            {% if filter_has_active %}No questions match your filters.{% else %}No questions yet.{% endif %}
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="span-full">
+
+        {% include "components/pagination.html" %}
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+

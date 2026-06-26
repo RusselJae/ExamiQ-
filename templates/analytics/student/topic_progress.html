@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Topic Progress - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Topic Progress" subtitle="See where you're strong and where to focus next." %}
+
+{% if topics %}
+<div class="bento-grid mb-6">
+    {% for topic in topics %}
+    <div class="span-half">
+        <div class="bento-card bento-card-inner h-full">
+            <div class="flex justify-between items-start gap-4 mb-3">
+                <h2 class="text-lg font-semibold text-examiq-navy">{{ topic.topic_name }}</h2>
+                <span class="text-2xl font-bold {% if topic.accuracy >= 70 %}stat-value-good{% elif topic.accuracy >= 50 %}text-examiq-amber{% else %}text-examiq-mistake{% endif %}">{{ topic.accuracy }}%</span>
+            </div>
+            <div class="progress-bar h-2">
+                <div class="progress-bar-fill" style="width: {{ topic.accuracy }}%"></div>
+            </div>
+            <p class="text-sm text-examiq-slate">{{ topic.correct }} of {{ topic.total }} answers correct</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+{% include "components/empty_state.html" with title="No topic data yet" body="Answer questions across topics to see your progress here." cta_url="/student/review/setup/" cta_label="Start reviewing" %}
+{% endif %}
+{% endblock %}

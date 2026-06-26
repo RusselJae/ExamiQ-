@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Professor Dashboard - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Your Courses" subtitle="Monitor how your classes are performing." %}
+
+{% if courses %}
+<div class="bento-grid">
+    {% for course in courses %}
+    <div class="span-half">
+        <a href="{% url 'analytics_professor:course_detail' course.pk %}"
+           class="bento-card bento-card-inner hover:shadow-md hover:ring-2 hover:ring-sky-100 transition block group h-full">
+            <h2 class="text-xl font-semibold text-examiq-cyan group-hover:text-sky-700">{{ course.code }}</h2>
+            <p class="text-examiq-navy mt-1">{{ course.name }}</p>
+            <p class="text-sm text-examiq-slate mt-2">{{ course.program.name }} · {{ course.term }} {{ course.academic_year }}</p>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="span-full">
+    {% include "components/empty_state.html" with title="No courses yet" body="Create a course offering to start tracking student performance." cta_url="/professor/courses/create/" cta_label="Create course offering" %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}EXAMIQ+{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        examiq: {
+                            bg: '#F5F4F0',
+                            navy: '#0F172A',
+                            cyan: '#1A5632',
+                            green: '#1A5632',
+                            gold: '#C9A227',
+                            success: '#2E7D52',
+                            mistake: '#EF4444',
+                            coral: '#E07A5F',
+                            amber: '#F59E0B',
+                            slate: '#64748B',
+                            accent: '#EEF4EE',
+                        }
+                    },
+                    borderRadius: { xl: '12px' },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-examiq-bg text-examiq-navy min-h-screen font-sans">
+    {% include "components/toast_stack.html" %}
+
+    <div id="django-messages" class="hidden">
+        {% if messages %}
+        {% for message in messages %}
+        <span data-toast-message="{{ message }}" data-toast-type="{{ message.tags|default:'info' }}"></span>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    {% block app_shell %}
+    <div class="app-layout">
+        {% block sidebar %}{% include "components/sidebar.html" %}{% endblock %}
+        <div class="app-main">
+            {% block navbar %}{% include "components/navbar.html" %}{% endblock %}
+            <div class="app-content {% block main_class %}{% endblock %}">
+                {% block content %}{% endblock %}
+            </div>
+            {% block footer %}{% include "components/footer.html" %}{% endblock %}
+        </div>
+    </div>
+    {% endblock %}
+
+    {% if user.is_authenticated and user.role == "professor" and professor_courses %}
+    <div class="sr-only" aria-hidden="true">{% csrf_token %}</div>
+    {% include "components/summary_fab.html" %}
+    {% endif %}
+
+    <script src="{% static 'js/examiq-ui.js' %}"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            if (typeof renderMathInElement !== "undefined") {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false}
+                    ]
+                });
+            }
+        });
+        document.body.addEventListener("htmx:afterSwap", function() {
+            if (typeof renderMathInElement !== "undefined") {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: "$$", right: "$$", display: true},
+                        {left: "$", right: "$", display: false}
+                    ]
+                });
+            }
+        });
+    </script>
+    {% if user.is_authenticated and user.role == "professor" and professor_courses %}
+    <script src="{% static 'js/analytics-summary.js' %}"></script>
+    {% endif %}
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

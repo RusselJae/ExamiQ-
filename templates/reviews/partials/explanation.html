@@ -1,0 +1,66 @@
+<div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 lg:p-8"
+     data-explanation-accordion
+     data-correct="{% if answer.is_correct %}true{% else %}false{% endif %}">
+
+    <div class="mb-6">
+        {% if answer.is_correct %}
+        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            Correct
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-red-50 text-red-700 border border-red-200">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>
+            Incorrect
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="mb-6">
+        <h3 class="text-lg font-bold text-examiq-navy">Step-by-Step Explanatory Feedback</h3>
+        <p class="text-sm text-examiq-slate mt-1">{{ steps|length }} step{{ steps|length|pluralize }} — reveal each one at your pace</p>
+    </div>
+
+    <div class="space-y-3 mb-6">
+        {% for step in steps %}
+        <div class="explanation-step rounded-xl bg-examiq-bg border border-slate-100 p-5 {% if not forloop.first %}hidden-step{% endif %}"
+             data-step="{{ forloop.counter }}"
+             data-step-feedback-url="{% url 'reviews:step_feedback_view' session.pk answer.pk step.pk %}">
+            <div class="flex items-start gap-3">
+                <span class="flex-shrink-0 w-7 h-7 rounded-xl bg-examiq-green text-white text-xs font-bold flex items-center justify-center">
+                    {{ forloop.counter }}
+                </span>
+                <div class="text-examiq-navy leading-relaxed flex-1">
+                    {{ step.content|linebreaks }}
+                    {% if step.professor_note %}
+                    <div class="professor-note-callout">
+                        <strong>Professor's note:</strong> {{ step.professor_note|linebreaks }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-examiq-slate text-sm rounded-xl bg-examiq-bg p-4">No explanation steps available for this question.</p>
+        {% endfor %}
+    </div>
+
+    <div hx-post="{% url 'reviews:feedback_view' session.pk answer.pk %}" hx-trigger="load" class="hidden"></div>
+
+    {% if steps %}
+    <button type="button"
+            data-reveal-next
+            class="btn-outline w-full mb-3">
+        Reveal Next Step
+    </button>
+    {% endif %}
+
+    <button type="button"
+            data-next-question
+            hx-get="{% url 'reviews:question_partial' session.pk %}"
+            hx-target="#question-container"
+            hx-swap="innerHTML"
+            class="btn-primary w-full {% if steps %}hidden{% endif %}">
+        Next Question
+    </button>
+</div>

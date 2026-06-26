@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Cross-Program Analytics - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Cross-Program Analytics" subtitle="Math performance by home degree program in your department." %}
+
+<div class="bento-grid mb-6">
+    <div class="span-kpi">
+        <div class="bento-card bento-card--kpi bento-card-inner">
+            <p class="text-sm text-examiq-slate">Overall department accuracy</p>
+            <p class="text-3xl font-bold stat-value-good">{{ analytics.overall_accuracy }}%</p>
+        </div>
+    </div>
+    {% for row in analytics.breakdown %}
+    <div class="span-half">
+        <div class="bento-card bento-card-inner flex justify-between items-center h-full">
+            <div>
+                <p class="font-semibold text-examiq-navy">{{ row.label }}</p>
+                <p class="text-xs text-examiq-slate">{{ row.student_count }} students · {{ row.total_answers }} answers</p>
+            </div>
+            <p class="text-xl font-bold stat-value-good">{{ row.accuracy }}%</p>
+        </div>
+    </div>
+    {% empty %}
+    <div class="span-full">
+        {% include "components/empty_state.html" with title="No student data yet" body="Analytics will appear once students in your department complete review sessions." %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

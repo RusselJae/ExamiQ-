@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }} - {{ course.code }}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:question_list' course.pk %}" class="text-link">&larr; Back to questions</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ form_title }}</h1>
+</div>
+{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+
+{% if is_edit and mistake_count %}
+<div class="mb-4 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-examiq-navy">
+    This question has {{ mistake_count }} recorded mistake{{ mistake_count|pluralize }}.
+    <a href="{% url 'analytics_professor:feedback_edit' course.pk object.pk %}" class="text-link font-medium ml-1">Edit explanation feedback &rarr;</a>
+</div>
+{% endif %}
+
+<form method="post" class="space-y-6" id="question-edit-form">
+    {% csrf_token %}
+
+    <div class="bento-card bento-card--elevated p-6 shadow-sm space-y-4">
+        <h2 class="text-lg font-semibold text-examiq-navy">Question details</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.topic.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Topic</label>
+                {{ form.topic }}
+                {% if form.topic.errors %}<p class="text-red-600 text-xs mt-1">{{ form.topic.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.difficulty.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Difficulty</label>
+                {{ form.difficulty }}
+                {% if form.difficulty.errors %}<p class="text-red-600 text-xs mt-1">{{ form.difficulty.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+        <div>
+            <label for="{{ form.stem.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
+            {{ form.stem }}
+            {% if form.stem.errors %}<p class="text-red-600 text-xs mt-1">{{ form.stem.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+            <label for="{{ form.concept_tag.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Concept tag</label>
+            {{ form.concept_tag }}
+        </div>
+    </div>
+
+    <div class="bento-card bento-card--elevated p-6 shadow-sm">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-1">Answer choices</h2>
+        <p class="text-xs text-examiq-slate mb-4">Mark exactly one choice as correct.</p>
+        {{ choice_formset.management_form }}
+        {% if choice_formset.non_form_errors %}
+        <p class="text-red-600 text-sm mb-3">{{ choice_formset.non_form_errors.0 }}</p>
+        {% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for choice_form in choice_formset %}
+            <div class="rounded-xl border border-slate-200 p-4 bg-white shadow-sm">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-semibold text-examiq-navy">Choice {% cycle "A" "B" "C" "D" %}</span>
+                    <label class="inline-flex items-center gap-2 text-xs text-examiq-slate cursor-pointer">
+                        {{ choice_form.is_correct }}
+                        <span>Correct</span>
+                    </label>
+                </div>
+                {{ choice_form.id }}
+                {{ choice_form.text }}
+                {% if choice_form.text.errors %}<p class="text-red-600 text-xs mt-1">{{ choice_form.text.errors.0 }}</p>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bento-card p-4 shadow-sm flex items-center justify-between">
+        <label for="{{ form.is_active.id_for_label }}" class="inline-flex items-center gap-2 text-sm text-examiq-navy cursor-pointer">
+            {{ form.is_active }}
+            <span>Active in question bank</span>
+        </label>
+        <button type="submit" class="btn-primary">Save question</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const form = document.getElementById("question-edit-form");
+    if (!form) return;
+    form.addEventListener("change", function(e) {
+        if (e.target.classList.contains("correct-choice-cb") && e.target.checked) {
+            form.querySelectorAll(".correct-choice-cb").forEach(function(cb) {
+                if (cb !== e.target) cb.checked = false;
+            });
+        }
+    });
+})();
+</script>
+{% endblock %}

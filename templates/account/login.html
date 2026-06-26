@@ -1,0 +1,40 @@
+{% extends "account/auth_base.html" %}
+
+{% block title %}Sign In - EXAMIQ+{% endblock %}
+
+{% block auth_content %}
+<h2 class="auth-card__heading">Welcome back</h2>
+<p class="auth-card__subheading">Log in to continue your review session.</p>
+
+<form method="post" action="{% url 'account_login' %}" class="auth-form" novalidate>
+    {% csrf_token %}
+    {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+
+    {% if form.non_field_errors %}
+    <div class="auth-form__errors" role="alert">
+        {% for error in form.non_field_errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% include "components/auth_field.html" with field=form.login %}
+    {% include "components/auth_password_field.html" with field=form.password %}
+
+    {% if form.remember %}
+    <label class="auth-checkbox" for="{{ form.remember.id_for_label }}">
+        {{ form.remember }}
+        <span>{{ form.remember.label }}</span>
+    </label>
+    {% endif %}
+
+    <button type="submit" class="btn-primary w-full mt-4">Sign In</button>
+</form>
+{% endblock %}
+
+{% block auth_footer %}
+<p class="auth-card__footer">
+    Don't have an account?
+    <a href="{% url 'account_signup' %}" class="text-link auth-card__footer-link">Sign up</a>
+</p>
+{% endblock %}

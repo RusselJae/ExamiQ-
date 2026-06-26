@@ -1,0 +1,47 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" id="variation-modal">
+    <div class="bento-card p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold text-examiq-navy">Generated variations</h2>
+            <button type="button" class="text-examiq-slate hover:text-examiq-navy" onclick="document.getElementById('variation-modal').remove()">&times;</button>
+        </div>
+
+        {% if ai_error %}
+        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 mb-4">
+            {{ ai_error }}
+        </div>
+        {% elif variations %}
+        <form method="post" action="{% url 'analytics_professor:question_confirm_variations' course.pk question.pk %}">
+            {% csrf_token %}
+            {% for variation in variations %}
+            <div class="border border-slate-100 rounded-xl p-4 mb-4">
+                <label class="flex items-start gap-2 mb-3">
+                    <input type="checkbox" name="selected" value="{{ forloop.counter0 }}" checked class="mt-1 rounded border-slate-300">
+                    <input type="hidden" name="stem_{{ forloop.counter0 }}" value="{{ variation.stem }}">
+                    <span class="text-examiq-navy font-medium">{{ variation.stem }}</span>
+                </label>
+                {% if variation.choices %}
+                <ul class="text-sm text-examiq-slate space-y-1 ml-6">
+                    {% for choice in variation.choices %}
+                    <li>
+                        <input type="hidden" name="choice_{{ forloop.parentloop.counter0 }}_{{ choice.label }}" value="{{ choice.text }}">
+                        {% if choice.is_correct %}
+                        <input type="hidden" name="correct_{{ forloop.parentloop.counter0 }}_{{ choice.label }}" value="on">
+                        {% endif %}
+                        <strong>{{ choice.label }}.</strong> {{ choice.text }}{% if choice.is_correct %} ✓{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <div class="flex gap-3">
+                <button type="submit" class="btn-primary">Save selected</button>
+                <button type="button" class="btn-secondary" onclick="document.getElementById('variation-modal').remove()">Cancel</button>
+            </div>
+        </form>
+        {% else %}
+        <p class="text-examiq-slate mb-4">No variations generated. Enable AI or try again later.</p>
+        <button type="button" class="btn-secondary" onclick="document.getElementById('variation-modal').remove()">Close</button>
+        {% endif %}
+    </div>
+</div>

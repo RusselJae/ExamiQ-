@@ -1,0 +1,16 @@
+<div class="empty-state {% if compact %}empty-state--compact{% endif %} {{ extra_class }}">
+    {% if icon %}
+    <div class="empty-state-icon-wrap" aria-hidden="true">
+        <div class="empty-state-icon">{{ icon|safe }}</div>
+    </div>
+    {% endif %}
+    {% if title %}
+    <p class="empty-state-title">{{ title }}</p>
+    {% endif %}
+    {% if body %}
+    <p class="empty-state-body">{{ body }}</p>
+    {% endif %}
+    {% if cta_url and cta_label %}
+    <a href="{{ cta_url }}" class="btn-primary btn-primary-sm mt-2">{{ cta_label }}</a>
+    {% endif %}
+</div>

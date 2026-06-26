@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}My Courses - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="My Courses" subtitle="Create, clone, and manage your term offerings." %}
+
+<div class="flex justify-end mb-6">
+    <a href="{% url 'analytics_professor:course_create' %}" class="btn-primary">Create course offering</a>
+</div>
+
+<div class="space-y-4">
+    {% for course in courses %}
+    <div class="bento-card p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h2 class="text-lg font-semibold text-examiq-navy">{{ course.code }} — {{ course.name }}</h2>
+            <p class="text-sm text-examiq-slate mt-1">
+                {{ course.program.name }} · {{ course.term }} {{ course.academic_year }} · Section {{ course.section }}
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'analytics_professor:course_detail' course.pk %}" class="btn-secondary text-sm">Open</a>
+            <form method="post" action="{% url 'analytics_professor:course_clone' course.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="term" value="2nd Sem">
+                <input type="hidden" name="academic_year" value="2026">
+                <button type="submit" class="btn-secondary text-sm">Clone to 2nd Sem</button>
+            </form>
+            <form method="post" action="{% url 'analytics_professor:course_archive' course.pk %}" class="inline">
+                {% csrf_token %}
+                <button type="submit" class="text-sm text-red-600 hover:underline">Archive</button>
+            </form>
+        </div>
+    </div>
+    {% empty %}
+    <div class="bento-card p-8 text-center text-examiq-slate">
+        No active course offerings. <a href="{% url 'analytics_professor:course_create' %}" class="text-examiq-cyan font-medium">Create one</a>.
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
