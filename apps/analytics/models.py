@@ -48,6 +48,7 @@ class MistakeRecord(models.Model):
         blank=True,
         related_name="mistake_records",
     )
+    ai_feedback = models.TextField(blank=True)
     occurred_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

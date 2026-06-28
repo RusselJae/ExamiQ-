@@ -4,7 +4,7 @@ from django.db.models import Q
 from django.utils import timezone
 from model_utils.models import TimeStampedModel
 
-from apps.questions.models import Question, QuestionChoice, Topic
+from apps.questions.models import Question, QuestionChoice, Subject, Topic
 from apps.users.models import Course, User
 
 
@@ -65,6 +65,51 @@ class ReviewWindow(TimeStampedModel):
             raise ValidationError("Close time must be after open time.")
 
 
+DEFAULT_EXAM_DIFFICULTIES = [
+    Question.Difficulty.EASY,
+    Question.Difficulty.MEDIUM,
+    Question.Difficulty.HARD,
+]
+
+
+class ExamSetup(TimeStampedModel):
+    """Faculty-controlled exam availability for a course offering."""
+
+    course = models.OneToOneField(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="exam_setup",
+    )
+    is_enabled = models.BooleanField(default=True)
+    topics = models.ManyToManyField(Topic, blank=True, related_name="exam_setups")
+    allowed_difficulties = models.JSONField(default=list)
+
+    class Meta:
+        verbose_name = "Exam Setup"
+        verbose_name_plural = "Exam Setups"
+
+    def __str__(self) -> str:
+        return f"Exam setup for {self.course.code}"
+
+    def save(self, *args, **kwargs):
+        if not self.allowed_difficulties:
+            self.allowed_difficulties = list(DEFAULT_EXAM_DIFFICULTIES)
+        super().save(*args, **kwargs)
+
+    def effective_difficulties(self) -> list[str]:
+        return self.allowed_difficulties or list(DEFAULT_EXAM_DIFFICULTIES)
+
+    def allowed_topic_queryset(self):
+        subject = Subject.objects.filter(
+            code=self.course.code,
+            program=self.course.program,
+        ).first()
+        base = Topic.objects.filter(subject=subject, parent__isnull=True) if subject else Topic.objects.none()
+        if self.topics.exists():
+            return base.filter(pk__in=self.topics.values_list("pk", flat=True))
+        return base
+
+
 class ReviewSession(TimeStampedModel):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -119,6 +164,8 @@ class ReviewSession(TimeStampedModel):
         choices=Status.choices,
         default=Status.ACTIVE,
     )
+    pre_session_confidence = models.CharField(max_length=20, blank=True, default="")
+    session_goal = models.CharField(max_length=100, blank=True, default="")
 
     class Meta:
         verbose_name = "Review Session"

@@ -11,8 +11,12 @@ from apps.analytics.confidence import (
     CLASSIFICATION_LUCKY_GUESS,
     CLASSIFICATION_MASTERY,
     CLASSIFICATION_MISCONCEPTION,
+    CONFIDENCE_TIER_HIGH,
+    CONFIDENCE_TIER_LOW,
+    CONFIDENCE_TIER_AVERAGE,
     classify_answer,
     confidence_accuracy_matrix,
+    confidence_tier_matrix,
 )
 from apps.analytics.models import ErrorType
 from apps.analytics.services import (
@@ -23,7 +27,7 @@ from apps.analytics.services import (
 )
 from apps.core.context_processors import navigation_context
 from apps.questions.models import ExplanationStep, Question
-from apps.reviews.models import Answer, ReviewSession, ReviewWindow, StepFeedbackView
+from apps.reviews.models import Answer, ReviewSession, StepFeedbackView
 from apps.users.models import Course
 
 
@@ -68,45 +72,56 @@ class TestConfidenceMatrix:
         assert matrix[CLASSIFICATION_MISCONCEPTION] == 1
         assert matrix[CLASSIFICATION_MASTERY] == 1
 
+    def test_confidence_tier_matrix(self, student, mcq_question, numeric_question):
+        question, _correct = mcq_question
+        numeric_q = numeric_question
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(
+            session=session,
+            question=question,
+            confidence=5,
+            is_correct=False,
+        )
+        Answer.objects.create(
+            session=session,
+            question=numeric_q,
+            confidence=3,
+            is_correct=True,
+        )
+        matrix = confidence_tier_matrix(Answer.objects.filter(session=session))
+        assert matrix[CONFIDENCE_TIER_HIGH] == 1
+        assert matrix[CONFIDENCE_TIER_AVERAGE] == 1
+
 
 @pytest.mark.django_db
-class TestReviewWindows:
-    def test_professor_can_create_window(self, client, professor, program):
-        course = Course.objects.create(
-            program=program,
-            code="TEST101",
-            name="Test Course",
-            professor=professor,
-        )
+class TestExamSetupProfessor:
+    def test_professor_can_save_exam_setup(self, client, professor, teaching_assignment):
+        course = teaching_assignment.course
         client.force_login(professor)
-        now = timezone.now()
         response = client.post(
-            reverse("analytics_professor:window_create", kwargs={"course_pk": course.pk}),
+            reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk}),
             {
-                "title": "Final Review",
-                "exam_type": "final",
-                "opens_at": (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
-                "closes_at": (now + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
-                "duration_minutes": 30,
-                "seconds_per_question": 30,
-                "mode": "timed_exam",
-                "allowed_difficulties": ["easy", "medium"],
-                "is_active": True,
+                "is_enabled": True,
+                "allowed_difficulties": ["easy", "medium", "hard"],
             },
         )
         assert response.status_code == 302
-        assert ReviewWindow.objects.filter(course=course, title="Final Review").exists()
+        setup = course.exam_setup
+        assert setup.is_enabled is True
 
-    def test_other_professor_cannot_access_window_list(self, client, professor, chairperson, program):
-        other = professor
-        course = Course.objects.create(
-            program=program,
-            code="SEC101",
-            name="Secret",
-            professor=chairperson,
+    def test_other_professor_cannot_access_exam_setup(
+        self, client, professor, chairperson, teaching_assignment
+    ):
+        course = teaching_assignment.course
+        client.force_login(chairperson)
+        response = client.get(
+            reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk})
         )
-        client.force_login(other)
-        response = client.get(reverse("analytics_professor:window_list", kwargs={"course_pk": course.pk}))
         assert response.status_code == 404
 
 
@@ -221,6 +236,7 @@ class TestHeatmap:
 
 @pytest.mark.django_db
 class TestQuestionCRUD:
+    @override_settings(AI_ENABLED=False)
     def test_professor_can_create_question(self, client, professor, topic, program):
         course = Course.objects.create(
             program=program,
@@ -246,6 +262,79 @@ class TestQuestionCRUD:
         )
         assert response.status_code == 302, getattr(response, "context", None)
         assert Question.objects.filter(stem="Test question?").exists()
+
+    @override_settings(AI_ENABLED=False)
+    def test_batch_skips_duplicate_question(self, client, professor, topic, program):
+        course = Course.objects.create(
+            program=program,
+            code="QB103",
+            name="QB Course 3",
+            professor=professor,
+        )
+        from apps.questions.services import create_question
+
+        create_question(
+            {
+                "topic": topic,
+                "difficulty": Question.Difficulty.EASY,
+                "question_type": Question.QuestionType.MCQ,
+                "stem": "Existing question?",
+                "is_active": True,
+                "status": Question.Status.APPROVED,
+            },
+            [
+                {"label": "A", "text": "1", "is_correct": True},
+                {"label": "B", "text": "2", "is_correct": False},
+                {"label": "C", "text": "3", "is_correct": False},
+                {"label": "D", "text": "4", "is_correct": False},
+            ],
+            [],
+        )
+        client.force_login(professor)
+        response = client.post(
+            reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+            {
+                "topic": topic.id,
+                "difficulty": Question.Difficulty.EASY,
+                "question_count": 1,
+                "stem_0": "existing question?",
+                "correct_0": "A",
+                "choice_0_A": "1",
+                "choice_0_B": "2",
+                "choice_0_C": "3",
+                "choice_0_D": "4",
+            },
+            follow=True,
+        )
+        assert response.status_code == 200
+        assert Question.objects.filter(stem__iexact="existing question?").count() == 1
+
+    def test_ai_validate_returns_json(self, client, professor, topic, program):
+        course = Course.objects.create(
+            program=program,
+            code="QB104",
+            name="QB Course 4",
+            professor=professor,
+        )
+        client.force_login(professor)
+        response = client.post(
+            reverse("analytics_professor:question_ai_validate", kwargs={"course_pk": course.pk}),
+            {
+                "topic": topic.id,
+                "difficulty": Question.Difficulty.EASY,
+                "stem": "What is 2+2?",
+                "correct_label": "A",
+                "choice_A": "4",
+                "choice_B": "5",
+                "choice_C": "6",
+                "choice_D": "7",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "is_valid" in data
+        assert "feedback" in data
 
     def test_professor_can_create_question_with_error_type(self, client, professor, topic, program):
         course = Course.objects.create(

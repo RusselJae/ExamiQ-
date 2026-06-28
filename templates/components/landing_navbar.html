@@ -1,0 +1,14 @@
+<header class="landing-nav">
+    <div class="landing-nav__inner">
+        {% include "components/landing_logo.html" %}
+        <nav class="landing-nav__links" aria-label="Main">
+            <a href="{% url 'core:home' %}#home" class="landing-nav__link landing-nav__link--active">Home</a>
+            <a href="{% url 'core:home' %}#about" class="landing-nav__link">About</a>
+            <a href="{% url 'core:home' %}#features" class="landing-nav__link">Features</a>
+        </nav>
+        <div class="landing-nav__actions">
+            <a href="{% url 'account_login' %}" class="landing-nav__login">Login</a>
+            <a href="{% url 'account_signup' %}" class="landing-nav__signup">Sign Up</a>
+        </div>
+    </div>
+</header>

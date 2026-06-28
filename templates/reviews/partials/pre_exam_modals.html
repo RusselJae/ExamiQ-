@@ -1,0 +1,83 @@
+<div id="pre-exam-modals" class="pre-exam-modals" aria-hidden="true">
+    {# Step 1 — Before We Start #}
+    <div id="pre-exam-step-confidence" class="pre-exam-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pre-exam-confidence-title">
+        <div class="pre-exam-modal-backdrop" data-pre-exam-dismiss></div>
+        <div class="pre-exam-modal-panel">
+            <h2 id="pre-exam-confidence-title" class="pre-exam-modal-title">Before We Start</h2>
+            <p class="pre-exam-modal-subtitle">How confident do you feel about this exam?</p>
+            <div class="pre-exam-confidence-grid">
+                <button type="button" class="pre-exam-confidence-card" data-confidence="not_confident">
+                    <span class="pre-exam-emoji" aria-hidden="true">😟</span>
+                    <span class="pre-exam-confidence-label">Not Confident</span>
+                </button>
+                <button type="button" class="pre-exam-confidence-card" data-confidence="bit_confident">
+                    <span class="pre-exam-emoji" aria-hidden="true">🙂</span>
+                    <span class="pre-exam-confidence-label">A Bit Confident</span>
+                </button>
+                <button type="button" class="pre-exam-confidence-card" data-confidence="very_confident">
+                    <span class="pre-exam-emoji" aria-hidden="true">😎</span>
+                    <span class="pre-exam-confidence-label">Very Confident</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {# Step 2 — Quick Warm-Up #}
+    <div id="pre-exam-step-warmup" class="pre-exam-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pre-exam-warmup-title">
+        <div class="pre-exam-modal-backdrop" data-pre-exam-dismiss></div>
+        <div class="pre-exam-modal-panel">
+            <h2 id="pre-exam-warmup-title" class="pre-exam-modal-title">Quick Warm-Up</h2>
+            <p class="pre-exam-modal-subtitle">One quick question to get your brain in gear.</p>
+            <p id="pre-exam-warmup-stem" class="pre-exam-warmup-stem"></p>
+            <div id="pre-exam-warmup-choices" class="pre-exam-warmup-choices"></div>
+            <p id="pre-exam-warmup-feedback" class="pre-exam-warmup-feedback hidden" role="status"></p>
+            <button type="button" id="pre-exam-warmup-continue" class="btn-primary w-full mt-4 hidden" disabled>Continue</button>
+        </div>
+    </div>
+
+    {# Step 3 — Set Your Goal #}
+    <div id="pre-exam-step-goal" class="pre-exam-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pre-exam-goal-title">
+        <div class="pre-exam-modal-backdrop" data-pre-exam-dismiss></div>
+        <div class="pre-exam-modal-panel">
+            <h2 id="pre-exam-goal-title" class="pre-exam-modal-title">Set Your Goal</h2>
+            <p class="pre-exam-modal-subtitle">What do you want to achieve today?</p>
+            <fieldset class="pre-exam-goal-list">
+                <legend class="sr-only">Session goal</legend>
+                <label class="pre-exam-goal-option">
+                    <input type="radio" name="pre_exam_goal" value="pass">
+                    <span>Pass the exam</span>
+                </label>
+                <label class="pre-exam-goal-option">
+                    <input type="radio" name="pre_exam_goal" value="high_score">
+                    <span>Get a high score</span>
+                </label>
+                <label class="pre-exam-goal-option">
+                    <input type="radio" name="pre_exam_goal" value="learn">
+                    <span>Learn and improve</span>
+                </label>
+                <label class="pre-exam-goal-option">
+                    <input type="radio" name="pre_exam_goal" value="finish">
+                    <span>Just finish</span>
+                </label>
+            </fieldset>
+            <label class="pre-exam-skip-goal mt-4 flex items-center gap-2 text-sm text-examiq-slate">
+                <input type="checkbox" id="pre-exam-skip-goal">
+                Don't show this again
+            </label>
+            <button type="button" id="pre-exam-goal-continue" class="btn-primary w-full mt-4" disabled>Continue</button>
+        </div>
+    </div>
+
+    {# Step 4 — Ready? #}
+    <div id="pre-exam-step-ready" class="pre-exam-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pre-exam-ready-title">
+        <div class="pre-exam-modal-backdrop" data-pre-exam-dismiss></div>
+        <div class="pre-exam-modal-panel pre-exam-modal-panel--compact">
+            <h2 id="pre-exam-ready-title" class="pre-exam-modal-title">Ready to start the exam?</h2>
+            <p class="pre-exam-modal-subtitle">Once you begin, the timer starts. Good luck!</p>
+            <div class="pre-exam-ready-actions">
+                <button type="button" id="pre-exam-ready-cancel" class="btn-outline flex-1">Cancel</button>
+                <button type="button" id="pre-exam-ready-start" class="btn-primary flex-1">Start</button>
+            </div>
+        </div>
+    </div>
+</div>

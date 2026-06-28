@@ -1,9 +1,9 @@
 import pytest
 from django.urls import reverse
 
-from apps.questions.models import Question, QuestionChoice
+from apps.questions.models import Question, YearLevel
 from apps.reviews.models import ReviewSession
-from apps.reviews.services import start_review_session
+from apps.reviews.services import start_review_session, submit_answer
 
 
 @pytest.mark.django_db
@@ -31,6 +31,7 @@ class TestQuestionPartialView:
             student=student,
             topic=topic,
             difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.PRACTICE_REVIEW,
         )
         client.force_login(student)
         url = reverse("reviews:question_partial", kwargs={"pk": session.pk})
@@ -39,12 +40,27 @@ class TestQuestionPartialView:
         assert response.status_code == 200
         content = response.content.decode()
         assert question.stem in content
-        assert "confidence-slider" in content
+        assert "confidence-btn" in content
+
+    def test_timed_exam_hides_confidence_buttons(self, client, student, topic, mcq_question):
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        client.force_login(student)
+        url = reverse("reviews:question_partial", kwargs={"pk": session.pk})
+        response = client.get(url)
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "confidence-btn" not in content
+        assert "question-timer-display" in content
 
 
 @pytest.mark.django_db
 class TestReviewSessionFocusUI:
-    def test_session_page_includes_progress_bar_and_slider_context(self, client, student, topic, mcq_question):
+    def test_session_page_loads_without_session_modals(self, client, student, topic, mcq_question):
         session = start_review_session(
             student=student,
             topic=topic,
@@ -55,14 +71,98 @@ class TestReviewSessionFocusUI:
         content = response.content.decode()
         assert response.status_code == 200
         assert "focus-header" in content
-        assert "focus-progress-bar" in content
-        assert "focus-question-dots" in content
-        assert "session-status" in content
+        assert "session-modal-icebreaker" not in content
+        assert 'data-intro-pending="false"' in content
+        assert "Loading first question" in content
+
+
+@pytest.mark.django_db
+class TestReviewSetupPage:
+    def test_setup_includes_pre_exam_modals(self, client, student, teaching_assignment, mcq_question):
+        client.force_login(student)
+        response = client.get(reverse("reviews:setup"))
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "pre-exam-step-confidence" in content
+        assert "review_window" not in content
+        assert "Open review windows" not in content
+
+
+@pytest.mark.django_db
+class TestReviewSetupPrefill:
+    def test_setup_prefills_subject_and_topic_from_query(
+        self, client, student, topic, teaching_assignment, mcq_question
+    ):
+        client.force_login(student)
+        url = reverse("reviews:setup") + f"?topic={topic.pk}"
+        response = client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert f'value="{topic.subject_id}"' in content or f'value="{topic.subject.pk}"' in content
+        assert str(topic.pk) in content
+        assert "preselectedTopicId" in content or str(topic.pk) in content
+
+    def test_setup_ignores_topic_outside_curriculum(self, client, student, year_level, program):
+        from apps.questions.models import Subject, Topic
+
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=99, defaults={"name": "Other Year"}
+        )
+        other_subject = Subject.objects.create(
+            program=program,
+            code="OTH-101",
+            name="Other Subject",
+            year_level=other_year,
+            semester=1,
+        )
+        other_topic = Topic.objects.create(subject=other_subject, name="Other Topic")
+        client.force_login(student)
+        url = reverse("reviews:setup") + f"?topic={other_topic.pk}"
+        response = client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert f"preselectedTopicId = {other_topic.pk}" not in content
+        assert "preselectedTopicId = null" in content
+
+
+@pytest.mark.django_db
+class TestSessionSummaryView:
+    def test_summary_shows_calibration_bars_and_generate_feedback(
+        self, client, student, topic, mcq_question
+    ):
+        question, _ = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        wrong = question.choices.filter(is_correct=False).first()
+        submit_answer(
+            session=session,
+            question=question,
+            confidence=5,
+            selected_choice=wrong,
+            time_spent_seconds=5,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        client.force_login(student)
+        response = client.get(reverse("reviews:summary", kwargs={"pk": session.pk}))
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "calibration-row" in content
+        assert "Weak Topics This Session" in content
+        assert "Generate feedback" in content
+        assert "session-feedback.js" in content
 
 
 @pytest.mark.django_db
 class TestSubmitAnswerView:
-    def test_timed_exam_records_confidence(self, client, student, topic, mcq_question):
+    def test_timed_exam_derives_high_confidence_from_fast_response(
+        self, client, student, topic, mcq_question
+    ):
         question, correct = mcq_question
         session = start_review_session(
             student=student,
@@ -76,13 +176,62 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
-                "confidence": "4",
-                "time_spent_seconds": "12",
+                "time_spent_seconds": "5",
                 "timed_out": "false",
             },
             HTTP_HX_REQUEST="true",
         )
 
         assert response.status_code == 204
+        assert response["HX-Redirect"] == reverse("reviews:question_partial", kwargs={"pk": session.pk})
         answer = session.answers.get()
-        assert answer.confidence == 4
+        assert answer.confidence == 5
+
+    def test_timed_exam_derives_average_confidence(self, client, student, topic, mcq_question):
+        question, correct = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        client.force_login(student)
+        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        response = client.post(
+            url,
+            {
+                "selected_choice": correct.pk,
+                "time_spent_seconds": "15",
+                "timed_out": "false",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        assert response.status_code == 204
+        assert session.answers.get().confidence == 3
+
+    def test_timed_exam_derives_low_confidence_on_timeout(
+        self, client, student, topic, mcq_question
+    ):
+        question, correct = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+            seconds_per_question=30,
+        )
+        client.force_login(student)
+        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        response = client.post(
+            url,
+            {
+                "selected_choice": correct.pk,
+                "time_spent_seconds": "30",
+                "timed_out": "true",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        assert response.status_code == 204
+        assert session.answers.get().confidence == 1

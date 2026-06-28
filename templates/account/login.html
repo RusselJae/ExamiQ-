@@ -2,9 +2,11 @@
 
 {% block title %}Sign In - EXAMIQ+{% endblock %}
 
+{% block auth_nav %}{% include "components/auth_nav_login.html" %}{% endblock %}
+
 {% block auth_content %}
-<h2 class="auth-card__heading">Welcome back</h2>
-<p class="auth-card__subheading">Log in to continue your review session.</p>
+<h2 class="auth-page__heading">Welcome back</h2>
+<p class="auth-page__subheading">Log in to continue your review session.</p>
 
 <form method="post" action="{% url 'account_login' %}" class="auth-form" novalidate>
     {% csrf_token %}
@@ -21,20 +23,25 @@
     {% include "components/auth_field.html" with field=form.login %}
     {% include "components/auth_password_field.html" with field=form.password %}
 
-    {% if form.remember %}
-    <label class="auth-checkbox" for="{{ form.remember.id_for_label }}">
-        {{ form.remember }}
-        <span>{{ form.remember.label }}</span>
-    </label>
-    {% endif %}
+    <div class="auth-form-actions">
+        {% if form.remember %}
+        <label class="auth-checkbox" for="{{ form.remember.id_for_label }}">
+            {{ form.remember }}
+            <span>{{ form.remember.label }}</span>
+        </label>
+        {% else %}
+        <span></span>
+        {% endif %}
+        <a href="{% url 'account_reset_password' %}" class="auth-form-actions__link">Forgot password?</a>
+    </div>
 
-    <button type="submit" class="btn-primary w-full mt-4">Sign In</button>
+    <button type="submit" class="auth-btn-submit">Sign in</button>
 </form>
 {% endblock %}
 
 {% block auth_footer %}
-<p class="auth-card__footer">
+<p class="auth-page__footer">
     Don't have an account?
-    <a href="{% url 'account_signup' %}" class="text-link auth-card__footer-link">Sign up</a>
+    <a href="{% url 'account_signup' %}">Sign up</a>
 </p>
 {% endblock %}

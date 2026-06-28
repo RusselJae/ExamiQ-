@@ -1,0 +1,7 @@
+Hi {{ user.get_full_name|default:user.email }},
+
+Your EXAMIQ+ registration as {{ user.get_role_display|lower }} was not approved at this time.
+
+If you believe this is an error, please contact your campus administrator.
+
+— EXAMIQ+ Campus Administration

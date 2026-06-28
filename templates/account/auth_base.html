@@ -1,30 +1,43 @@
-{% extends "base.html" %}
 {% load static %}
-
-{% block app_shell %}
-<div class="auth-screen">
-    <div class="auth-screen__visual">
-        <div class="auth-screen__bg" style="background-image: url('{% static 'assets/cvsu_background.jpg' %}');" aria-hidden="true"></div>
-        <div class="auth-screen__overlay" aria-hidden="true"></div>
-        <div class="auth-screen__brand">
-            <h1 class="auth-screen__title">EXAMIQ+</h1>
-            <p class="auth-screen__tagline">
-                Self-regulated math exam review. Build confidence, track mistakes, crush the exam.
-            </p>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}EXAMIQ+{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="stylesheet" href="{% static 'css/landing.css' %}">
+</head>
+<body class="auth-page">
+    {% include "components/toast_stack.html" %}
+    <div id="django-messages" class="hidden">
+        {% if messages %}
+        {% for message in messages %}
+        <span data-toast-message="{{ message }}" data-toast-type="{{ message.tags|default:'info' }}"></span>
+        {% endfor %}
+        {% endif %}
     </div>
+    {% include "components/landing_shapes.html" %}
 
-    <div class="auth-screen__form-side">
-        <div class="auth-screen__panel">
-            <div class="auth-card">
-                {% block auth_content %}{% endblock %}
+    <div class="auth-page__viewport">
+        {% block auth_nav %}{% include "components/auth_nav_login.html" %}{% endblock %}
+
+        <main class="auth-page__main">
+            <div class="auth-page__column">
+                <div class="auth-page__card{% block auth_card_class %}{% endblock %}">
+                    {% block auth_content %}{% endblock %}
+                </div>
+                {% block auth_footer %}{% endblock %}
+                {% block auth_column_extra %}{% endblock %}
             </div>
-            {% block auth_footer %}{% endblock %}
-        </div>
+        </main>
     </div>
-</div>
-{% endblock %}
 
-{% block extra_js %}
-<script src="{% static 'js/auth-forms.js' %}"></script>
-{% endblock %}
+    <script src="{% static 'js/examiq-ui.js' %}"></script>
+    <script src="{% static 'js/auth-forms.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

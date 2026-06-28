@@ -32,9 +32,18 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
             programs = programs.filter(slug__in=dept_slugs) if dept_slugs else programs.filter(
                 managing_department=department
             )
-        context["program_summaries"] = [
+        summaries = [
             program_performance_summary(program, department=department) for program in programs
         ]
+        for summary in summaries:
+            summary["has_activity"] = summary["total_answers"] > 0
+        context["program_summaries"] = summaries
+        context["dashboard_stats"] = {
+            "program_count": len(summaries),
+            "with_activity": sum(1 for row in summaries if row["has_activity"]),
+            "total_sessions": sum(row["sessions_completed"] for row in summaries),
+            "total_answers": sum(row["total_answers"] for row in summaries),
+        }
         context["all_programs"] = [
             {"slug": slug, "name": name}
             for slug, name, _dept in PROGRAM_DEFINITIONS
@@ -86,7 +95,7 @@ class QuestionReviewListView(ChairpersonRequiredMixin, ListView):
         department = self.request.user.department
         programs = Program.objects.filter(managing_department=department).order_by("name")
         topics = Topic.objects.filter(subject__program__managing_department=department).order_by(
-            "program__name", "name"
+            "subject__program__name", "name"
         )
         filter_names = ["q", "program", "topic"]
         context["filter_form_fields"] = build_filter_fields(
@@ -251,7 +260,7 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
                     "type": "search",
                     "name": "q",
                     "label": "Search",
-                    "placeholder": "Course code, title, or professor",
+                    "placeholder": "Course code, title, or faculty",
                 },
                 {
                     "type": "select",

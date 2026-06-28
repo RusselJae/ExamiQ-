@@ -1,0 +1,82 @@
+<div id="session-modals" class="session-modals">
+
+    <div id="session-modal-icebreaker" class="session-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="session-modal-icebreaker-title" data-icebreaker-slug="{{ icebreaker.slug }}">
+
+        <div class="session-modal-card focus-card">
+
+            <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2 text-center">Ice breaker</p>
+
+            <h2 id="session-modal-icebreaker-title" class="text-2xl font-bold text-examiq-navy text-center">
+
+                {{ icebreaker.title }}
+
+            </h2>
+
+            <p class="text-sm text-examiq-slate mt-3 text-center leading-relaxed">
+
+                {{ icebreaker.description }}
+
+            </p>
+
+            <p class="text-xs text-examiq-slate mt-4 text-center">
+
+                Take a moment to try it — one activity per review session.
+
+            </p>
+
+            <button type="button" class="btn-primary w-full mt-6" data-session-modal-continue>
+
+                Continue to review
+
+            </button>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="session-modal-tips" class="session-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="session-modal-tips-title">
+
+        <div class="session-modal-card focus-card">
+
+            <h2 id="session-modal-tips-title" class="text-sm font-semibold uppercase tracking-wider text-examiq-slate mb-3">How to answer</h2>
+
+            <ul class="space-y-2 text-sm text-examiq-navy list-disc list-inside">
+
+                <li>Read each question carefully before selecting your answer.</li>
+
+                {% if is_timed_exam %}
+
+                <li>Watch the per-question timer — submit before time runs out.</li>
+
+                {% endif %}
+
+                <li>Choose the best answer, then rate how confident you feel (1–5).</li>
+
+                <li>Be honest with your confidence — it helps track what you truly know.</li>
+
+                {% if not is_timed_exam %}
+
+                <li>Review the step-by-step explanation after each answer.</li>
+
+                {% else %}
+
+                <li>Explanations appear at the end of your session.</li>
+
+                {% endif %}
+
+            </ul>
+
+            <button type="button" class="btn-primary w-full mt-6" data-session-modal-start>
+
+                Got it, start review
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+

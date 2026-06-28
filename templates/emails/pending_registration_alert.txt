@@ -1,0 +1,10 @@
+A new {{ user.get_role_display|lower }} registration is pending approval:
+
+  Email: {{ user.email }}
+  Name: {{ user.get_full_name|default:"—" }}
+  {% if user.department %}Department: {{ user.department.name }}{% endif %}
+
+Review pending accounts:
+{{ review_url }}
+
+— EXAMIQ+

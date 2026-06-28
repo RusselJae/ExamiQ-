@@ -1,19 +1,24 @@
 from datetime import timedelta
 
 from django.db.models import Q
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.views.generic import ListView, TemplateView
+from django.views import View
+from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.analytics.models import MistakeRecord
 from apps.analytics.services import (
+    generate_mistake_feedback,
     get_student_mistake_patterns,
+    get_student_topic_answers,
     student_performance_summary,
     topic_progress_summary,
 )
 from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
 from apps.core.mixins import StudentRequiredMixin
-from apps.questions.models import Question
-from apps.reviews.models import ReviewSession
+from apps.questions.models import Question, Topic
+from apps.reviews.models import Answer, ReviewSession
 from apps.reviews.recommendations import get_review_recommendations
 
 
@@ -107,6 +112,28 @@ class MistakePatternView(StudentRequiredMixin, TemplateView):
         return context
 
 
+class TopicAnswerReviewView(StudentRequiredMixin, ListView):
+    template_name = "analytics/student/topic_answer_review.html"
+    context_object_name = "answers"
+    paginate_by = 20
+
+    def get_queryset(self):
+        get_object_or_404(Topic, pk=self.kwargs["topic_id"])
+        topic, answers = get_student_topic_answers(
+            self.request.user,
+            self.kwargs["topic_id"],
+        )
+        if not answers.exists():
+            raise Http404
+        self.topic = topic
+        return answers
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["topic"] = self.topic
+        return context
+
+
 class SessionHistoryView(StudentRequiredMixin, ListView):
     model = ReviewSession
     template_name = "analytics/student/session_history.html"
@@ -177,3 +204,57 @@ class TopicProgressView(StudentRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["topics"] = topic_progress_summary(self.request.user)
         return context
+
+
+class AnswerDetailView(StudentRequiredMixin, DetailView):
+    model = Answer
+    template_name = "analytics/student/answer_detail.html"
+    context_object_name = "answer"
+    pk_url_kwarg = "answer_pk"
+
+    def get_queryset(self):
+        return (
+            Answer.objects.filter(session__student=self.request.user)
+            .select_related(
+                "question",
+                "question__topic",
+                "selected_choice",
+                "mistake_record",
+                "mistake_record__error_type",
+            )
+            .prefetch_related("question__choices", "question__explanation_steps")
+        )
+
+
+class GenerateAnswerFeedbackView(StudentRequiredMixin, View):
+    """Generate AI feedback for a single wrong answer on demand."""
+
+    def post(self, request, answer_pk):
+        answer = get_object_or_404(
+            Answer.objects.select_related(
+                "question",
+                "question__topic",
+                "selected_choice",
+                "mistake_record",
+                "mistake_record__error_type",
+                "session",
+            ).prefetch_related("question__choices", "question__explanation_steps"),
+            pk=answer_pk,
+            session__student=request.user,
+        )
+        if answer.is_correct:
+            return HttpResponse("Correct answers do not need feedback.", status=400)
+
+        mistake_record = getattr(answer, "mistake_record", None)
+        if not mistake_record:
+            raise Http404
+
+        generate_mistake_feedback(mistake_record)
+        answer.refresh_from_db()
+        answer.mistake_record.refresh_from_db()
+
+        return render(
+            request,
+            "components/answer_review_card.html",
+            {"answer": answer},
+        )

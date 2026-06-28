@@ -3,7 +3,7 @@
 
 {% block title %}Profile - EXAMIQ+{% endblock %}
 
-{% block main_class %}profile-page{% if user.role == "student" %} profile-page--student{% endif %}{% endblock %}
+{% block main_class %}profile-page{% endblock %}
 
 {% block content %}
 {% include "components/page_header.html" with title="Profile" subtitle="Manage your account details, login email, and password." %}
@@ -12,7 +12,16 @@
     {# Summary card #}
     <div class="profile-bento-hero bento-card profile-card profile-hero bento-card--elevated">
         <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-            {% include "components/profile_avatar_upload.html" with size="hero" show_camera=False %}
+            <div class="profile-hero-avatar">
+                {% include "components/profile_avatar_upload.html" with size="hero" show_camera=True photo_form_id="profile-update-form" %}
+                {% if user.profile_photo %}
+                <form method="post" action="{% url 'users:profile' %}" class="profile-remove-photo-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="remove_photo">
+                    <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove photo</button>
+                </form>
+                {% endif %}
+            </div>
             <div class="flex-1 min-w-0">
                 <p class="text-xl font-bold text-examiq-navy">
                     {{ user.get_full_name|default:user.email }}
@@ -29,6 +38,9 @@
                     {% if user.role == "student" and user.year_level %}
                     <span class="profile-pill">{{ user.year_level.name }}</span>
                     {% endif %}
+                    {% if user.role == "student" and user.section %}
+                    <span class="profile-pill">Section {{ user.section.label }}</span>
+                    {% endif %}
                     <span class="profile-pill">Member since {{ user.date_joined|date:"M Y" }}</span>
                 </div>
             </div>
@@ -38,24 +50,13 @@
     {# Row 2 — personal details | account activity #}
     <div class="profile-bento-personal bento-card profile-card">
         <h2 class="profile-card-title">Personal details</h2>
-        <form method="post" action="{% url 'users:profile' %}" enctype="multipart/form-data" class="profile-card-form">
+        <form method="post" action="{% url 'users:profile' %}" enctype="multipart/form-data" class="profile-card-form" id="profile-update-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="update_profile">
             <div class="profile-card-body">
-                <div class="profile-photo-upload">
-                    {% include "components/profile_avatar_upload.html" with size="form" show_camera=True %}
-                    <div class="flex-1 min-w-0 sr-only">
-                        <label for="id_profile_photo" class="block text-sm font-medium text-examiq-slate mb-1">Profile photo</label>
-                        {{ profile_form.profile_photo }}
-                    </div>
+                <div class="sr-only">
+                    {{ profile_form.profile_photo }}
                 </div>
-                {% if user.profile_photo %}
-                <form method="post" action="{% url 'users:profile' %}" class="profile-remove-photo-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="remove_photo">
-                    <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove photo</button>
-                </form>
-                {% endif %}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {{ profile_form.first_name|as_crispy_field }}
                     {{ profile_form.middle_name|as_crispy_field }}
@@ -66,6 +67,9 @@
                 {% endif %}
                 {% if profile_form.year_level %}
                 {{ profile_form.year_level|as_crispy_field }}
+                {% endif %}
+                {% if profile_form.section %}
+                {{ profile_form.section|as_crispy_field }}
                 {% endif %}
             </div>
             <div class="profile-card-footer">
@@ -179,69 +183,6 @@
         </form>
     </div>
 
-    {% if show_pilot_section %}
-    <div class="profile-bento-pilot bento-card profile-card span-full">
-        <h2 class="profile-card-title">Pilot Study</h2>
-        <p class="text-sm text-examiq-slate mb-4">Help us evaluate EXAMIQ+'s impact on self-regulated learning. Pre- and post-surveys are optional and available anytime.</p>
-
-        <div class="flex flex-wrap gap-2 mb-4">
-            {% if pre_survey %}
-            <span class="profile-pill profile-pill--role">Pre complete</span>
-            {% else %}
-            <span class="profile-pill">Pre pending</span>
-            {% endif %}
-            {% if post_survey %}
-            <span class="profile-pill profile-pill--role">Post complete</span>
-            {% else %}
-            <span class="profile-pill">Post pending</span>
-            {% endif %}
-        </div>
-
-        {% if not pilot_consent or not pilot_consent.consented %}
-        <form method="post" action="{% url 'users:profile' %}" class="mb-6">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="pilot_consent">
-            <label class="flex items-start gap-2 text-sm text-examiq-navy mb-3">
-                {{ consent_form.consented }}
-                <span>I consent to participate in the EXAMIQ+ pilot study. My data may be used in anonymized research exports.</span>
-            </label>
-            <button type="submit" class="btn-primary btn-primary-sm">Save consent</button>
-        </form>
-        {% endif %}
-
-        {% if not pre_survey %}
-        <div class="mb-6 pb-6 border-b border-slate-100">
-            <h3 class="text-sm font-semibold text-examiq-navy mb-3">Pre-study survey</h3>
-            <form method="post" action="{% url 'users:profile' %}">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="pre_survey">
-                {{ pre_survey_form.calibration_awareness|as_crispy_field }}
-                {{ pre_survey_form.confidence_rating_usefulness|as_crispy_field }}
-                {{ pre_survey_form.would_recommend|as_crispy_field }}
-                {{ pre_survey_form.open_feedback|as_crispy_field }}
-                <button type="submit" class="btn-primary btn-primary-sm mt-2">Submit pre-survey</button>
-            </form>
-        </div>
-        {% endif %}
-
-        {% if not post_survey %}
-        <div>
-            <h3 class="text-sm font-semibold text-examiq-navy mb-3">Post-study survey</h3>
-            <form method="post" action="{% url 'users:profile' %}">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="post_survey">
-                {{ post_survey_form.calibration_awareness|as_crispy_field }}
-                {{ post_survey_form.confidence_rating_usefulness|as_crispy_field }}
-                {{ post_survey_form.would_recommend|as_crispy_field }}
-                {{ post_survey_form.open_feedback|as_crispy_field }}
-                <button type="submit" class="btn-primary btn-primary-sm mt-2">Submit post-survey</button>
-            </form>
-        </div>
-        {% elif pre_survey %}
-        <p class="text-sm text-examiq-slate">Thank you — both surveys are complete.</p>
-        {% endif %}
-    </div>
-    {% endif %}
 </div>
 {% endblock %}
 
@@ -256,7 +197,7 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = function(e) {
-                const wrap = document.querySelector(".profile-avatar-wrap--form");
+                const wrap = document.querySelector(".profile-avatar-wrap--hero");
                 if (!wrap) return;
                 let img = wrap.querySelector(".profile-avatar-image");
                 if (img && img.tagName !== "IMG") {
@@ -302,6 +243,37 @@
             btn.setAttribute("aria-expanded", "false");
         });
     });
+
+    const programSelect = document.getElementById("id_home_degree_program");
+    const yearSelect = document.getElementById("id_year_level");
+    const sectionSelect = document.getElementById("id_section");
+    if (programSelect && yearSelect && sectionSelect) {
+        async function loadProfileSections() {
+            const program = programSelect.value;
+            const yearLevel = yearSelect.value;
+            const currentValue = sectionSelect.value;
+            sectionSelect.innerHTML = '<option value="">— Select section —</option>';
+            if (!program || !yearLevel) return;
+            try {
+                const resp = await fetch(
+                    "{% url 'users:api_sections' %}?program=" + encodeURIComponent(program) + "&year_level=" + yearLevel
+                );
+                const data = await resp.json();
+                data.sections.forEach(function(section) {
+                    const opt = document.createElement("option");
+                    opt.value = section.id;
+                    opt.textContent = section.is_full
+                        ? section.display + " (Full)"
+                        : section.display + " (" + section.remaining_slots + " slots)";
+                    opt.disabled = section.is_full && String(section.id) !== currentValue;
+                    if (String(section.id) === currentValue) opt.selected = true;
+                    sectionSelect.appendChild(opt);
+                });
+            } catch (err) { /* ignore */ }
+        }
+        programSelect.addEventListener("change", loadProfileSections);
+        yearSelect.addEventListener("change", loadProfileSections);
+    }
 })();
 </script>
 {% endblock %}

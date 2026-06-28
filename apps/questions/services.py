@@ -384,3 +384,48 @@ def deactivate_question(question: "Question") -> "Question":
     return question
 
 
+def normalize_stem(stem: str) -> str:
+    """Normalize question stem for duplicate comparison."""
+    import re
+
+    text = (stem or "").strip().lower()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def find_duplicate_question(topic_id: int, stem: str, *, exclude_pk: int | None = None):
+    """Return an existing question in the topic with the same normalized stem."""
+    from apps.questions.models import Question
+
+    normalized = normalize_stem(stem)
+    if not normalized:
+        return None
+    for question in Question.objects.filter(topic_id=topic_id).only("pk", "stem"):
+        if normalize_stem(question.stem) == normalized:
+            if exclude_pk and question.pk == exclude_pk:
+                continue
+            return question
+    return None
+
+
+def build_steps_from_post(steps_raw: str, concept_tag: str = "", solution_summary: str = "") -> list[dict]:
+    """Parse explanation steps from JSON POST field or fallbacks."""
+    import json
+
+    steps: list[dict] = []
+    if steps_raw:
+        try:
+            parsed = json.loads(steps_raw)
+            if isinstance(parsed, list):
+                for index, content in enumerate(parsed, start=1):
+                    text = str(content).strip()
+                    if text:
+                        steps.append({"order": index, "content": text})
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if not steps and solution_summary.strip():
+        steps.append({"order": 1, "content": solution_summary.strip()})
+    if not steps and concept_tag.strip():
+        steps.append({"order": 1, "content": concept_tag.strip()})
+    return steps
+

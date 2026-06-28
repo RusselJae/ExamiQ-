@@ -5,8 +5,35 @@ from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from apps.core.mixins import ProfessorCourseMixin
-from apps.reviews.forms_professor import ReviewWindowForm
-from apps.reviews.models import ReviewWindow
+from apps.reviews.exam_setup_services import get_or_create_exam_setup
+from apps.reviews.forms_professor import ExamSetupForm, ReviewWindowForm
+from apps.reviews.models import ExamSetup, ReviewWindow
+
+
+class ExamSetupUpdateView(ProfessorCourseMixin, UpdateView):
+    model = ExamSetup
+    form_class = ExamSetupForm
+    template_name = "professor/exam_setup/form.html"
+
+    def get_object(self, queryset=None):
+        return get_or_create_exam_setup(self.course)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["course"] = self.course
+        return kwargs
+
+    def form_valid(self, form):
+        messages.success(self.request, "Exam setup saved.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("analytics_professor:exam_setup", kwargs={"course_pk": self.course.pk})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_tab"] = "exam_setup"
+        return context
 
 
 class ReviewWindowListView(ProfessorCourseMixin, ListView):

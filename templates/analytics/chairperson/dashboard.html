@@ -3,51 +3,161 @@
 {% block title %}Programs - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Programs Dashboard" subtitle="Math performance by degree program in your department." %}
+<div class="overview-header mb-6">
+    <div class="overview-header__main">
+        <h1 class="overview-title">Programs dashboard</h1>
+        <p class="overview-as-of">Math performance by degree program{% if department %} in {{ department.name }}{% endif %}.</p>
+    </div>
+</div>
 
-{% if department %}
-<p class="text-sm text-examiq-slate mb-4">Department: <strong>{{ department.name }}</strong></p>
-{% endif %}
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=dashboard_stats.program_count label="Degree programs" icon="book" variant="neutral" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=dashboard_stats.with_activity label="With activity" icon="target" variant="accent" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=dashboard_stats.total_sessions label="Total sessions" icon="clock" variant="neutral" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=dashboard_stats.total_answers label="Total answers" icon="users" variant="neutral" %}
+    </div>
+</div>
 
-<div class="bento-grid mb-6">
+{% if program_summaries %}
+<div class="dash-toolbar mb-6">
+    <div class="dash-toolbar__search">
+        <svg class="dash-toolbar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="search" id="program-search" class="dash-toolbar__input" placeholder="Search programs" aria-label="Search programs">
+    </div>
+    <div class="dash-toolbar__sort">
+        <label for="program-sort" class="sr-only">Sort programs</label>
+        <select id="program-sort" class="dash-toolbar__select">
+            <option value="accuracy-desc">Sort by accuracy</option>
+            <option value="accuracy-asc">Accuracy (low to high)</option>
+            <option value="name-asc">Name (A–Z)</option>
+            <option value="sessions-desc">Most sessions</option>
+        </select>
+    </div>
+</div>
+
+<p class="overview-section-label">Program performance</p>
+<div class="overview-course-grid" id="program-card-grid">
     {% for summary in program_summaries %}
-    <div class="span-half">
-        <div class="bento-card bento-card--elevated bento-card-inner">
-            {% include "components/section_header.html" with title=summary.program.name %}
-            <p class="text-xs text-examiq-slate mb-4">{{ summary.topic_count }} math topics</p>
-            <div class="grid grid-cols-3 gap-3">
-                <div class="bento-card bento-card--kpi stat-card stat-card--good bento-card-inner !p-3">
-                    <div class="stat-card-value stat-value-good text-xl">{{ summary.accuracy }}%</div>
-                    <div class="stat-card-label text-xs">Accuracy</div>
-                </div>
-                <div class="bento-card bento-card--kpi stat-card stat-card--primary bento-card-inner !p-3">
-                    <div class="stat-card-value stat-value-primary text-xl">{{ summary.sessions_completed }}</div>
-                    <div class="stat-card-label text-xs">Sessions</div>
-                </div>
-                <div class="bento-card bento-card--kpi stat-card stat-card--navy bento-card-inner !p-3">
-                    <div class="stat-card-value stat-value-navy text-xl">{{ summary.total_answers }}</div>
-                    <div class="stat-card-label text-xs">Answers</div>
+    <article class="overview-course-card program-card {% if summary.has_activity %}overview-course-card--active{% endif %}"
+             data-program-name="{{ summary.program.name|lower }}"
+             data-accuracy="{{ summary.accuracy }}"
+             data-sessions="{{ summary.sessions_completed }}">
+        <div class="overview-course-card__header">
+            <div class="program-card__identity">
+                <span class="program-card__icon" aria-hidden="true">{{ summary.program.name|slice:":1" }}</span>
+                <div>
+                    <h2 class="overview-course-card__title">{{ summary.program.name }}</h2>
+                    <p class="overview-course-card__subtitle">{{ summary.topic_count }} math topic{{ summary.topic_count|pluralize }}</p>
                 </div>
             </div>
+            {% if summary.has_activity %}
+            <span class="overview-course-badge overview-course-badge--open">Active</span>
+            {% else %}
+            <span class="overview-course-badge overview-course-badge--muted">No data</span>
+            {% endif %}
         </div>
-    </div>
-    {% empty %}
-    <div class="span-full">
-        {% include "components/empty_state.html" with title="No programs in scope" body="Programs managed by your department will appear here." %}
-    </div>
+
+        <div class="program-card__accuracy">
+            <div class="program-card__accuracy-row">
+                <span class="program-card__accuracy-label">Accuracy</span>
+                <span class="program-card__accuracy-value">{{ summary.accuracy }}%</span>
+            </div>
+            <div class="program-card__progress" role="presentation">
+                <div class="program-card__progress-fill" style="width: {{ summary.accuracy }}%"></div>
+            </div>
+        </div>
+
+        <div class="program-card__footer">
+            <div>
+                <span class="overview-course-stat-label">Sessions</span>
+                <span class="overview-course-stat-value">{{ summary.sessions_completed }}</span>
+            </div>
+            <div>
+                <span class="overview-course-stat-label">Answers</span>
+                <span class="overview-course-stat-value">{{ summary.total_answers }}</span>
+            </div>
+        </div>
+    </article>
     {% endfor %}
 </div>
+{% else %}
+{% include "components/empty_state.html" with title="No programs in scope" body="Programs managed by your department will appear here." %}
+{% endif %}
 
-<div class="bento-card bento-card-inner">
-    {% include "components/section_header.html" with title="All Degree Programs" %}
-    <ul class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-examiq-slate">
+{% if all_programs %}
+<div class="program-tags-panel mt-8">
+    <h2 class="overview-section-label">All degree programs</h2>
+    <div class="program-tags">
         {% for prog in all_programs %}
-        <li class="py-2 px-3 rounded-lg bg-[var(--color-primary-soft)] border border-[rgba(26,86,50,0.12)]">{{ prog.name }}</li>
+        <span class="program-tag">
+            <svg class="program-tag__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
+            </svg>
+            {{ prog.name }}
+        </span>
         {% endfor %}
-    </ul>
+    </div>
 </div>
+{% endif %}
+{% endblock %}
 
-<div class="mt-6 flex justify-end">
-    <a href="{% url 'analytics_chairperson:research_export' %}" class="btn-secondary">Download Research CSV</a>
-</div>
+{% block extra_js %}
+<script>
+(function () {
+    const grid = document.getElementById("program-card-grid");
+    const searchInput = document.getElementById("program-search");
+    const sortSelect = document.getElementById("program-sort");
+    if (!grid) return;
+
+    function getCards() {
+        return Array.from(grid.querySelectorAll(".program-card"));
+    }
+
+    function filterCards() {
+        const query = (searchInput && searchInput.value || "").trim().toLowerCase();
+        getCards().forEach(function (card) {
+            const name = card.dataset.programName || "";
+            card.hidden = query && name.indexOf(query) === -1;
+        });
+    }
+
+    function sortCards() {
+        const mode = sortSelect ? sortSelect.value : "accuracy-desc";
+        const cards = getCards().filter(function (card) { return !card.hidden; });
+        cards.sort(function (a, b) {
+            if (mode === "name-asc") {
+                return (a.dataset.programName || "").localeCompare(b.dataset.programName || "");
+            }
+            if (mode === "sessions-desc") {
+                return Number(b.dataset.sessions) - Number(a.dataset.sessions);
+            }
+            if (mode === "accuracy-asc") {
+                return Number(a.dataset.accuracy) - Number(b.dataset.accuracy);
+            }
+            return Number(b.dataset.accuracy) - Number(a.dataset.accuracy);
+        });
+        cards.forEach(function (card) { grid.appendChild(card); });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener("input", function () {
+            filterCards();
+            sortCards();
+        });
+    }
+    if (sortSelect) {
+        sortSelect.addEventListener("change", sortCards);
+    }
+})();
+</script>
 {% endblock %}

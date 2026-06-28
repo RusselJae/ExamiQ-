@@ -80,6 +80,9 @@
                 correct: "A",
                 concept: "",
                 choices: { A: "", B: "", C: "", D: "" },
+                steps: [],
+                solution_summary: "",
+                validation: null,
             };
             config.ensureFieldsForIndex(i);
             config.setQuestionData(i, data);

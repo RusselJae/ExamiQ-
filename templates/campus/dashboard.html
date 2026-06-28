@@ -1,34 +1,126 @@
 {% extends "base.html" %}
+{% load humanize %}
 
 {% block title %}Campus Admin - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Campus Admin" subtitle="Provision faculty accounts and manage campus users." %}
-
-<div class="bento-grid mb-6">
-    <div class="span-third">
-        <div class="bento-card bento-card--kpi stat-card stat-card--primary bento-card-inner">
-            <div class="stat-card-value stat-value-primary">{{ student_count }}</div>
-            <div class="stat-card-label">Students</div>
-        </div>
-    </div>
-    <div class="span-third">
-        <div class="bento-card bento-card--kpi stat-card stat-card--navy bento-card-inner">
-            <div class="stat-card-value stat-value-navy">{{ professor_count }}</div>
-            <div class="stat-card-label">Professors</div>
-        </div>
-    </div>
-    <div class="span-third">
-        <div class="bento-card bento-card--kpi stat-card stat-card--good bento-card-inner">
-            <div class="stat-card-value stat-value-good">{{ chairperson_count }}</div>
-            <div class="stat-card-label">Chairpersons</div>
-        </div>
+<div class="overview-header mb-6">
+    <div class="overview-header__main">
+        <h1 class="overview-title">Campus admin</h1>
+        <p class="overview-as-of">Provision faculty accounts, manage sections, and approve registrations.</p>
     </div>
 </div>
 
-<div class="flex flex-wrap gap-3">
-    <a href="{% url 'campus:user_list' %}" class="btn-primary btn-primary-sm">Manage users</a>
-    <a href="{% url 'campus:create_professor' %}" class="btn-secondary btn-primary-sm">Create professor</a>
-    <a href="{% url 'campus:create_chairperson' %}" class="btn-secondary btn-primary-sm">Create chairperson</a>
+{% if current_academic_year or current_term %}
+<div class="campus-period-banner mb-6">
+    <span class="campus-period-banner__label">Active academic period</span>
+    <span class="campus-period-banner__value">
+        {% if current_academic_year %}{{ current_academic_year.label }}{% endif %}
+        {% if current_term %} · {{ current_term.name }}{% endif %}
+    </span>
+</div>
+{% endif %}
+
+{% if sections_near_capacity or sections_full %}
+<div class="campus-alert mb-6">
+    {% if sections_full %}
+    <p><strong>{{ sections_full|length }}</strong> section{{ sections_full|length|pluralize }} at full capacity.</p>
+    {% endif %}
+    {% if sections_near_capacity %}
+    <p><strong>{{ sections_near_capacity|length }}</strong> section{{ sections_near_capacity|length|pluralize }} have 5 or fewer slots remaining.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="overview-kpi-grid mb-8">
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=student_count label="Students" subtext=student_subtext icon="users" variant="neutral" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=professor_count label="Faculty" subtext=professor_subtext icon="book" variant="accent" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=chairperson_count label="Chairpersons" subtext=chairperson_subtext icon="target" variant="neutral" %}
+    </div>
+</div>
+
+<div class="campus-dashboard-grid">
+    <section class="campus-panel">
+        <h2 class="campus-panel__title">Quick actions</h2>
+        <div class="campus-action-list">
+            <a href="{% url 'campus:user_list' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--users" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Manage users</span>
+                    <span class="campus-action-item__desc">View, edit, or deactivate accounts{% if pending_count %} · {{ pending_count }} pending{% endif %}</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            <a href="{% url 'campus:section_list' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--sections" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Sections ({{ section_count }})</span>
+                    <span class="campus-action-item__desc">Create and manage program cohorts</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            <a href="{% url 'campus:academic_calendar' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--calendar" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Academic calendar</span>
+                    <span class="campus-action-item__desc">Set current year and term</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            <a href="{% url 'campus:create_professor' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--faculty" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Create faculty</span>
+                    <span class="campus-action-item__desc">Provision a new professor account</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            <a href="{% url 'campus:create_chairperson' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--chair" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Create chairperson</span>
+                    <span class="campus-action-item__desc">Provision a new department chair</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+        </div>
+    </section>
+
+    <section class="campus-panel">
+        <div class="campus-panel__header-row">
+            <h2 class="campus-panel__title">Recent activity</h2>
+            <a href="{% url 'campus:user_list' %}" class="campus-panel__link">See all</a>
+        </div>
+        {% if recent_activity %}
+        <ul class="campus-activity-feed">
+            {% for item in recent_activity %}
+            <li class="campus-activity-item">
+                <span class="campus-activity-item__dot campus-activity-item__dot--{{ item.tone }}" aria-hidden="true"></span>
+                <div class="campus-activity-item__body">
+                    <p class="campus-activity-item__message">{{ item.message }}</p>
+                    <p class="campus-activity-item__time">{{ item.timestamp|naturaltime }}</p>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="campus-activity-empty">No recent campus activity yet.</p>
+        {% endif %}
+    </section>
 </div>
 {% endblock %}

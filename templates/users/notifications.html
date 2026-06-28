@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Notifications" subtitle="Account and workflow updates." %}
+
+{% if notifications %}
+<form method="post" action="{% url 'users:notifications_read' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{% url 'users:notifications' %}">
+    <div class="mb-4">
+        <button type="submit" class="btn-secondary btn-primary-sm">Mark all as read</button>
+    </div>
+    <ul class="space-y-3">
+        {% for notification in notifications %}
+        <li class="bento-card p-4 {% if not notification.is_read %}border-l-4 border-examiq-green{% endif %}">
+            <p class="text-sm text-examiq-navy">{{ notification.message }}</p>
+            <p class="text-xs text-examiq-slate mt-1">{{ notification.created_at|date:"M d, Y g:i A" }}</p>
+            {% if notification.link %}
+            <a href="{{ notification.link }}" class="text-sm text-examiq-green hover:underline mt-1 inline-block">View</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</form>
+{% else %}
+<div class="bento-card p-6 text-examiq-slate text-sm">No notifications yet.</div>
+{% endif %}
+{% endblock %}

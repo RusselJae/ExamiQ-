@@ -3,13 +3,10 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
-from django.utils import timezone
 from django.views import View
 
 from allauth.account.models import EmailAddress
 
-from apps.research.forms import PilotConsentForm, PostSurveyForm, PreSurveyForm
-from apps.research.models import PilotConsent, SurveyResponse
 from apps.users.forms import (
     EmailChangeRequestForm,
     ExamiQChangePasswordForm,
@@ -29,31 +26,10 @@ class ProfileView(LoginRequiredMixin, View):
             "password_form": ExamiQChangePasswordForm(user=user),
         }
 
-    def get_survey_context(self, user):
-        if user.role != User.Role.STUDENT:
-            return {}
-        consent = PilotConsent.objects.filter(student=user).first()
-        pre = SurveyResponse.objects.filter(
-            student=user, survey_type=SurveyResponse.SurveyType.PRE
-        ).first()
-        post = SurveyResponse.objects.filter(
-            student=user, survey_type=SurveyResponse.SurveyType.POST
-        ).first()
-        return {
-            "pilot_consent": consent,
-            "consent_form": PilotConsentForm(instance=consent or PilotConsent(student=user)),
-            "pre_survey": pre,
-            "post_survey": post,
-            "pre_survey_form": PreSurveyForm(instance=pre),
-            "post_survey_form": PostSurveyForm(instance=post),
-            "show_pilot_section": True,
-        }
-
     def get_context(self, user, forms=None):
         forms = forms or self.get_forms(user)
         return {
             **forms,
-            **self.get_survey_context(user),
             "pending_emails": EmailAddress.objects.filter(user=user, verified=False),
             "account_activity": get_account_activity(user),
         }
@@ -64,52 +40,6 @@ class ProfileView(LoginRequiredMixin, View):
     def post(self, request):
         action = request.POST.get("action")
         user = request.user
-
-        if action == "pilot_consent" and user.role == User.Role.STUDENT:
-            consent, _ = PilotConsent.objects.get_or_create(student=user)
-            form = PilotConsentForm(request.POST, instance=consent)
-            if form.is_valid():
-                obj = form.save(commit=False)
-                if obj.consented and not obj.consented_at:
-                    obj.consented_at = timezone.now()
-                obj.save()
-                messages.success(request, "Pilot study consent saved.")
-                return redirect("users:profile")
-            ctx = self.get_context(user)
-            ctx["consent_form"] = form
-            return render(request, self.template_name, ctx)
-
-        if action == "pre_survey" and user.role == User.Role.STUDENT:
-            existing = SurveyResponse.objects.filter(
-                student=user, survey_type=SurveyResponse.SurveyType.PRE
-            ).first()
-            form = PreSurveyForm(request.POST, instance=existing)
-            if form.is_valid():
-                survey = form.save(commit=False)
-                survey.student = user
-                survey.survey_type = SurveyResponse.SurveyType.PRE
-                survey.save()
-                messages.success(request, "Pre-study survey submitted. Thank you!")
-                return redirect("users:profile")
-            ctx = self.get_context(user)
-            ctx["pre_survey_form"] = form
-            return render(request, self.template_name, ctx)
-
-        if action == "post_survey" and user.role == User.Role.STUDENT:
-            existing = SurveyResponse.objects.filter(
-                student=user, survey_type=SurveyResponse.SurveyType.POST
-            ).first()
-            form = PostSurveyForm(request.POST, instance=existing)
-            if form.is_valid():
-                survey = form.save(commit=False)
-                survey.student = user
-                survey.survey_type = SurveyResponse.SurveyType.POST
-                survey.save()
-                messages.success(request, "Post-study survey submitted. Thank you!")
-                return redirect("users:profile")
-            ctx = self.get_context(user)
-            ctx["post_survey_form"] = form
-            return render(request, self.template_name, ctx)
 
         if action == "update_profile":
             form = ProfileUpdateForm(user=user, data=request.POST, files=request.FILES)

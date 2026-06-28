@@ -6,7 +6,7 @@ from django.db.models import Avg, Count, Max
 from django.utils import timezone
 
 from apps.ai.helpers import calibration_narrative_from_matrix
-from apps.analytics.confidence import confidence_accuracy_matrix
+from apps.analytics.confidence import confidence_accuracy_matrix, confidence_tier_matrix
 from apps.analytics.models import MistakeRecord
 from apps.questions.models import Topic
 from apps.reviews.models import Answer, ReviewSession
@@ -22,6 +22,8 @@ def build_session_summary(session: ReviewSession) -> dict:
     calibration_gap = round(avg_confidence * 20 - accuracy, 1) if total else 0
 
     matrix = confidence_accuracy_matrix(answers)
+    tier_matrix = confidence_tier_matrix(answers)
+    tier_max = max(tier_matrix.values()) if tier_matrix else 1
     session_mistakes = list(
         MistakeRecord.objects.filter(
             student=session.student,
@@ -39,6 +41,8 @@ def build_session_summary(session: ReviewSession) -> dict:
         "avg_confidence": round(avg_confidence, 1),
         "calibration_gap": calibration_gap,
         "calibration_matrix": matrix,
+        "calibration_tier_matrix": tier_matrix,
+        "calibration_tier_max": tier_max,
         "narrative": calibration_narrative_from_matrix(matrix, session_mistakes),
         "weak_topics": session_mistakes,
     }

@@ -26,9 +26,19 @@ class TestProfileView:
         assert student.email in content
         assert "Student" in content
         assert "Login email" in content
-        assert "profile-page--student" in content
-        assert "profile-avatar-wrap" in content
+        assert "profile-bento" in content
+        assert "profile-avatar-wrap--hero" in content
+        assert "profile-avatar-wrap--form" not in content
         assert "profile-avatar-camera" in content
+        assert "profile-update-form" in content
+        assert "Pilot Study" not in content
+
+    def test_student_profile_uses_bento_layout(self, client, student):
+        client.force_login(student)
+        response = client.get(reverse("users:profile"))
+        content = response.content.decode()
+        assert "profile-page--student" not in content
+        assert "profile-bento" in content
 
     def test_professor_profile_uses_bento_layout(self, client, professor):
         client.force_login(professor)

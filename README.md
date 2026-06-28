@@ -7,7 +7,7 @@ Self-regulated mathematics exam review system for college students.
 - **Students**: Confidence-based timed review sessions, adaptive question selection, calibration summaries, rule-based review recommendations, mistake tracking, performance dashboards
 - **Professors**: Course-level analytics, intervention lists with CSV export, confidence trends, mistake patterns
 - **Chairpersons**: Program-level monitoring, question approval, anonymized research CSV export, institutional reporting
-- **Pilot study**: Pre/post surveys accessible from Profile
+- **Roles**: Student, Faculty, Chairperson, Campus Administrator
 
 ## Quick Start
 

@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
 
-{% block title %}Create Professor - Campus Admin{% endblock %}
+{% block title %}Create Faculty - Campus Admin{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Create Professor" subtitle="Provision a professor account with a temporary password." %}
+{% include "components/page_header.html" with title="Create Faculty" subtitle="Provision a faculty account with a temporary password." %}
 
 <div class="bento-card bento-card-inner max-w-xl">
     <form method="post" novalidate>
         {% csrf_token %}
         {{ form|crispy }}
         <div class="flex flex-wrap gap-3 mt-4">
-            <button type="submit" class="btn-primary btn-primary-sm">Create professor</button>
+            <button type="submit" class="btn-primary btn-primary-sm">Create faculty</button>
             <a href="{% url 'campus:user_list' %}" class="btn-secondary btn-primary-sm">Cancel</a>
         </div>
     </form>

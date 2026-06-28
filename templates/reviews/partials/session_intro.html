@@ -1,0 +1,72 @@
+<div class="focus-card session-intro p-6 lg:p-8" data-session-intro>
+
+    <div class="text-center mb-6">
+
+        <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Ready?</p>
+
+        <h2 class="text-2xl font-bold text-examiq-navy">
+
+            {% if session.topic %}Ready to tackle {{ session.topic.name }}?{% else %}Ready to begin?{% endif %}
+
+        </h2>
+
+        <p class="text-sm text-examiq-slate mt-2">
+
+            {% if is_timed_exam %}
+
+            Timed exam mode — answer each question before the clock runs out.
+
+            {% else %}
+
+            Practice mode — you'll see step-by-step feedback after each answer.
+
+            {% endif %}
+
+        </p>
+
+    </div>
+
+
+
+    <div class="rounded-xl bg-examiq-bg border border-slate-200 p-5 mb-6">
+
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-examiq-slate mb-3">How to answer</h3>
+
+        <ul class="space-y-2 text-sm text-examiq-navy list-disc list-inside">
+
+            <li>Read each question carefully before selecting your answer.</li>
+
+            {% if is_timed_exam %}
+
+            <li>Watch the per-question timer — submit before time runs out.</li>
+
+            {% endif %}
+
+            <li>Choose the best answer, then rate how confident you feel (1–5).</li>
+
+            <li>Be honest with your confidence — it helps track what you truly know.</li>
+
+            {% if not is_timed_exam %}
+
+            <li>Review the step-by-step explanation after each answer.</li>
+
+            {% else %}
+
+            <li>Explanations appear at the end of your session.</li>
+
+            {% endif %}
+
+        </ul>
+
+    </div>
+
+
+
+    <button type="button" class="btn-primary w-full" data-start-review>
+
+        Start review
+
+    </button>
+
+</div>
+

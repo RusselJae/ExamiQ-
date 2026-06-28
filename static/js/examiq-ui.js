@@ -7,10 +7,10 @@
     const TOAST_DURATION = 4000;
 
     const TOAST_BORDER = {
-        success: "border-l-emerald-500",
-        error: "border-l-red-500",
-        info: "border-l-blue-500",
-        warning: "border-l-amber-500",
+        success: "toast-item--success",
+        error: "toast-item--error",
+        info: "toast-item--info",
+        warning: "toast-item--warning",
     };
 
     function getToastStack() {
@@ -32,7 +32,7 @@
 
         const toast = document.createElement("div");
         toast.className =
-            "toast-item pointer-events-auto bg-white shadow-lg px-4 py-3 pr-10 text-sm text-slate-800 relative border-0 border-l-4 rounded-none " +
+            "toast-item pointer-events-auto px-4 py-3 pr-10 text-sm text-slate-800 relative " +
             (TOAST_BORDER[type] || TOAST_BORDER.info);
         toast.setAttribute("role", "alert");
 
@@ -58,11 +58,129 @@
         }, TOAST_DURATION);
     };
 
+    function getBannerStack() {
+        return document.getElementById("banner-stack");
+    }
+
+    function dismissBanner(banner) {
+        if (!banner || banner.classList.contains("banner-dismissing")) return;
+        banner.classList.add("banner-dismissing");
+        setTimeout(function () {
+            banner.remove();
+        }, 300);
+    }
+
+    window.showBanner = function (message, type) {
+        type = type || "info";
+        const stack = getBannerStack();
+        if (!stack) return;
+
+        const banner = document.createElement("div");
+        banner.className =
+            "banner-item toast-item pointer-events-auto px-4 py-3 pr-10 text-sm text-slate-800 relative " +
+            (TOAST_BORDER[type] || TOAST_BORDER.info);
+        banner.setAttribute("role", "alert");
+
+        const messageEl = document.createElement("span");
+        messageEl.className = "toast-message";
+        messageEl.textContent = message;
+        banner.appendChild(messageEl);
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "toast-close";
+        closeBtn.setAttribute("aria-label", "Dismiss");
+        closeBtn.innerHTML = "&times;";
+        closeBtn.addEventListener("click", function () {
+            dismissBanner(banner);
+        });
+        banner.appendChild(closeBtn);
+
+        stack.appendChild(banner);
+
+        setTimeout(function () {
+            dismissBanner(banner);
+        }, TOAST_DURATION);
+    };
+
+    const CONFIRM_BORDER = {
+        warning: "toast-item--warning",
+        error: "toast-item--error",
+        info: "toast-item--info",
+    };
+
+    window.showConfirm = function (options) {
+        options = options || {};
+        const root = document.getElementById("confirm-dialog-root");
+        if (!root) return Promise.resolve(false);
+
+        const messageEl = root.querySelector("#confirm-dialog-message");
+        const card = root.querySelector(".confirm-dialog-card");
+        const okBtn = root.querySelector("[data-confirm-ok]");
+        const cancelBtns = root.querySelectorAll("[data-confirm-cancel]");
+        if (!messageEl || !card || !okBtn) return Promise.resolve(false);
+
+        const type = options.type || "warning";
+        card.className =
+            "confirm-dialog-card toast-item " + (CONFIRM_BORDER[type] || CONFIRM_BORDER.warning);
+        messageEl.textContent = options.message || "Are you sure?";
+        okBtn.textContent = options.confirmLabel || "Confirm";
+        cancelBtns.forEach(function (btn) {
+            btn.textContent = options.cancelLabel || "Cancel";
+        });
+
+        root.classList.remove("hidden");
+        root.setAttribute("aria-hidden", "false");
+        okBtn.focus();
+
+        return new Promise(function (resolve) {
+            function cleanup(result) {
+                root.classList.add("hidden");
+                root.setAttribute("aria-hidden", "true");
+                okBtn.removeEventListener("click", onOk);
+                cancelBtns.forEach(function (btn) {
+                    btn.removeEventListener("click", onCancel);
+                });
+                document.removeEventListener("keydown", onKeydown);
+                resolve(result);
+            }
+
+            function onOk() {
+                cleanup(true);
+            }
+
+            function onCancel() {
+                cleanup(false);
+            }
+
+            function onKeydown(e) {
+                if (e.key === "Escape") onCancel();
+            }
+
+            okBtn.addEventListener("click", onOk);
+            cancelBtns.forEach(function (btn) {
+                btn.addEventListener("click", onCancel);
+            });
+            document.addEventListener("keydown", onKeydown);
+        });
+    };
+
+    function isAuthScreen() {
+        return (
+            document.body.classList.contains("auth-page") ||
+            document.body.classList.contains("landing-body")
+        );
+    }
+
     function initDjangoMessages() {
         const container = document.getElementById("django-messages");
         if (!container) return;
         container.querySelectorAll("[data-toast-message]").forEach(function (el) {
-            const msg = el.dataset.toastMessage;
+            const msg = el.dataset.toastMessage || "";
+            const onAuthScreen = isAuthScreen();
+            if (!onAuthScreen && /signed out/i.test(msg)) {
+                return;
+            }
             let type = el.dataset.toastType || "info";
             if (type === "error") type = "error";
             else if (type === "success") type = "success";
@@ -72,11 +190,56 @@
         });
     }
 
+    function initAuthBanners() {
+        const params = new URLSearchParams(window.location.search);
+        const registered = params.get("registered");
+        if (registered === "pending") {
+            showToast(
+                "Account submitted. A campus administrator will review your request before you can sign in.",
+                "info"
+            );
+        } else if (registered === "rejected") {
+            showToast(
+                "Your registration was not approved. Contact your campus administrator for help.",
+                "error"
+            );
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         initDjangoMessages();
+        initAuthBanners();
         initProfileDropdowns();
         initAppSidebar();
+        initConfirmForms();
     });
+
+    function initConfirmForms() {
+        document.querySelectorAll("form[data-confirm-message]").forEach(function (form) {
+            if (form.dataset.confirmBound) return;
+            form.dataset.confirmBound = "1";
+            form.addEventListener("submit", function (e) {
+                if (form.dataset.confirmed === "1") {
+                    form.dataset.confirmed = "0";
+                    return;
+                }
+                e.preventDefault();
+                const message = form.dataset.confirmMessage;
+                const type = form.dataset.confirmType || "warning";
+                showConfirm({
+                    message: message,
+                    type: type,
+                    confirmLabel: form.dataset.confirmLabel || "Confirm",
+                    cancelLabel: form.dataset.cancelLabel || "Cancel",
+                }).then(function (ok) {
+                    if (ok) {
+                        form.dataset.confirmed = "1";
+                        form.requestSubmit();
+                    }
+                });
+            });
+        });
+    }
 
     function initProfileDropdowns() {
         document.querySelectorAll("[data-dropdown]").forEach(function (dropdown) {

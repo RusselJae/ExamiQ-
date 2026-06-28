@@ -34,6 +34,7 @@ urlpatterns = [
     ),
     path("courses/<int:pk>/insights/", views_professor.CourseInsightsRedirectView.as_view(), name="course_insights"),
     path("courses/<int:pk>/heatmap/", views_professor.CourseHeatmapView.as_view(), name="course_heatmap"),
+    path("courses/<int:course_pk>/exam-setup/", review_views.ExamSetupUpdateView.as_view(), name="exam_setup"),
     path("courses/<int:course_pk>/windows/", review_views.ReviewWindowListView.as_view(), name="window_list"),
     path("courses/<int:course_pk>/windows/create/", review_views.ReviewWindowCreateView.as_view(), name="window_create"),
     path(

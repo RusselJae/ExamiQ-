@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ answer.question.topic.name }} - Answer Review{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title=answer.question.topic.name subtitle="Your answer for this question — review and learn." %}
+
+<p class="mb-4">
+    <a href="{% url 'analytics_student:mistakes' %}" class="text-link text-sm">&larr; Back to mistake log</a>
+</p>
+
+{% include "components/answer_review_card.html" with answer=answer %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/session-feedback.js' %}"></script>
+{% endblock %}

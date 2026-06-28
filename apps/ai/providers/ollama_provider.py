@@ -7,6 +7,7 @@ import re
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
 from apps.ai.interfaces import (
+    AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
@@ -15,6 +16,7 @@ from apps.ai.interfaces import (
     QuestionValidator,
 )
 from apps.ai.prompts import (
+    build_adaptive_feedback_prompt,
     build_calibration_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
@@ -23,6 +25,7 @@ from apps.ai.prompts import (
 )
 from apps.ai.providers import ollama_client
 from apps.ai.stubs import (
+    StubAdaptiveFeedbackGenerator,
     StubCalibrationAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
@@ -48,6 +51,8 @@ def _parse_question_json(raw: str) -> list[dict]:
     match = re.search(r"\[.*\]", text, re.DOTALL)
     if match:
         text = match.group(0)
+    text = re.sub(r",\s*]", "]", text)
+    text = re.sub(r",\s*}", "}", text)
     data = json.loads(text)
     if not isinstance(data, list):
         raise json.JSONDecodeError("Expected JSON array", text, 0)
@@ -116,7 +121,9 @@ class OllamaQuestionGenerator(QuestionGenerator):
             try:
                 data = _parse_question_json(last_raw)
                 if data:
-                    return data[:count]
+                    from apps.ai.normalize import normalize_generated_questions
+
+                    return normalize_generated_questions(data[:count])
             except (json.JSONDecodeError, TypeError) as exc:
                 last_exc = exc
                 logger.warning(
@@ -155,6 +162,23 @@ class OllamaQuestionValidator(QuestionValidator):
         except (json.JSONDecodeError, TypeError) as exc:
             logger.warning("Failed to parse Ollama validation JSON: %s", exc)
         return stub.validate(stem, choices, topic, difficulty, correct_label)
+
+
+class OllamaAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
+    def generate(
+        self,
+        topic: str,
+        question: str,
+        user_answer: str,
+        correct_answer: str,
+        confidence: str = "medium",
+    ) -> str:
+        stub = StubAdaptiveFeedbackGenerator()
+        system, prompt = build_adaptive_feedback_prompt(
+            topic, question, user_answer, correct_answer, confidence
+        )
+        result = _chat(prompt, system=system, max_output_tokens=600)
+        return result or stub.generate(topic, question, user_answer, correct_answer, confidence)
 
 
 class OllamaErrorClassifier(ErrorClassifier):

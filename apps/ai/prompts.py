@@ -92,9 +92,33 @@ QUESTION_VALIDATION_JSON_SCHEMA = (
 )
 
 QUESTION_JSON_SCHEMA = (
-    '[{"stem":"...","concept_tag":"short label","correct_label":"A",'
-    '"choices":[{"label":"A","text":"...","is_correct":true}, ...]}]'
+    '[{"stem":"short question text","concept_tag":"2-4 word tag","correct_label":"B",'
+    '"choices":[{"label":"A","text":"plausible distractor","is_correct":false},'
+    '{"label":"B","text":"the one correct answer","is_correct":true},'
+    '{"label":"C","text":"plausible distractor","is_correct":false},'
+    '{"label":"D","text":"plausible distractor","is_correct":false}],'
+    '"explanation_steps":["Step 1: ...","Step 2: ..."],'
+    '"solution_summary":"Final answer: B because ..."}]'
 )
+
+DIFFICULTY_GUIDANCE: dict[str, str] = {
+    "easy": (
+        "Beginner: single concept, direct recall or one obvious step. "
+        "Stem tests definition, identification, or a basic application."
+    ),
+    "medium": (
+        "Intermediate: combine 2-3 ideas, moderate reasoning or multi-step setup. "
+        "Distractors should tempt partial understanding."
+    ),
+    "hard": (
+        "Advanced: deep understanding required — NOT beginner questions with harder wording. "
+        "Use scenario-based stems (language acceptance, construction, optimization, proof, "
+        "debugging, edge cases, trade-offs). "
+        "Applies to every subject (CS theory, discrete math, programming, statistics, "
+        "algebra, geometry, etc.). "
+        "Distractors must reflect real misconceptions experts see in this topic."
+    ),
+}
 
 # Legacy tutorQA topic keywords — useful for off-topic redirects in tutor flows.
 TOPIC_KEYWORDS: dict[str, list[str]] = {
@@ -167,11 +191,14 @@ def format_conversation_history(history: list[dict[str, str]] | None) -> str:
     return "Conversation so far:\n" + "\n".join(lines) + "\n\n"
 
 
-def question_generation_max_tokens(count: int) -> int:
+def question_generation_max_tokens(count: int, difficulty: str = "") -> int:
     from django.conf import settings
 
     cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
-    return min(cap, max(800, 280 * count))
+    base = min(cap, max(800, 280 * count))
+    if difficulty == Question.Difficulty.HARD:
+        base = min(cap, int(base * 1.35))
+    return base
 
 
 def exam_feedback_max_tokens(item_count: int) -> int:
@@ -214,10 +241,26 @@ def off_topic_redirect(topic: str, question: str) -> str | None:
 
 QUESTION_GENERATION_SYSTEM = (
     f"You are {EXAMIQ_PERSONA} question writer. Return valid JSON only — no markdown, no prose.\n"
-    "Rules: MCQ with exactly 4 choices (A-D), one correct; stems ≤50 words; "
-    "difficulty must match requested level.\n"
+    "Rules:\n"
+    "- MCQ with exactly 4 distinct non-empty choices (A-D); exactly one correct.\n"
+    "- correct_label MUST match the single choice with is_correct:true.\n"
+    "- Randomize correct_label per question (A, B, C, or D). Never default all answers to A.\n"
+    "- In a batch, use at least 2 different correct_label values when count ≥ 2.\n"
+    "- Stems ≤50 words; choice text ≤120 characters; difficulty must match requested level.\n"
+    "- Distractors plausible but definitively wrong to a subject expert.\n"
+    "- Solve each problem yourself before marking the answer; verify correctness.\n"
+    "- For computation or multi-step problems: include ≥2 explanation_steps showing work.\n"
+    "- solution_summary states the correct choice letter and why.\n"
+    "- Match the subject field exactly (theory, math, programming, statistics, etc.).\n"
+    "JSON output rules:\n"
+    "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
+    "- No trailing commas. Escape double quotes inside strings.\n"
     "Use plain text for formulas and code snippets — no LaTeX or markdown."
 )
+
+
+def _difficulty_guidance(difficulty: str) -> str:
+    return DIFFICULTY_GUIDANCE.get(difficulty, DIFFICULTY_GUIDANCE["medium"])
 
 
 def build_question_generation_prompt(
@@ -230,17 +273,22 @@ def build_question_generation_prompt(
     subject = topic.subject
     label = difficulty_label(difficulty)
     ref = reference_stem.strip() or "none"
+    guidance = _difficulty_guidance(difficulty)
 
     user_prompt = (
         f"Generate exactly {count} multiple-choice questions.\n"
         f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
         f"Difficulty: {label} ({difficulty})\n"
+        f"{guidance}\n"
         f"Reference (optional): {ref}\n\n"
         "Keep stems and choice text short. Escape quotes inside JSON strings.\n"
-        "Distractors must be plausible but clearly wrong to an expert.\n"
-        f"JSON array schema:\n{QUESTION_JSON_SCHEMA}"
+        "Pick a different correct_label for each question when possible (mix A, B, C, D).\n"
+        "Do NOT place the correct answer on the same letter for every question.\n"
+        "Each question must include explanation_steps (≥1) and solution_summary.\n"
+        f"JSON array schema (example shows B correct — use any letter per question):\n"
+        f"{QUESTION_JSON_SCHEMA}"
     )
-    return QUESTION_GENERATION_SYSTEM, user_prompt, question_generation_max_tokens(count)
+    return QUESTION_GENERATION_SYSTEM, user_prompt, question_generation_max_tokens(count, difficulty)
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +297,10 @@ def build_question_generation_prompt(
 
 QUESTION_VALIDATION_SYSTEM = (
     f"You are {EXAMIQ_PERSONA} exam reviewer. Return valid JSON only.\n"
-    "Check topic fit, difficulty fit, clarity, and whether the marked answer is correct."
+    "Structural checks: stem is clear; exactly 4 choices A-D with distinct text; "
+    "exactly one marked correct; correct_label matches the true answer.\n"
+    "Semantic checks: solve the problem independently; confirm topic and difficulty fit.\n"
+    "Set is_valid:false if ANY check fails. Be strict — do not pass flawed questions."
 )
 
 
@@ -266,7 +317,9 @@ def build_question_validation_prompt(
     user_prompt = (
         f"Validate this MCQ for subject '{subject_name}', topic '{topic_name}', "
         f"difficulty '{difficulty}'.\n"
-        f"Stem: {stem}\nChoices: {choices_text}\nMarked correct: {correct_label}\n"
+        f"Stem: {stem}\nChoices: {choices_text}\nMarked correct: {correct_label}\n\n"
+        "Solve the problem yourself. Verify the marked choice is definitively correct.\n"
+        "Reject if choices are duplicated, ambiguous, off-topic, or the marked answer is wrong.\n"
         f"Return JSON only:\n{QUESTION_VALIDATION_JSON_SCHEMA}"
     )
     return QUESTION_VALIDATION_SYSTEM, user_prompt

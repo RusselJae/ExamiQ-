@@ -1,11 +1,18 @@
 """Curriculum lookup helpers for cascading dropdowns and filtering."""
 
 from apps.questions.models import Subject, Topic, YearLevel
-from apps.users.models import Program
+from apps.users.models import AcademicTerm, Program, ProgramSection
 
 
 def get_year_levels():
     return YearLevel.objects.all()
+
+
+def term_semester(term: AcademicTerm | None) -> int | None:
+    """Return Subject semester (1 or 2) for an academic term."""
+    if not term:
+        return None
+    return term.semester
 
 
 def get_subjects_for_program(
@@ -14,13 +21,29 @@ def get_subjects_for_program(
     *,
     exclude_placeholder: bool = True,
     strict_year: bool = True,
+    semester: int | None = None,
 ):
     qs = Subject.objects.select_related("program", "year_level").filter(program_id=program_id)
     if exclude_placeholder:
         qs = qs.exclude(code__startswith="GEN-")
     if year_level_id and strict_year:
         qs = qs.filter(year_level_id=year_level_id)
+    if semester is not None:
+        qs = qs.filter(semester=semester)
     return qs.order_by("year_level__order", "semester", "code")
+
+
+def subjects_for_teaching_assignment(
+    section: ProgramSection,
+    term: AcademicTerm,
+):
+    """Subjects valid for a teaching assignment (section year + term semester)."""
+    semester = term_semester(term)
+    return get_subjects_for_program(
+        section.program_id,
+        section.year_level_id,
+        semester=semester,
+    )
 
 
 def get_subjects_for_professor(program_id: int | None, year_level_id: int | None = None):
@@ -46,13 +69,21 @@ def topics_for_program(program_id: int | None):
 
 
 def subject_queryset_for_student(user):
-    program = user.home_program
-    if not program:
+    """Subjects available via enabled exam setups for the student's section and term."""
+    from apps.reviews.exam_setup_services import enabled_assignments_for_student
+
+    assignments = enabled_assignments_for_student(user)
+    if not assignments.exists():
         return Subject.objects.none()
-    qs = Subject.objects.filter(program=program).exclude(code__startswith="GEN-")
+    current_term = AcademicTerm.get_current()
+    semester = term_semester(current_term)
+    subject_ids = assignments.values_list("subject_id", flat=True)
+    qs = Subject.objects.filter(pk__in=subject_ids).exclude(code__startswith="GEN-")
     qs = qs.select_related("year_level")
     if user.year_level_id:
         qs = qs.filter(year_level_id=user.year_level_id)
+    if semester is not None:
+        qs = qs.filter(semester=semester)
     return qs.order_by("year_level__order", "semester", "code")
 
 

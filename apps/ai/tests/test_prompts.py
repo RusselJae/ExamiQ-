@@ -24,11 +24,25 @@ class TestQuestionGenerationPrompt:
         assert tokens_three == 840
         assert tokens_five > tokens_three
 
+    @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
+    def test_hard_difficulty_gets_larger_budget(self, topic):
+        _, _, hard_tokens = build_question_generation_prompt(topic, "hard", 3)
+        _, _, easy_tokens = build_question_generation_prompt(topic, "easy", 3)
+        assert hard_tokens > easy_tokens
+
     def test_includes_subject_and_topic(self, topic):
         system, user, _ = build_question_generation_prompt(topic, "medium", 2)
         assert "ExamiQ+" in system
         assert topic.name in user
         assert topic.subject.code in user
+        assert "explanation_steps" in user
+        assert "randomize" in system.lower() or "correct_label" in system.lower()
+
+    def test_hard_difficulty_includes_advanced_guidance(self, topic):
+        _, user, tokens = build_question_generation_prompt(topic, "hard", 3)
+        assert "Advanced" in user
+        assert "every subject" in user.lower() or "Applies to every subject" in user
+        assert tokens > question_generation_max_tokens(3, "medium")
 
 
 class TestLegacyTutorPrompts:

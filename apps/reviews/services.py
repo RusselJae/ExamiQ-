@@ -26,6 +26,8 @@ def start_review_session(
     review_window=None,
     mode: str | None = None,
     seconds_per_question: int | None = None,
+    pre_session_confidence: str = "",
+    session_goal: str = "",
 ) -> ReviewSession:
     """Create a new active review session."""
     if review_window:
@@ -48,6 +50,8 @@ def start_review_session(
         course=course,
         review_window=review_window,
         planned_question_count=planned_question_count,
+        pre_session_confidence=pre_session_confidence,
+        session_goal=session_goal,
     )
 
 
@@ -142,6 +146,7 @@ def submit_answer(
             student=session.student,
             question=question,
             answer=answer,
+            generate_ai=False,
         )
 
     return answer

@@ -8,6 +8,7 @@ from django.views.generic import CreateView, ListView
 
 from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
 from apps.reviews.models import ReviewWindow
+from apps.users.assignment_services import get_professor_course_queryset, professor_has_assignments
 from apps.users.forms import CourseOfferingForm
 from apps.users.models import Course
 
@@ -21,16 +22,31 @@ class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
 
     def get_queryset(self):
         return (
-            Course.objects.filter(professor=self.request.user, is_archived=False)
+            get_professor_course_queryset(self.request.user)
             .select_related("program")
             .order_by("-academic_year", "term", "code")
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["assignments_managed"] = professor_has_assignments(self.request.user)
+        return context
 
 
 class ProfessorCourseCreateView(ProfessorRequiredMixin, CreateView):
     model = Course
     form_class = CourseOfferingForm
     template_name = "professor/courses/form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if professor_has_assignments(request.user):
+            messages.info(
+                request,
+                "Your courses are assigned by your department chairperson. "
+                "Contact them if you need a new teaching load.",
+            )
+            return redirect("analytics_professor:course_list")
+        return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         form.instance.professor = self.request.user

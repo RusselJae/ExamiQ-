@@ -29,6 +29,25 @@ class TestReviewServices:
         )
         assert answer.is_correct is False
         assert hasattr(answer, "mistake_record")
+        assert answer.mistake_record.ai_feedback == ""
+
+    def test_generate_mistake_feedback_persists_text(self, student, mcq_question, program, topic):
+        from apps.analytics.services import generate_mistake_feedback
+
+        question, _ = mcq_question
+        session = start_review_session(student, topic, "easy", 15)
+        wrong = question.choices.filter(is_correct=False).first()
+        answer = submit_answer(
+            session=session,
+            question=question,
+            confidence=3,
+            selected_choice=wrong,
+        )
+        record = answer.mistake_record
+        text = generate_mistake_feedback(record)
+        record.refresh_from_db()
+        assert text
+        assert record.ai_feedback == text
 
     def test_session_expired_rejects_submission(self, student, mcq_question):
         question, correct = mcq_question

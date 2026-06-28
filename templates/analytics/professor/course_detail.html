@@ -16,21 +16,7 @@
     <div class="span-kpi">{% include "components/stat_card.html" with value=summary.feedback_views label="Feedback Views" variant=summary.feedback_views|yesno:"primary,warning" %}</div>
 
     <div class="span-half">
-        <div class="bento-card bento-card-inner h-full">
-            <h2 class="text-lg font-semibold text-examiq-navy mb-4">Confidence Calibration</h2>
-            <div class="space-y-1">
-                {% for key, count in summary.calibration_matrix.items %}
-                <div class="calibration-row text-sm">
-                    <span class="capitalize text-examiq-navy">{{ key|cut:"_" }}</span>
-                    <div class="calibration-bar">
-                        <div class="calibration-bar-fill progress-bar-fill--{% if key == 'mastery' %}good{% elif key == 'misconception' %}coral{% else %}muted{% endif %}"
-                             style="width: {% widthratio count calibration_max 100 %}%"></div>
-                    </div>
-                    <span class="font-medium text-examiq-slate text-right">{{ count }}</span>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+        {% include "components/calibration_tier_card.html" with calibration_matrix=summary.calibration_matrix calibration_max=calibration_max %}
     </div>
     <div class="span-half">
         <div class="bento-card bento-card--list bento-card-inner h-full">

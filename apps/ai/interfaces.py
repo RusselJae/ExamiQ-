@@ -59,6 +59,21 @@ class ErrorClassifier:
         return None
 
 
+class AdaptiveFeedbackGenerator:
+    def generate(
+        self,
+        topic: str,
+        question: str,
+        user_answer: str,
+        correct_answer: str,
+        confidence: str = "medium",
+    ) -> str:
+        return (
+            f"You answered '{user_answer}' but the correct answer is '{correct_answer}'. "
+            f"Review {topic} and practice similar problems."
+        )
+
+
 class CurriculumAdvisor:
     def program_report(self, program) -> str:
         from apps.analytics.services import program_performance_summary

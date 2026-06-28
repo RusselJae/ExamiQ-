@@ -2,12 +2,48 @@ from django import forms
 from django.utils import timezone
 
 from apps.questions.models import Question, Topic
-from apps.reviews.models import ReviewWindow
+from apps.reviews.models import DEFAULT_EXAM_DIFFICULTIES, ExamSetup, ReviewWindow
 
 FORM_INPUT_CLASS = (
     "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
     "focus:border-examiq-green focus:ring-2 focus:ring-green-100 outline-none transition"
 )
+
+
+class ExamSetupForm(forms.ModelForm):
+    topics = forms.ModelMultipleChoiceField(
+        queryset=Topic.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Leave empty to allow all topics for this subject.",
+    )
+    allowed_difficulties = forms.MultipleChoiceField(
+        choices=Question.Difficulty.choices,
+        widget=forms.CheckboxSelectMultiple,
+        initial=list(DEFAULT_EXAM_DIFFICULTIES),
+    )
+
+    class Meta:
+        model = ExamSetup
+        fields = ["is_enabled", "topics", "allowed_difficulties"]
+        widgets = {
+            "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+        }
+
+    def __init__(self, *args, course=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if course:
+            self.fields["topics"].queryset = Topic.objects.filter(
+                subject__program=course.program,
+                subject__code=course.code,
+                parent__isnull=True,
+            ).order_by("name")
+
+    def clean_allowed_difficulties(self):
+        difficulties = self.cleaned_data.get("allowed_difficulties")
+        if not difficulties:
+            raise forms.ValidationError("Select at least one difficulty level.")
+        return difficulties
 
 
 class ReviewWindowForm(forms.ModelForm):

@@ -1,0 +1,29 @@
+# Secrets & local config
+.env
+.env.local
+*.pem
+# Local database
+db.sqlite3
+*.sqlite3
+# Django build / uploads
+staticfiles/
+media/
+# Tests & tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+# OS / IDE (optional)
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+.cursor/rules/
+.cursor/rules/django.mdc
+
+venv/
+.venv/
+__pycache__/
+*.pyc

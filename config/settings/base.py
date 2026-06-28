@@ -136,6 +136,9 @@ SESSION_COOKIE_AGE = 86400
 
 DEFAULT_SECONDS_PER_QUESTION = 30
 
+SITE_URL = env("SITE_URL", default="http://127.0.0.1:8000")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@examiq.local")
+
 AI_ENABLED = env.bool("AI_ENABLED", default=False)
 LLM_PROVIDER = env("LLM_PROVIDER", default="openai")
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")

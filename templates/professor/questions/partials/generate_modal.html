@@ -28,6 +28,8 @@
                            data-stem="{{ variation.stem|escape }}"
                            data-concept="{{ variation.concept_tag|default:''|escape }}"
                            data-correct="{{ variation.correct_label|default:'A' }}"
+                           data-solution="{{ variation.solution_summary|default:''|escape }}"
+                           {% if variation.explanation_steps %}data-steps="{% for step in variation.explanation_steps %}{{ step|escape }}{% if not forloop.last %}|||{% endif %}{% endfor %}"{% endif %}
                            {% for choice in variation.choices %}
                            data-choice-{{ choice.label|lower }}="{{ choice.text|escape }}"
                            {% endfor %}>

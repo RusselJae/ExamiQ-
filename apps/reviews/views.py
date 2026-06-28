@@ -7,20 +7,21 @@ from django.views import View
 from django.views.generic import DetailView
 
 from apps.core.mixins import StudentRequiredMixin
+from apps.questions.curriculum import subject_queryset_for_student
 from apps.questions.models import Question, Topic
 from apps.questions.services import get_adaptive_questions_for_session
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
+from apps.reviews.exam_setup_services import student_setup_eligibility
 from apps.reviews.recommendations import build_session_summary, get_review_recommendations
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
-from apps.reviews.forms_professor import get_open_windows_for_student
-from apps.reviews.models import Answer, ReviewSession, ReviewWindow
+from apps.reviews.models import Answer, ReviewSession
+from apps.reviews.warmups import random_warmup
+from apps.analytics.confidence import confidence_from_time_spent
 from apps.reviews.services import (
     SessionExpiredError,
-    WindowStartError,
     complete_session,
     get_answered_question_ids,
     start_review_session,
-    start_session_from_window,
     submit_answer,
     validate_session_active,
 )
@@ -41,42 +42,53 @@ class ReviewSetupView(StudentRequiredMixin, View):
 
     template_name = "reviews/setup.html"
 
+    def _setup_context(self, form, **extra):
+        import json
+
+        eligibility = student_setup_eligibility(self.request.user)
+        subjects = subject_queryset_for_student(self.request.user)
+        no_exams = eligibility.get("eligible") and not subjects.exists()
+        return {
+            "form": form,
+            "setup_eligibility": eligibility,
+            "no_exams_available": no_exams,
+            "warmup_json": json.dumps(random_warmup()),
+            **extra,
+        }
+
     def get(self, request):
-        open_windows = get_open_windows_for_student(request.user)
-        form = ReviewSetupForm(student=request.user, open_windows=open_windows)
+        initial = {}
+        preselected_topic_id = None
+
+        topic_pk = request.GET.get("topic")
+        if topic_pk:
+            topic = get_object_or_404(Topic.objects.select_related("subject"), pk=topic_pk)
+            if subject_queryset_for_student(request.user).filter(pk=topic.subject_id).exists():
+                initial = {"subject": topic.subject, "topic": topic}
+                preselected_topic_id = topic.pk
+
+        form = ReviewSetupForm(student=request.user, initial=initial)
         return render(
             request,
             self.template_name,
-            {"form": form, "open_windows": open_windows},
+            self._setup_context(form, preselected_topic_id=preselected_topic_id),
         )
 
     def post(self, request):
-        open_windows = get_open_windows_for_student(request.user)
-        form = ReviewSetupForm(request.POST, student=request.user, open_windows=open_windows)
+        form = ReviewSetupForm(request.POST, student=request.user)
         if form.is_valid():
-            window = form.cleaned_data.get("review_window")
-            course = form.get_course_for_session()
-            mode = ReviewSession.Mode.TIMED_EXAM
-            seconds_per_question = 30
-            if window:
-                mode = window.mode
-                seconds_per_question = window.seconds_per_question
             session = start_review_session(
                 student=request.user,
                 topic=form.cleaned_data["topic"],
                 difficulty=form.cleaned_data["difficulty"],
                 duration_minutes=form.cleaned_data["duration_minutes"],
-                course=course,
-                review_window=window,
-                mode=mode,
-                seconds_per_question=seconds_per_question,
+                course=form.get_course_for_session(),
+                mode=ReviewSession.Mode.TIMED_EXAM,
+                pre_session_confidence=form.cleaned_data.get("pre_session_confidence") or "",
+                session_goal=form.cleaned_data.get("session_goal") or "",
             )
             return redirect("reviews:session", pk=session.pk)
-        return render(
-            request,
-            self.template_name,
-            {"form": form, "open_windows": open_windows},
-        )
+        return render(request, self.template_name, self._setup_context(form))
 
 
 class ReviewSetupSubjectsView(StudentRequiredMixin, CurriculumSubjectsView):
@@ -93,37 +105,6 @@ class ReviewSetupSubjectsView(StudentRequiredMixin, CurriculumSubjectsView):
 
 class ReviewSetupTopicsView(StudentRequiredMixin, CurriculumTopicsView):
     pass
-
-
-class ReviewWindowStartView(StudentRequiredMixin, View):
-    """Start a review session directly from an open review window."""
-
-    def post(self, request, window_pk):
-        open_window_ids = set(
-            get_open_windows_for_student(request.user).values_list("pk", flat=True)
-        )
-        window = get_object_or_404(
-            ReviewWindow.objects.select_related("course", "course__program").prefetch_related(
-                "topics"
-            ),
-            pk=window_pk,
-        )
-        if window.pk not in open_window_ids:
-            messages.error(request, "This review window is not available.")
-            return redirect("reviews:setup")
-
-        topic = None
-        topic_id = request.POST.get("topic")
-        if topic_id:
-            topic = get_object_or_404(Topic, pk=topic_id)
-
-        try:
-            session = start_session_from_window(request.user, window, topic=topic)
-        except WindowStartError as exc:
-            messages.error(request, str(exc))
-            return redirect("reviews:setup")
-
-        return redirect("reviews:session", pk=session.pk)
 
 
 class ReviewSessionView(StudentRequiredMixin, DetailView):
@@ -223,7 +204,11 @@ class SubmitAnswerView(StudentRequiredMixin, View):
 
         time_spent = int(request.POST.get("time_spent_seconds", 0) or 0)
         confidence = None
-        if not timed_out and form.is_valid():
+        if timed_exam:
+            if timed_out:
+                time_spent = session.seconds_per_question
+            confidence = confidence_from_time_spent(time_spent)
+        elif not timed_out and form.is_valid():
             conf = form.cleaned_data.get("confidence")
             confidence = int(conf) if conf else None
 
@@ -242,7 +227,7 @@ class SubmitAnswerView(StudentRequiredMixin, View):
 
         if timed_exam:
             response = HttpResponse(status=204)
-            response["HX-Redirect"] = reverse("reviews:session", kwargs={"pk": session.pk})
+            response["HX-Redirect"] = reverse("reviews:question_partial", kwargs={"pk": session.pk})
             return response
 
         steps = question.explanation_steps.all()
@@ -266,16 +251,26 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
                 "answers__question__choices",
                 "answers__question__explanation_steps",
                 "answers__selected_choice",
+                "answers__mistake_record",
+                "answers__mistake_record__error_type",
             )
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["session_summary"] = build_session_summary(self.object)
+        session_summary = build_session_summary(self.object)
+        context["session_summary"] = session_summary
+        context["calibration_tier_max"] = session_summary["calibration_tier_max"]
         context["recommendations"] = get_review_recommendations(self.request.user, limit=5)
-        context["answers"] = self.object.answers.select_related(
-            "question", "selected_choice"
-        ).prefetch_related("question__choices", "question__explanation_steps")
+        context["answers"] = (
+            self.object.answers.select_related("question", "selected_choice", "mistake_record")
+            .prefetch_related(
+                "question__choices",
+                "question__explanation_steps",
+                "mistake_record__error_type",
+            )
+            .order_by("answered_at")
+        )
         return context
 
 

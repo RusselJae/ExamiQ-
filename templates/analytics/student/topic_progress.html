@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load crispy_forms_tags %}
 
 {% block title %}Topic Progress - EXAMIQ+{% endblock %}
 
@@ -9,7 +10,7 @@
 <div class="bento-grid mb-6">
     {% for topic in topics %}
     <div class="span-half">
-        <div class="bento-card bento-card-inner h-full">
+        <div class="bento-card bento-card-inner h-full flex flex-col">
             <div class="flex justify-between items-start gap-4 mb-3">
                 <h2 class="text-lg font-semibold text-examiq-navy">{{ topic.topic_name }}</h2>
                 <span class="text-2xl font-bold {% if topic.accuracy >= 70 %}stat-value-good{% elif topic.accuracy >= 50 %}text-examiq-amber{% else %}text-examiq-mistake{% endif %}">{{ topic.accuracy }}%</span>
@@ -17,7 +18,10 @@
             <div class="progress-bar h-2">
                 <div class="progress-bar-fill" style="width: {{ topic.accuracy }}%"></div>
             </div>
-            <p class="text-sm text-examiq-slate">{{ topic.correct }} of {{ topic.total }} answers correct</p>
+            <p class="text-sm text-examiq-slate mt-2">{{ topic.correct }} of {{ topic.total }} answers correct</p>
+            <div class="mt-auto pt-4">
+                <a href="{% url 'reviews:setup' %}?topic={{ topic.topic_id }}" class="btn-primary btn-primary-sm">Review topic</a>
+            </div>
         </div>
     </div>
     {% endfor %}

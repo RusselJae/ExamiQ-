@@ -4,8 +4,8 @@
        class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
     <a href="{% url 'analytics_professor:course_roster' course.pk %}"
        class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Roster</a>
-    <a href="{% url 'analytics_professor:window_list' course.pk %}"
-       class="course-nav-link {% if active_tab == 'windows' %}course-nav-link-active{% endif %}">Review Windows</a>
+    <a href="{% url 'analytics_professor:exam_setup' course.pk %}"
+       class="course-nav-link {% if active_tab == 'exam_setup' %}course-nav-link-active{% endif %}">Exam Setup</a>
     <a href="{% url 'analytics_professor:course_heatmap' course.pk %}"
        class="course-nav-link {% if active_tab == 'heatmap' %}course-nav-link-active{% endif %}">Heatmap</a>
     <a href="{% url 'analytics_professor:topic_list' course.pk %}"

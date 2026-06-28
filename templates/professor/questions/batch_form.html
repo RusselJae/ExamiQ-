@@ -140,6 +140,48 @@
 
     let questionIndex = 0;
     let restoring = false;
+    const validationState = {};
+
+    function normalizeStem(text) {
+        return (text || "").trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    function checkIconSvg() {
+        return '<svg class="validate-btn__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>';
+    }
+
+    function xIconSvg() {
+        return '<svg class="validate-btn__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 18L18 6M6 6l12 12"/></svg>';
+    }
+
+    function validateButtonHtml(index) {
+        const validation = validationState[index];
+        if (validation && validation.is_valid === true) {
+            return '<button type="button" class="validate-btn validate-btn--valid text-sm font-medium mr-2 inline-flex items-center gap-1" data-index="' + index + '">Valid ' + checkIconSvg() + "</button>";
+        }
+        if (validation && validation.is_valid === false) {
+            return '<button type="button" class="validate-btn validate-btn--invalid text-sm font-medium mr-2 inline-flex items-center gap-1" data-index="' + index + '">Invalid ' + xIconSvg() + "</button>";
+        }
+        return '<button type="button" class="validate-btn text-link text-sm font-medium mr-2" data-index="' + index + '">Validate</button>';
+    }
+
+    function showValidateModal(result) {
+        const validateContainer = document.getElementById("validate-modal-container");
+        const validBadge = result.is_valid
+            ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Yes</span>'
+            : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">Needs review</span>';
+        validateContainer.innerHTML =
+            '<div class="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" id="validate-modal">' +
+            '<div class="bento-card bento-card--elevated p-6 max-w-lg w-full mx-4 shadow-xl">' +
+            '<div class="flex justify-between items-center mb-5"><h2 class="text-lg font-semibold text-examiq-navy">AI Validation</h2>' +
+            '<button type="button" class="close-validate-modal text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button></div>' +
+            '<div class="space-y-4 text-sm"><div class="flex items-center justify-between gap-3 py-2 border-b border-slate-100">' +
+            '<span class="font-medium text-examiq-navy">Overall valid</span>' + validBadge + '</div>' +
+            '<div class="rounded-xl bg-slate-50 border border-slate-200 p-4 shadow-inner">' +
+            '<span class="font-medium text-examiq-navy block mb-2">AI Feedback</span>' +
+            '<p class="text-examiq-slate leading-relaxed">' + (result.feedback || "") + "</p></div></div>" +
+            '<button type="button" class="close-validate-modal btn-primary w-full mt-6">Close</button></div></div>';
+    }
 
     const batchConfig = {
         coursePk: coursePk,
@@ -186,17 +228,26 @@
                 return '<input type="text" name="choice_' + index + "_" + letter + '">';
             }).join("") +
             '<input type="text" name="correct_' + index + '" value="A">' +
-            '<input type="text" name="concept_tag_' + index + '">';
+            '<input type="text" name="concept_tag_' + index + '">' +
+            '<input type="hidden" name="steps_' + index + '" value="">' +
+            '<input type="hidden" name="solution_summary_' + index + '" value="">';
         fieldsStore.appendChild(wrapper);
     }
 
     function getQuestionData(index) {
         ensureFieldsForIndex(index);
+        let steps = [];
+        try {
+            steps = JSON.parse(getField("steps_" + index).value || "[]");
+        } catch (e) { steps = []; }
         const data = {
             stem: getField("stem_" + index).value,
             correct: getField("correct_" + index).value || "A",
             concept: getField("concept_tag_" + index).value,
+            solution_summary: getField("solution_summary_" + index).value || "",
+            steps: Array.isArray(steps) ? steps : [],
             choices: {},
+            validation: validationState[index] || null,
         };
         ["A", "B", "C", "D"].forEach(function(letter) {
             data.choices[letter] = getField("choice_" + index + "_" + letter).value;
@@ -209,10 +260,17 @@
         getField("stem_" + index).value = data.stem || "";
         getField("correct_" + index).value = (data.correct || "A").toUpperCase();
         getField("concept_tag_" + index).value = data.concept || "";
+        getField("solution_summary_" + index).value = data.solution_summary || "";
+        getField("steps_" + index).value = JSON.stringify(data.steps || []);
         ["A", "B", "C", "D"].forEach(function(letter) {
             getField("choice_" + index + "_" + letter).value =
                 (data.choices && data.choices[letter]) || "";
         });
+        if (data.validation) {
+            validationState[index] = data.validation;
+        } else {
+            delete validationState[index];
+        }
     }
 
     function editUrlFor(index) {
@@ -235,7 +293,7 @@
             '<td class="py-3 pr-4 text-examiq-slate max-w-[10rem] truncate">' + truncate(data.concept, 24) + "</td>" +
             '<td class="py-3 whitespace-nowrap">' +
             '<a href="' + editUrlFor(index) + '" class="text-link text-sm font-medium mr-3">Edit</a>' +
-            '<button type="button" class="validate-btn text-link text-sm font-medium mr-2" data-index="' + index + '">Validate</button>' +
+            validateButtonHtml(index) +
             '<button type="button" class="delete-question-btn btn-icon-delete" data-index="' + index + '" aria-label="Delete question">' +
             window.ExamiQBatch.trashIconSvg() + "</button></td>";
     }
@@ -323,6 +381,9 @@
         if (draft.settings.difficulty) difficultySelect.value = draft.settings.difficulty;
 
         window.ExamiQBatch.syncDomFromDraft(batchConfig, draft);
+        draft.questions.forEach(function(q, i) {
+            if (q.validation) validationState[i] = q.validation;
+        });
         restoring = false;
     }
 
@@ -334,7 +395,8 @@
         return fd;
     }
 
-    function runValidate(index, triggerBtn) {
+    function runValidate(index, triggerBtn, showModal) {
+        if (typeof showModal === "undefined") showModal = true;
         const data = getQuestionData(index);
         const fd = getSettingsFormData();
         fd.append("stem", data.stem);
@@ -343,29 +405,69 @@
             fd.append("choice_" + letter, data.choices[letter] || "");
         });
 
-        const validateContainer = document.getElementById("validate-modal-container");
-        validateContainer.innerHTML =
-            '<div class="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">' +
-            '<div class="bento-card p-8 shadow-xl flex flex-col items-center gap-3">' +
-            '<span class="btn-spinner btn-spinner-lg" style="border-color:#1A5632;border-top-color:transparent"></span>' +
-            '<p class="text-sm text-examiq-slate">Validating question…</p></div></div>';
-
         if (triggerBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
             window.ExamiQUI.setButtonLoading(triggerBtn, true, "Validating…");
         }
 
-        fetch(validateUrl, { method: "POST", body: fd })
-            .then(function(r) { return r.text(); })
-            .then(function(html) { validateContainer.innerHTML = html; })
+        return fetch(validateUrl, {
+            method: "POST",
+            headers: { Accept: "application/json" },
+            body: fd,
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(result) {
+                validationState[index] = {
+                    is_valid: !!result.is_valid,
+                    feedback: result.feedback || "",
+                    checked_at: Date.now(),
+                };
+                renderTableRow(index);
+                window.ExamiQBatch.persist(batchConfig);
+                if (showModal) showValidateModal(result);
+                return result;
+            })
             .catch(function() {
-                validateContainer.innerHTML = "";
                 if (window.showToast) window.showToast("Validation failed. Please try again.", "error");
+                return { is_valid: false };
             })
             .finally(function() {
                 if (triggerBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
                     window.ExamiQUI.setButtonLoading(triggerBtn, false);
                 }
             });
+    }
+
+    function findDuplicateStemsInQueue() {
+        const seen = {};
+        const duplicates = [];
+        for (let i = 0; i < questionIndex; i++) {
+            const stem = normalizeStem(getQuestionData(i).stem);
+            if (!stem) continue;
+            if (seen[stem] !== undefined) {
+                duplicates.push(i + 1);
+            } else {
+                seen[stem] = i;
+            }
+        }
+        return duplicates;
+    }
+
+    async function validateAllBeforeSubmit() {
+        const pending = [];
+        for (let i = 0; i < questionIndex; i++) {
+            if (!getQuestionData(i).stem.trim()) continue;
+            if (!validationState[i]) pending.push(i);
+        }
+        for (let j = 0; j < pending.length; j++) {
+            await runValidate(pending[j], null, false);
+        }
+        for (let i = 0; i < questionIndex; i++) {
+            if (!getQuestionData(i).stem.trim()) continue;
+            if (!validationState[i] || validationState[i].is_valid !== true) {
+                return false;
+            }
+        }
+        return true;
     }
 
     function onSettingsChange() {
@@ -383,8 +485,33 @@
     topicSelect.addEventListener("change", onSettingsChange);
     difficultySelect.addEventListener("change", onSettingsChange);
 
-    batchForm.addEventListener("submit", function() {
+    batchForm.addEventListener("submit", async function(e) {
+        if (!topicSelect.value) {
+            e.preventDefault();
+            if (window.showToast) window.showToast("Select a topic before submitting.", "warning");
+            return;
+        }
+        const dupes = findDuplicateStemsInQueue();
+        if (dupes.length) {
+            e.preventDefault();
+            if (window.showToast) {
+                window.showToast("Duplicate questions in queue (rows: " + dupes.join(", ") + ").", "warning");
+            }
+            return;
+        }
+        e.preventDefault();
+        const submitBtn = batchForm.querySelector('button[type="submit"]');
+        if (submitBtn && window.ExamiQUI) window.ExamiQUI.setButtonLoading(submitBtn, true, "Validating…");
+        const allValid = await validateAllBeforeSubmit();
+        if (submitBtn && window.ExamiQUI) window.ExamiQUI.setButtonLoading(submitBtn, false);
+        if (!allValid) {
+            if (window.showToast) {
+                window.showToast("Fix or remove invalid questions before submitting.", "error");
+            }
+            return;
+        }
         window.ExamiQBatch.clearDraft(coursePk);
+        batchForm.submit();
     });
 
     window.addEventListener("beforeunload", function(e) {
@@ -423,9 +550,15 @@
         const deleteBtn = e.target.closest(".delete-question-btn");
         if (deleteBtn) {
             const index = parseInt(deleteBtn.dataset.index, 10);
-            if (confirm("Delete this question?")) {
-                window.ExamiQBatch.removeQuestion(batchConfig, index);
-            }
+            showConfirm({
+                message: "Delete this question?",
+                type: "warning",
+                confirmLabel: "Delete",
+            }).then(function (ok) {
+                if (ok) {
+                    window.ExamiQBatch.removeQuestion(batchConfig, index);
+                }
+            });
             return;
         }
         const validateBtn = e.target.closest(".validate-btn");
@@ -439,10 +572,16 @@
             const checked = document.querySelectorAll('input[name="selected_variation"]:checked');
             let nextIndex = findNextEmptyIndex();
             checked.forEach(function(cb) {
+                let steps = [];
+                if (cb.dataset.steps) {
+                    steps = cb.dataset.steps.split("|||").map(function(s) { return s.trim(); }).filter(Boolean);
+                }
                 const data = {
                     stem: cb.dataset.stem || "",
                     concept: cb.dataset.concept || "",
                     correct: cb.dataset.correct || "A",
+                    solution_summary: cb.dataset.solution || "",
+                    steps: steps,
                     choices: {},
                 };
                 ["A", "B", "C", "D"].forEach(function(letter) {

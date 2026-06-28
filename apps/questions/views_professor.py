@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Count, Q
 
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -17,6 +17,7 @@ from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 from apps.ai.factory import get_ai_provider_label, get_difficulty_tagger, get_question_generator, get_question_validator
 from apps.ai.exceptions import AIServiceUnavailableError
+from apps.ai.normalize import normalize_generated_questions
 
 from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
 from apps.core.mixins import ProfessorCourseMixin
@@ -32,7 +33,18 @@ from apps.questions.views_curriculum import (
     CurriculumTopicsView,
     ProfessorCurriculumSubjectsView as ProfessorCurriculumSubjectsAPI,
 )
-from apps.questions.services import create_question, deactivate_question, submit_question_for_review
+from apps.questions.services import (
+    build_steps_from_post,
+    create_question,
+    deactivate_question,
+    find_duplicate_question,
+    submit_question_for_review,
+)
+from apps.users.assignment_services import (
+    get_assigned_subjects_queryset,
+    professor_can_access_subject,
+)
+from apps.questions.validation import validate_question_for_submit
 
 
 
@@ -396,11 +408,13 @@ class QuestionGenerateVariationsView(ProfessorCourseMixin, View):
         ai_error = None
         variations = []
         try:
-            variations = get_question_generator().generate(
-                question.topic,
-                question.difficulty,
-                count=3,
-                reference_stem=question.stem,
+            variations = normalize_generated_questions(
+                get_question_generator().generate(
+                    question.topic,
+                    question.difficulty,
+                    count=3,
+                    reference_stem=question.stem,
+                )
             )
         except AIServiceUnavailableError as exc:
             ai_error = exc.message
@@ -441,69 +455,67 @@ class QuestionConfirmVariationsView(ProfessorCourseMixin, View):
         indices = request.POST.getlist("selected")
 
         created = 0
+        skipped_invalid = 0
+        skipped_duplicates: list[str] = []
 
         for index in indices:
-
             stem = request.POST.get(f"stem_{index}", "").strip()
-
             if not stem:
-
                 continue
-
             choices_data = []
-
+            correct_label = ""
             for label in ("A", "B", "C", "D"):
-
                 text = request.POST.get(f"choice_{index}_{label}", "").strip()
-
                 is_correct = request.POST.get(f"correct_{index}_{label}") == "on"
-
+                if is_correct:
+                    correct_label = label
                 if text:
-
                     choices_data.append({"label": label, "text": text, "is_correct": is_correct})
 
-            if len(choices_data) < 2:
-
+            validation = validate_question_for_submit(
+                stem, choices_data, question.topic, question.difficulty, correct_label
+            )
+            if not validation.get("is_valid"):
+                skipped_invalid += 1
                 continue
 
-            new_q = create_question(
+            if find_duplicate_question(question.topic_id, stem):
+                skipped_duplicates.append(stem[:60])
+                continue
 
-                {
-
-                    "topic": question.topic,
-
-                    "difficulty": question.difficulty,
-
-                    "question_type": Question.QuestionType.MCQ,
-
-                    "stem": stem,
-
-                    "is_active": True,
-
-                    "status": Question.Status.PENDING,
-
-                    "proposed_by": request.user,
-
-                },
-
-                choices_data,
-
-                [{"order": 1, "content": f"See original question #{question.pk} for explanation pattern."}],
-
+            steps = build_steps_from_post(
+                request.POST.get(f"steps_{index}", ""),
+                solution_summary=request.POST.get(f"solution_summary_{index}", ""),
             )
+            if not steps:
+                steps = [{"order": 1, "content": f"See original question #{question.pk} for explanation pattern."}]
 
+            create_question(
+                {
+                    "topic": question.topic,
+                    "difficulty": question.difficulty,
+                    "question_type": Question.QuestionType.MCQ,
+                    "stem": stem,
+                    "is_active": True,
+                    "status": Question.Status.PENDING,
+                    "proposed_by": request.user,
+                },
+                choices_data,
+                steps,
+            )
             created += 1
 
-
-
+        if skipped_invalid:
+            messages.error(request, f"Skipped {skipped_invalid} invalid variation(s).")
+        if skipped_duplicates:
+            messages.warning(
+                request,
+                "Skipped duplicate variation(s) already in the question bank.",
+            )
         if created:
-
             messages.success(request, f"Created {created} variation(s) pending review.")
-
         else:
-
             messages.warning(request, "No variations were saved.")
-
         return redirect("analytics_professor:question_list", course_pk=self.course.pk)
 
 
@@ -545,7 +557,9 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
     def get_context_data(self):
         year_levels = YearLevel.objects.all()
-        subjects = Subject.objects.filter(program=self.course.program).select_related("year_level")
+        subjects = get_assigned_subjects_queryset(
+            self.request.user, self.course.program_id
+        ).select_related("year_level")
         return {
             "course": self.course,
             "active_tab": "questions",
@@ -581,6 +595,10 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             count = 0
 
         created = 0
+        skipped_invalid = 0
+        skipped_duplicates: list[str] = []
+        seen_stems: set[str] = set()
+
         for index in range(count):
             stem = request.POST.get(f"stem_{index}", "").strip()
             if not stem:
@@ -596,11 +614,32 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                         "text": text,
                         "is_correct": label == correct_label,
                     })
-            if len(choices_data) < 2:
+
+            validation = validate_question_for_submit(
+                stem, choices_data, topic, difficulty, correct_label
+            )
+            if not validation.get("is_valid"):
+                skipped_invalid += 1
                 continue
-            steps = []
-            if concept_tag:
-                steps.append({"order": 1, "content": concept_tag})
+
+            normalized = find_duplicate_question(topic.pk, stem)
+            if normalized:
+                skipped_duplicates.append(stem[:60])
+                continue
+
+            from apps.questions.services import normalize_stem
+
+            stem_key = normalize_stem(stem)
+            if stem_key in seen_stems:
+                skipped_duplicates.append(stem[:60])
+                continue
+            seen_stems.add(stem_key)
+
+            steps = build_steps_from_post(
+                request.POST.get(f"steps_{index}", ""),
+                concept_tag=concept_tag,
+                solution_summary=request.POST.get(f"solution_summary_{index}", ""),
+            )
             create_question(
                 {
                     "topic": topic,
@@ -617,10 +656,23 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             )
             created += 1
 
+        if skipped_invalid:
+            messages.error(
+                request,
+                f"Skipped {skipped_invalid} invalid question(s). Fix and validate before submitting.",
+            )
+        if skipped_duplicates:
+            messages.warning(
+                request,
+                "Skipped duplicate question(s) already in the bank or queue: "
+                + "; ".join(skipped_duplicates[:3])
+                + ("…" if len(skipped_duplicates) > 3 else ""),
+            )
         if created:
             messages.success(request, f"Submitted {created} question(s) for chairperson review.")
             return redirect("analytics_professor:question_list", course_pk=self.course.pk)
-        messages.warning(request, "No questions were saved. Add at least one complete question.")
+        if not skipped_invalid and not skipped_duplicates:
+            messages.warning(request, "No questions were saved. Add at least one complete question.")
         return render(request, self.template_name, self.get_context_data())
 
 
@@ -638,7 +690,9 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         ai_error = None
         variations = []
         try:
-            variations = get_question_generator().generate(topic, difficulty, count=3)
+            variations = normalize_generated_questions(
+                get_question_generator().generate(topic, difficulty, count=3)
+            )
         except AIServiceUnavailableError as exc:
             ai_error = exc.message
 
@@ -674,7 +728,13 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
             if text:
                 choices.append({"label": label, "text": text, "is_correct": label == correct_label})
 
-        result = get_question_validator().validate(stem, choices, topic, difficulty, correct_label)
+        result = validate_question_for_submit(
+            stem, choices, topic, difficulty, correct_label
+        )
+
+        if "application/json" in request.headers.get("Accept", ""):
+            return JsonResponse(result)
+
         return render(
             request,
             "professor/questions/partials/validate_modal.html",
@@ -682,13 +742,16 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
         )
 
 
-def _get_program_subject(course, subject_id):
+def _get_program_subject(course, subject_id, professor=None):
     if not subject_id or not str(subject_id).isdigit():
         return None
-    return Subject.objects.filter(
+    subject = Subject.objects.filter(
         pk=int(subject_id),
         program=course.program,
     ).first()
+    if subject and professor and not professor_can_access_subject(professor, subject):
+        return None
+    return subject
 
 
 class TopicListView(ProfessorCourseMixin, ListView):
@@ -712,14 +775,14 @@ class TopicListView(ProfessorCourseMixin, ListView):
         context["program"] = self.course.program
         subject_id = self.request.GET.get("subject", "")
         context["selected_subject_id"] = subject_id
-        selected_subject = _get_program_subject(self.course, subject_id)
+        selected_subject = _get_program_subject(self.course, subject_id, self.request.user)
         context["selected_subject"] = selected_subject
         return context
 
 
 class TopicCreateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
-        subject = _get_program_subject(self.course, request.POST.get("subject"))
+        subject = _get_program_subject(self.course, request.POST.get("subject"), request.user)
         if not subject:
             messages.error(request, "Select a valid course code first.")
             return redirect(

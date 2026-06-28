@@ -6,6 +6,7 @@ from django.db.models.functions import TruncDate
 from apps.analytics.confidence import (
     CLASSIFICATION_LABELS,
     confidence_accuracy_matrix,
+    confidence_tier_matrix,
     misconception_topics,
 )
 from apps.analytics.models import MistakeRecord
@@ -15,22 +16,91 @@ from apps.users.constants import home_programs_for_department, students_in_depar
 from apps.users.models import Course, Program, User
 
 
-def log_mistake(student: User, question: Question, answer: Answer) -> MistakeRecord:
+def log_mistake(
+    student: User,
+    question: Question,
+    answer: Answer,
+    *,
+    generate_ai: bool = False,
+) -> MistakeRecord:
     """Create a mistake record when a student answers incorrectly."""
     error_type = None
     if answer.selected_choice_id and answer.selected_choice.error_type_id:
         error_type = answer.selected_choice.error_type
-    elif answer.selected_choice_id:
-        from apps.ai.factory import get_error_classifier
 
-        error_type = get_error_classifier().classify(question, answer)
-    return MistakeRecord.objects.create(
+    ai_feedback = ""
+    record = MistakeRecord.objects.create(
         student=student,
         question=question,
         topic=question.topic,
         answer=answer,
         error_type=error_type,
+        ai_feedback=ai_feedback,
     )
+    if generate_ai:
+        generate_mistake_feedback(record)
+        record.refresh_from_db()
+    return record
+
+
+def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
+    """Generate and persist AI feedback for an existing mistake record."""
+    answer = mistake_record.answer
+    question = mistake_record.question
+
+    if not mistake_record.error_type_id and answer.selected_choice_id:
+        from apps.ai.factory import get_error_classifier
+
+        error_type = get_error_classifier().classify(question, answer)
+        if error_type:
+            mistake_record.error_type = error_type
+            mistake_record.save(update_fields=["error_type"])
+
+    ai_feedback = ""
+    try:
+        from django.conf import settings
+
+        if settings.AI_ENABLED:
+            from apps.ai.factory import get_adaptive_feedback_generator
+
+            user_answer = ""
+            if answer.selected_choice_id:
+                choice = answer.selected_choice
+                user_answer = f"{choice.label}: {choice.text}"
+            elif answer.numeric_response is not None:
+                user_answer = str(answer.numeric_response)
+            elif answer.timed_out:
+                user_answer = "Timed out"
+
+            correct_answer = ""
+            if question.question_type == Question.QuestionType.MCQ:
+                correct = question.choices.filter(is_correct=True).first()
+                if correct:
+                    correct_answer = f"{correct.label}: {correct.text}"
+            elif question.correct_answer is not None:
+                correct_answer = str(question.correct_answer)
+
+            confidence = "medium"
+            if answer.confidence is not None:
+                if answer.confidence <= 2:
+                    confidence = "low"
+                elif answer.confidence >= 4:
+                    confidence = "high"
+
+            ai_feedback = get_adaptive_feedback_generator().generate(
+                topic=question.topic.name,
+                question=question.stem,
+                user_answer=user_answer or "No answer",
+                correct_answer=correct_answer or "Unknown",
+                confidence=confidence,
+            )
+    except Exception:
+        ai_feedback = ""
+
+    if ai_feedback:
+        mistake_record.ai_feedback = ai_feedback
+        mistake_record.save(update_fields=["ai_feedback"])
+    return ai_feedback
 
 
 def student_performance_summary(student: User) -> dict:
@@ -84,7 +154,11 @@ def topic_progress_summary(student: User) -> list[dict]:
     """Return per-topic accuracy stats for a student."""
     rows = (
         Answer.objects.filter(session__student=student)
-        .values("question__topic__name")
+        .values(
+            "question__topic__name",
+            "question__topic_id",
+            "question__topic__subject_id",
+        )
         .annotate(
             total=Count("id"),
             correct=Count("id", filter=Q(is_correct=True)),
@@ -98,6 +172,8 @@ def topic_progress_summary(student: User) -> list[dict]:
         results.append(
             {
                 "topic_name": row["question__topic__name"],
+                "topic_id": row["question__topic_id"],
+                "subject_id": row["question__topic__subject_id"],
                 "total": total,
                 "correct": row["correct"],
                 "accuracy": accuracy,
@@ -111,7 +187,7 @@ def professor_overview_summary(professor: User) -> dict:
     from django.db.models import Max
     from django.utils import timezone
 
-    from apps.reviews.models import ReviewWindow
+    from apps.reviews.models import ExamSetup
 
     courses = Course.objects.filter(professor=professor, is_archived=False)
     answers = Answer.objects.filter(session__course__professor=professor)
@@ -121,12 +197,10 @@ def professor_overview_summary(professor: User) -> dict:
 
     now = timezone.now()
     week_ago = now - timezone.timedelta(days=7)
-    active_windows = ReviewWindow.objects.filter(
+    enabled_exam_setups = ExamSetup.objects.filter(
         course__professor=professor,
         course__is_archived=False,
-        is_active=True,
-        opens_at__lte=now,
-        closes_at__gte=now,
+        is_enabled=True,
     ).count()
 
     last_activity_at = (
@@ -150,7 +224,7 @@ def professor_overview_summary(professor: User) -> dict:
             course__professor=professor,
             started_at__gte=week_ago,
         ).count(),
-        "active_windows": active_windows,
+        "enabled_exam_setups": enabled_exam_setups,
         "total_sessions": total_sessions,
         "as_of": now,
         "week_start": week_ago,
@@ -164,7 +238,7 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
     """Return per-course stats for the professor overview page."""
     from django.utils import timezone
 
-    from apps.reviews.models import ReviewWindow
+    from apps.reviews.models import ExamSetup
 
     now = timezone.now()
     week_ago = now - timezone.timedelta(days=7)
@@ -184,12 +258,10 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
             started_at__gte=week_ago,
         ).count()
 
-        active_windows = ReviewWindow.objects.filter(
+        exam_setup_enabled = ExamSetup.objects.filter(
             course=course,
-            is_active=True,
-            opens_at__lte=now,
-            closes_at__gte=now,
-        ).count()
+            is_enabled=True,
+        ).exists()
 
         last_session_at = (
             ReviewSession.objects.filter(course=course)
@@ -204,7 +276,7 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
                 "enrolled_count": enrolled_count,
                 "accuracy": accuracy,
                 "sessions_this_week": sessions_this_week,
-                "active_windows": active_windows,
+                "exam_setup_enabled": exam_setup_enabled,
                 "last_session_at": last_session_at,
             }
         )
@@ -286,7 +358,7 @@ def course_performance_summary(course: Course) -> dict:
         answer__session__course=course,
     ).count()
 
-    calibration_matrix = confidence_accuracy_matrix(answers)
+    calibration_matrix = confidence_tier_matrix(answers)
     misconception_topic_list = misconception_topics(answers)
 
     return {
@@ -402,6 +474,33 @@ def get_student_mistake_patterns(student: User) -> list[dict]:
     )
 
 
+def get_student_topic_answers(student: User, topic_id: int):
+    """Return topic and answers for a student's activity on that topic."""
+    from apps.questions.models import Topic
+    from apps.reviews.models import Answer
+
+    answers = (
+        Answer.objects.filter(
+            session__student=student,
+            question__topic_id=topic_id,
+        )
+        .select_related(
+            "question",
+            "selected_choice",
+            "session",
+            "mistake_record",
+            "mistake_record__error_type",
+        )
+        .prefetch_related("question__choices", "question__explanation_steps")
+        .order_by("-answered_at")
+    )
+    if not answers.exists():
+        return None, Answer.objects.none()
+
+    topic = Topic.objects.filter(pk=topic_id).first()
+    return topic, answers
+
+
 def student_course_summary(student: User, course: Course) -> dict:
     """Performance summary scoped to a student's activity in a course offering."""
     sessions = ReviewSession.objects.filter(
@@ -447,7 +546,7 @@ def student_course_summary(student: User, course: Course) -> dict:
         "review_hours": review_hours,
         "accuracy_trend": accuracy_trend,
         "weak_topics": weak_topics,
-        "calibration_matrix": confidence_accuracy_matrix(answers),
+        "calibration_matrix": confidence_tier_matrix(answers),
         "recent_sessions": sessions.order_by("-started_at")[:10],
     }
 

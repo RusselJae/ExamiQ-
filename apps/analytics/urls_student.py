@@ -9,5 +9,20 @@ urlpatterns = [
     path("sessions/", views_student.SessionHistoryView.as_view(), name="session_history"),
     path("topics/", views_student.TopicProgressView.as_view(), name="topic_progress"),
     path("mistakes/", views_student.MistakeListView.as_view(), name="mistakes"),
+    path(
+        "mistakes/answers/<int:answer_pk>/",
+        views_student.AnswerDetailView.as_view(),
+        name="answer_detail",
+    ),
+    path(
+        "mistakes/answers/<int:answer_pk>/generate-feedback/",
+        views_student.GenerateAnswerFeedbackView.as_view(),
+        name="generate_answer_feedback",
+    ),
     path("mistakes/patterns/", views_student.MistakePatternView.as_view(), name="mistake_patterns"),
+    path(
+        "mistakes/patterns/<int:topic_id>/",
+        views_student.TopicAnswerReviewView.as_view(),
+        name="topic_answer_review",
+    ),
 ]

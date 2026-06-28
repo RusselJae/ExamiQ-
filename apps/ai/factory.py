@@ -5,6 +5,7 @@ import logging
 from django.conf import settings
 
 from apps.ai.interfaces import (
+    AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
@@ -16,6 +17,7 @@ from apps.ai.interfaces import (
 )
 from apps.ai.stubs import (
     RuleBasedSpacedRepetitionScheduler,
+    StubAdaptiveFeedbackGenerator,
     StubCalibrationAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
@@ -176,3 +178,20 @@ def get_curriculum_advisor() -> CurriculumAdvisor:
         except Exception as exc:
             logger.warning("Falling back to stub CurriculumAdvisor: %s", exc)
     return StubCurriculumAdvisor()
+
+
+def get_adaptive_feedback_generator() -> AdaptiveFeedbackGenerator:
+    if _ai_available():
+        try:
+            if settings.LLM_PROVIDER == "gemini":
+                from apps.ai.providers.gemini_provider import GeminiAdaptiveFeedbackGenerator
+
+                return GeminiAdaptiveFeedbackGenerator()
+            if settings.LLM_PROVIDER == "ollama":
+                return _ollama_import().OllamaAdaptiveFeedbackGenerator()
+            from apps.ai.providers.openai_provider import OpenAIAdaptiveFeedbackGenerator
+
+            return OpenAIAdaptiveFeedbackGenerator()
+        except Exception as exc:
+            logger.warning("Falling back to stub AdaptiveFeedbackGenerator: %s", exc)
+    return StubAdaptiveFeedbackGenerator()

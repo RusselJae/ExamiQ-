@@ -1,0 +1,7 @@
+Hi {{ user.get_full_name|default:user.email }},
+
+Your EXAMIQ+ {{ user.get_role_display|lower }} account has been approved. You can now sign in:
+
+{{ login_url }}
+
+— EXAMIQ+ Campus Administration

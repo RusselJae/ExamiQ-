@@ -6,12 +6,12 @@
 {% block focus_center %}
 <div id="question-container"
      class="w-full"
-     hx-get="{% url 'reviews:question_partial' session.pk %}"
-     hx-trigger="load"
-     hx-swap="innerHTML">
-    <div class="bg-white rounded-xl border border-slate-200/80 shadow-sm p-12 text-center">
-        <div class="inline-block w-8 h-8 border-2 border-examiq-cyan border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p class="text-examiq-slate text-sm">Loading question...</p>
+     data-intro-pending="false"
+     data-session-id="{{ session.pk }}"
+     data-question-url="{% url 'reviews:question_partial' session.pk %}">
+    <div class="focus-card p-12 text-center session-waiting-placeholder">
+        <div class="inline-block w-8 h-8 border-2 border-examiq-green border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-examiq-slate text-sm">Loading first question…</p>
     </div>
 </div>
 {% endblock %}

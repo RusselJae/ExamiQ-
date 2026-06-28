@@ -8,6 +8,7 @@ from django.conf import settings
 
 from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
 from apps.ai.prompts import (
+    build_adaptive_feedback_prompt,
     build_calibration_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
@@ -15,6 +16,7 @@ from apps.ai.prompts import (
     build_question_validation_prompt,
 )
 from apps.ai.interfaces import (
+    AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
@@ -23,6 +25,7 @@ from apps.ai.interfaces import (
     QuestionValidator,
 )
 from apps.ai.stubs import (
+    StubAdaptiveFeedbackGenerator,
     StubCalibrationAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
@@ -111,7 +114,9 @@ class OpenAIQuestionGenerator(QuestionGenerator):
                 cleaned = match.group(0)
             data = json.loads(cleaned)
             if isinstance(data, list):
-                return data[:count]
+                from apps.ai.normalize import normalize_generated_questions
+
+                return normalize_generated_questions(data[:count])
         except (json.JSONDecodeError, TypeError) as exc:
             logger.warning("Failed to parse question generation JSON: %s", exc)
         return []
@@ -143,6 +148,23 @@ class OpenAIQuestionValidator(QuestionValidator):
         except (json.JSONDecodeError, TypeError) as exc:
             logger.warning("Failed to parse validation JSON: %s", exc)
         return stub.validate(stem, choices, topic, difficulty, correct_label)
+
+
+class OpenAIAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
+    def generate(
+        self,
+        topic: str,
+        question: str,
+        user_answer: str,
+        correct_answer: str,
+        confidence: str = "medium",
+    ) -> str:
+        stub = StubAdaptiveFeedbackGenerator()
+        system, prompt = build_adaptive_feedback_prompt(
+            topic, question, user_answer, correct_answer, confidence
+        )
+        result = _chat(prompt, system=system)
+        return result or stub.generate(topic, question, user_answer, correct_answer, confidence)
 
 
 class OpenAIErrorClassifier(ErrorClassifier):

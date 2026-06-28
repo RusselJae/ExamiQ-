@@ -1,0 +1,162 @@
+{% extends "landing/base.html" %}
+{% load static %}
+
+{% block title %}ExamiQ+ — Master Mathematics with Confidence{% endblock %}
+
+{% block body %}
+{% include "components/landing_navbar.html" %}
+
+<main>
+    <section id="home" class="landing-hero">
+        <div class="landing-hero__inner">
+            <span class="landing-badge">
+                <span class="landing-badge__dot"></span>
+                Adaptive Learning
+            </span>
+            <h1 class="landing-hero__title">Master Mathematics with Confidence</h1>
+            <p class="landing-hero__lead">
+                An adaptive exam review platform that boosts performance through dynamic feedback
+                and confidence-based testing — built for CSU Bacoor students.
+            </p>
+            <div class="landing-hero__actions">
+                <a href="{% url 'account_signup' %}" class="landing-btn landing-btn--primary">Get Started</a>
+                <a href="#about" class="landing-btn landing-btn--ghost">Learn More</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="landing-about">
+        <div class="landing-about__card">
+            <div class="landing-about__grid">
+                <div class="landing-about__copy">
+                    <h2 class="landing-section-title">About ExamiQ+</h2>
+                    <p class="landing-about__text">
+                        ExamiQ+ is a self-regulated mathematics exam review system designed for students
+                        at Cavite State University — Bacoor Campus. We replace static review materials
+                        with a modern, adaptive approach that helps you identify gaps, track mistakes,
+                        and build real confidence before exam day.
+                    </p>
+                </div>
+                <div class="landing-about__highlights">
+                    <div class="landing-highlight">
+                        <span class="landing-highlight__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>
+                        </span>
+                        <div>
+                            <p class="landing-highlight__title">Weakness identification</p>
+                            <p class="landing-highlight__desc">Pinpoints where you struggle most</p>
+                        </div>
+                    </div>
+                    <div class="landing-highlight">
+                        <span class="landing-highlight__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+                        </span>
+                        <div>
+                            <p class="landing-highlight__title">Mistake history</p>
+                            <p class="landing-highlight__desc">Review and revisit past errors</p>
+                        </div>
+                    </div>
+                    <div class="landing-highlight">
+                        <span class="landing-highlight__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16l4-8 4 4 4-10 4 14"/></svg>
+                        </span>
+                        <div>
+                            <p class="landing-highlight__title">Confidence building</p>
+                            <p class="landing-highlight__desc">Adaptive flow that grows with you</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="team" class="landing-team">
+        <p class="landing-eyebrow">The people behind it</p>
+        <h2 class="landing-section-title landing-section-title--center">Our Team</h2>
+        <div class="landing-team__grid">
+            <article class="landing-team-card">
+                <div class="landing-team-card__photo-wrap">
+                    <img src="{% static 'assets/ibita-cropped.jpg' %}" alt="" class="landing-team-card__photo" width="120" height="120">
+                </div>
+                <h3 class="landing-team-card__name">Narding M. Ibita</h3>
+                <p class="landing-team-card__role">Developer 1</p>
+            </article>
+            <article class="landing-team-card">
+                <div class="landing-team-card__photo-wrap">
+                    <img src="{% static 'assets/tan-cropped.jpg' %}" alt="" class="landing-team-card__photo" width="120" height="120">
+                </div>
+                <h3 class="landing-team-card__name">Shakira Tan</h3>
+                <p class="landing-team-card__role">Developer 2</p>
+            </article>
+            <article class="landing-team-card">
+                <div class="landing-team-card__photo-wrap">
+                    <img src="{% static 'assets/vaflor-cropped.jpg' %}" alt="" class="landing-team-card__photo" width="120" height="120">
+                </div>
+                <h3 class="landing-team-card__name">Daniela Princess Vaflor</h3>
+                <p class="landing-team-card__role">Developer 3</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="features" class="landing-features">
+        <p class="landing-eyebrow">What we offer</p>
+        <h2 class="landing-section-title">System Features</h2>
+        <div class="landing-features__grid">
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Dynamic Feedback</h3>
+                <p class="landing-feature-card__desc">Instant, question-by-question explanations after each response — not just at the end.</p>
+            </article>
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Mistake Tracking</h3>
+                <p class="landing-feature-card__desc">Incorrect answers logged by topic, date, and confidence level for structured review.</p>
+            </article>
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 5-7 13-7 13S5 14 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Confidence-Based Flow</h3>
+                <p class="landing-feature-card__desc">Response time signals confidence — fast but wrong flags overconfidence automatically.</p>
+            </article>
+            <article class="landing-feature-card landing-feature-card--planned">
+                <span class="landing-feature-card__badge">Planned</span>
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M9 21V9M15 21V3M20 21v-5"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Adaptive Questioning</h3>
+                <p class="landing-feature-card__desc">Difficulty adjusts to your performance, ensuring you're always challenged appropriately.</p>
+            </article>
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Performance Analytics</h3>
+                <p class="landing-feature-card__desc">Charts showing accuracy over time, topic performance, and confidence vs competence.</p>
+            </article>
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Light and Dark Mode</h3>
+                <p class="landing-feature-card__desc">Study at any hour with a simple theme toggle, saved to your preferences.</p>
+            </article>
+        </div>
+    </section>
+</main>
+
+<footer class="landing-footer">
+    <div class="landing-footer__inner">
+        {% include "components/landing_logo.html" %}
+        <p class="landing-footer__copy">&copy; {% now "Y" %} ExamiQ+. Cavite State University — Bacoor Campus.</p>
+    </div>
+</footer>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/landing.js' %}"></script>
+{% endblock %}

@@ -3,8 +3,13 @@ from django import forms
 from apps.questions.curriculum import subject_queryset_for_student
 from apps.questions.models import Question, Subject, Topic
 from apps.questions.services import count_available_questions
-from apps.reviews.models import ReviewWindow
-from apps.users.models import Course, User
+from apps.reviews.exam_setup_services import (
+    assignment_for_student_subject,
+    difficulties_for_student_subject,
+    student_setup_eligibility,
+    topics_for_student_subject,
+)
+from apps.users.models import User
 
 FORM_INPUT_CLASS = (
     "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
@@ -15,6 +20,19 @@ PILOT_DIFFICULTY_CHOICES = [
     (Question.Difficulty.EASY, "Beginner"),
     (Question.Difficulty.MEDIUM, "Intermediate"),
     (Question.Difficulty.HARD, "Advanced"),
+]
+
+PRE_SESSION_CONFIDENCE_CHOICES = [
+    ("not_confident", "Not Confident"),
+    ("bit_confident", "A Bit Confident"),
+    ("very_confident", "Very Confident"),
+]
+
+SESSION_GOAL_CHOICES = [
+    ("pass", "Pass the exam"),
+    ("high_score", "Get a high score"),
+    ("learn", "Learn and improve"),
+    ("finish", "Just finish"),
 ]
 
 
@@ -28,15 +46,9 @@ class ReviewSetupForm(forms.Form):
         queryset=Topic.objects.none(),
         widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_topic"}),
     )
-    review_window = forms.ModelChoiceField(
-        queryset=ReviewWindow.objects.none(),
-        required=False,
-        empty_label="Free practice (no scheduled window)",
-        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS}),
-    )
     difficulty = forms.ChoiceField(
         choices=PILOT_DIFFICULTY_CHOICES,
-        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS}),
+        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_difficulty"}),
     )
     duration_minutes = forms.IntegerField(
         min_value=5,
@@ -44,14 +56,22 @@ class ReviewSetupForm(forms.Form):
         initial=30,
         widget=forms.NumberInput(attrs={"class": FORM_INPUT_CLASS}),
     )
+    pre_session_confidence = forms.ChoiceField(
+        choices=PRE_SESSION_CONFIDENCE_CHOICES,
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+    session_goal = forms.ChoiceField(
+        choices=SESSION_GOAL_CHOICES,
+        required=False,
+        widget=forms.HiddenInput(),
+    )
 
-    def __init__(self, *args, student=None, open_windows=None, **kwargs):
+    def __init__(self, *args, student=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.student = student
         if student:
             self.fields["subject"].queryset = subject_queryset_for_student(student)
-        if open_windows is not None:
-            self.fields["review_window"].queryset = open_windows
 
         subject = None
         if self.data.get("subject"):
@@ -61,39 +81,40 @@ class ReviewSetupForm(forms.Form):
                 pass
         elif self.initial.get("subject"):
             subject = self.initial["subject"]
-        if subject:
-            self.fields["topic"].queryset = Topic.objects.filter(
-                subject=subject, parent__isnull=True
-            ).order_by("name")
+        if subject and student:
+            self.fields["topic"].queryset = topics_for_student_subject(student, subject)
+            allowed = difficulties_for_student_subject(student, subject)
+            if allowed:
+                self.fields["difficulty"].choices = [
+                    c for c in PILOT_DIFFICULTY_CHOICES if c[0] in allowed
+                ]
+            topic_initial = self.initial.get("topic")
+            if topic_initial and not self.data.get("topic"):
+                self.fields["topic"].initial = topic_initial
 
     def clean(self):
         cleaned = super().clean()
         subject = cleaned.get("subject")
-        window = cleaned.get("review_window")
         topic = cleaned.get("topic")
         difficulty = cleaned.get("difficulty")
 
-        if self.student and self.student.role == User.Role.STUDENT:
-            if not self.student.home_degree_program:
-                raise forms.ValidationError(
-                    "Set your home degree program in Profile before starting an exam."
-                )
-            if not self.student.year_level_id:
-                raise forms.ValidationError(
-                    "Set your year level in Profile before starting an exam."
-                )
+        if self.student:
+            eligibility = student_setup_eligibility(self.student)
+            if not eligibility.get("eligible"):
+                raise forms.ValidationError(eligibility["message"])
 
         if subject and topic and topic.subject_id != subject.pk:
             raise forms.ValidationError("Selected topic does not belong to this subject.")
 
-        if window:
-            if not window.is_open:
-                raise forms.ValidationError("This review window is no longer open.")
-            if window.topics.exists() and topic and topic not in window.topics.all():
-                raise forms.ValidationError("Selected topic is not allowed for this review window.")
-            if difficulty and difficulty not in window.allowed_difficulties:
-                raise forms.ValidationError("Selected difficulty is not allowed for this review window.")
-            cleaned["duration_minutes"] = window.duration_minutes
+        if self.student and subject:
+            allowed_topics = topics_for_student_subject(self.student, subject)
+            if topic and not allowed_topics.filter(pk=topic.pk).exists():
+                raise forms.ValidationError("Selected topic is not available for this exam.")
+            allowed_difficulties = difficulties_for_student_subject(self.student, subject)
+            if difficulty and allowed_difficulties and difficulty not in allowed_difficulties:
+                raise forms.ValidationError(
+                    "Selected difficulty is not available for this exam."
+                )
 
         if topic and difficulty:
             available = count_available_questions(topic, difficulty)
@@ -106,15 +127,10 @@ class ReviewSetupForm(forms.Form):
 
     def get_course_for_session(self):
         subject = self.cleaned_data.get("subject")
-        window = self.cleaned_data.get("review_window")
-        if window:
-            return window.course
-        if subject:
-            return (
-                Course.objects.filter(program=subject.program, is_archived=False)
-                .order_by("-academic_year", "term", "code")
-                .first()
-            )
+        if subject and self.student:
+            assignment = assignment_for_student_subject(self.student, subject)
+            if assignment:
+                return assignment.course
         return None
 
 
@@ -124,6 +140,7 @@ class AnswerForm(forms.Form):
     confidence = forms.ChoiceField(
         choices=CONFIDENCE_CHOICES,
         required=False,
+        initial="3",
         widget=forms.HiddenInput(attrs={"id": "confidence-input"}),
     )
     numeric_response = forms.CharField(
@@ -160,7 +177,7 @@ class AnswerForm(forms.Form):
         cleaned = super().clean()
         if cleaned.get("timed_out"):
             return cleaned
-        if not cleaned.get("confidence"):
+        if not self.timed_exam and not cleaned.get("confidence"):
             raise forms.ValidationError("Please select your confidence level.")
         if not cleaned.get("selected_choice") and not cleaned.get("numeric_response"):
             if "selected_choice" in self.fields or "numeric_response" in self.fields:

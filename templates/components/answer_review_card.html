@@ -1,0 +1,89 @@
+{% load examiq_tags %}
+<div class="answer-review-card bento-card bento-card-inner" id="answer-review-{{ answer.pk }}">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+        {% if answer.is_correct %}
+        <span class="inline-flex items-center px-3 py-1 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Correct</span>
+        {% elif answer.timed_out %}
+        <span class="inline-flex items-center px-3 py-1 rounded-xl text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Timed out</span>
+        {% else %}
+        <span class="inline-flex items-center px-3 py-1 rounded-xl text-xs font-semibold bg-red-50 text-red-700 border border-red-200">Incorrect</span>
+        {% endif %}
+        <span class="text-xs text-examiq-slate">{{ answer.answered_at|date:"M d, Y g:i A" }}</span>
+    </div>
+
+    <p class="text-examiq-navy font-medium mb-4">{{ answer.question.stem|linebreaks }}</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-1">Your answer</p>
+            <p class="text-examiq-navy">
+                {% if answer.selected_choice %}
+                {{ answer.selected_choice.label }}: {{ answer.selected_choice.text }}
+                {% elif answer.numeric_response %}
+                {{ answer.numeric_response }}
+                {% elif answer.timed_out %}
+                <span class="text-examiq-slate italic">No answer submitted (time expired)</span>
+                {% else %}
+                —
+                {% endif %}
+            </p>
+            {% if answer.confidence %}
+            <p class="text-xs text-examiq-slate mt-2">Confidence: {{ answer.confidence|confidence_label }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-1">Correct answer</p>
+            <p class="text-examiq-navy">
+                {% for choice in answer.question.choices.all %}
+                {% if choice.is_correct %}
+                {{ choice.label }}: {{ choice.text }}
+                {% endif %}
+                {% empty %}
+                {% if answer.question.correct_answer is not None %}
+                {{ answer.question.correct_answer }}
+                {% else %}
+                —
+                {% endif %}
+                {% endfor %}
+            </p>
+        </div>
+    </div>
+
+    {% if not answer.is_correct and answer.mistake_record %}
+    {% if answer.mistake_record.error_type %}
+    <div class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-4">
+        <p class="text-xs font-semibold uppercase tracking-wider text-amber-800 mb-1">Error type</p>
+        <p class="text-sm text-amber-900">{{ answer.mistake_record.error_type.label }}</p>
+    </div>
+    {% endif %}
+
+    <div class="answer-review-feedback" id="answer-feedback-{{ answer.pk }}">
+        {% if answer.mistake_record.ai_feedback %}
+        <div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+            <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Why you missed it</p>
+            <p class="text-sm text-examiq-navy leading-relaxed whitespace-pre-line">{{ answer.mistake_record.ai_feedback }}</p>
+        </div>
+        {% elif answer.mistake_record %}
+        <button type="button"
+                class="btn-secondary feedback-generate-btn"
+                data-generate-feedback-url="{% url 'analytics_student:generate_answer_feedback' answer.pk %}"
+                data-answer-id="{{ answer.pk }}">
+            Generate feedback
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% with steps=answer.question.explanation_steps.all %}
+    {% if steps %}
+    <div class="mt-4 rounded-xl bg-examiq-bg border border-slate-100 p-4">
+        <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Step-by-step solution</p>
+        <ol class="space-y-2 list-decimal list-inside text-sm text-examiq-navy">
+            {% for step in steps %}
+            <li class="leading-relaxed">{{ step.content }}</li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endif %}
+    {% endwith %}
+</div>

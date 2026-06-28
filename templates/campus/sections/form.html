@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if object %}Edit Section{% else %}Create Section{% endif %} - Campus Admin{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title=object|yesno:"Edit Section,Create Section" subtitle="Define a cohort section for student registration." %}
+
+<div class="bento-card max-w-xl">
+    <form method="post" class="p-6">
+        {% csrf_token %}
+        {{ form|crispy }}
+        <div class="flex gap-3 mt-4">
+            <button type="submit" class="btn-primary btn-primary-sm">Save</button>
+            <a href="{% url 'campus:section_list' %}" class="btn-secondary btn-primary-sm">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

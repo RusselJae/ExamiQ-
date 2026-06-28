@@ -7,6 +7,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.ai.interfaces import (
+    AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
@@ -19,26 +20,36 @@ from apps.reviews.recommendations import get_review_recommendations
 
 logger = logging.getLogger(__name__)
 
+_STUB_LABELS = ("B", "C", "D")
+
 
 class StubQuestionGenerator(QuestionGenerator):
     def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = ""):
         logger.info("AI question generation stub called (AI_ENABLED=%s)", settings.AI_ENABLED)
         if topic is None:
             return []
-        return [
-            {
-                "stem": f"[Stub] Sample {difficulty} question about {topic.name}?",
+        from apps.ai.normalize import normalize_generated_questions
+
+        items = []
+        for i in range(min(count, 3)):
+            label = _STUB_LABELS[i % len(_STUB_LABELS)]
+            items.append({
+                "stem": f"[Stub] Sample {difficulty} question about {topic.name}? ({i + 1})",
                 "concept_tag": f"Concept: {topic.name}",
-                "correct_label": "A",
+                "correct_label": label,
                 "choices": [
-                    {"label": "A", "text": "Correct answer", "is_correct": True},
-                    {"label": "B", "text": "Distractor 1", "is_correct": False},
-                    {"label": "C", "text": "Distractor 2", "is_correct": False},
-                    {"label": "D", "text": "Distractor 3", "is_correct": False},
+                    {"label": "A", "text": "Distractor A", "is_correct": label == "A"},
+                    {"label": "B", "text": "Distractor B", "is_correct": label == "B"},
+                    {"label": "C", "text": "Distractor C", "is_correct": label == "C"},
+                    {"label": "D", "text": "Distractor D", "is_correct": label == "D"},
                 ],
-            }
-            for _ in range(min(count, 3))
-        ]
+                "explanation_steps": [
+                    f"Step 1: Identify the concept related to {topic.name}.",
+                    f"Step 2: Apply the rule; the correct choice is {label}.",
+                ],
+                "solution_summary": f"The correct answer is {label}.",
+            })
+        return normalize_generated_questions(items)
 
 
 class StubQuestionValidator:
@@ -46,6 +57,14 @@ class StubQuestionValidator:
         from apps.ai.interfaces import QuestionValidator
 
         return QuestionValidator().validate(stem, choices, topic, difficulty, correct_label)
+
+
+class StubAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
+    def generate(self, topic, question, user_answer, correct_answer, confidence="medium"):
+        return (
+            f"You answered '{user_answer}' but the correct answer is '{correct_answer}'. "
+            f"Review the core concept for {topic} and try similar practice questions."
+        )
 
 
 class StubDifficultyTagger(DifficultyTagger):

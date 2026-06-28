@@ -1,4 +1,4 @@
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
@@ -17,9 +17,9 @@ def get_role_dashboard_url(user: User) -> str:
 
 
 class HomeView(View):
-    """Redirect authenticated users to their role dashboard."""
+    """Landing page for guests; dashboard redirect for signed-in users."""
 
     def get(self, request):
         if request.user.is_authenticated:
             return redirect(get_role_dashboard_url(request.user))
-        return redirect("account_login")
+        return render(request, "landing/home.html")

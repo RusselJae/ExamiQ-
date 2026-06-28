@@ -46,6 +46,9 @@
 </head>
 <body class="bg-examiq-bg text-examiq-navy min-h-screen font-sans">
     {% include "components/toast_stack.html" %}
+    {% include "components/banner_stack.html" %}
+
+    {% include "components/confirm_dialog.html" %}
 
     <div id="django-messages" class="hidden">
         {% if messages %}

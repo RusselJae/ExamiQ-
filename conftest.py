@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 
 from apps.questions.models import Question, QuestionChoice, Subject, Topic, YearLevel
 from apps.users.constants import PROGRAM_DEFINITIONS
-from apps.users.models import Course, Department, Program
+from apps.users.models import AcademicTerm, AcademicYear, Course, Department, Program, ProgramSection
 
 User = get_user_model()
 
@@ -51,7 +51,57 @@ def topic(db, subject):
 
 
 @pytest.fixture
-def student(db, department, year_level):
+def academic_year(db):
+    year, _ = AcademicYear.objects.get_or_create(
+        label="2025-2026",
+        defaults={"is_current": True},
+    )
+    return year
+
+
+@pytest.fixture
+def program_section(db, program, year_level, academic_year):
+    section, _ = ProgramSection.objects.get_or_create(
+        program=program,
+        year_level=year_level,
+        label="A",
+        academic_year=academic_year,
+        defaults={"max_students": 40},
+    )
+    return section
+
+
+@pytest.fixture
+def academic_term(db, academic_year):
+    term, _ = AcademicTerm.objects.get_or_create(
+        academic_year=academic_year,
+        name="1st Sem",
+        defaults={
+            "is_current": True,
+            "semester": AcademicTerm.Semester.FIRST,
+        },
+    )
+    if not term.is_current:
+        term.is_current = True
+        term.save(update_fields=["is_current"])
+    return term
+
+
+@pytest.fixture
+def teaching_assignment(db, professor, program_section, subject, academic_term, chairperson):
+    from apps.users.assignment_services import create_teaching_assignment
+
+    return create_teaching_assignment(
+        professor=professor,
+        program_section=program_section,
+        subject=subject,
+        term=academic_term,
+        assigned_by=chairperson,
+    )
+
+
+@pytest.fixture
+def student(db, department, year_level, program_section):
     return User.objects.create_user(
         email="student@test.edu",
         password="testpass123",
@@ -59,6 +109,7 @@ def student(db, department, year_level):
         department=department,
         home_degree_program=User.HomeDegreeProgram.CS,
         year_level=year_level,
+        section=program_section,
     )
 
 

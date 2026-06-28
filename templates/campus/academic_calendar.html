@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Academic Calendar - Campus Admin{% endblock %}
+
+{% block content %}
+<div class="overview-header mb-6">
+    <div class="overview-header__main">
+        <h1 class="overview-title">Academic calendar</h1>
+        <p class="overview-as-of">Set the current academic year and term for sections and teaching assignments.</p>
+    </div>
+</div>
+
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=calendar_stats.year_count label="Academic years" icon="calendar" variant="neutral" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=calendar_stats.term_count label="Terms" icon="clock" variant="neutral" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% if calendar_stats.current_year %}
+        {% include "components/overview_stat_card.html" with value=calendar_stats.current_year.label label="Current year" icon="calendar" variant="accent" %}
+        {% else %}
+        {% include "components/overview_stat_card.html" with value="—" label="Current year" icon="calendar" variant="neutral" %}
+        {% endif %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% if calendar_stats.current_term %}
+        {% include "components/overview_stat_card.html" with value=calendar_stats.current_term.name label="Current term" icon="target" variant="accent" %}
+        {% else %}
+        {% include "components/overview_stat_card.html" with value="—" label="Current term" icon="target" variant="neutral" %}
+        {% endif %}
+    </div>
+</div>
+
+<div class="calendar-form-grid mb-6">
+    <section class="calendar-form-panel" id="add-year-panel">
+        <h2 class="calendar-form-panel__title">Add academic year</h2>
+        <form method="post" class="calendar-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_year">
+            <div class="calendar-field">
+                <label class="calendar-field__label" for="id_label">Label <span class="calendar-field__req">*</span></label>
+                {{ year_form.label }}
+                <p class="calendar-field__help">Use the format YYYY-YYYY.</p>
+                {% if year_form.label.errors %}<p class="calendar-field__error">{{ year_form.label.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="calendar-toggle-row">
+                <label class="calendar-toggle">
+                    {{ year_form.is_current }}
+                    <span class="calendar-toggle__track" aria-hidden="true"></span>
+                </label>
+                <div>
+                    <p class="calendar-toggle-row__title">Set as current year</p>
+                    <p class="calendar-toggle-row__desc">Only one year can be current at a time.</p>
+                </div>
+            </div>
+            <button type="submit" class="btn-primary btn-primary-sm calendar-form__submit">Save year</button>
+        </form>
+    </section>
+
+    <section class="calendar-form-panel" id="add-term-panel">
+        <h2 class="calendar-form-panel__title">Add term</h2>
+        <form method="post" class="calendar-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_term">
+            <div class="calendar-field">
+                <label class="calendar-field__label" for="id_academic_year">Academic year <span class="calendar-field__req">*</span></label>
+                {{ term_form.academic_year }}
+                {% if term_form.academic_year.errors %}<p class="calendar-field__error">{{ term_form.academic_year.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="calendar-field">
+                <label class="calendar-field__label" for="id_name">Name <span class="calendar-field__req">*</span></label>
+                {{ term_form.name }}
+                <p class="calendar-field__help">e.g. 1st Sem, 2nd Sem, Summer</p>
+                {% if term_form.name.errors %}<p class="calendar-field__error">{{ term_form.name.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="calendar-field">
+                <label class="calendar-field__label" for="id_semester">Semester <span class="calendar-field__req">*</span></label>
+                {{ term_form.semester }}
+                <p class="calendar-field__help">Used to match subjects when creating teaching assignments.</p>
+                {% if term_form.semester.errors %}<p class="calendar-field__error">{{ term_form.semester.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="calendar-toggle-row">
+                <label class="calendar-toggle">
+                    {{ term_form.is_current }}
+                    <span class="calendar-toggle__track" aria-hidden="true"></span>
+                </label>
+                <div>
+                    <p class="calendar-toggle-row__title">Set as current term</p>
+                    <p class="calendar-toggle-row__desc">Becomes active for new sections and assignments.</p>
+                </div>
+            </div>
+            <button type="submit" class="btn-primary btn-primary-sm calendar-form__submit">Save term</button>
+        </form>
+    </section>
+</div>
+
+<section class="calendar-list-panel">
+    <div class="calendar-list-panel__header">
+        <h2 class="calendar-list-panel__title">Academic years and terms</h2>
+        <p class="calendar-list-panel__subtitle">Terms are grouped under their academic year.</p>
+    </div>
+
+    {% if academic_years %}
+    <div class="calendar-year-list">
+        {% for year in academic_years %}
+        <div class="calendar-year-block">
+            <div class="calendar-year-row">
+                <div class="calendar-year-row__main">
+                    <span class="calendar-year-row__label">{{ year.label }}</span>
+                    {% if year.is_current %}
+                    <span class="calendar-status-badge calendar-status-badge--current">Current</span>
+                    {% endif %}
+                    <span class="calendar-year-row__meta">{{ year.term_total }} term{{ year.term_total|pluralize }}</span>
+                </div>
+                <div class="calendar-year-row__actions">
+                    {% if not year.is_current %}
+                    <form method="post" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="set_current_year">
+                        <input type="hidden" name="year_id" value="{{ year.pk }}">
+                        <button type="submit" class="calendar-action-btn calendar-action-btn--text">Set current</button>
+                    </form>
+                    {% endif %}
+                    <a href="{% url 'campus:academic_calendar' %}?year={{ year.pk }}#add-term-panel"
+                       class="calendar-action-btn calendar-action-btn--icon"
+                       title="Add term to {{ year.label }}"
+                       aria-label="Add term to {{ year.label }}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    </a>
+                </div>
+            </div>
+
+            {% for term in year.terms.all %}
+            <div class="calendar-term-row">
+                <div class="calendar-term-row__main">
+                    <span class="calendar-term-row__label">{{ term.name }}</span>
+                    {% if term.is_current %}
+                    <span class="calendar-status-badge calendar-status-badge--current">Current</span>
+                    {% endif %}
+                </div>
+                <div class="calendar-term-row__actions">
+                    {% if not term.is_current %}
+                    <form method="post" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="set_current_term">
+                        <input type="hidden" name="term_id" value="{{ term.pk }}">
+                        <button type="submit" class="calendar-action-btn calendar-action-btn--text">Set current</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="calendar-term-row calendar-term-row--empty">
+                <span class="calendar-term-row__label">No terms yet</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="calendar-empty">No academic years defined yet. Add your first year above.</p>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const yearId = params.get("year");
+    const yearSelect = document.getElementById("id_academic_year");
+    if (yearId && yearSelect) {
+        yearSelect.value = yearId;
+        const panel = document.getElementById("add-term-panel");
+        if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+})();
+</script>
+{% endblock %}

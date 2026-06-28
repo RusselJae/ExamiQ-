@@ -38,7 +38,7 @@
 <div class="overview-course-grid">
     {% for card in course_cards %}
     {% with course=card.course %}
-    <article class="overview-course-card {% if card.active_windows or card.sessions_this_week %}overview-course-card--active{% endif %}">
+    <article class="overview-course-card {% if card.exam_setup_enabled or card.sessions_this_week %}overview-course-card--active{% endif %}">
         <div class="overview-course-card__header">
             <div>
                 <h2 class="overview-course-card__title">{{ course.name }}</h2>
@@ -46,8 +46,8 @@
                     {{ course.program.name }} · {{ course.term }} {{ course.academic_year }} · Sec {{ course.section }}
                 </p>
             </div>
-            {% if card.active_windows %}
-            <span class="overview-course-badge overview-course-badge--open">{{ card.active_windows }} open</span>
+            {% if card.exam_setup_enabled %}
+            <span class="overview-course-badge overview-course-badge--open">Exam open</span>
             {% elif card.sessions_this_week or card.last_session_at %}
             <span class="overview-course-badge overview-course-badge--open">{{ card.sessions_this_week }} this week</span>
             {% else %}

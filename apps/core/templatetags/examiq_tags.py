@@ -2,7 +2,7 @@ from django import template
 
 register = template.Library()
 
-CONFIDENCE_LABELS = {1: "Low", 3: "Medium", 5: "High"}
+CONFIDENCE_LABELS = {1: "Low", 3: "Average", 5: "High"}
 
 DIFFICULTY_LABELS = {
     "easy": "Beginner",

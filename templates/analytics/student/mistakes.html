@@ -1,111 +1,59 @@
 {% extends "base.html" %}
-
 {% load examiq_tags %}
-
-
 
 {% block title %}Mistakes - EXAMIQ+{% endblock %}
 
-
-
 {% block content %}
-
 {% include "components/page_header.html" with title="Mistake Log" subtitle="Every wrong answer is a lesson. Review them." %}
 
-
-
 <div class="bento-grid">
-
     {% include "components/filter_bar.html" %}
 
-
-
     {% if mistakes %}
-
     <div class="span-full">
-
         <div class="bento-card bento-card-inner overflow-hidden">
-
             <table class="w-full text-sm">
-
-        <thead class="bg-examiq-bg">
-
-            <tr class="text-left text-examiq-slate">
-
-                <th class="px-4 py-3 font-medium">Topic</th>
-
-                <th class="px-4 py-3 font-medium">Question</th>
-
-                <th class="px-4 py-3 font-medium">Confidence</th>
-
-                <th class="px-4 py-3 font-medium">Date</th>
-
-            </tr>
-
-        </thead>
-
-        <tbody>
-
-            {% for mistake in mistakes %}
-
-            <tr class="border-t border-slate-100">
-
-                <td class="px-4 py-3 text-examiq-navy">{{ mistake.topic.name }}</td>
-
-                <td class="px-4 py-3 text-examiq-slate">{{ mistake.question.stem|truncatewords:15 }}</td>
-
-                <td class="px-4 py-3">
-
-                    <span class="inline-block px-2 py-0.5 rounded-lg text-xs font-medium bg-red-50 text-examiq-mistake">
-
-                        {{ mistake.answer.confidence|confidence_label }}
-
-                    </span>
-
-                </td>
-
-                <td class="px-4 py-3 text-examiq-slate">{{ mistake.occurred_at|date:"M d, Y H:i" }}</td>
-
-            </tr>
-
-            {% endfor %}
-
-        </tbody>
-
+                <thead class="bg-examiq-bg">
+                    <tr class="text-left text-examiq-slate">
+                        <th class="px-4 py-3 font-medium">Topic</th>
+                        <th class="px-4 py-3 font-medium">Question</th>
+                        <th class="px-4 py-3 font-medium">Confidence</th>
+                        <th class="px-4 py-3 font-medium">Date</th>
+                        <th class="px-4 py-3 font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mistake in mistakes %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-4 py-3 text-examiq-navy">{{ mistake.topic.name }}</td>
+                        <td class="px-4 py-3 text-examiq-slate">{{ mistake.question.stem|truncatewords:15 }}</td>
+                        <td class="px-4 py-3">
+                            <span class="inline-block px-2 py-0.5 rounded-lg text-xs font-medium bg-red-50 text-examiq-mistake">
+                                {{ mistake.answer.confidence|confidence_label }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-examiq-slate">{{ mistake.occurred_at|date:"M d, Y H:i" }}</td>
+                        <td class="px-4 py-3">
+                            <a href="{% url 'analytics_student:answer_detail' mistake.answer_id %}" class="btn-primary btn-primary-sm">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
             </table>
-
         </div>
-
     </div>
 
-
-
     <div class="span-full">
-
         {% include "components/pagination.html" %}
-
     </div>
-
     {% else %}
-
     <div class="span-full">
-
         {% if filter_has_active %}
-
         {% include "components/empty_state.html" with compact=True title="No matching mistakes" body="Try adjusting your search or filters." %}
-
         {% else %}
-
         {% include "components/empty_state.html" with title="No mistakes recorded" body="Either you're perfect or you haven't started reviewing." cta_url="/reviews/setup/" cta_label="Start reviewing" %}
-
         {% endif %}
-
     </div>
-
     {% endif %}
-
 </div>
-
 {% endblock %}
-
-
