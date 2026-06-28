@@ -9,7 +9,7 @@ from apps.analytics.models import ErrorType
 from apps.analytics.services import log_mistake
 from apps.questions.models import ExplanationStep, Question, QuestionChoice, Subject, Topic, YearLevel
 from apps.reviews.models import Answer, ReviewSession, ReviewWindow
-from apps.reviews.services import complete_session, start_review_session, submit_answer
+from apps.reviews.services import complete_session, start_review_session
 from apps.users.constants import HOME_PROGRAM_DEPARTMENT_NAMES, PROGRAM_DEFINITIONS
 from apps.users.models import Course, Department, Program, User
 
@@ -154,22 +154,8 @@ class Command(BaseCommand):
         self._retire_gen_placeholder_questions(programs.get("cs"))
         self._seed_questions(topics)
         self._seed_extras(courses.get("cs"), prof2, topics)
+        self._ensure_admin_user(edu)
         self._seed_demo_narrative(courses, topics, programs)
-
-        admin_user, created = User.objects.get_or_create(
-            email="admin@examiq.edu",
-            defaults={
-                "first_name": "Admin",
-                "last_name": "User",
-                "role": User.Role.CHAIRPERSON,
-                "department": edu,
-                "is_staff": True,
-                "is_superuser": True,
-            },
-        )
-        if created or not admin_user.has_usable_password():
-            admin_user.set_password("admin1234")
-            admin_user.save()
 
         self.stdout.write(self.style.SUCCESS("Seed complete!"))
         self._print_credentials(chairs)
@@ -391,6 +377,22 @@ class Command(BaseCommand):
             for order, content in enumerate(spec["steps"], start=1):
                 ExplanationStep.objects.create(question=q, order=order, content=content)
 
+    def _ensure_admin_user(self, department):
+        admin_user, created = User.objects.get_or_create(
+            email="admin@examiq.edu",
+            defaults={
+                "first_name": "Admin",
+                "last_name": "User",
+                "role": User.Role.CHAIRPERSON,
+                "department": department,
+                "is_staff": True,
+                "is_superuser": True,
+            },
+        )
+        if created or not admin_user.has_usable_password():
+            admin_user.set_password("admin1234")
+            admin_user.save()
+
     def _seed_extras(self, course, professor, topics):
         if not course or not professor:
             return
@@ -490,18 +492,27 @@ class Command(BaseCommand):
             )
 
     def _create_demo_session(self, student, course, topic, difficulty, days_ago, answers_spec):
+        started = timezone.now() - timedelta(days=days_ago)
+        if ReviewSession.objects.filter(
+            student=student,
+            topic=topic,
+            difficulty=difficulty,
+            status=ReviewSession.Status.COMPLETED,
+            started_at__date=started.date(),
+        ).exists():
+            return
+
         questions = list(
             Question.objects.filter(
                 topic=topic,
                 difficulty=difficulty,
                 status=Question.Status.APPROVED,
                 is_active=True,
-            )[: max(len(answers_spec), 1)]
+            )[: len(answers_spec)]
         )
         if not questions:
             return
 
-        started = timezone.now() - timedelta(days=days_ago)
         session = start_review_session(
             student=student,
             topic=topic,
@@ -514,8 +525,8 @@ class Command(BaseCommand):
         ReviewSession.objects.filter(pk=session.pk).update(started_at=started)
         session.refresh_from_db()
 
-        for index, (confidence, is_correct) in enumerate(answers_spec):
-            question = questions[index % len(questions)]
+        for index, (confidence, is_correct) in enumerate(answers_spec[: len(questions)]):
+            question = questions[index]
             if question.question_type == Question.QuestionType.MCQ:
                 choice = (
                     question.choices.filter(is_correct=True).first()
