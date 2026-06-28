@@ -91,13 +91,14 @@ def academic_term(db, academic_year):
 def teaching_assignment(db, professor, program_section, subject, academic_term, chairperson):
     from apps.users.assignment_services import create_teaching_assignment
 
-    return create_teaching_assignment(
+    assignment, _ = create_teaching_assignment(
         professor=professor,
         program_section=program_section,
         subject=subject,
         term=academic_term,
         assigned_by=chairperson,
     )
+    return assignment
 
 
 @pytest.fixture

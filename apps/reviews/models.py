@@ -83,6 +83,14 @@ class ExamSetup(TimeStampedModel):
     is_enabled = models.BooleanField(default=True)
     topics = models.ManyToManyField(Topic, blank=True, related_name="exam_setups")
     allowed_difficulties = models.JSONField(default=list)
+    duration_minutes = models.PositiveIntegerField(
+        default=30,
+        help_text="Total exam session length in minutes.",
+    )
+    seconds_per_question = models.PositiveIntegerField(
+        default=30,
+        help_text="Time limit per question in timed exam mode.",
+    )
 
     class Meta:
         verbose_name = "Exam Setup"

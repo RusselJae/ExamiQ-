@@ -24,7 +24,7 @@ class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
         return (
             get_professor_course_queryset(self.request.user)
             .select_related("program")
-            .order_by("-academic_year", "term", "code")
+            .order_by("code", "section", "-academic_year", "term")
         )
 
     def get_context_data(self, **kwargs):

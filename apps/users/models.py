@@ -345,7 +345,8 @@ class Course(models.Model):
     def display_label(self) -> str:
         """Human-readable label for student course-offering selection."""
         prof = self.professor.get_full_name() if self.professor else "TBA"
-        return f"{self.code} {self.name}, {prof}, {self.term} {self.academic_year}"
+        section_part = f"Sec {self.section}, " if self.section else ""
+        return f"{self.code} {self.name}, {section_part}{prof}, {self.term} {self.academic_year}"
 
 
 class Enrollment(models.Model):

@@ -4448,3 +4448,55 @@
     margin: 0;
     padding: 1rem 0;
 }
+
+.assign-field--full {
+    grid-column: 1 / -1;
+}
+
+.exam-setup-form {
+    width: 100%;
+}
+
+.exam-setup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+}
+
+.exam-setup-card--wide {
+    grid-column: 1 / -1;
+}
+
+.exam-setup-card__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-navy);
+    margin: 0;
+}
+
+.exam-setup-card__subtitle {
+    font-size: 0.875rem;
+    color: var(--color-slate);
+    margin: 0.375rem 0 0;
+}
+
+.exam-setup-topic-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.5rem 1rem;
+}
+
+.exam-setup-topic-grid label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--color-navy);
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .exam-setup-grid {
+        grid-template-columns: 1fr;
+    }
+}

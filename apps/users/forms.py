@@ -589,11 +589,12 @@ class TeachingAssignmentForm(forms.Form):
         queryset=User.objects.filter(role=User.Role.PROFESSOR, is_active=True).order_by("email"),
         label="Faculty",
     )
-    program_section = forms.ModelChoiceField(
+    program_sections = forms.ModelMultipleChoiceField(
         queryset=ProgramSection.queryset_with_counts().select_related(
             "program", "year_level", "academic_year"
         ),
-        label="Section",
+        label="Sections",
+        widget=forms.CheckboxSelectMultiple,
     )
     subject = forms.ModelChoiceField(
         queryset=Subject.objects.none(),
@@ -610,9 +611,10 @@ class TeachingAssignmentForm(forms.Form):
         self.chairperson = chairperson
         super().__init__(**kwargs)
         _style_fields(self)
+        self.fields["program_sections"].widget.attrs["class"] = "exam-setup-topic-grid"
         dept_id = chairperson.department_id
         if dept_id:
-            self.fields["program_section"].queryset = (
+            self.fields["program_sections"].queryset = (
                 ProgramSection.queryset_with_counts()
                 .filter(program__managing_department_id=dept_id, is_active=True)
                 .select_related("program", "year_level", "academic_year")
@@ -621,10 +623,14 @@ class TeachingAssignmentForm(forms.Form):
         current_term = AcademicTerm.get_current()
         if current_term:
             self.fields["term"].initial = current_term.pk
-        section_id = self.data.get("program_section") if self.data else None
+        section_ids = self.data.getlist("program_sections") if self.data else []
         term_id = self.data.get("term") if self.data else None
-        if section_id and str(section_id).isdigit():
-            section = ProgramSection.objects.filter(pk=int(section_id)).select_related("program").first()
+        first_section_id = next(
+            (sid for sid in section_ids if str(sid).isdigit()),
+            None,
+        )
+        if first_section_id:
+            section = ProgramSection.objects.filter(pk=int(first_section_id)).select_related("program").first()
             term = None
             if term_id and str(term_id).isdigit():
                 term = AcademicTerm.objects.filter(pk=int(term_id)).first()
@@ -635,18 +641,29 @@ class TeachingAssignmentForm(forms.Form):
 
                 self.fields["subject"].queryset = subjects_for_teaching_assignment(section, term)
 
+    def clean_program_sections(self):
+        sections = self.cleaned_data.get("program_sections")
+        if not sections:
+            raise forms.ValidationError("Select at least one section.")
+        return sections
+
     def clean(self):
         cleaned = super().clean()
-        section = cleaned.get("program_section")
+        sections = cleaned.get("program_sections")
         subject = cleaned.get("subject")
         term = cleaned.get("term")
-        if section and subject and subject.program_id != section.program_id:
-            raise forms.ValidationError("Subject must belong to the section's program.")
-        if section and subject and term:
-            from apps.users.assignment_services import validate_assignment_subject
+        if not sections or not subject:
+            return cleaned
+        from apps.users.assignment_services import validate_assignment_subject
 
-            try:
-                validate_assignment_subject(section, subject, term)
-            except ValueError as exc:
-                raise forms.ValidationError(str(exc)) from exc
+        for section in sections:
+            if subject.program_id != section.program_id:
+                raise forms.ValidationError(
+                    f"Subject must belong to the program for section {section.label}."
+                )
+            if term:
+                try:
+                    validate_assignment_subject(section, subject, term)
+                except ValueError as exc:
+                    raise forms.ValidationError(str(exc)) from exc
         return cleaned

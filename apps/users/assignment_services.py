@@ -77,7 +77,7 @@ def create_teaching_assignment(
     subject: Subject,
     term,
     assigned_by: User,
-) -> TeachingAssignment:
+) -> tuple[TeachingAssignment, bool]:
     """Create a teaching assignment and linked course offering."""
     validate_assignment_subject(program_section, subject, term)
 
@@ -89,7 +89,7 @@ def create_teaching_assignment(
         defaults={"assigned_by": assigned_by},
     )
     if not created:
-        return assignment
+        return assignment, False
 
     course, _ = Course.objects.get_or_create(
         code=subject.code,
@@ -109,4 +109,31 @@ def create_teaching_assignment(
     assignment.course = course
     assignment.save(update_fields=["course"])
     get_or_create_exam_setup(course)
-    return assignment
+    return assignment, True
+
+
+@transaction.atomic
+def create_teaching_assignments(
+    *,
+    professor: User,
+    program_sections,
+    subject: Subject,
+    term,
+    assigned_by: User,
+) -> dict[str, int]:
+    """Create teaching assignments for multiple sections."""
+    created_count = 0
+    skipped_count = 0
+    for program_section in program_sections:
+        _, created = create_teaching_assignment(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=term,
+            assigned_by=assigned_by,
+        )
+        if created:
+            created_count += 1
+        else:
+            skipped_count += 1
+    return {"created": created_count, "skipped": skipped_count}

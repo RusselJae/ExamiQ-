@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags %}
 
 {% block title %}Exam Setup - {{ course.code }}{% endblock %}
 
@@ -11,24 +10,80 @@
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-<form method="post" class="bento-card p-6 w-full">
+<form method="post" class="exam-setup-form">
     {% csrf_token %}
-    <p class="text-sm text-examiq-slate mb-6">
-        Control whether students in this section can start exams, which topics are available,
-        and which difficulty levels they may choose.
-    </p>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="space-y-4">
-            {{ form.is_enabled|as_crispy_field }}
-        </div>
-        <div class="space-y-4">
-            {{ form.allowed_difficulties|as_crispy_field }}
-        </div>
-        <div class="lg:col-span-2 space-y-4">
-            {{ form.topics|as_crispy_field }}
-        </div>
+
+    {% if form.non_field_errors %}
+    <div class="bento-card p-4 mb-4 border-red-200 bg-red-50 text-red-700 text-sm">
+        {{ form.non_field_errors }}
     </div>
-    <div class="mt-6 pt-4 border-t border-slate-100">
+    {% endif %}
+
+    <div class="exam-setup-grid">
+        <section class="exam-setup-card bento-card p-6">
+            <h2 class="exam-setup-card__title">Availability</h2>
+            <p class="exam-setup-card__subtitle">Control whether students in this section can start exams.</p>
+            <label class="exam-setup-toggle flex items-center gap-3 mt-4 cursor-pointer">
+                {{ form.is_enabled }}
+                <span class="text-sm font-medium text-examiq-navy">Exam enabled for this section</span>
+            </label>
+        </section>
+
+        <section class="exam-setup-card bento-card p-6">
+            <h2 class="exam-setup-card__title">Timing</h2>
+            <p class="exam-setup-card__subtitle">Set how long the exam runs and how much time students get per question.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                <div>
+                    <label for="id_duration_minutes" class="block text-sm font-medium text-examiq-navy mb-1">
+                        {{ form.duration_minutes.label }}
+                    </label>
+                    {{ form.duration_minutes }}
+                    {% if form.duration_minutes.help_text %}
+                    <p class="text-xs text-examiq-slate mt-1">{{ form.duration_minutes.help_text }}</p>
+                    {% endif %}
+                    {% if form.duration_minutes.errors %}
+                    <p class="text-xs text-red-600 mt-1">{{ form.duration_minutes.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="id_seconds_per_question" class="block text-sm font-medium text-examiq-navy mb-1">
+                        {{ form.seconds_per_question.label }}
+                    </label>
+                    {{ form.seconds_per_question }}
+                    {% if form.seconds_per_question.help_text %}
+                    <p class="text-xs text-examiq-slate mt-1">{{ form.seconds_per_question.help_text }}</p>
+                    {% endif %}
+                    {% if form.seconds_per_question.errors %}
+                    <p class="text-xs text-red-600 mt-1">{{ form.seconds_per_question.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <section class="exam-setup-card bento-card p-6">
+            <h2 class="exam-setup-card__title">Allowed difficulties</h2>
+            <p class="exam-setup-card__subtitle">Students may only choose from the levels you enable.</p>
+            <div class="mt-4">
+                {{ form.allowed_difficulties }}
+                {% if form.allowed_difficulties.errors %}
+                <p class="text-xs text-red-600 mt-2">{{ form.allowed_difficulties.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="exam-setup-card bento-card p-6 exam-setup-card--wide">
+            <h2 class="exam-setup-card__title">Topics</h2>
+            <p class="exam-setup-card__subtitle">Leave empty to allow all topics for this subject.</p>
+            <div class="mt-4">
+                {{ form.topics }}
+                {% if form.topics.errors %}
+                <p class="text-xs text-red-600 mt-2">{{ form.topics.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+
+    <div class="mt-6">
         <button type="submit" class="btn-primary">Save exam setup</button>
     </div>
 </form>

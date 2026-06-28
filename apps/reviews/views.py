@@ -11,7 +11,7 @@ from apps.questions.curriculum import subject_queryset_for_student
 from apps.questions.models import Question, Topic
 from apps.questions.services import get_adaptive_questions_for_session
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
-from apps.reviews.exam_setup_services import student_setup_eligibility
+from apps.reviews.exam_setup_services import exam_timing_for_course, student_setup_eligibility
 from apps.reviews.recommendations import build_session_summary, get_review_recommendations
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
 from apps.reviews.models import Answer, ReviewSession
@@ -77,13 +77,19 @@ class ReviewSetupView(StudentRequiredMixin, View):
     def post(self, request):
         form = ReviewSetupForm(request.POST, student=request.user)
         if form.is_valid():
+            course = form.get_course_for_session()
+            duration_minutes = form.cleaned_data["duration_minutes"]
+            seconds_per_question = None
+            if course:
+                duration_minutes, seconds_per_question = exam_timing_for_course(course)
             session = start_review_session(
                 student=request.user,
                 topic=form.cleaned_data["topic"],
                 difficulty=form.cleaned_data["difficulty"],
-                duration_minutes=form.cleaned_data["duration_minutes"],
-                course=form.get_course_for_session(),
+                duration_minutes=duration_minutes,
+                course=course,
                 mode=ReviewSession.Mode.TIMED_EXAM,
+                seconds_per_question=seconds_per_question,
                 pre_session_confidence=form.cleaned_data.get("pre_session_confidence") or "",
                 session_goal=form.cleaned_data.get("session_goal") or "",
             )
@@ -105,6 +111,29 @@ class ReviewSetupSubjectsView(StudentRequiredMixin, CurriculumSubjectsView):
 
 class ReviewSetupTopicsView(StudentRequiredMixin, CurriculumTopicsView):
     pass
+
+
+class ReviewSetupTimingView(StudentRequiredMixin, View):
+    """GET ?subject=<pk> — exam timing configured by faculty for the student's section."""
+
+    def get(self, request):
+        from apps.questions.models import Subject
+        from apps.reviews.exam_setup_services import assignment_for_student_subject, exam_timing_for_course
+
+        subject_id = request.GET.get("subject", "")
+        if not subject_id.isdigit():
+            return JsonResponse({})
+        subject = Subject.objects.filter(pk=int(subject_id)).first()
+        if not subject:
+            return JsonResponse({})
+        assignment = assignment_for_student_subject(request.user, subject)
+        if not assignment or not assignment.course:
+            return JsonResponse({})
+        duration_minutes, seconds_per_question = exam_timing_for_course(assignment.course)
+        return JsonResponse({
+            "duration_minutes": duration_minutes,
+            "seconds_per_question": seconds_per_question,
+        })
 
 
 class ReviewSessionView(StudentRequiredMixin, DetailView):

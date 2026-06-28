@@ -14,20 +14,36 @@ class ExamSetupForm(forms.ModelForm):
     topics = forms.ModelMultipleChoiceField(
         queryset=Topic.objects.none(),
         required=False,
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "exam-setup-topic-grid"}),
         help_text="Leave empty to allow all topics for this subject.",
     )
     allowed_difficulties = forms.MultipleChoiceField(
         choices=Question.Difficulty.choices,
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "exam-setup-topic-grid"}),
         initial=list(DEFAULT_EXAM_DIFFICULTIES),
     )
 
     class Meta:
         model = ExamSetup
-        fields = ["is_enabled", "topics", "allowed_difficulties"]
+        fields = [
+            "is_enabled",
+            "duration_minutes",
+            "seconds_per_question",
+            "topics",
+            "allowed_difficulties",
+        ]
         widgets = {
             "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "duration_minutes": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS, "min": 5, "max": 120}),
+            "seconds_per_question": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}),
+        }
+        labels = {
+            "duration_minutes": "Session duration (minutes)",
+            "seconds_per_question": "Time per question (seconds)",
+        }
+        help_texts = {
+            "duration_minutes": "Total length of the timed exam session.",
+            "seconds_per_question": "How long students have to answer each question.",
         }
 
     def __init__(self, *args, course=None, **kwargs):
@@ -38,6 +54,19 @@ class ExamSetupForm(forms.ModelForm):
                 subject__code=course.code,
                 parent__isnull=True,
             ).order_by("name")
+
+    def clean(self):
+        cleaned = super().clean()
+        duration = cleaned.get("duration_minutes")
+        if duration is not None and not 5 <= duration <= 120:
+            raise forms.ValidationError("Duration must be between 5 and 120 minutes.")
+        seconds = cleaned.get("seconds_per_question")
+        if seconds is not None and not 10 <= seconds <= 120:
+            raise forms.ValidationError("Seconds per question must be between 10 and 120.")
+        difficulties = cleaned.get("allowed_difficulties")
+        if not difficulties:
+            raise forms.ValidationError("Select at least one difficulty level.")
+        return cleaned
 
     def clean_allowed_difficulties(self):
         difficulties = self.cleaned_data.get("allowed_difficulties")

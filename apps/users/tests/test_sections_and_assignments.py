@@ -184,13 +184,46 @@ class TestTeachingAssignments:
             reverse("analytics_chairperson:assignment_create"),
             {
                 "professor": professor.pk,
-                "program_section": program_section.pk,
+                "program_sections": [program_section.pk],
                 "subject": subject.pk,
                 "term": term.pk,
             },
         )
         assert response.status_code == 302
         assert professor.teaching_assignments.count() == 1
+
+    def test_chairperson_can_assign_multiple_sections(
+        self, client, chairperson, professor, program_section, subject, program, year_level
+    ):
+        chairperson.department = program.managing_department
+        chairperson.save(update_fields=["department"])
+        second_section = ProgramSection.objects.create(
+            program=program,
+            year_level=year_level,
+            label="2-B",
+            academic_year=program_section.academic_year,
+            is_active=True,
+        )
+        term = AcademicTerm.objects.create(
+            academic_year=program_section.academic_year,
+            name="1st Sem",
+            is_current=True,
+        )
+        client.force_login(chairperson)
+        response = client.post(
+            reverse("analytics_chairperson:assignment_create"),
+            {
+                "professor": professor.pk,
+                "program_sections": [program_section.pk, second_section.pk],
+                "subject": subject.pk,
+                "term": term.pk,
+            },
+        )
+        assert response.status_code == 302
+        assert professor.teaching_assignments.count() == 2
+        from apps.reviews.models import ExamSetup
+
+        assert ExamSetup.objects.filter(course__professor=professor).count() == 2
 
     def test_professor_with_assignments_cannot_self_create_course(self, client, professor, program_section, subject):
         term = AcademicTerm.objects.create(

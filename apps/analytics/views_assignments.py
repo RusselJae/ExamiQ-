@@ -9,7 +9,7 @@ from django.views.generic import FormView, ListView
 from apps.core.filtering import get_filter_param
 from apps.core.mixins import ChairpersonRequiredMixin
 from apps.questions.curriculum import subjects_for_teaching_assignment
-from apps.users.assignment_services import create_teaching_assignment
+from apps.users.assignment_services import create_teaching_assignments
 from apps.users.forms import TeachingAssignmentForm
 from apps.users.models import AcademicTerm, ProgramSection, TeachingAssignment
 
@@ -75,9 +75,9 @@ class ChairpersonAssignmentCreateView(ChairpersonRequiredMixin, FormView):
 
     def form_valid(self, form):
         try:
-            create_teaching_assignment(
+            result = create_teaching_assignments(
                 professor=form.cleaned_data["professor"],
-                program_section=form.cleaned_data["program_section"],
+                program_sections=form.cleaned_data["program_sections"],
                 subject=form.cleaned_data["subject"],
                 term=form.cleaned_data["term"],
                 assigned_by=self.request.user,
@@ -85,7 +85,20 @@ class ChairpersonAssignmentCreateView(ChairpersonRequiredMixin, FormView):
         except ValueError as exc:
             messages.error(self.request, str(exc))
             return redirect("analytics_chairperson:assignments")
-        messages.success(self.request, "Teaching assignment created.")
+        created = result["created"]
+        skipped = result["skipped"]
+        if created and skipped:
+            messages.success(
+                self.request,
+                f"Created {created} assignment(s); {skipped} already existed.",
+            )
+        elif created:
+            messages.success(
+                self.request,
+                f"Created {created} teaching assignment(s).",
+            )
+        else:
+            messages.info(self.request, "All selected assignments already exist.")
         return super().form_valid(form)
 
     def form_invalid(self, form):

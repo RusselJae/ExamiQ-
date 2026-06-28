@@ -52,7 +52,7 @@
 
         <h2 class="assign-panel__title">New assignment</h2>
 
-        <p class="assign-panel__subtitle">Select faculty, section, and subject for the current term.</p>
+        <p class="assign-panel__subtitle">Select faculty, one or more sections, and subject for the current term.</p>
 
     </div>
 
@@ -76,17 +76,17 @@
 
             </div>
 
-            <div class="assign-field">
+            <div class="assign-field assign-field--full">
 
-                <label class="assign-field__label" for="id_program_section">
+                <label class="assign-field__label">
 
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
 
-                    Section
+                    Sections
 
                 </label>
 
-                {{ assignment_form.program_section }}
+                {{ assignment_form.program_sections }}
 
             </div>
 
@@ -278,19 +278,29 @@
 
 (function() {
 
-    const sectionSelect = document.getElementById("id_program_section");
+    const sectionContainer = document.getElementById("id_program_sections");
 
     const termSelect = document.getElementById("id_term");
 
     const subjectSelect = document.getElementById("id_subject");
 
-    if (!sectionSelect || !subjectSelect) return;
+    if (!sectionContainer || !subjectSelect) return;
+
+
+
+    function firstSelectedSectionId() {
+
+        const checked = sectionContainer.querySelector("input:checked");
+
+        return checked ? checked.value : "";
+
+    }
 
 
 
     async function loadSubjects() {
 
-        const sectionId = sectionSelect.value;
+        const sectionId = firstSelectedSectionId();
 
         const termId = termSelect ? termSelect.value : "";
 
@@ -326,7 +336,7 @@
 
 
 
-    sectionSelect.addEventListener("change", loadSubjects);
+    sectionContainer.addEventListener("change", loadSubjects);
 
     if (termSelect) {
 
@@ -334,7 +344,7 @@
 
     }
 
-    if (sectionSelect.value) loadSubjects();
+    if (firstSelectedSectionId()) loadSubjects();
 
 })();
 

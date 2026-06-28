@@ -71,16 +71,16 @@
                 <p class="sidebar-section-label sidebar-course-label">My courses</p>
                 <div class="sidebar-course-list">
                     {% for course in professor_courses %}
-                    <a href="{% url 'analytics_professor:course_detail' course.pk %}" title="{{ course.code }}"
+                    <a href="{% url 'analytics_professor:course_detail' course.pk %}" title="{{ course.display_label }}"
                        class="sidebar-link sidebar-link-compact {% if sidebar_course.pk == course.pk %}sidebar-link-active{% endif %}">
-                        <span class="sidebar-label">{{ course.code }}</span>
+                        <span class="sidebar-label">{% if course.section %}{{ course.code }} · Sec {{ course.section }}{% else %}{{ course.code }}{% endif %}</span>
                     </a>
                     {% endfor %}
                 </div>
                 {% endif %}
 
                 {% if sidebar_course %}
-                <p class="sidebar-section-label sidebar-course-label">{{ sidebar_course.code }}</p>
+                <p class="sidebar-section-label sidebar-course-label">{% if sidebar_course.section %}{{ sidebar_course.code }} · Sec {{ sidebar_course.section }}{% else %}{{ sidebar_course.code }}{% endif %}</p>
                 <nav class="sidebar-subnav" aria-label="Course navigation">
                     <a href="{% url 'analytics_professor:course_detail' sidebar_course.pk %}"
                        class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_detail' %}sidebar-subnav-link-active{% endif %}">Analytics</a>

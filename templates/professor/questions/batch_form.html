@@ -140,7 +140,30 @@
 
     let questionIndex = 0;
     let restoring = false;
+    let formDirty = false;
     const validationState = {};
+
+    function markDirty() {
+        if (restoring) return;
+        formDirty = true;
+    }
+
+    function invalidateValidation(index) {
+        if (validationState[index]) {
+            delete validationState[index];
+            renderTableRow(index);
+        }
+    }
+
+    function peerStemsForIndex(index) {
+        const peers = [];
+        for (let i = 0; i < questionIndex; i++) {
+            if (i === index) continue;
+            const stem = getQuestionData(i).stem.trim();
+            if (stem) peers.push(stem);
+        }
+        return peers;
+    }
 
     function normalizeStem(text) {
         return (text || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -305,7 +328,10 @@
         renderTableRow(index);
         questionIndex += 1;
         syncCountInput();
-        if (!restoring) window.ExamiQBatch.persist(batchConfig);
+        if (!restoring) {
+            markDirty();
+            window.ExamiQBatch.persist(batchConfig);
+        }
         if (openEdit) window.location.href = editUrlFor(index);
         return index;
     }
@@ -401,6 +427,7 @@
         const fd = getSettingsFormData();
         fd.append("stem", data.stem);
         fd.append("correct_label", data.correct);
+        fd.append("peer_stems", JSON.stringify(peerStemsForIndex(index)));
         ["A", "B", "C", "D"].forEach(function(letter) {
             fd.append("choice_" + letter, data.choices[letter] || "");
         });
@@ -456,22 +483,37 @@
         const pending = [];
         for (let i = 0; i < questionIndex; i++) {
             if (!getQuestionData(i).stem.trim()) continue;
-            if (!validationState[i]) pending.push(i);
+            if (!validationState[i] || validationState[i].is_valid !== true) {
+                pending.push(i);
+            }
+        }
+        if (!pending.length) {
+            return true;
         }
         for (let j = 0; j < pending.length; j++) {
-            await runValidate(pending[j], null, false);
-        }
-        for (let i = 0; i < questionIndex; i++) {
-            if (!getQuestionData(i).stem.trim()) continue;
-            if (!validationState[i] || validationState[i].is_valid !== true) {
+            const result = await runValidate(pending[j], null, false);
+            if (!result.is_valid) {
                 return false;
             }
         }
         return true;
     }
 
+    function allRowsValid() {
+        let hasQuestions = false;
+        for (let i = 0; i < questionIndex; i++) {
+            if (!getQuestionData(i).stem.trim()) continue;
+            hasQuestions = true;
+            if (!validationState[i] || validationState[i].is_valid !== true) {
+                return false;
+            }
+        }
+        return hasQuestions;
+    }
+
     function onSettingsChange() {
         if (restoring) return;
+        markDirty();
         window.ExamiQBatch.persist(batchConfig);
     }
 
@@ -501,24 +543,39 @@
         }
         e.preventDefault();
         const submitBtn = batchForm.querySelector('button[type="submit"]');
-        if (submitBtn && window.ExamiQUI) window.ExamiQUI.setButtonLoading(submitBtn, true, "Validating…");
+        const needsValidation = !allRowsValid();
+        if (needsValidation && submitBtn && window.ExamiQUI) {
+            window.ExamiQUI.setButtonLoading(submitBtn, true, "Validating…");
+        }
         const allValid = await validateAllBeforeSubmit();
-        if (submitBtn && window.ExamiQUI) window.ExamiQUI.setButtonLoading(submitBtn, false);
+        if (needsValidation && submitBtn && window.ExamiQUI) {
+            window.ExamiQUI.setButtonLoading(submitBtn, false);
+        }
         if (!allValid) {
             if (window.showToast) {
                 window.showToast("Fix or remove invalid questions before submitting.", "error");
             }
             return;
         }
+        formDirty = false;
         window.ExamiQBatch.clearDraft(coursePk);
         batchForm.submit();
     });
 
     window.addEventListener("beforeunload", function(e) {
-        if (questionIndex > 0) {
+        if (formDirty && questionIndex > 0) {
             e.preventDefault();
             e.returnValue = "";
         }
+    });
+
+    fieldsStore.addEventListener("input", function(e) {
+        const wrapper = e.target.closest("[data-index]");
+        if (!wrapper) return;
+        const index = parseInt(wrapper.dataset.index, 10);
+        invalidateValidation(index);
+        markDirty();
+        window.ExamiQBatch.persist(batchConfig);
     });
 
     generateBtn.addEventListener("click", async function() {
@@ -556,6 +613,7 @@
                 confirmLabel: "Delete",
             }).then(function (ok) {
                 if (ok) {
+                    markDirty();
                     window.ExamiQBatch.removeQuestion(batchConfig, index);
                 }
             });

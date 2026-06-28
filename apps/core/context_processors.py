@@ -28,13 +28,19 @@ def navigation_context(request):
         return context
 
     context["professor_courses"] = list(
-        get_professor_course_queryset(user).select_related("program").order_by("code")
+        get_professor_course_queryset(user)
+        .select_related("program")
+        .order_by("code", "section", "-academic_year", "term")
     )
     context["summary_courses"] = [
         {
             "pk": course.pk,
             "code": course.code,
-            "label": f"{course.code} · {course.term} {course.academic_year}",
+            "label": (
+                f"{course.code} · Sec {course.section} · {course.term} {course.academic_year}"
+                if course.section
+                else f"{course.code} · {course.term} {course.academic_year}"
+            ),
         }
         for course in context["professor_courses"]
     ]

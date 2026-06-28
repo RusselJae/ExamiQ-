@@ -616,7 +616,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     })
 
             validation = validate_question_for_submit(
-                stem, choices_data, topic, difficulty, correct_label
+                stem, choices_data, topic, difficulty, correct_label, ai_enabled=False
             )
             if not validation.get("is_valid"):
                 skipped_invalid += 1
@@ -711,6 +711,8 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
 
 class QuestionAIValidateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
+        import json
+
         topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
         stem = request.POST.get("stem", "")
@@ -728,8 +730,18 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
             if text:
                 choices.append({"label": label, "text": text, "is_correct": label == correct_label})
 
+        peer_stems = []
+        raw_peer_stems = request.POST.get("peer_stems", "")
+        if raw_peer_stems:
+            try:
+                parsed = json.loads(raw_peer_stems)
+                if isinstance(parsed, list):
+                    peer_stems = [str(item) for item in parsed]
+            except (TypeError, ValueError):
+                peer_stems = []
+
         result = validate_question_for_submit(
-            stem, choices, topic, difficulty, correct_label
+            stem, choices, topic, difficulty, correct_label, peer_stems=peer_stems
         )
 
         if "application/json" in request.headers.get("Accept", ""):

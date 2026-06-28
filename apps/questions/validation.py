@@ -5,6 +5,30 @@ from __future__ import annotations
 LABELS = ("A", "B", "C", "D")
 
 
+def check_duplicate_stem(
+    topic_id: int,
+    stem: str,
+    *,
+    exclude_pk: int | None = None,
+    peer_stems: list[str] | None = None,
+) -> str | None:
+    """Return an error message when stem exactly matches DB or peer queue entries."""
+    from apps.questions.services import find_duplicate_question, normalize_stem
+
+    normalized = normalize_stem(stem)
+    if not normalized:
+        return None
+
+    if find_duplicate_question(topic_id, stem, exclude_pk=exclude_pk):
+        return "Duplicate question: this stem already exists in the question bank."
+
+    if peer_stems:
+        for index, peer in enumerate(peer_stems, start=1):
+            if normalize_stem(peer) == normalized:
+                return f"Duplicate question: matches row {index} in your queue."
+    return None
+
+
 def validate_question_structure(
     stem: str,
     choices: list[dict],
@@ -59,8 +83,10 @@ def validate_question_for_submit(
     correct_label: str = "",
     *,
     ai_enabled: bool = True,
+    peer_stems: list[str] | None = None,
+    exclude_pk: int | None = None,
 ) -> dict:
-    """Structural + optional AI validation. Returns validator-shaped dict."""
+    """Structural + duplicate + optional AI validation. Returns validator-shaped dict."""
     structure = validate_question_structure(stem, choices, correct_label)
     if not structure["is_valid"]:
         return {
@@ -72,12 +98,36 @@ def validate_question_for_submit(
             "errors": structure["errors"],
         }
 
+    duplicate_message = check_duplicate_stem(
+        topic.pk,
+        stem,
+        exclude_pk=exclude_pk,
+        peer_stems=peer_stems,
+    )
+    if duplicate_message:
+        return {
+            "is_valid": False,
+            "topic_relevant": False,
+            "answer_correct": False,
+            "feedback": duplicate_message,
+            "suggested_concept_tag": "",
+            "errors": [duplicate_message],
+        }
+
+    if not ai_enabled:
+        return {
+            "is_valid": True,
+            "topic_relevant": True,
+            "answer_correct": True,
+            "feedback": "",
+            "suggested_concept_tag": "",
+            "errors": structure["errors"],
+        }
+
     from apps.ai.factory import get_question_validator
 
     result = get_question_validator().validate(stem, choices, topic, difficulty, correct_label)
     result["errors"] = structure["errors"]
-    if not ai_enabled:
-        result["is_valid"] = True
-    elif not result.get("is_valid"):
+    if not result.get("is_valid"):
         result["errors"] = structure["errors"] + [result.get("feedback") or "AI validation failed."]
     return result
