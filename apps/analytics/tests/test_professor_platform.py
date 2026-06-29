@@ -107,6 +107,7 @@ class TestExamSetupProfessor:
             reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk}),
             {
                 "is_enabled": True,
+                "seconds_per_question": 30,
                 "allowed_difficulties": ["easy", "medium", "hard"],
             },
         )
@@ -147,7 +148,9 @@ class TestProfessorRoster:
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:course_roster", kwargs={"course_pk": course.pk}))
         assert response.status_code == 200
-        assert student.email in response.content.decode()
+        content = response.content.decode()
+        assert student.email in content
+        assert "Masterlist" in content
 
     def test_student_detail_requires_session(self, client, professor, student, program):
         course = Course.objects.create(
@@ -194,7 +197,7 @@ class TestSidebarContext:
 
 @pytest.mark.django_db
 class TestHeatmap:
-    def test_heatmap_counts_quadrants(self, student, mcq_question, program, professor):
+    def test_heatmap_counts_confidence_tiers(self, student, mcq_question, program, professor):
         question, _ = mcq_question
         course = Course.objects.create(
             program=program,
@@ -212,7 +215,7 @@ class TestHeatmap:
         Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
         heatmap = get_topic_mastery_heatmap(course)
         topic_row = next(t for t in heatmap["topics"] if t["topic_name"] == question.topic.name)
-        assert topic_row["misconception"] >= 1
+        assert topic_row["high"] >= 1
 
     def test_student_rows_include_practicing_student(self, student, mcq_question, program, professor):
         question, _ = mcq_question

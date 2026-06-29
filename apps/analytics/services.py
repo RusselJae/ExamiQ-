@@ -103,6 +103,72 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
     return ai_feedback
 
 
+def generate_answer_feedback(answer) -> str:
+    """Generate and return AI feedback for a session answer."""
+    if answer.mistake_record:
+        if answer.mistake_record.ai_feedback:
+            return answer.mistake_record.ai_feedback
+        return generate_mistake_feedback(answer.mistake_record)
+
+    from django.conf import settings
+
+    if not settings.AI_ENABLED:
+        return "Correct answer. Keep practicing to reinforce this topic."
+
+    from apps.ai.factory import get_adaptive_feedback_generator
+
+    question = answer.question
+    user_answer = ""
+    if answer.selected_choice_id:
+        choice = answer.selected_choice
+        user_answer = f"{choice.label}: {choice.text}"
+    elif answer.numeric_response is not None:
+        user_answer = str(answer.numeric_response)
+
+    correct_answer = ""
+    if question.question_type == Question.QuestionType.MCQ:
+        correct = question.choices.filter(is_correct=True).first()
+        if correct:
+            correct_answer = f"{correct.label}: {correct.text}"
+    elif question.correct_answer is not None:
+        correct_answer = str(question.correct_answer)
+
+    confidence = "high" if answer.confidence and answer.confidence >= 4 else "medium"
+    return get_adaptive_feedback_generator().generate(
+        topic=question.topic.name,
+        question=question.stem,
+        user_answer=user_answer or "Correct",
+        correct_answer=correct_answer or "Correct",
+        confidence=confidence,
+    )
+
+
+def generate_session_feedback(session) -> list[dict]:
+    """Generate feedback for every answer in a completed session."""
+    from apps.analytics.confidence import confidence_tier_key
+
+    results = []
+    answers = (
+        session.answers.select_related("question", "selected_choice", "mistake_record")
+        .prefetch_related("question__choices")
+        .order_by("answered_at")
+    )
+    for answer in answers:
+        feedback = generate_answer_feedback(answer)
+        tier_key = confidence_tier_key(answer.confidence)
+        results.append(
+            {
+                "answer_id": answer.pk,
+                "stem": answer.question.stem,
+                "is_correct": answer.is_correct,
+                "timed_out": answer.timed_out,
+                "confidence_tier": tier_key,
+                "feedback": feedback,
+            }
+        )
+    return results
+
+
 def student_performance_summary(student: User) -> dict:
     """Return performance summary for a single student."""
     sessions = ReviewSession.objects.filter(
@@ -583,8 +649,8 @@ def get_roster_summaries(course: Course) -> list[dict]:
 
 
 def get_topic_mastery_heatmap(course: Course) -> dict:
-    """Build topic×quadrant heatmap data for a course."""
-    from apps.analytics.confidence import classify_answer
+    """Build topic×confidence-tier heatmap data for a course."""
+    from apps.analytics.confidence import CONFIDENCE_TIER_LABELS, confidence_tier_key
 
     answers = _course_answers(course).select_related("question__topic")
     topic_map: dict[int, dict] = {}
@@ -595,21 +661,21 @@ def get_topic_mastery_heatmap(course: Course) -> dict:
             topic_map[topic.id] = {
                 "topic_id": topic.id,
                 "topic_name": topic.name,
-                "mastery": 0,
-                "misconception": 0,
-                "lucky_guess": 0,
-                "expected_gap": 0,
-                "uncertain": 0,
+                "none": 0,
+                "low": 0,
+                "average": 0,
+                "high": 0,
                 "total": 0,
             }
-        classification = classify_answer(answer.confidence, answer.is_correct)
-        topic_map[topic.id][classification] += 1
+        tier = confidence_tier_key(answer.confidence)
+        topic_map[topic.id][tier] += 1
         topic_map[topic.id]["total"] += 1
 
     topics = sorted(topic_map.values(), key=lambda t: t["topic_name"])
     callouts = {
-        "overconfident": [t for t in topics if t["misconception"] >= 2],
-        "anxious": [t for t in topics if t["lucky_guess"] >= 2],
+        "low_confidence": [
+            t for t in topics if (t["none"] + t["low"]) >= 2
+        ],
     }
 
     student_rows = _build_student_heatmap_rows(course, answers)
@@ -617,31 +683,25 @@ def get_topic_mastery_heatmap(course: Course) -> dict:
     return {
         "topics": topics,
         "student_rows": student_rows,
-        "classification_labels": CLASSIFICATION_LABELS,
+        "tier_labels": CONFIDENCE_TIER_LABELS,
         "callouts": callouts,
-        "matrix": confidence_accuracy_matrix(answers),
+        "matrix": confidence_tier_matrix(answers),
     }
 
 
 def _build_student_heatmap_rows(course: Course, answers) -> list[dict]:
-    """Per-student dominant calibration quadrant counts."""
-    from apps.analytics.confidence import classify_answer
+    """Per-student dominant confidence tier."""
+    from apps.analytics.confidence import confidence_tier_key
 
     student_ids = _course_student_ids(course)
     students = User.objects.filter(pk__in=student_ids)
     rows = []
     for student in students:
         student_answers = answers.filter(session__student=student)
-        counts = {
-            "mastery": 0,
-            "misconception": 0,
-            "lucky_guess": 0,
-            "expected_gap": 0,
-            "uncertain": 0,
-        }
+        counts = {"none": 0, "low": 0, "average": 0, "high": 0}
         for answer in student_answers:
-            counts[classify_answer(answer.confidence, answer.is_correct)] += 1
-        dominant = max(counts, key=counts.get) if student_answers.exists() else "uncertain"
+            counts[confidence_tier_key(answer.confidence)] += 1
+        dominant = max(counts, key=counts.get) if student_answers.exists() else "none"
         rows.append(
             {
                 "student_id": student.pk,

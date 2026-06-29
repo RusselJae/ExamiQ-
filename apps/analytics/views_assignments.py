@@ -6,7 +6,14 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import FormView, ListView
 
-from apps.core.filtering import get_filter_param
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+)
 from apps.core.mixins import ChairpersonRequiredMixin
 from apps.questions.curriculum import subjects_for_teaching_assignment
 from apps.users.assignment_services import create_teaching_assignments
@@ -38,6 +45,13 @@ class ChairpersonAssignmentListView(ChairpersonRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = self._base_queryset()
+        qs = apply_date_range(qs, self.request, "created_at")
+        qs = apply_sort(
+            qs,
+            self.request,
+            newest_field="-created_at",
+            oldest_field="created_at",
+        )
         term_filter = get_filter_param(self.request, "term")
         if term_filter == "1st":
             qs = qs.filter(term__name__icontains="1st")
@@ -50,6 +64,24 @@ class ChairpersonAssignmentListView(ChairpersonRequiredMixin, ListView):
         base_qs = self._base_queryset()
         context["assignment_form"] = TeachingAssignmentForm(chairperson=self.request.user)
         context["term_filter"] = get_filter_param(self.request, "term")
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            [
+                {
+                    "type": "sort",
+                    "name": "sort",
+                    "label": "Order",
+                    "choices": [
+                        ("newest", "Newest first"),
+                        ("oldest", "Oldest first"),
+                    ],
+                },
+                *STANDARD_DATE_SORT_FILTER_SPECS[0:2],
+            ],
+        )
+        context["filter_has_active"] = has_active_filters(
+            self.request, ["term", "date_from", "date_to", "sort"]
+        )
         context["assignment_stats"] = {
             "total": base_qs.count(),
             "faculty": base_qs.values("professor_id").distinct().count(),

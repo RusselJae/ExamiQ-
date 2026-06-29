@@ -15,15 +15,27 @@
                             {% if field.autofocus %}autofocus{% endif %}
                         >
                     </label>
-                    {% elif field.type == "select" %}
+                    {% elif field.type == "select" or field.type == "sort" %}
                     <label class="filter-bar__field">
                         <span class="filter-bar__label">{{ field.label }}</span>
                         <select name="{{ field.name }}" class="filter-bar__select">
+                            {% if field.type == "select" %}
                             <option value="">{{ field.all_label|default:"All" }}</option>
+                            {% endif %}
                             {% for value, label in field.choices %}
                             <option value="{{ value }}" {% if value == field.selected %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
+                    </label>
+                    {% elif field.type == "date" %}
+                    <label class="filter-bar__field">
+                        <span class="filter-bar__label">{{ field.label }}</span>
+                        <input
+                            type="date"
+                            name="{{ field.name }}"
+                            value="{{ field.value }}"
+                            class="filter-bar__input"
+                        >
                     </label>
                     {% endif %}
                 {% endfor %}

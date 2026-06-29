@@ -9,7 +9,14 @@ from django.views.generic import DetailView, ListView, TemplateView, UpdateView
 from apps.analytics.confidence import confidence_accuracy_matrix
 from apps.analytics.models import MistakeRecord
 from apps.analytics.services import department_math_analytics, program_performance_summary
-from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+)
 from apps.core.mixins import ChairpersonRequiredMixin, QuestionApprovalMixin
 from apps.questions.forms import ExplanationStepFormSet, QuestionChoiceFormSet, QuestionForm
 from apps.questions.models import Question, Topic
@@ -68,7 +75,13 @@ class QuestionReviewListView(ChairpersonRequiredMixin, ListView):
                 topic__subject__program__managing_department=department,
             )
             .select_related("topic", "topic__subject__program", "proposed_by")
-            .order_by("created")
+        )
+        queryset = apply_date_range(queryset, self.request, "created")
+        queryset = apply_sort(
+            queryset,
+            self.request,
+            newest_field="-created",
+            oldest_field="created",
         )
 
         search = get_filter_param(self.request, "q")
@@ -97,7 +110,7 @@ class QuestionReviewListView(ChairpersonRequiredMixin, ListView):
         topics = Topic.objects.filter(subject__program__managing_department=department).order_by(
             "subject__program__name", "name"
         )
-        filter_names = ["q", "program", "topic"]
+        filter_names = ["q", "program", "topic", "date_from", "date_to", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -122,6 +135,7 @@ class QuestionReviewListView(ChairpersonRequiredMixin, ListView):
                         for topic in topics
                     ],
                 },
+                *STANDARD_DATE_SORT_FILTER_SPECS,
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
@@ -218,7 +232,12 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
             Course.objects.filter(review_sessions__student_id__in=student_ids)
             .select_related("professor", "program")
             .distinct()
-            .order_by("-academic_year", "term", "code")
+        )
+        queryset = apply_sort(
+            queryset,
+            self.request,
+            newest_field="-academic_year",
+            oldest_field="academic_year",
         )
 
         search = get_filter_param(self.request, "q")
@@ -252,7 +271,7 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
             .distinct()
             .order_by("term")
         )
-        filter_names = ["q", "program", "term"]
+        filter_names = ["q", "program", "term", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -273,6 +292,15 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
                     "name": "term",
                     "label": "Term",
                     "choices": [(term, term) for term in terms],
+                },
+                {
+                    "type": "sort",
+                    "name": "sort",
+                    "label": "Order",
+                    "choices": [
+                        ("newest", "Newest year first"),
+                        ("oldest", "Oldest year first"),
+                    ],
                 },
             ],
         )

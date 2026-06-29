@@ -19,7 +19,14 @@ from apps.ai.factory import get_ai_provider_label, get_difficulty_tagger, get_qu
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.normalize import normalize_generated_questions
 
-from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+)
 from apps.core.mixins import ProfessorCourseMixin
 
 from apps.questions.forms import (
@@ -65,15 +72,16 @@ class QuestionListView(ProfessorCourseMixin, ListView):
     def get_queryset(self):
 
         queryset = (
-
             Question.objects.filter(topic__subject__program=self.course.program)
-
             .select_related("topic")
-
             .annotate(mistake_count=Count("mistake_records"))
-
-            .order_by("topic__name", "difficulty", "status")
-
+        )
+        queryset = apply_date_range(queryset, self.request, "created")
+        queryset = apply_sort(
+            queryset,
+            self.request,
+            newest_field="-created",
+            oldest_field="created",
         )
 
         search = get_filter_param(self.request, "q")
@@ -109,7 +117,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         context["active_tab"] = "questions"
         context["ai_provider_label"] = get_ai_provider_label()
         topics = Topic.objects.filter(subject__program=self.course.program).order_by("name")
-        filter_names = ["q", "topic", "difficulty", "type", "active"]
+        filter_names = ["q", "topic", "difficulty", "type", "active", "date_from", "date_to", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -146,6 +154,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
                         ("no", "Inactive"),
                     ],
                 },
+                *STANDARD_DATE_SORT_FILTER_SPECS,
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)

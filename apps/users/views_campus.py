@@ -10,6 +10,14 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+)
 from apps.core.mixins import CampusAdminRequiredMixin
 from apps.users.email_services import send_account_approved_email, send_account_rejected_email
 from apps.users.forms import (
@@ -116,7 +124,14 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = User.objects.select_related("department", "year_level", "section").order_by("email")
+        qs = User.objects.select_related("department", "year_level", "section")
+        qs = apply_date_range(qs, self.request, "date_joined")
+        qs = apply_sort(
+            qs,
+            self.request,
+            newest_field="-date_joined",
+            oldest_field="date_joined",
+        )
         role = self.request.GET.get("role", "")
         if role in {choice[0] for choice in User.Role.choices}:
             qs = qs.filter(role=role)
@@ -144,6 +159,32 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
         context["search_query"] = self.request.GET.get("q", "")
         context["role_choices"] = User.Role.choices
         context["status_choices"] = User.ApprovalStatus.choices
+        filter_names = ["role", "status", "q", "date_from", "date_to", "sort"]
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            [
+                {
+                    "type": "search",
+                    "name": "q",
+                    "label": "Search",
+                    "placeholder": "Name, email, or student number",
+                },
+                {
+                    "type": "select",
+                    "name": "role",
+                    "label": "Role",
+                    "choices": User.Role.choices,
+                },
+                {
+                    "type": "select",
+                    "name": "status",
+                    "label": "Status",
+                    "choices": User.ApprovalStatus.choices,
+                },
+                *STANDARD_DATE_SORT_FILTER_SPECS,
+            ],
+        )
+        context["filter_has_active"] = has_active_filters(self.request, filter_names)
         return context
 
 

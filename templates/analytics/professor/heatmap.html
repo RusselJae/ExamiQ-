@@ -5,25 +5,16 @@
 {% block content %}
 <div class="mb-6">
     <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
-    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Topic Mastery Heatmap</h1>
-    <p class="text-examiq-slate mt-1">Confidence vs. accuracy — spot anxious and overconfident patterns.</p>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Confidence Heatmap</h1>
+    <p class="text-examiq-slate mt-1">No, Low, Average, and High confidence patterns by topic.</p>
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-{% if heatmap.callouts.overconfident %}
-<div class="bento-card p-4 mb-4 border-l-4 border-red-400">
-    <p class="text-sm font-semibold text-examiq-navy">Overconfidence alert</p>
-    <p class="text-sm text-examiq-slate">High confidence + wrong answers in:
-        {% for t in heatmap.callouts.overconfident %}{{ t.topic_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-    </p>
-</div>
-{% endif %}
-
-{% if heatmap.callouts.anxious %}
+{% if heatmap.callouts.low_confidence %}
 <div class="bento-card p-4 mb-4 border-l-4 border-amber-400">
-    <p class="text-sm font-semibold text-examiq-navy">Low confidence but succeeding</p>
-    <p class="text-sm text-examiq-slate">Possible anxious mastery in:
-        {% for t in heatmap.callouts.anxious %}{{ t.topic_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    <p class="text-sm font-semibold text-examiq-navy">Low confidence alert</p>
+    <p class="text-sm text-examiq-slate">Students reporting No or Low confidence in:
+        {% for t in heatmap.callouts.low_confidence %}{{ t.topic_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
     </p>
 </div>
 {% endif %}
@@ -42,22 +33,20 @@
             <thead>
                 <tr class="text-left text-examiq-slate border-b border-slate-100">
                     <th class="pb-2 font-medium">Topic</th>
-                    <th class="pb-2 font-medium text-center">Mastery</th>
-                    <th class="pb-2 font-medium text-center">Misconception</th>
-                    <th class="pb-2 font-medium text-center">Lucky guess</th>
-                    <th class="pb-2 font-medium text-center">Expected gap</th>
-                    <th class="pb-2 font-medium text-center">Uncertain</th>
+                    <th class="pb-2 font-medium text-center">No Confidence</th>
+                    <th class="pb-2 font-medium text-center">Low Confidence</th>
+                    <th class="pb-2 font-medium text-center">Average Confidence</th>
+                    <th class="pb-2 font-medium text-center">High Confidence</th>
                 </tr>
             </thead>
             <tbody>
                 {% for topic in heatmap.topics %}
                 <tr class="border-b border-slate-50">
                     <td class="py-2 text-examiq-navy font-medium">{{ topic.topic_name }}</td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-mastery">{{ topic.mastery }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-misconception">{{ topic.misconception }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-lucky_guess">{{ topic.lucky_guess }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-expected_gap">{{ topic.expected_gap }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-uncertain">{{ topic.uncertain }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-none">{{ topic.none }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-low">{{ topic.low }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-average">{{ topic.average }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-high">{{ topic.high }}</div></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -69,13 +58,14 @@
 </div>
 
 <div id="student-view" class="bento-card p-6">
-    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Student calibration</h2>
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Student confidence</h2>
     {% if heatmap.student_rows %}
+    {% load examiq_tags %}
     <table class="w-full text-sm">
         <thead>
             <tr class="text-left text-examiq-slate border-b border-slate-100">
                 <th class="pb-2 font-medium">Student</th>
-                <th class="pb-2 font-medium">Dominant pattern</th>
+                <th class="pb-2 font-medium">Dominant tier</th>
                 <th class="pb-2 font-medium">Answers</th>
                 <th class="pb-2 font-medium"></th>
             </tr>
@@ -84,7 +74,7 @@
             {% for row in heatmap.student_rows %}
             <tr class="border-b border-slate-50" id="student-{{ row.student_id }}">
                 <td class="py-2 text-examiq-navy font-medium">{{ row.student_name }}</td>
-                <td class="py-2"><span class="heatmap-cell heatmap-{{ row.dominant }} capitalize">{{ row.dominant|cut:"_" }}</span></td>
+                <td class="py-2"><span class="heatmap-cell heatmap-{{ row.dominant }}">{{ row.dominant|confidence_tier_badge }}</span></td>
                 <td class="py-2 text-examiq-slate">{{ row.total }}</td>
                 <td class="py-2 text-right">
                     <a href="{% url 'analytics_professor:student_detail' course.pk row.student_id %}" class="text-link">Details</a>
@@ -109,16 +99,16 @@ if (topicsData.length > 0) {
         data: {
             labels: topicsData.map(t => t.topic_name),
             datasets: [
-                { label: "Mastery", data: topicsData.map(t => t.mastery), backgroundColor: "#10B981" },
-                { label: "Misconception", data: topicsData.map(t => t.misconception), backgroundColor: "#EF4444" },
-                { label: "Lucky guess", data: topicsData.map(t => t.lucky_guess), backgroundColor: "#F59E0B" },
-                { label: "Expected gap", data: topicsData.map(t => t.expected_gap), backgroundColor: "#94A3B8" },
-                { label: "Uncertain", data: topicsData.map(t => t.uncertain), backgroundColor: "#0284C7" },
+                { label: "No Confidence", data: topicsData.map(t => t.none), backgroundColor: "#94A3B8" },
+                { label: "Low Confidence", data: topicsData.map(t => t.low), backgroundColor: "#F59E0B" },
+                { label: "Average Confidence", data: topicsData.map(t => t.average), backgroundColor: "#0284C7" },
+                { label: "High Confidence", data: topicsData.map(t => t.high), backgroundColor: "#10B981" },
             ],
         },
         options: {
             responsive: true,
             scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+            plugins: { legend: { position: "bottom" } },
         },
     });
 }

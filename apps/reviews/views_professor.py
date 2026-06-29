@@ -4,6 +4,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    has_active_filters,
+)
 from apps.core.mixins import ProfessorCourseMixin
 from apps.reviews.exam_setup_services import get_or_create_exam_setup
 from apps.reviews.forms_professor import ExamSetupForm, ReviewWindowForm
@@ -40,13 +47,27 @@ class ReviewWindowListView(ProfessorCourseMixin, ListView):
     model = ReviewWindow
     template_name = "professor/windows/list.html"
     context_object_name = "windows"
+    paginate_by = 20
 
     def get_queryset(self):
-        return ReviewWindow.objects.filter(course=self.course).prefetch_related("topics")
+        queryset = ReviewWindow.objects.filter(course=self.course).prefetch_related("topics")
+        queryset = apply_date_range(queryset, self.request, "created")
+        return apply_sort(
+            queryset,
+            self.request,
+            newest_field="-created",
+            oldest_field="created",
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "windows"
+        filter_names = ["date_from", "date_to", "sort"]
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            STANDARD_DATE_SORT_FILTER_SPECS,
+        )
+        context["filter_has_active"] = has_active_filters(self.request, filter_names)
         now = timezone.now()
         context["upcoming_windows"] = [w for w in context["windows"] if w.opens_at > now]
         context["active_windows"] = [w for w in context["windows"] if w.is_open]

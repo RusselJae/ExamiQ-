@@ -105,6 +105,8 @@ def validate_session_active(session: ReviewSession) -> None:
     """Ensure session is still active and not expired."""
     if session.status != ReviewSession.Status.ACTIVE:
         raise SessionExpiredError("This session is no longer active.")
+    if session.mode == ReviewSession.Mode.TIMED_EXAM:
+        return
     if session.is_expired:
         session.status = ReviewSession.Status.EXPIRED
         session.ended_at = timezone.now()

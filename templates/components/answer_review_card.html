@@ -28,7 +28,9 @@
                 {% endif %}
             </p>
             {% if answer.confidence %}
-            <p class="text-xs text-examiq-slate mt-2">Confidence: {{ answer.confidence|confidence_label }}</p>
+            <span class="confidence-tier-badge confidence-tier-badge--{{ answer.confidence|confidence_tier_key }}">
+                {{ answer.confidence|confidence_label }}
+            </span>
             {% endif %}
         </div>
         <div>
@@ -59,9 +61,9 @@
 
     <div class="answer-review-feedback" id="answer-feedback-{{ answer.pk }}">
         {% if answer.mistake_record.ai_feedback %}
-        <div class="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+        <div class="feedback-card__body rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
             <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Why you missed it</p>
-            <p class="text-sm text-examiq-navy leading-relaxed whitespace-pre-line">{{ answer.mistake_record.ai_feedback }}</p>
+            <div class="feedback-step-list text-sm text-examiq-navy leading-relaxed whitespace-pre-line">{{ answer.mistake_record.ai_feedback }}</div>
         </div>
         {% elif answer.mistake_record %}
         <button type="button"
@@ -78,7 +80,7 @@
     {% if steps %}
     <div class="mt-4 rounded-xl bg-examiq-bg border border-slate-100 p-4">
         <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Step-by-step solution</p>
-        <ol class="space-y-2 list-decimal list-inside text-sm text-examiq-navy">
+        <ol class="feedback-step-list space-y-2 list-decimal list-inside text-sm text-examiq-navy">
             {% for step in steps %}
             <li class="leading-relaxed">{{ step.content }}</li>
             {% endfor %}

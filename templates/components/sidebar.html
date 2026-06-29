@@ -85,7 +85,7 @@
                     <a href="{% url 'analytics_professor:course_detail' sidebar_course.pk %}"
                        class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_detail' %}sidebar-subnav-link-active{% endif %}">Analytics</a>
                     <a href="{% url 'analytics_professor:course_roster' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_roster' or request.resolver_match.url_name == 'student_detail' %}sidebar-subnav-link-active{% endif %}">Roster</a>
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_roster' or request.resolver_match.url_name == 'student_detail' %}sidebar-subnav-link-active{% endif %}">Masterlist</a>
                     <a href="{% url 'analytics_professor:exam_setup' sidebar_course.pk %}"
                        class="sidebar-subnav-link {% if 'exam_setup' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Exam Setup</a>
                     <a href="{% url 'analytics_professor:course_heatmap' sidebar_course.pk %}"

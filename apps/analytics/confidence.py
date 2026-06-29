@@ -31,21 +31,37 @@ CONFIDENCE_TIER_AVERAGE = "average"
 CONFIDENCE_TIER_HIGH = "high"
 
 CONFIDENCE_TIER_LABELS = {
-    CONFIDENCE_TIER_NONE: "No",
-    CONFIDENCE_TIER_LOW: "Low",
-    CONFIDENCE_TIER_AVERAGE: "Average",
-    CONFIDENCE_TIER_HIGH: "High",
+    CONFIDENCE_TIER_NONE: "No Confidence",
+    CONFIDENCE_TIER_LOW: "Low Confidence",
+    CONFIDENCE_TIER_AVERAGE: "Average Confidence",
+    CONFIDENCE_TIER_HIGH: "High Confidence",
 }
 
 
-def confidence_from_time_spent(seconds: int) -> int:
-    """Map response time to confidence tier (high / average / low)."""
-    capped = min(max(seconds, 0), CONFIDENCE_TIMER_CAP_SECONDS)
-    if capped <= HIGH_CONFIDENCE_MAX_SECONDS:
+def confidence_from_time_spent(seconds: int, seconds_per_question: int = 30) -> int:
+    """Map response time to confidence tier, scaled to the per-question limit."""
+    cap = max(seconds_per_question, 1)
+    capped = min(max(seconds, 0), cap)
+    high_max = cap * HIGH_CONFIDENCE_MAX_SECONDS / CONFIDENCE_TIMER_CAP_SECONDS
+    avg_max = cap * AVERAGE_CONFIDENCE_MAX_SECONDS / CONFIDENCE_TIMER_CAP_SECONDS
+    if capped <= high_max:
         return CONFIDENCE_HIGH
-    if capped <= AVERAGE_CONFIDENCE_MAX_SECONDS:
+    if capped <= avg_max:
         return CONFIDENCE_MEDIUM
     return CONFIDENCE_LOW
+
+
+def confidence_tier_key(confidence: int | None) -> str:
+    """Map stored confidence value to tier key."""
+    if confidence is None:
+        return CONFIDENCE_TIER_NONE
+    if confidence == CONFIDENCE_LOW:
+        return CONFIDENCE_TIER_LOW
+    if confidence == CONFIDENCE_MEDIUM:
+        return CONFIDENCE_TIER_AVERAGE
+    if confidence == CONFIDENCE_HIGH:
+        return CONFIDENCE_TIER_HIGH
+    return CONFIDENCE_TIER_NONE
 
 
 def classify_answer(confidence: int, is_correct: bool) -> str:
@@ -69,17 +85,7 @@ def confidence_tier_matrix(answers_qs: QuerySet) -> dict[str, int]:
     """Return answer counts grouped by reported confidence tier."""
     matrix = {key: 0 for key in CONFIDENCE_TIER_LABELS}
     for row in answers_qs.values("confidence"):
-        confidence = row["confidence"]
-        if confidence is None:
-            matrix[CONFIDENCE_TIER_NONE] += 1
-        elif confidence == CONFIDENCE_LOW:
-            matrix[CONFIDENCE_TIER_LOW] += 1
-        elif confidence == CONFIDENCE_MEDIUM:
-            matrix[CONFIDENCE_TIER_AVERAGE] += 1
-        elif confidence == CONFIDENCE_HIGH:
-            matrix[CONFIDENCE_TIER_HIGH] += 1
-        else:
-            matrix[CONFIDENCE_TIER_NONE] += 1
+        matrix[confidence_tier_key(row["confidence"])] += 1
     return matrix
 
 

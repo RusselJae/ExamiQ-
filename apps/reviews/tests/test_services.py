@@ -51,7 +51,13 @@ class TestReviewServices:
 
     def test_session_expired_rejects_submission(self, student, mcq_question):
         question, correct = mcq_question
-        session = start_review_session(student, question.topic, "easy", 15)
+        session = start_review_session(
+            student,
+            question.topic,
+            "easy",
+            15,
+            mode=ReviewSession.Mode.PRACTICE_REVIEW,
+        )
         session.started_at = session.started_at.replace(year=2020)
         session.save()
 

@@ -1,0 +1,589 @@
+EXAMIQ+ USER GUIDE
+==================
+
+This guide explains how to use the ExamiQ+ Self-Regulated Mathematics Exam
+Review System. It covers what each role does, how to navigate the system,
+and how data flows from setup through review sessions to analytics.
+
+
+1. SYSTEM OVERVIEW
+------------------
+
+ExamiQ+ is a web-based mathematics exam review platform for college students.
+It supports self-regulated learning through timed review sessions, confidence
+calibration tracking, mistake logging, adaptive question selection, and
+role-based analytics for faculty and department leadership.
+
+The system is organized around degree programs. Each program (for example,
+Computer Science, Information Technology, BSEd Mathematics, Psychology,
+Marketing, Human Resources, Hospitality Management, and Criminology) has
+its own math subjects, topics, and question bank. Students review content
+matched to their home degree program and section.
+
+There are four user roles:
+
+  - Student
+  - Faculty (displayed in the interface; stored in the system as professor)
+  - Department Chairperson
+  - Campus Administrator
+
+How the roles connect:
+
+  1. The Campus Administrator sets up academic years, terms, and program
+     sections (cohorts with capacity limits).
+  2. The Department Chairperson assigns faculty to sections, subjects, and
+     terms. This creates course offerings and exam setup records.
+  3. Faculty configure exam settings, build the question bank, and monitor
+     student performance.
+  4. Students complete timed review sessions. Answers, confidence levels,
+     and mistakes are recorded.
+  5. Analytics and reports feed back to students (self-regulation), faculty
+     (interventions), and chairpersons (program oversight).
+
+
+2. GETTING STARTED (ALL USERS)
+------------------------------
+
+2.1 Accessing the system
+
+  - Open the ExamiQ+ website in a web browser.
+  - Log in at /accounts/login/
+  - Create a new account at /accounts/signup/
+  - Log out at /accounts/logout/
+
+2.2 After login
+
+Each role is redirected to its home page:
+
+  - Student          -> /student/dashboard/
+  - Faculty          -> /professor/courses/
+  - Chairperson      -> /chairperson/dashboard/
+  - Campus Admin     -> /admin/ (Django admin) or /campus/ via sidebar
+
+2.3 Profile and settings
+
+All authenticated users can manage their account at /profile/:
+
+  - Update name and profile photo
+  - Request an email change (verification required)
+  - Change password
+
+Students can also update program, year level, and section on their profile.
+These fields are required before a student can start a review session.
+
+Notifications are available at /profile/notifications/. Users can view,
+mark as read, and check unread counts.
+
+2.4 Registration and approval
+
+Public signup is available for three roles:
+
+  Student
+    - Signs up with student number (9 digits), program, year level, section,
+      and phone number.
+    - Account is approved and activated immediately.
+    - Can log in and use the system right away.
+
+  Faculty
+    - Signs up with employee ID.
+    - Account starts as pending and inactive.
+    - Must wait for a Campus Administrator to approve before logging in.
+
+  Department Chairperson
+    - Signs up with employee ID and department.
+    - Account starts as pending and inactive.
+    - Must wait for a Campus Administrator to approve before logging in.
+
+  Campus Administrator
+    - Not available on the public signup page.
+    - Accounts are created by existing administrators or system seeding.
+
+When a pending or rejected user tries to log in, they are redirected to the
+login page with a message indicating their registration status.
+
+Campus Administrators receive email and in-app notifications when new
+faculty or chairperson registrations are submitted.
+
+
+3. ROLE: STUDENT
+----------------
+
+3.1 Purpose
+
+Students use ExamiQ+ to practice mathematics through timed exam-style review
+sessions, track their mistakes and weak areas, and build awareness of how
+well their confidence matches their actual performance (calibration).
+
+3.2 Navigation (sidebar)
+
+Main:
+  - Dashboard        (/student/dashboard/)
+  - Start Review     (/student/review/setup/)
+
+Insights:
+  - Session History  (/student/sessions/)
+  - Mistakes         (/student/mistakes/)
+  - Weak Areas       (/student/mistakes/patterns/)
+  - Topic Progress   (/student/topics/)
+
+All users also have Settings (profile) and Log out in the sidebar footer.
+
+3.3 Prerequisites before starting a review
+
+Before the Start Review page allows a session, the system checks:
+
+  - The student profile has a section and year level set.
+  - The student's year level matches their assigned section.
+  - A current academic term is active (set by Campus Administrator).
+  - At least one teaching assignment exists for the student's section with
+    exam setup enabled by faculty.
+
+If any requirement is missing, the setup page shows an eligibility message
+explaining what needs to be completed.
+
+3.4 Starting a review session (step by step)
+
+  1. Go to Start Review (/student/review/setup/).
+  2. Select a subject from those available for the student's program and
+     section.
+  3. Select a topic within that subject.
+  4. Select a difficulty level (Beginner, Intermediate, or Advanced).
+     Available difficulties may be limited by faculty exam setup.
+  5. Confirm or adjust the session duration in minutes.
+  6. Submit the setup form to begin the session.
+
+Optional pre-session prompts (confidence level and session goal) may appear
+before the exam begins.
+
+3.5 During the timed exam
+
+  - The session runs on a countdown timer with a per-question time limit.
+  - Questions are selected adaptively. The system prioritizes topics where
+    the student has prior mistakes, questions answered wrong with high
+    inferred confidence, and questions not yet seen.
+  - The student selects an answer for each question before time runs out.
+  - Confidence is inferred from response time, not from a manual rating
+    after each answer.
+  - Explanations are not shown during the exam. They appear on the session
+    summary after the exam ends.
+  - The session continues until all questions are answered or time expires.
+
+3.6 After the session
+
+  - The student is taken to the session summary (/student/review/<id>/summary/).
+  - The summary shows accuracy, calibration insights (mastery, misconception,
+    lucky guess, expected gap), and review recommendations for future study.
+  - Completed sessions appear in Session History.
+
+3.7 Using analytics and self-regulation tools
+
+  Dashboard
+    Performance overview, calibration summary, and recommended topics or
+    actions based on recent sessions.
+
+  Session History
+    List of past completed and expired review sessions.
+
+  Mistakes
+    Browse individual wrong answers. Open an answer detail page to review
+    the question, the student's response, and step-by-step explanations.
+    Optional AI-generated feedback can be requested on mistake detail pages
+    when AI is enabled on the server.
+
+  Weak Areas
+    View mistake patterns grouped by topic. Drill into a topic to review
+    all answers in that area.
+
+  Topic Progress
+    Track mastery progress across math topics in the student's program.
+
+
+4. ROLE: FACULTY (PROFESSOR)
+----------------------------
+
+4.1 Purpose
+
+Faculty manage course offerings, configure exam access for students, build
+and submit questions for approval, monitor class performance, identify
+students who need intervention, and improve explanations on commonly
+missed questions.
+
+4.2 Navigation (sidebar)
+
+Main:
+  - Overview         (/professor/overview/)
+  - My Courses       (/professor/courses/)
+
+Per course (when a course is selected):
+  - Analytics        (/professor/courses/<id>/)
+  - Roster           (/professor/courses/<id>/roster/)
+  - Exam Setup       (/professor/courses/<id>/exam-setup/)
+  - Heatmap          (/professor/courses/<id>/heatmap/)
+  - Topics           (/professor/courses/<id>/topics/)
+  - Question Bank    (/professor/courses/<id>/questions/)
+  - Feedback         (/professor/courses/<id>/feedback/)
+
+4.3 Course access
+
+Faculty see courses in two ways:
+
+  Chairperson-assigned courses
+    When the department chairperson has created teaching assignments, the
+    faculty member's courses are created automatically from those
+    assignments. Self-creating new courses is blocked in this case.
+    Contact the chairperson to change teaching load.
+
+  Self-created courses
+    When no chairperson assignments exist, faculty can create their own
+    course offerings at /professor/courses/create/. They set term, year,
+    section, and program. Courses can be cloned to a new term or archived
+    when no longer needed.
+
+Faculty can only access and manage courses they own.
+
+4.4 Exam setup
+
+At /professor/courses/<id>/exam-setup/, faculty configure:
+
+  - Whether exams are enabled for students in the assigned section
+  - Session duration in minutes
+  - Seconds allowed per question
+  - Which topics students may select
+  - Which difficulty levels are available
+
+Exam setup must be enabled for students in that section to see the subject
+on their Start Review page.
+
+4.5 Review windows (optional)
+
+Faculty can create scheduled review windows at
+/professor/courses/<id>/windows/. Windows define named review periods with
+start and end dates. Note: the primary student review path uses Exam Setup
+settings rather than window-based session launch.
+
+4.6 Topics
+
+Faculty manage course topics at /professor/courses/<id>/topics/. They can
+create, edit, and delete topics tied to subjects within the course program.
+
+4.7 Question bank
+
+Faculty build questions at /professor/courses/<id>/questions/:
+
+  Single question create
+    Add one question with stem, choices, correct answer, explanation steps,
+    topic, and difficulty.
+
+  Batch create
+    Build multiple questions in one session using a draft queue.
+
+  Edit and deactivate
+  - Edit existing questions. Approved questions return to pending status
+    when edited and must be re-approved by the chairperson.
+  - Deactivate questions no longer needed.
+
+  AI-assisted tools (when AI is enabled on the server)
+  - Generate draft questions from a topic and difficulty
+  - Validate draft questions for structure and quality
+  - Suggest difficulty for a question
+  - Generate variations of an existing question
+
+All faculty-created questions start with status PENDING. They are not used
+in student sessions until a chairperson approves them.
+
+4.8 Feedback
+
+At /professor/courses/<id>/feedback/, faculty can edit step-by-step
+explanations for approved questions that students frequently miss. This
+helps clarify common errors after review sessions.
+
+4.9 Analytics and interventions
+
+  Overview
+    Cross-course summary cards for all of the faculty member's courses.
+
+  Course analytics
+    Per-course performance summary, calibration breakdown, and intervention
+    list flagging students who may need support (for example, low accuracy,
+    calibration gaps, or insufficient practice).
+
+  Roster
+    Student list with performance bands. Drill into an individual student for
+    course-specific accuracy, calibration analysis, and session history.
+
+  Heatmap
+    Topic mastery heatmap showing class-wide strengths and weaknesses.
+
+  Intervention CSV export
+    Download a CSV from /professor/courses/<id>/interventions/export/
+    containing student names, intervention flags, accuracy, and suggested
+    actions.
+
+  AI course summary
+    Generate a narrative course report from the analytics page when AI is
+    enabled.
+
+
+5. ROLE: DEPARTMENT CHAIRPERSON
+-------------------------------
+
+5.1 Purpose
+
+The chairperson oversees mathematics review activity within their department.
+They assign faculty teaching loads, approve question bank submissions,
+and monitor program-level performance across all degree programs managed
+by the department.
+
+5.2 Scope
+
+A chairperson's access is limited to their own department. They can only
+manage assignments, approve questions, and view analytics for programs
+where their department is the managing department.
+
+5.3 Navigation (sidebar)
+
+  - Programs           (/chairperson/dashboard/)
+  - Assignments        (/chairperson/assignments/)
+  - Question Review    (/chairperson/questions/review/)
+  - Cross-Program      (/chairperson/analytics/by-program/)
+  - Course Audit       (/chairperson/courses/)
+
+The Question Review menu shows a badge when pending questions are waiting
+for approval.
+
+5.4 Teaching assignments
+
+At /chairperson/assignments/, the chairperson links:
+
+  - A faculty member
+  - A program section (cohort)
+  - A subject
+  - An academic term
+
+Creating an assignment automatically creates or links a course offering and
+an exam setup record for that faculty member. This is the primary way
+students gain access to review subjects for their section.
+
+Assignments can be deleted when they are no longer needed.
+
+5.5 Question review
+
+At /chairperson/questions/review/, the chairperson sees all PENDING
+questions submitted by faculty for programs in their department.
+
+For each question, the chairperson can:
+
+  Approve
+    Question status becomes APPROVED and it becomes available in student
+    review sessions.
+
+  Reject
+    Question status becomes REJECTED. An optional note can be left for the
+    faculty member.
+
+  Edit and approve
+    Open the question, make corrections, save, and approve in one step.
+
+5.6 Oversight analytics
+
+  Programs dashboard
+    Per-program performance summaries for all programs in the department.
+
+  Cross-Program analytics
+    Department-wide math analytics broken down by home degree program.
+
+  Course audit
+    List of course offerings that have review activity from students in
+    department programs.
+
+
+6. ROLE: CAMPUS ADMINISTRATOR
+-----------------------------
+
+6.1 Purpose
+
+The Campus Administrator maintains the institutional infrastructure that
+all other roles depend on: user accounts, program sections, and the academic
+calendar. They approve or reject faculty and chairperson registration
+requests and can provision accounts directly.
+
+6.2 Navigation (sidebar)
+
+  - Campus Dashboard    (/campus/)
+  - Users               (/campus/users/)
+  - Sections            (/campus/sections/)
+  - Academic Calendar   (/campus/academic-calendar/)
+
+Campus Administrators and system superusers see this section in addition
+to any other role-specific navigation they may have.
+
+6.3 User management
+
+At /campus/users/, the administrator can:
+
+  - List and filter all users by role and approval status
+  - Approve pending faculty and chairperson registrations
+  - Reject pending registrations
+  - Activate or deactivate existing accounts (cannot deactivate own account)
+  - Provision new faculty accounts at /campus/users/create/professor/
+  - Provision new chairperson accounts at /campus/users/create/chairperson/
+
+Approved users receive an email notification and can log in immediately.
+Provisioned accounts are created in an approved, active state.
+
+6.4 Section management
+
+At /campus/sections/, the administrator manages program sections (cohorts):
+
+  - Create individual sections with program, year level, academic year, and
+    capacity
+  - Bulk-create sections
+  - Edit section details and capacity
+
+Sections are used during student signup and chairperson teaching assignments.
+Capacity limits are enforced when students register.
+
+6.5 Academic calendar
+
+At /campus/academic-calendar/, the administrator:
+
+  - Creates academic year records (for example, 2025-2026)
+  - Creates terms within each year (for example, 1st Semester, 2nd Semester)
+  - Sets which year and term are currently active
+
+Students cannot start review sessions unless a current academic term is set.
+
+
+7. END-TO-END SYSTEM FLOW
+---------------------------
+
+7.1 Flow A: Account lifecycle
+
+  1. User visits the ExamiQ+ landing page.
+  2. User signs up at /accounts/signup/ and selects a role.
+  3. Student accounts are activated immediately.
+     Faculty and chairperson accounts enter pending status.
+  4. Campus Administrator reviews pending registrations at /campus/users/.
+  5. Administrator approves or rejects the account.
+  6. Approved user logs in and is redirected to their role dashboard.
+  7. User maintains profile and notification settings at /profile/.
+
+7.2 Flow B: Content and access pipeline
+
+  1. Campus Administrator creates academic years, terms, and program sections.
+  2. Campus Administrator sets the current academic year and term.
+  3. Chairperson creates teaching assignments linking faculty, section,
+     subject, and term.
+  4. System creates course offering and exam setup for each assignment.
+  5. Faculty enables exam setup and configures topics, difficulties, and timing.
+  6. Faculty creates questions in the question bank (manually or with AI).
+  7. All new questions enter PENDING status.
+  8. Chairperson reviews and approves questions.
+  9. Approved questions become available for student review sessions.
+
+7.3 Flow C: Student review cycle
+
+  1. Student completes profile (program, year level, section).
+  2. Student opens Start Review and passes eligibility checks.
+  3. Student selects subject, topic, difficulty, and duration.
+  4. System creates a timed review session.
+  5. Adaptive engine selects questions from approved, active bank items.
+  6. Student answers each question within the time limit.
+  7. System grades each answer, infers confidence from response time, and
+     logs mistakes for wrong answers.
+  8. Session ends when questions are exhausted or time expires.
+  9. Student views session summary with calibration insights and
+     recommendations.
+  10. Data feeds into Dashboard, Session History, Mistakes, Weak Areas,
+      and Topic Progress.
+
+7.4 Flow D: Instructional response
+
+  1. Faculty opens course analytics or roster.
+  2. System flags students on the intervention list based on accuracy,
+     calibration gaps, or practice frequency.
+  3. Faculty drills into individual student performance.
+  4. Faculty exports intervention CSV for follow-up or advising.
+  5. Faculty edits explanations on high-mistake questions in Feedback.
+  6. Faculty may generate an AI course summary for reporting.
+
+7.5 Flow E: Institutional oversight
+
+  1. Chairperson views Programs dashboard for department-wide performance.
+  2. Chairperson monitors pending questions and approves or rejects submissions.
+  3. Chairperson reviews Cross-Program analytics across degree programs.
+  4. Chairperson audits which courses have active student review participation.
+
+
+8. QUESTION LIFECYCLE (REFERENCE)
+---------------------------------
+
+  Faculty creates question
+       |
+       v
+    PENDING  ---- Chairperson rejects ---->  REJECTED
+       |
+       v
+  Chairperson approves
+       |
+       v
+    APPROVED (active in student sessions)
+
+If faculty edits an approved question, it returns to PENDING and must be
+re-approved before it is used in sessions again.
+
+Faculty can deactivate questions at any time. Deactivated questions are
+removed from the active pool regardless of status.
+
+
+9. QUICK REFERENCE: ROLE PERMISSIONS
+------------------------------------
+
+Student
+  Can do:
+    - Start timed review sessions for their program and section
+    - View personal dashboard, session history, mistakes, and topic progress
+    - Request AI feedback on individual wrong answers (when AI enabled)
+    - Update profile including program, year level, and section
+  Cannot do:
+    - Access faculty, chairperson, or campus admin pages
+    - Create or approve questions
+    - View other students' data
+
+Faculty
+  Can do:
+    - Manage own course offerings (create, clone, archive when allowed)
+    - Configure exam setup and review windows
+    - Create, edit, and deactivate questions (submitted as PENDING)
+    - Use AI tools for question generation and validation (when AI enabled)
+    - View course analytics, roster, heatmap, and intervention exports
+    - Edit feedback on high-mistake approved questions
+  Cannot do:
+    - Approve own questions
+    - Access other faculty members' courses
+    - Manage campus-wide users, sections, or calendar
+    - Self-create courses when chairperson assignments exist
+
+Department Chairperson
+  Can do:
+    - Create and delete teaching assignments in own department
+    - Approve, reject, or edit-then-approve pending questions
+    - View program dashboard, cross-program analytics, and course audit
+  Cannot do:
+    - Access other departments' assignments or analytics
+    - Approve questions for programs outside managing department
+    - Manage campus infrastructure (sections, calendar)
+
+Campus Administrator
+  Can do:
+    - Approve or reject faculty and chairperson registrations
+    - Provision faculty and chairperson accounts directly
+    - Activate or deactivate user accounts
+    - Manage program sections and academic calendar
+    - View campus dashboard with user counts and activity feed
+  Cannot do:
+    - Sign up through the public registration page
+    - Approve student accounts (students are auto-approved)
+
+
+END OF GUIDE

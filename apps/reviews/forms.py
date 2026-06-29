@@ -50,12 +50,6 @@ class ReviewSetupForm(forms.Form):
         choices=PILOT_DIFFICULTY_CHOICES,
         widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_difficulty"}),
     )
-    duration_minutes = forms.IntegerField(
-        min_value=5,
-        max_value=120,
-        initial=30,
-        widget=forms.NumberInput(attrs={"class": FORM_INPUT_CLASS}),
-    )
     pre_session_confidence = forms.ChoiceField(
         choices=PRE_SESSION_CONFIDENCE_CHOICES,
         required=False,

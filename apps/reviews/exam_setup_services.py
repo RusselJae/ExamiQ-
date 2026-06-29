@@ -94,6 +94,12 @@ def topics_for_student_subject(student: User, subject: Subject):
     return base
 
 
+def exam_seconds_per_question(course) -> int:
+    """Return per-question time limit from exam setup."""
+    setup = get_or_create_exam_setup(course)
+    return setup.seconds_per_question
+
+
 def exam_timing_for_course(course) -> tuple[int, int]:
     """Return (duration_minutes, seconds_per_question) from exam setup."""
     setup = get_or_create_exam_setup(course)

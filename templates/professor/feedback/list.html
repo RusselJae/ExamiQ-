@@ -10,6 +10,10 @@
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
+<div class="bento-grid mb-4">
+    {% include "components/filter_bar.html" %}
+</div>
+
 <div class="bento-card p-6 overflow-x-auto shadow-sm">
     {% if questions %}
     <table class="w-full text-sm">

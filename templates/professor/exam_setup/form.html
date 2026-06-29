@@ -31,32 +31,18 @@
 
         <section class="exam-setup-card bento-card p-6">
             <h2 class="exam-setup-card__title">Timing</h2>
-            <p class="exam-setup-card__subtitle">Set how long the exam runs and how much time students get per question.</p>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                <div>
-                    <label for="id_duration_minutes" class="block text-sm font-medium text-examiq-navy mb-1">
-                        {{ form.duration_minutes.label }}
-                    </label>
-                    {{ form.duration_minutes }}
-                    {% if form.duration_minutes.help_text %}
-                    <p class="text-xs text-examiq-slate mt-1">{{ form.duration_minutes.help_text }}</p>
-                    {% endif %}
-                    {% if form.duration_minutes.errors %}
-                    <p class="text-xs text-red-600 mt-1">{{ form.duration_minutes.errors.0 }}</p>
-                    {% endif %}
-                </div>
-                <div>
-                    <label for="id_seconds_per_question" class="block text-sm font-medium text-examiq-navy mb-1">
-                        {{ form.seconds_per_question.label }}
-                    </label>
-                    {{ form.seconds_per_question }}
-                    {% if form.seconds_per_question.help_text %}
-                    <p class="text-xs text-examiq-slate mt-1">{{ form.seconds_per_question.help_text }}</p>
-                    {% endif %}
-                    {% if form.seconds_per_question.errors %}
-                    <p class="text-xs text-red-600 mt-1">{{ form.seconds_per_question.errors.0 }}</p>
-                    {% endif %}
-                </div>
+            <p class="exam-setup-card__subtitle">Set how much time students get per question. Exams end when all questions are answered.</p>
+            <div class="mt-4">
+                <label for="id_seconds_per_question" class="block text-sm font-medium text-examiq-navy mb-1">
+                    {{ form.seconds_per_question.label }}
+                </label>
+                {{ form.seconds_per_question }}
+                {% if form.seconds_per_question.help_text %}
+                <p class="text-xs text-examiq-slate mt-1">{{ form.seconds_per_question.help_text }}</p>
+                {% endif %}
+                {% if form.seconds_per_question.errors %}
+                <p class="text-xs text-red-600 mt-1">{{ form.seconds_per_question.errors.0 }}</p>
+                {% endif %}
             </div>
         </section>
 

@@ -27,22 +27,18 @@ class ExamSetupForm(forms.ModelForm):
         model = ExamSetup
         fields = [
             "is_enabled",
-            "duration_minutes",
             "seconds_per_question",
             "topics",
             "allowed_difficulties",
         ]
         widgets = {
             "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
-            "duration_minutes": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS, "min": 5, "max": 120}),
             "seconds_per_question": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}),
         }
         labels = {
-            "duration_minutes": "Session duration (minutes)",
             "seconds_per_question": "Time per question (seconds)",
         }
         help_texts = {
-            "duration_minutes": "Total length of the timed exam session.",
             "seconds_per_question": "How long students have to answer each question.",
         }
 
@@ -57,9 +53,6 @@ class ExamSetupForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        duration = cleaned.get("duration_minutes")
-        if duration is not None and not 5 <= duration <= 120:
-            raise forms.ValidationError("Duration must be between 5 and 120 minutes.")
         seconds = cleaned.get("seconds_per_question")
         if seconds is not None and not 10 <= seconds <= 120:
             raise forms.ValidationError("Seconds per question must be between 10 and 120.")

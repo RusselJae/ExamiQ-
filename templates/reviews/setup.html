@@ -42,7 +42,6 @@
         {% else %}
         <form method="post" id="review-setup-form" class="space-y-4">
             {% csrf_token %}
-            {{ form.duration_minutes.as_hidden }}
             {{ form.pre_session_confidence.as_hidden }}
             {{ form.session_goal.as_hidden }}
             {{ form.subject|as_crispy_field }}
@@ -67,23 +66,20 @@
 (function() {
     const subjectSelect = document.getElementById("id_subject");
     const topicSelect = document.getElementById("id_topic");
-    const durationInput = document.getElementById("id_duration_minutes");
     const timingSummary = document.getElementById("exam-timing-summary");
     if (!subjectSelect || !topicSelect) return;
 
     const preselectedTopicId = {% if preselected_topic_id %}{{ preselected_topic_id }}{% else %}null{% endif %};
 
     async function loadTiming(subjectId) {
-        if (!timingSummary || !durationInput) return;
+        if (!timingSummary) return;
         timingSummary.classList.add("hidden");
         timingSummary.textContent = "";
         if (!subjectId) return;
         const resp = await fetch("{% url 'reviews:setup_timing' %}?subject=" + encodeURIComponent(subjectId));
         const data = await resp.json();
-        if (data.duration_minutes) {
-            durationInput.value = data.duration_minutes;
-            timingSummary.textContent =
-                data.duration_minutes + " min session · " + data.seconds_per_question + " sec per question";
+        if (data.seconds_per_question) {
+            timingSummary.textContent = data.seconds_per_question + " seconds per question";
             timingSummary.classList.remove("hidden");
         }
     }

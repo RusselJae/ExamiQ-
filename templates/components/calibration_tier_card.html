@@ -1,11 +1,12 @@
 <div class="bento-card bento-card-inner h-full">
     <h2 class="text-lg font-semibold text-examiq-navy mb-4">{{ title|default:"Confidence Calibration" }}</h2>
     <div class="space-y-1">
+        {% load examiq_tags %}
         {% for key, count in calibration_matrix.items %}
         <div class="calibration-row text-sm">
-            <span class="capitalize text-examiq-navy">{% if key == "none" %}No{% elif key == "low" %}Low{% elif key == "average" %}Average{% elif key == "high" %}High{% else %}{{ key|cut:"_" }}{% endif %} confidence</span>
+            <span class="text-examiq-navy">{{ key|confidence_tier_badge }}</span>
             <div class="calibration-bar">
-                <div class="calibration-bar-fill progress-bar-fill--{% if key == 'high' %}good{% elif key == 'low' %}coral{% else %}muted{% endif %}"
+                <div class="calibration-bar-fill progress-bar-fill--{% if key == 'high' %}good{% elif key == 'low' or key == 'none' %}coral{% else %}muted{% endif %}"
                      style="width: {% widthratio count calibration_max 100 %}%"></div>
             </div>
             <span class="font-medium text-examiq-slate text-right">{{ count }}</span>

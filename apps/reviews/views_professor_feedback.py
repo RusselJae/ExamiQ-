@@ -4,6 +4,14 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import ListView, UpdateView
 
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+)
 from apps.core.mixins import ProfessorCourseMixin
 from apps.analytics.services import get_step_feedback_stats
 from apps.questions.forms import ExplanationStepFormSet
@@ -14,9 +22,10 @@ class FeedbackListView(ProfessorCourseMixin, ListView):
     model = Question
     template_name = "professor/feedback/list.html"
     context_object_name = "questions"
+    paginate_by = 25
 
     def get_queryset(self):
-        return (
+        queryset = (
             Question.objects.filter(
                 topic__subject__program=self.course.program,
                 is_active=True,
@@ -25,12 +34,25 @@ class FeedbackListView(ProfessorCourseMixin, ListView):
             .select_related("topic")
             .annotate(mistake_count=Count("mistake_records"))
             .filter(mistake_count__gt=0)
-            .order_by("-mistake_count")
+        )
+        queryset = apply_date_range(queryset, self.request, "created")
+        return apply_sort(
+            queryset,
+            self.request,
+            newest_field="-mistake_count",
+            oldest_field="mistake_count",
+            default="newest",
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "feedback"
+        filter_names = ["date_from", "date_to", "sort"]
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            STANDARD_DATE_SORT_FILTER_SPECS,
+        )
+        context["filter_has_active"] = has_active_filters(self.request, filter_names)
         return context
 
 

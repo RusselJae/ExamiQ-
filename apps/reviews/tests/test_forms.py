@@ -45,7 +45,6 @@ class TestReviewSetupForm:
                 "subject": subject.pk,
                 "topic": topic.pk,
                 "difficulty": Question.Difficulty.EASY,
-                "duration_minutes": 30,
             },
             student=student,
         )
@@ -60,7 +59,6 @@ class TestReviewSetupForm:
                 "subject": subject.pk,
                 "topic": topic.pk,
                 "difficulty": Question.Difficulty.EASY,
-                "duration_minutes": 30,
             },
             student=student,
         )

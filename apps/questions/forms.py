@@ -96,10 +96,11 @@ class TopicForm(forms.ModelForm):
 class SimplifiedQuestionChoiceForm(forms.ModelForm):
     class Meta:
         model = QuestionChoice
-        fields = ["text", "is_correct"]
+        fields = ["text", "is_correct", "error_type"]
         widgets = {
             "text": forms.TextInput(attrs={"class": INPUT_CLASS}),
             "is_correct": forms.CheckboxInput(attrs={"class": "rounded border-slate-300 correct-choice-cb"}),
+            "error_type": forms.Select(attrs={"class": INPUT_CLASS}),
         }
 
 
@@ -139,7 +140,7 @@ SimplifiedQuestionChoiceFormSet = inlineformset_factory(
     QuestionChoice,
     form=SimplifiedQuestionChoiceForm,
     formset=BaseSimplifiedChoiceFormSet,
-    fields=["text", "is_correct"],
+    fields=["text", "is_correct", "error_type"],
     extra=4,
     max_num=4,
     can_delete=False,

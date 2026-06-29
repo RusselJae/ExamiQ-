@@ -29,7 +29,6 @@ class TestExamSetupViews:
             url,
             {
                 "is_enabled": "",
-                "duration_minutes": 45,
                 "seconds_per_question": 40,
                 "allowed_difficulties": setup.effective_difficulties(),
             },
@@ -37,7 +36,6 @@ class TestExamSetupViews:
         assert response.status_code == 302
         setup.refresh_from_db()
         assert setup.is_enabled is False
-        assert setup.duration_minutes == 45
         assert setup.seconds_per_question == 40
 
     def test_student_session_uses_exam_setup_timing(
@@ -48,9 +46,8 @@ class TestExamSetupViews:
         question, _ = mcq_question
         course = teaching_assignment.course
         setup = get_or_create_exam_setup(course)
-        setup.duration_minutes = 50
         setup.seconds_per_question = 45
-        setup.save(update_fields=["duration_minutes", "seconds_per_question"])
+        setup.save(update_fields=["seconds_per_question"])
 
         client.force_login(student)
         response = client.post(
@@ -59,12 +56,10 @@ class TestExamSetupViews:
                 "subject": topic.subject_id,
                 "topic": topic.pk,
                 "difficulty": question.difficulty,
-                "duration_minutes": 15,
             },
         )
         assert response.status_code == 302
         session = ReviewSession.objects.filter(student=student).latest("pk")
-        assert session.duration_minutes == 50
         assert session.seconds_per_question == 45
 
     def test_other_professor_cannot_access_exam_setup(

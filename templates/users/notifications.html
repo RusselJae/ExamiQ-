@@ -5,6 +5,10 @@
 {% block content %}
 {% include "components/page_header.html" with title="Notifications" subtitle="Account and workflow updates." %}
 
+<div class="bento-grid mb-4">
+    {% include "components/filter_bar.html" %}
+</div>
+
 {% if notifications %}
 <form method="post" action="{% url 'users:notifications_read' %}">
     {% csrf_token %}

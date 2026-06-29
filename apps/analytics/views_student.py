@@ -15,7 +15,14 @@ from apps.analytics.services import (
     student_performance_summary,
     topic_progress_summary,
 )
-from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
+from apps.core.filtering import (
+    STANDARD_DATE_SORT_FILTER_SPECS,
+    apply_date_range,
+    apply_sort,
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+)
 from apps.core.mixins import StudentRequiredMixin
 from apps.questions.models import Question, Topic
 from apps.reviews.models import Answer, ReviewSession
@@ -42,7 +49,13 @@ class MistakeListView(StudentRequiredMixin, ListView):
         queryset = (
             MistakeRecord.objects.filter(student=self.request.user)
             .select_related("question", "topic", "answer")
-            .order_by("-occurred_at")
+        )
+        queryset = apply_date_range(queryset, self.request, "occurred_at")
+        queryset = apply_sort(
+            queryset,
+            self.request,
+            newest_field="-occurred_at",
+            oldest_field="occurred_at",
         )
 
         search = get_filter_param(self.request, "q")
@@ -52,21 +65,19 @@ class MistakeListView(StudentRequiredMixin, ListView):
             )
 
         confidence_band = get_filter_param(self.request, "confidence")
-        confidence_map = {"low": 1, "medium": 3, "high": 5}
+        confidence_map = {"none": None, "low": 1, "average": 3, "high": 5}
         if confidence_band in confidence_map:
-            queryset = queryset.filter(answer__confidence=confidence_map[confidence_band])
-
-        recent = get_filter_param(self.request, "recent")
-        days_map = {"7": 7, "30": 30, "90": 90}
-        if recent in days_map:
-            cutoff = timezone.now() - timedelta(days=days_map[recent])
-            queryset = queryset.filter(occurred_at__gte=cutoff)
+            value = confidence_map[confidence_band]
+            if value is None:
+                queryset = queryset.filter(answer__confidence__isnull=True)
+            else:
+                queryset = queryset.filter(answer__confidence=value)
 
         return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        filter_names = ["q", "confidence", "recent"]
+        filter_names = ["q", "confidence", "date_from", "date_to", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -81,22 +92,13 @@ class MistakeListView(StudentRequiredMixin, ListView):
                     "name": "confidence",
                     "label": "Confidence",
                     "choices": [
-                        ("low", "Low"),
-                        ("medium", "Medium"),
-                        ("high", "High"),
+                        ("none", "No Confidence"),
+                        ("low", "Low Confidence"),
+                        ("average", "Average Confidence"),
+                        ("high", "High Confidence"),
                     ],
                 },
-                {
-                    "type": "select",
-                    "name": "recent",
-                    "label": "Date",
-                    "all_label": "Any time",
-                    "choices": [
-                        ("7", "Last 7 days"),
-                        ("30", "Last 30 days"),
-                        ("90", "Last 90 days"),
-                    ],
-                },
+                *STANDARD_DATE_SORT_FILTER_SPECS,
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
@@ -147,7 +149,13 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
                 status__in=[ReviewSession.Status.COMPLETED, ReviewSession.Status.EXPIRED],
             )
             .select_related("topic", "course")
-            .order_by("-started_at")
+        )
+        queryset = apply_date_range(queryset, self.request, "started_at")
+        queryset = apply_sort(
+            queryset,
+            self.request,
+            newest_field="-started_at",
+            oldest_field="started_at",
         )
 
         search = get_filter_param(self.request, "q")
@@ -166,7 +174,7 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        filter_names = ["q", "difficulty", "status"]
+        filter_names = ["q", "difficulty", "status", "date_from", "date_to", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -191,6 +199,7 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
                         (ReviewSession.Status.EXPIRED, "Expired"),
                     ],
                 },
+                *STANDARD_DATE_SORT_FILTER_SPECS,
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)

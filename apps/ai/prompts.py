@@ -55,16 +55,22 @@ If the student asks something outside this topic:
 
 CONFIDENCE_ADAPTIVE_RULES = """\
 ### CONFIDENCE-ADAPTIVE BEHAVIOR
-- Low confidence → slow, simple, supportive explanations.
-- Medium confidence → balanced explanation.
-- High confidence → deeper reasoning; remind them to check work when needed."""
+- Low confidence: slow, simple, supportive explanations.
+- Medium confidence: balanced explanation.
+- High confidence: deeper reasoning; remind them to check work when needed.
+
+### FORMATTING RULES
+- Use plain sentences. Avoid decorative symbols (arrows, bullets, equals signs, markdown headers).
+- Only use math symbols when the question, answer, or solution already uses them.
+- For incorrect answers, include numbered step-by-step correction (Step 1, Step 2, ...).
+- Keep each step on its own line."""
 
 AI_FEEDBACK_JSON_RULES = """\
 CRITICAL JSON FORMATTING RULES:
 - Use proper JSON string escaping.
-- For 'correction_steps': use ACTUAL newlines in the JSON string (not literal \\n).
-- Preserve mathematical notation carefully; escape quotes inside strings.
-- Do NOT add extra backslashes.
+- For correction_steps: use ACTUAL newlines in the JSON string (not literal backslash-n).
+- Use plain language. Avoid decorative symbols unless math notation appears in the question.
+- correction_steps must be numbered steps (Step 1, Step 2, ...) with one action per step.
 - Return ONLY the JSON object — no markdown fences or prose."""
 
 AI_FEEDBACK_JSON_SCHEMA = """\
@@ -424,9 +430,11 @@ def build_adaptive_feedback_prompt(
     user_prompt = f"""\
 ### DYNAMIC FEEDBACK RULES
 When the student is incorrect:
-- Give step-by-step solutions and explain their mistake clearly.
-- If confidence is LOW → simpler explanations.
-- If confidence is HIGH → deeper reasoning.
+- Give numbered step-by-step solutions and explain their mistake clearly.
+- If confidence is LOW, use simpler explanations.
+- If confidence is HIGH, include deeper reasoning.
+
+Use plain language. Avoid decorative symbols unless the question uses math notation.
 
 ### SKILL & PRACTICE RECOMMENDATION RULES
 Include what to practice next, ideal difficulty, concepts needing attention, \

@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="mb-6">
-    <a href="{% url 'analytics_professor:course_roster' course.pk %}" class="text-link">&larr; Back to roster</a>
+    <a href="{% url 'analytics_professor:course_roster' course.pk %}" class="text-link">&larr; Back to masterlist</a>
     <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ student.get_full_name|default:student.email }}</h1>
     <p class="text-examiq-slate">{{ student.email }}</p>
 </div>

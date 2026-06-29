@@ -1,0 +1,20 @@
+<div id="post-session-feedback-modal" class="feedback-modal hidden" role="dialog" aria-modal="true" aria-labelledby="post-session-feedback-title">
+    <div class="feedback-modal__backdrop" data-dismiss-feedback-modal></div>
+    <div class="feedback-modal__panel bento-card bento-card--elevated">
+        <div class="feedback-modal__header">
+            <div>
+                <h2 id="post-session-feedback-title" class="text-xl font-semibold text-examiq-navy">Your Exam Feedback</h2>
+                <p class="text-sm text-examiq-slate mt-1">Personalized explanations for each question you answered.</p>
+            </div>
+            <button type="button" class="feedback-modal__close" data-dismiss-feedback-modal aria-label="Close">&times;</button>
+        </div>
+        <div id="post-session-feedback-loading" class="feedback-modal__loading">
+            <div class="feedback-modal__spinner" aria-hidden="true"></div>
+            <p class="text-sm text-examiq-slate">Generating feedback for your answers…</p>
+        </div>
+        <div id="post-session-feedback-list" class="feedback-modal__list hidden"></div>
+        <div class="feedback-modal__footer">
+            <button type="button" class="btn-primary w-full" data-dismiss-feedback-modal>Done</button>
+        </div>
+    </div>
+</div>

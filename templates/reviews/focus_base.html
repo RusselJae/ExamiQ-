@@ -102,6 +102,7 @@
         </div>
 
         <div class="sidebar-content space-y-3">
+            {% if not is_timed_exam %}
             <div class="focus-card focus-card--center">
                 <p class="focus-card__label">Time Remaining</p>
                 <div id="timer"
@@ -109,8 +110,14 @@
                      data-remaining="{{ remaining_seconds }}">
                     --:--
                 </div>
-                <p class="text-xs text-examiq-slate mt-2">{{ session.duration_minutes }} min session</p>
             </div>
+            {% else %}
+            <div class="focus-card focus-card--center">
+                <p class="focus-card__label">Per question</p>
+                <p class="text-2xl font-mono font-bold text-examiq-navy mt-1">{{ session.seconds_per_question }}s</p>
+                <p class="text-xs text-examiq-slate mt-2">Timer resets each question</p>
+            </div>
+            {% endif %}
             <div class="focus-card focus-card--center">
                 <p class="focus-card__label">Status</p>
                 <p class="focus-status flex items-center justify-center gap-2 text-sm font-medium text-examiq-navy mt-1">
