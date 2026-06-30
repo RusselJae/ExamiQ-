@@ -10,42 +10,47 @@
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-    {% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions" accent="cyan" %}
-    {% include "components/stat_card.html" with value=summary.review_hours label="Review Hours" accent="cyan" %}
-    <div class="bento-card p-6">
-        <div class="text-2xl font-bold stat-value-success">{{ summary.accuracy }}%</div>
-        <div class="text-sm text-examiq-slate mt-1">Accuracy</div>
+<div class="overview-kpi-grid mb-8">
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions" icon="clock" variant="neutral" subtext=last_session_subtext %}
     </div>
-    {% include "components/stat_card.html" with value=summary.avg_confidence label="Avg Confidence" accent="cyan" %}
-</div>
-
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="bento-card p-6">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Confidence Calibration</h2>
-        <ul class="space-y-2 text-sm mb-4">
-            {% for key, count in summary.calibration_matrix.items %}
-            <li class="flex justify-between py-1 border-b border-slate-50">
-                <span class="text-examiq-navy">{% if key == "none" %}No{% elif key == "low" %}Low{% elif key == "average" %}Average{% elif key == "high" %}High{% else %}{{ key|cut:"_" }}{% endif %} confidence</span>
-                <span class="font-medium text-examiq-slate">{{ count }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-        <p class="text-sm text-examiq-slate">{{ calibration_narrative }}</p>
-        {% if ai_enabled %}
-        <span class="ai-assist-badge mt-4">AI Assist</span>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=summary.review_hours label="Review hours" icon="clock" variant="neutral" subtext=review_hours_subtext %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% if summary.accuracy >= 70 %}
+        {% include "components/overview_stat_card.html" with value=summary.accuracy label="Accuracy" suffix="%" icon="target" variant="accent" subtext=accuracy_subtext %}
         {% else %}
-        <span class="ai-assist-badge mt-4">Rule-based insights</span>
+        {% include "components/overview_stat_card.html" with value=summary.accuracy label="Accuracy" suffix="%" icon="target" variant="warning" subtext=accuracy_subtext %}
         {% endif %}
     </div>
-    <div class="bento-card p-6">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Top Mistake Topics</h2>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=summary.avg_confidence label="Avg confidence" icon="clock" variant="neutral" subtext=confidence_subtext %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="space-y-4">
+        {% include "components/calibration_tier_card.html" with calibration_matrix=summary.calibration_matrix calibration_max=summary.calibration_max title="Confidence calibration" %}
+        <div class="bento-card bento-card-inner p-6">
+            <p class="text-sm text-examiq-slate">{{ calibration_narrative }}</p>
+            {% if ai_enabled %}
+            <span class="ai-assist-badge mt-4">AI Assist</span>
+            {% else %}
+            <span class="ai-assist-badge mt-4">Rule-based insights</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="bento-card bento-card-inner p-6 h-full">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Top mistake topics</h2>
         {% if summary.weak_topics %}
-        <ul class="space-y-2">
+        <ul class="space-y-3">
             {% for topic in summary.weak_topics %}
-            <li class="flex justify-between py-2 border-b border-slate-100">
-                <span class="text-examiq-navy">{{ topic.topic__name }}</span>
-                <span class="text-examiq-mistake font-semibold">{{ topic.mistake_count }}</span>
+            <li class="flex items-center justify-between py-2 border-b border-slate-100">
+                <span class="text-examiq-navy font-medium">{{ topic.topic__name }}</span>
+                <span class="mistake-count-badge {% if topic.mistake_count >= 8 %}mistake-count-badge--high{% elif topic.mistake_count >= 4 %}mistake-count-badge--medium{% else %}mistake-count-badge--low{% endif %}">
+                    {{ topic.mistake_count }} error{{ topic.mistake_count|pluralize }}
+                </span>
             </li>
             {% endfor %}
         </ul>
@@ -54,30 +59,38 @@
         {% endif %}
     </div>
 </div>
+
+<div class="bento-card bento-card--chart bento-card-inner mb-8">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4 px-6 pt-6">
+        <h2 class="text-lg font-semibold text-examiq-navy">Confidence vs performance</h2>
+    </div>
+    <div id="confidence-performance-wrap" class="px-6 pb-6">
+        <canvas id="confidencePerformanceChart" height="220"></canvas>
+    </div>
+    <div id="confidence-performance-empty" class="chart-empty-state hidden px-6 pb-6">
+        <p class="empty-state-title">Not enough session data yet</p>
+        <p class="empty-state-body">Complete more review sessions to compare confidence and performance.</p>
+    </div>
+</div>
+
+<div class="mb-4">
+    <h2 class="text-lg font-semibold text-examiq-navy">Session history</h2>
+</div>
+{% include "components/session_history_table.html" with session_history_rows=summary.session_history_rows show_summary_link=False %}
 {% endblock %}
 
 {% block extra_js %}
-{{ summary.accuracy_trend|json_script:"student-trend-data" }}
+{{ summary.confidence_performance_series|json_script:"confidence-performance-data" }}
 <script>
-const trendData = JSON.parse(document.getElementById("student-trend-data").textContent);
-if (trendData.length > 0) {
-    const canvas = document.createElement("canvas");
-    canvas.id = "studentTrendChart";
-    canvas.height = 200;
-    document.querySelector(".grid").after(canvas);
-    new Chart(canvas, {
-        type: "line",
-        data: {
-            labels: trendData.map(d => d.date),
-            datasets: [{
-                label: "Accuracy %",
-                data: trendData.map(d => d.accuracy),
-                borderColor: "#0284C7",
-                tension: 0.3,
-            }]
-        },
-        options: { scales: { y: { min: 0, max: 100 } } }
-    });
-}
+document.addEventListener("DOMContentLoaded", function() {
+    const seriesData = JSON.parse(document.getElementById("confidence-performance-data").textContent);
+    const canvas = document.getElementById("confidencePerformanceChart");
+    if (window.ExamiQUI && window.ExamiQUI.renderConfidencePerformanceChart) {
+        window.ExamiQUI.renderConfidencePerformanceChart(canvas, seriesData, {
+            wrapEl: document.getElementById("confidence-performance-wrap"),
+            emptyEl: document.getElementById("confidence-performance-empty"),
+        });
+    }
+});
 </script>
 {% endblock %}

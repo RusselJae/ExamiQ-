@@ -179,6 +179,28 @@ class StudentDetailView(ProfessorCourseMixin, DetailView):
         context["calibration_narrative"] = calibration["narrative"]
         context["ai_enabled"] = calibration["ai_enabled"]
         context["active_tab"] = "roster"
+
+        course_summary = course_performance_summary(self.course)
+        course_accuracy = course_summary.get("accuracy", 0)
+        if summary["accuracy"] < course_accuracy:
+            context["accuracy_subtext"] = "Below class average"
+        elif summary["accuracy"] >= 70:
+            context["accuracy_subtext"] = "On track"
+        else:
+            context["accuracy_subtext"] = "Room to improve"
+
+        if summary["avg_confidence"] >= 4 and summary["accuracy"] < 70:
+            context["confidence_subtext"] = "High confidence, low accuracy"
+        else:
+            context["confidence_subtext"] = ""
+
+        last_date = summary.get("last_session_date")
+        context["last_session_subtext"] = (
+            f"Last session {last_date.strftime('%b %d')}" if last_date else "No sessions yet"
+        )
+        context["review_hours_subtext"] = (
+            "Logged practice time" if summary["review_hours"] else "No review logged yet"
+        )
         return context
 
 

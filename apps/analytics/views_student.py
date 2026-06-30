@@ -9,6 +9,8 @@ from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.analytics.models import MistakeRecord
 from apps.analytics.services import (
+    annotate_session_metrics,
+    build_session_history_rows,
     generate_mistake_feedback,
     get_student_mistake_patterns,
     get_student_topic_answers,
@@ -171,7 +173,7 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
         if status in {ReviewSession.Status.COMPLETED, ReviewSession.Status.EXPIRED}:
             queryset = queryset.filter(status=status)
 
-        return queryset
+        return annotate_session_metrics(queryset)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -205,6 +207,8 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
+        sessions = context.get("sessions") or context.get("object_list") or []
+        context["session_history_rows"] = build_session_history_rows(sessions)
         return context
 
 

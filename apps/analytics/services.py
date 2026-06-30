@@ -203,7 +203,9 @@ def student_performance_summary(student: User) -> dict:
         .order_by("-mistake_count")[:5]
     )
 
-    recent_sessions = sessions.select_related("topic").order_by("-started_at")[:10]
+    recent_sessions = annotate_session_metrics(
+        sessions.select_related("topic").order_by("-started_at")[:10]
+    )
 
     return {
         "sessions_completed": sessions.count(),
@@ -213,6 +215,7 @@ def student_performance_summary(student: User) -> dict:
         "accuracy_trend": accuracy_trend,
         "weak_topics": weak_topics,
         "recent_sessions": recent_sessions,
+        "recent_session_rows": build_session_history_rows(recent_sessions),
     }
 
 
@@ -556,6 +559,95 @@ def get_student_topic_answers(student: User, topic_id: int):
     return topic, answers
 
 
+def _confidence_label_short(avg_confidence: float | None) -> str:
+    """Map average answer confidence to a short display label."""
+    if avg_confidence is None:
+        return "—"
+    rounded = round(avg_confidence)
+    if rounded <= 2:
+        return "Low"
+    if rounded <= 4:
+        return "Average"
+    return "High"
+
+
+def _session_review_status_label(accuracy: float) -> str:
+    if accuracy < 70:
+        return "Needs review"
+    return "Complete"
+
+
+def annotate_session_metrics(queryset):
+    """Annotate sessions with answer counts and average confidence."""
+    return queryset.annotate(
+        session_avg_confidence=Avg("answers__confidence"),
+        session_answer_count=Count("answers"),
+        session_correct_count=Count("answers", filter=Q(answers__is_correct=True)),
+    )
+
+
+def build_session_history_rows(sessions) -> list[dict]:
+    """Build display rows for session history tables."""
+    rows = []
+    for session in sessions:
+        total = getattr(session, "session_answer_count", None)
+        if total is None:
+            total = session.total_questions
+        correct = getattr(session, "session_correct_count", None)
+        if correct is None:
+            correct = session.correct_count
+        accuracy = round(correct / total * 100, 1) if total else 0.0
+        avg_conf = getattr(session, "session_avg_confidence", None)
+        if avg_conf is None and total:
+            avg_conf = session.answers.aggregate(avg=Avg("confidence"))["avg"]
+        if avg_conf is not None:
+            avg_conf = round(float(avg_conf), 1)
+        rows.append(
+            {
+                "session": session,
+                "date": session.started_at,
+                "topic_name": session.topic.name,
+                "avg_confidence": avg_conf,
+                "confidence_label": _confidence_label_short(avg_conf),
+                "correct_count": correct,
+                "total_questions": total,
+                "accuracy": accuracy,
+                "score_display": f"{correct}/{total}" if total else "—",
+                "status_label": _session_review_status_label(accuracy),
+                "summary_url": None,
+            }
+        )
+    return rows
+
+
+def build_confidence_performance_series(sessions) -> list[dict]:
+    """Per-session data for confidence vs performance grouped bar chart."""
+    series = []
+    for session in sessions:
+        total = getattr(session, "session_answer_count", None)
+        if total is None:
+            total = session.total_questions
+        correct = getattr(session, "session_correct_count", None)
+        if correct is None:
+            correct = session.correct_count
+        accuracy = round(correct / total * 100, 1) if total else 0.0
+        avg_conf = getattr(session, "session_avg_confidence", None)
+        if avg_conf is None and total:
+            avg_conf = session.answers.aggregate(avg=Avg("confidence"))["avg"] or 0
+        avg_conf = round(float(avg_conf or 0), 1)
+        started = session.started_at
+        label = f"{session.topic.name} {started.strftime('%m-%d %I:%M %p')}" if started else session.topic.name
+        series.append(
+            {
+                "label": label,
+                "topic": session.topic.name,
+                "confidence": round(avg_conf / 5 * 100, 1) if avg_conf else 0,
+                "performance": accuracy,
+            }
+        )
+    return series
+
+
 def student_course_summary(student: User, course: Course) -> dict:
     """Performance summary scoped to a student's activity in a course offering."""
     sessions = ReviewSession.objects.filter(
@@ -593,6 +685,12 @@ def student_course_summary(student: User, course: Course) -> dict:
         .order_by("-mistake_count")[:5]
     )
 
+    ordered_sessions = annotate_session_metrics(
+        sessions.order_by("-started_at")
+    )
+    session_list = list(ordered_sessions)
+    last_session = session_list[0] if session_list else None
+
     return {
         "sessions_completed": sessions.count(),
         "total_answers": total_answers,
@@ -602,7 +700,11 @@ def student_course_summary(student: User, course: Course) -> dict:
         "accuracy_trend": accuracy_trend,
         "weak_topics": weak_topics,
         "calibration_matrix": confidence_tier_matrix(answers),
-        "recent_sessions": sessions.order_by("-started_at")[:10],
+        "recent_sessions": ordered_sessions[:10],
+        "session_history_rows": build_session_history_rows(session_list),
+        "confidence_performance_series": build_confidence_performance_series(session_list),
+        "last_session_date": last_session.started_at if last_session else None,
+        "calibration_max": max(confidence_tier_matrix(answers).values()) if total_answers else 1,
     }
 
 

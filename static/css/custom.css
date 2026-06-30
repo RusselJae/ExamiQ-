@@ -406,14 +406,17 @@
 .focus-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 0.75rem 1rem;
+    justify-content: flex-start;
+    padding: 0.5rem 1rem;
     background: var(--color-surface);
     color: var(--color-navy);
 }
 
 .focus-header__logo {
-    font-size: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
     font-weight: 700;
     letter-spacing: -0.02em;
     color: var(--color-navy);
@@ -425,8 +428,8 @@
 }
 
 .focus-header__logo .landing-logo__icon {
-    width: 2rem;
-    height: 2rem;
+    width: 1.5rem;
+    height: 1.5rem;
     flex-shrink: 0;
 }
 
@@ -437,15 +440,23 @@
 }
 
 .focus-header__logo-text {
-    font-size: 1.125rem;
+    font-size: 1rem;
     font-weight: 700;
     letter-spacing: -0.02em;
     color: inherit;
 }
 
 .focus-layout--exam {
-    max-width: 42rem;
+    max-width: min(72rem, 100%);
     margin: 0 auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+@media (max-width: 640px) {
+    .focus-header__logo-text {
+        display: none;
+    }
 }
 
 .focus-layout__center {
@@ -1999,6 +2010,27 @@
     color: #fff;
 }
 
+.landing-logo--compact {
+    gap: 0.5rem;
+}
+
+.landing-logo--compact .landing-logo__icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+}
+
+.landing-logo--compact .landing-logo__name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--sidebar-text-active);
+    letter-spacing: -0.02em;
+}
+
+.app-sidebar.is-collapsed .landing-logo--compact .landing-logo__text {
+    display: none;
+}
+
 .sidebar-brand-icon {
     color: var(--color-accent);
 }
@@ -3192,6 +3224,54 @@
 .data-table-accuracy .progress-bar {
     flex: 1;
     min-width: 3rem;
+}
+
+.session-score-fraction {
+    min-width: 2.5rem;
+    white-space: nowrap;
+}
+
+.session-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.session-status-pill--review {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.session-status-pill--complete {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.mistake-count-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.mistake-count-badge--high {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.mistake-count-badge--medium {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.mistake-count-badge--low {
+    background: #fefce8;
+    color: #a16207;
 }
 
 /* Enhanced empty states */

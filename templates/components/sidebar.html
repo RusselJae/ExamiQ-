@@ -2,12 +2,7 @@
 <aside id="app-sidebar" class="app-sidebar">
     <div class="app-sidebar-inner">
         <div class="app-sidebar-header">
-            <a href="{% url 'core:home' %}" class="app-sidebar-brand landing-logo landing-logo--compact" title="EXAMIQ+ home">
-                {% include "components/landing_logo_icon.html" %}
-                <span class="landing-logo__text sidebar-label">
-                    <span class="landing-logo__name">ExamiQ+</span>
-                </span>
-            </a>
+            {% include "components/sidebar_logo.html" %}
             <button type="button" id="sidebar-collapse-toggle" class="sidebar-collapse-toggle" aria-label="Collapse sidebar" aria-expanded="true">
                 <svg class="w-5 h-5 sidebar-collapse-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
             </button>

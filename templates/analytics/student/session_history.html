@@ -1,133 +1,29 @@
 {% extends "base.html" %}
 
-
-
 {% block title %}Session History - EXAMIQ+{% endblock %}
 
-
-
 {% block content %}
-
 {% include "components/page_header.html" with title="Session History" subtitle="Review your past practice sessions and track improvement." %}
 
-
-
 <div class="bento-grid">
-
     {% include "components/filter_bar.html" %}
 
-
-
-    {% if sessions %}
-
+    {% if session_history_rows %}
     <div class="span-full">
-
-        <div class="bento-card bento-card-inner overflow-hidden">
-
-            <table class="data-table">
-
-                <thead>
-
-                    <tr>
-
-                        <th>Topic</th>
-
-                        <th>Difficulty</th>
-
-                        <th>Date</th>
-
-                        <th>Questions</th>
-
-                        <th>Accuracy</th>
-
-                        <th>Status</th>
-
-                        <th></th>
-
-                    </tr>
-
-                </thead>
-
-                <tbody>
-
-                    {% for session in sessions %}
-
-                    <tr>
-
-                        <td class="text-examiq-navy font-medium">{{ session.topic.name }}</td>
-
-                        <td>{% include "components/difficulty_pill.html" with difficulty=session.difficulty %}</td>
-
-                        <td class="text-examiq-slate">{{ session.started_at|date:"M d, Y g:i A" }}</td>
-
-                        <td class="text-examiq-slate">{{ session.total_questions }}</td>
-
-                        <td>
-
-                            <div class="data-table-accuracy">
-
-                                <div class="progress-bar">
-
-                                    <div class="progress-bar-fill {% if session.accuracy >= 70 %}progress-bar-fill--good{% elif session.accuracy >= 50 %}progress-bar-fill--warning{% else %}progress-bar-fill--mistake{% endif %}"
-
-                                         style="width: {{ session.accuracy }}%"></div>
-
-                                </div>
-
-                                <span class="text-sm font-medium">{{ session.accuracy }}%</span>
-
-                            </div>
-
-                        </td>
-
-                        <td class="text-examiq-slate capitalize">{{ session.get_status_display }}</td>
-
-                        <td>
-
-                            <a href="{% url 'reviews:summary' session.pk %}" class="text-link text-sm">View summary</a>
-
-                        </td>
-
-                    </tr>
-
-                    {% endfor %}
-
-                </tbody>
-
-            </table>
-
-        </div>
-
+        {% include "components/session_history_table.html" %}
     </div>
 
-
-
     <div class="span-full">
-
         {% include "components/pagination.html" %}
-
     </div>
-
     {% else %}
-
     <div class="span-full">
-
         {% if filter_has_active %}
-
         {% include "components/empty_state.html" with compact=True title="No matching sessions" body="Try adjusting your search or filters." %}
-
         {% else %}
-
         {% include "components/empty_state.html" with title="No sessions yet" body="Complete a review session to build your history." cta_url="/student/review/setup/" cta_label="Start your first review" %}
-
         {% endif %}
-
     </div>
-
     {% endif %}
-
 </div>
-
 {% endblock %}
-
-

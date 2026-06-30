@@ -406,6 +406,58 @@
         });
     };
 
+    window.ExamiQUI.renderConfidencePerformanceChart = function (canvas, seriesData, options) {
+        options = options || {};
+        const emptyEl = options.emptyEl;
+        const wrapEl = options.wrapEl;
+        if (!canvas || typeof Chart === "undefined") return;
+
+        const data = seriesData || [];
+        if (data.length < 1) {
+            if (wrapEl) wrapEl.classList.add("hidden");
+            if (emptyEl) emptyEl.classList.remove("hidden");
+            return;
+        }
+
+        if (wrapEl) wrapEl.classList.remove("hidden");
+        if (emptyEl) emptyEl.classList.add("hidden");
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: data.map(function (d) { return d.label; }),
+                datasets: [
+                    {
+                        label: "Confidence",
+                        data: data.map(function (d) { return d.confidence; }),
+                        backgroundColor: "rgba(236, 72, 153, 0.65)",
+                        borderRadius: 4,
+                    },
+                    {
+                        label: "Performance",
+                        data: data.map(function (d) { return d.performance; }),
+                        backgroundColor: "rgba(59, 130, 246, 0.65)",
+                        borderRadius: 4,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { min: 0, max: 100, grid: { color: "#f1f5f9" } },
+                    x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0 } },
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: "top",
+                        align: "end",
+                    },
+                },
+            },
+        });
+    };
+
     document.body.addEventListener("showToast", function (event) {
         const detail = event.detail;
         if (detail && detail.message) {

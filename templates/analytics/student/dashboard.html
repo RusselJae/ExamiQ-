@@ -72,36 +72,9 @@
     <div class="span-full">
         <div class="bento-card bento-card-inner">
             {% include "components/section_header.html" with label="History" title="Recent Sessions" action_url="/student/sessions/" action_label="View all" %}
-            {% if summary.recent_sessions %}
+            {% if summary.recent_session_rows %}
             <div class="overflow-x-auto">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Topic</th>
-                            <th>Difficulty</th>
-                            <th>Date</th>
-                            <th>Accuracy</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in summary.recent_sessions %}
-                        <tr>
-                            <td class="text-examiq-navy font-medium">{{ s.topic.name }}</td>
-                            <td>{% include "components/difficulty_pill.html" with difficulty=s.difficulty %}</td>
-                            <td class="text-examiq-slate">{{ s.started_at|date:"M d, Y" }}</td>
-                            <td>
-                                <div class="data-table-accuracy">
-                                    <div class="progress-bar">
-                                        <div class="progress-bar-fill {% if s.accuracy >= 70 %}progress-bar-fill--good{% elif s.accuracy >= 50 %}progress-bar-fill--warning{% else %}progress-bar-fill--mistake{% endif %}"
-                                             style="width: {{ s.accuracy }}%"></div>
-                                    </div>
-                                    <span class="text-sm font-medium stat-value-good">{{ s.accuracy }}%</span>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                {% include "components/session_history_table.html" with session_history_rows=summary.recent_session_rows show_status_column=False show_summary_link=False %}
             </div>
             {% else %}
             {% include "components/empty_state.html" with compact=True title="No sessions yet" body="Start a review to build your performance history." cta_url="/student/review/setup/" cta_label="Start your first review" %}

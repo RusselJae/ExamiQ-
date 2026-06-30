@@ -20,6 +20,8 @@ from apps.analytics.confidence import (
 )
 from apps.analytics.models import ErrorType
 from apps.analytics.services import (
+    build_confidence_performance_series,
+    build_session_history_rows,
     get_step_feedback_stats,
     get_topic_mastery_heatmap,
     log_mistake,
@@ -610,3 +612,104 @@ class TestAIFactoryOpenAI:
 
         mock_chat.return_value = None
         assert get_question_generator().generate(None, "easy", 2) == []
+
+
+@pytest.mark.django_db
+class TestSessionHistoryHelpers:
+    def test_build_session_history_rows_includes_fraction_and_status(self, student, mcq_question, program, professor):
+        question, _correct = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="HIST101",
+            name="History Course",
+            professor=professor,
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
+        rows = build_session_history_rows([session])
+        assert len(rows) == 1
+        assert rows[0]["score_display"] == "0/1"
+        assert rows[0]["accuracy"] == 0.0
+        assert rows[0]["status_label"] == "Needs review"
+        assert rows[0]["confidence_label"] == "High"
+
+    def test_build_confidence_performance_series(self, student, mcq_question, program, professor):
+        question, _correct = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="CHART101",
+            name="Chart Course",
+            professor=professor,
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(session=session, question=question, confidence=3, is_correct=True)
+        series = build_confidence_performance_series([session])
+        assert len(series) == 1
+        assert series[0]["performance"] == 100.0
+        assert series[0]["confidence"] == 60.0
+
+    def test_student_course_summary_includes_session_rows(self, student, mcq_question, program, professor):
+        question, _correct = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="SUM101",
+            name="Summary Course",
+            professor=professor,
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(session=session, question=question, confidence=3, is_correct=True)
+        summary = student_course_summary(student, course)
+        assert len(summary["session_history_rows"]) == 1
+        assert len(summary["confidence_performance_series"]) == 1
+        assert summary["calibration_max"] >= 1
+
+    def test_student_detail_renders_session_history(self, client, professor, student, mcq_question, program):
+        question, _correct = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="DET201",
+            name="Detail Course",
+            professor=professor,
+            term="1st Sem",
+            academic_year="2026",
+            section="A",
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:student_detail",
+                kwargs={"course_pk": course.pk, "student_pk": student.pk},
+            )
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Session history" in content
+        assert "Confidence vs performance" in content
+        assert "0/1" in content
+        assert "Needs review" in content
