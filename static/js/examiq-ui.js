@@ -436,13 +436,14 @@
                     {
                         label: "Performance",
                         data: data.map(function (d) { return d.performance; }),
-                        backgroundColor: "rgba(59, 130, 246, 0.65)",
+                        backgroundColor: "rgba(26, 86, 50, 0.75)",
                         borderRadius: 4,
                     },
                 ],
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     y: { min: 0, max: 100, grid: { color: "#f1f5f9" } },
                     x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0 } },
@@ -450,8 +451,8 @@
                 plugins: {
                     legend: {
                         display: true,
-                        position: "top",
-                        align: "end",
+                        position: "bottom",
+                        align: "center",
                     },
                 },
             },

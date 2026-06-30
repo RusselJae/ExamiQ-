@@ -479,7 +479,14 @@ class SessionTutorHistoryView(StudentRequiredMixin, View):
         )
         from apps.reviews.tutor_services import tutor_history_payload
 
-        return JsonResponse(tutor_history_payload(session))
+        answer_id = request.GET.get("answer_id")
+        if answer_id is not None:
+            try:
+                answer_id = int(answer_id)
+            except (TypeError, ValueError):
+                answer_id = None
+
+        return JsonResponse(tutor_history_payload(session, answer_id=answer_id))
 
 
 class SessionTutorChatView(StudentRequiredMixin, View):

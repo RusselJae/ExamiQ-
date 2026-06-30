@@ -6,6 +6,7 @@
         messages: [],
         activeAnswerId: null,
         sending: false,
+        loaded: false,
     };
 
     function escapeHtml(text) {
@@ -27,6 +28,14 @@
 
     function getConfig() {
         return window.ExamiQTutor || {};
+    }
+
+    function historyUrlForAnswer(answerId) {
+        var config = getConfig();
+        if (!config.historyUrl) return "";
+        if (!answerId) return config.historyUrl;
+        var sep = config.historyUrl.indexOf("?") >= 0 ? "&" : "?";
+        return config.historyUrl + sep + "answer_id=" + encodeURIComponent(answerId);
     }
 
     function openModal() {
@@ -60,6 +69,26 @@
         return stem.length > 72 ? stem.slice(0, 69) + "…" : stem;
     }
 
+    async function loadHistoryForAnswer(answerId) {
+        var url = historyUrlForAnswer(answerId);
+        if (!url) return;
+        var resp = await fetch(url, {
+            headers: { Accept: "application/json" },
+            credentials: "same-origin",
+        });
+        if (!resp.ok) throw new Error("history failed");
+        var data = await resp.json();
+        state.messages = data.messages || [];
+        if (data.items && data.items.length) {
+            state.items = data.items;
+        }
+        if (data.active_answer_id) {
+            state.activeAnswerId = data.active_answer_id;
+        } else if (answerId) {
+            state.activeAnswerId = answerId;
+        }
+    }
+
     function renderPills() {
         var container = document.getElementById("ai-tutor-question-pills");
         var countEl = document.getElementById("ai-tutor-review-count");
@@ -79,20 +108,30 @@
         container.innerHTML = reviewItems
             .map(function (item, index) {
                 var active = item.answer_id === state.activeAnswerId ? " ai-tutor-pill--active" : "";
+                var saved = item.message_count > 0 ? ' <span class="ai-tutor-pill__saved" title="Saved conversation">●</span>' : "";
                 return (
                     '<button type="button" class="ai-tutor-pill' + active + '" data-answer-id="' +
                     item.answer_id + '" role="tab" aria-selected="' + (active ? "true" : "false") + '">' +
-                    "Q" + (index + 1) + ": " + escapeHtml(truncateStem(item.stem)) +
+                    "Q" + (index + 1) + ": " + escapeHtml(truncateStem(item.stem)) + saved +
                     "</button>"
                 );
             })
             .join("");
 
         container.querySelectorAll(".ai-tutor-pill").forEach(function (pill) {
-            pill.addEventListener("click", function () {
-                state.activeAnswerId = parseInt(pill.dataset.answerId, 10);
-                renderPills();
-                renderFeedbackPanel();
+            pill.addEventListener("click", async function () {
+                var answerId = parseInt(pill.dataset.answerId, 10);
+                state.activeAnswerId = answerId;
+                try {
+                    await loadHistoryForAnswer(answerId);
+                    renderPills();
+                    renderFeedbackPanel();
+                    renderMessages();
+                } catch (err) {
+                    if (typeof showToast === "function") {
+                        showToast("Could not load saved conversation for this question.", "error");
+                    }
+                }
             });
         });
     }
@@ -160,24 +199,6 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    async function loadHistory() {
-        var config = getConfig();
-        if (!config.historyUrl) return;
-        var resp = await fetch(config.historyUrl, {
-            headers: { Accept: "application/json" },
-            credentials: "same-origin",
-        });
-        if (!resp.ok) throw new Error("history failed");
-        var data = await resp.json();
-        state.messages = data.messages || [];
-        if (data.items && data.items.length) {
-            state.items = data.items;
-        }
-        if (data.active_answer_id) {
-            state.activeAnswerId = data.active_answer_id;
-        }
-    }
-
     async function loadFeedback() {
         var config = getConfig();
         if (!config.feedbackUrl) return;
@@ -219,7 +240,9 @@
     function showContent() {
         var loading = document.getElementById("ai-tutor-loading");
         var content = document.getElementById("ai-tutor-content");
+        var errorEl = document.getElementById("ai-tutor-error");
         if (loading) loading.classList.add("hidden");
+        if (errorEl) errorEl.classList.add("hidden");
         if (content) content.classList.remove("hidden");
         pickDefaultAnswer();
         renderPills();
@@ -258,6 +281,11 @@
             if (data.active_answer_id) {
                 state.activeAnswerId = data.active_answer_id;
             }
+            var item = activeItem();
+            if (item) {
+                item.message_count = (item.message_count || 0) + 2;
+            }
+            renderPills();
             renderMessages();
         } catch (err) {
             state.messages.pop();
@@ -270,24 +298,43 @@
         }
     }
 
-    async function initTutorModal() {
-        var config = getConfig();
-        if (!config.openOnLoad) return;
-
+    async function openTutorModal() {
         openModal();
+        var loading = document.getElementById("ai-tutor-loading");
+        var content = document.getElementById("ai-tutor-content");
+        var errorEl = document.getElementById("ai-tutor-error");
+        if (loading) loading.classList.remove("hidden");
+        if (content) content.classList.add("hidden");
+        if (errorEl) errorEl.classList.add("hidden");
+
         try {
-            await loadHistory();
+            await loadHistoryForAnswer(null);
             await loadFeedback();
+            if (state.activeAnswerId) {
+                await loadHistoryForAnswer(state.activeAnswerId);
+            }
             showContent();
+            state.loaded = true;
         } catch (err) {
             showError("Could not load tutor feedback. Try again from your session summary.");
         }
     }
 
+    window.ExamiQTutor = window.ExamiQTutor || {};
+    window.ExamiQTutor.open = openTutorModal;
+
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("[data-dismiss-ai-tutor]").forEach(function (el) {
             el.addEventListener("click", closeModal);
         });
+
+        var openBtn = document.getElementById("open-ai-tutor-btn");
+        if (openBtn) {
+            openBtn.addEventListener("click", function (event) {
+                event.preventDefault();
+                openTutorModal();
+            });
+        }
 
         var form = document.getElementById("ai-tutor-chat-form");
         var input = document.getElementById("ai-tutor-chat-input");
@@ -300,6 +347,9 @@
             });
         }
 
-        initTutorModal();
+        var config = getConfig();
+        if (config.openOnLoad) {
+            openTutorModal();
+        }
     });
 })();

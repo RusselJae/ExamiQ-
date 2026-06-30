@@ -3,13 +3,28 @@
 from __future__ import annotations
 
 from apps.ai.factory import get_tutor_engine
-from apps.ai.prompts import build_tutor_chat_prompt
-from apps.reviews.models import Answer, ReviewSession, TutorConversation, TutorMessage
+from apps.reviews.models import Answer, Question, ReviewSession, TutorConversation, TutorMessage
+from apps.users.models import User
 
 
-def get_or_create_conversation(session: ReviewSession) -> TutorConversation:
-    conversation, _ = TutorConversation.objects.get_or_create(session=session)
+def get_or_create_conversation(student: User, question: Question) -> TutorConversation:
+    conversation, _ = TutorConversation.objects.get_or_create(
+        student=student,
+        question=question,
+    )
     return conversation
+
+
+def conversation_messages_payload(conversation: TutorConversation) -> list[dict]:
+    return [
+        {
+            "id": msg.pk,
+            "role": msg.role,
+            "content": msg.content,
+            "created_at": msg.created.isoformat(),
+        }
+        for msg in conversation.messages.order_by("created")
+    ]
 
 
 def conversation_history(conversation: TutorConversation, limit: int = 40) -> list[dict[str, str]]:
@@ -79,9 +94,14 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
         steps = list(
             answer.question.explanation_steps.order_by("order").values_list("content", flat=True)
         )
+        conv = TutorConversation.objects.filter(
+            student=session.student,
+            question=answer.question,
+        ).first()
         items.append(
             {
                 "answer_id": answer.pk,
+                "question_id": answer.question_id,
                 "stem": answer.question.stem,
                 "is_correct": answer.is_correct,
                 "timed_out": answer.timed_out,
@@ -90,27 +110,35 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "correction_steps": steps,
                 "topic": answer.question.topic.name,
                 "difficulty": answer.question.get_difficulty_display(),
+                "message_count": conv.messages.count() if conv else 0,
             }
         )
     return items
 
 
-def tutor_history_payload(session: ReviewSession) -> dict:
-    conversation = get_or_create_conversation(session)
-    messages = [
-        {
-            "id": msg.pk,
-            "role": msg.role,
-            "content": msg.content,
-            "answer_id": msg.answer_id,
-            "created_at": msg.created.isoformat(),
-        }
-        for msg in conversation.messages.select_related("answer").order_by("created")
-    ]
+def tutor_history_payload(session: ReviewSession, *, answer_id: int | None = None) -> dict:
+    items = session_answer_items(session)
+    active_answer_id = answer_id
+    if not active_answer_id and items:
+        wrong = [item for item in items if not item["is_correct"]]
+        pool = wrong if wrong else items
+        active_answer_id = pool[0]["answer_id"]
+
+    messages = []
+    if active_answer_id:
+        answer = Answer.objects.filter(pk=active_answer_id, session=session).select_related("question").first()
+        if answer:
+            conversation = TutorConversation.objects.filter(
+                student=session.student,
+                question=answer.question,
+            ).first()
+            if conversation:
+                messages = conversation_messages_payload(conversation)
+
     return {
         "messages": messages,
-        "active_answer_id": conversation.active_answer_id,
-        "items": session_answer_items(session),
+        "active_answer_id": active_answer_id,
+        "items": items,
     }
 
 
@@ -124,15 +152,13 @@ def process_tutor_chat(
     if not user_message:
         return {"error": "Message cannot be empty."}
 
-    conversation = get_or_create_conversation(session)
     answer = None
     if answer_id:
-        answer = Answer.objects.filter(pk=answer_id, session=session).first()
-        if answer:
-            conversation.active_answer = answer
-            conversation.save(update_fields=["active_answer"])
-    elif conversation.active_answer_id:
-        answer = conversation.active_answer
+        answer = Answer.objects.filter(pk=answer_id, session=session).select_related("question").first()
+    if not answer:
+        return {"error": "Select a question to discuss."}
+
+    conversation = get_or_create_conversation(session.student, answer.question)
 
     TutorMessage.objects.create(
         conversation=conversation,
@@ -163,5 +189,6 @@ def process_tutor_chat(
     return {
         "reply": reply,
         "message_id": assistant_msg.pk,
-        "active_answer_id": conversation.active_answer_id,
+        "active_answer_id": answer.pk,
+        "question_id": answer.question_id,
     }

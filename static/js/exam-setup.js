@@ -20,6 +20,7 @@
     if (!subjectSelect || !topicSelect || !difficultySelect) return;
 
     let previewData = null;
+    let lastNoQuestionsToastKey = "";
 
     function difficultyCountKey(value) {
         if (value === "easy") return "easy";
@@ -48,10 +49,32 @@
         updateSummary();
     }
 
+    function updateStartButton(count) {
+        const startBtn = document.getElementById("start-exam-btn");
+        if (!startBtn) return;
+        const unavailable = typeof count === "number" && count === 0;
+        startBtn.disabled = unavailable;
+        startBtn.setAttribute("aria-disabled", unavailable ? "true" : "false");
+    }
+
+    function notifyIfNoQuestions(count) {
+        if (typeof count !== "number" || count !== 0) return;
+        const key = (topicSelect.value || "") + ":" + (difficultySelect.value || "");
+        if (key === lastNoQuestionsToastKey) return;
+        lastNoQuestionsToastKey = key;
+        if (typeof showToast === "function") {
+            showToast(
+                "No exam is available for this topic yet. Your instructor may still be adding questions.",
+                "warning"
+            );
+        }
+    }
+
     function updateSummary() {
         if (!previewData) {
             if (summaryCount) summaryCount.textContent = "—";
             if (summarySeconds) summarySeconds.textContent = "—";
+            updateStartButton(null);
             return;
         }
         const difficulty = difficultySelect.value;
@@ -65,6 +88,8 @@
                 ? String(previewData.seconds_per_question)
                 : "—";
         }
+        updateStartButton(count);
+        notifyIfNoQuestions(count);
     }
 
     async function loadTopics(subjectId, selectTopicId) {
@@ -102,6 +127,7 @@
         if (!data || Object.keys(data).length === 0) return;
 
         previewData = data;
+        lastNoQuestionsToastKey = "";
         updateDifficultyCounts();
         updateSummary();
     }

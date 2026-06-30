@@ -299,25 +299,30 @@ class StepFeedbackView(models.Model):
 
 
 class TutorConversation(TimeStampedModel):
-    session = models.OneToOneField(
-        ReviewSession,
+    student = models.ForeignKey(
+        User,
         on_delete=models.CASCADE,
-        related_name="tutor_conversation",
+        related_name="tutor_conversations",
+        limit_choices_to={"role": User.Role.STUDENT},
     )
-    active_answer = models.ForeignKey(
-        Answer,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
+    question = models.ForeignKey(
+        "questions.Question",
+        on_delete=models.CASCADE,
+        related_name="tutor_conversations",
     )
 
     class Meta:
         verbose_name = "Tutor Conversation"
         verbose_name_plural = "Tutor Conversations"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "question"],
+                name="unique_tutor_conversation_per_student_question",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"Tutor chat for session #{self.session_id}"
+        return f"Tutor chat for {self.student_id} / Q#{self.question_id}"
 
 
 class TutorMessage(TimeStampedModel):

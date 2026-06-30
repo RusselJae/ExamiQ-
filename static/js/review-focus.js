@@ -188,6 +188,8 @@
     }
 
     function initChoiceTiles(root) {
+        const formsWithSubmit = new WeakSet();
+
         (root || document).querySelectorAll(".choice-tile").forEach(function (tile) {
             const radio = tile.querySelector('input[type="radio"]');
             if (!radio || radio.dataset.bound) return;
@@ -195,7 +197,6 @@
 
             const form = tile.closest("form");
             const isTimedExam = form && form.dataset.timedExamForm === "true";
-            let submitting = false;
 
             function syncSelected() {
                 const scope = form || document;
@@ -207,22 +208,20 @@
                 }
             }
 
-            function disableChoices() {
+            function lockChoices() {
                 if (!form) return;
                 form.querySelectorAll(".choice-tile").forEach(function (t) {
                     t.classList.add("exam-choice-tile--locked");
-                    const input = t.querySelector('input[type="radio"]');
-                    if (input) input.disabled = true;
                 });
             }
 
             function submitTimedChoice() {
-                if (!isTimedExam || submitting) return;
-                submitting = true;
+                if (!isTimedExam || !form || formsWithSubmit.has(form)) return;
+                formsWithSubmit.add(form);
                 if (typeof window.stopQuestionTimer === "function") {
                     window.stopQuestionTimer();
                 }
-                disableChoices();
+                lockChoices();
                 if (typeof htmx !== "undefined") {
                     htmx.trigger(form, "submit");
                 } else {
@@ -272,7 +271,8 @@
             if (typeof window.stopQuestionTimer === "function") {
                 window.stopQuestionTimer();
             }
-            numericInput.disabled = true;
+            numericInput.readOnly = true;
+            numericInput.classList.add("exam-numeric-input--locked");
             if (typeof htmx !== "undefined") {
                 htmx.trigger(form, "submit");
             } else {

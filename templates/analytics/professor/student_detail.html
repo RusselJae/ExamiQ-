@@ -2,6 +2,8 @@
 
 {% block title %}{{ student.get_full_name|default:student.email }} - {{ course.code }}{% endblock %}
 
+{% block main_class %}professor-student-detail{% endblock %}
+
 {% block content %}
 <div class="mb-6">
     <a href="{% url 'analytics_professor:course_roster' course.pk %}" class="text-link">&larr; Back to masterlist</a>
@@ -64,8 +66,8 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4 px-6 pt-6">
         <h2 class="text-lg font-semibold text-examiq-navy">Confidence vs performance</h2>
     </div>
-    <div id="confidence-performance-wrap" class="px-6 pb-6">
-        <canvas id="confidencePerformanceChart" height="220"></canvas>
+    <div id="confidence-performance-wrap" class="confidence-performance-wrap px-6 pb-6">
+        <canvas id="confidencePerformanceChart" height="110"></canvas>
     </div>
     <div id="confidence-performance-empty" class="chart-empty-state hidden px-6 pb-6">
         <p class="empty-state-title">Not enough session data yet</p>

@@ -373,12 +373,12 @@
 
 .timer-warning {
     border-color: #f59e0b !important;
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.28);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.32);
 }
 
 .timer-critical {
     border-color: #ef4444 !important;
-    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.3);
+    box-shadow: 0 0 0 7px rgba(239, 68, 68, 0.35);
     animation: timer-pulse 1s ease-in-out infinite;
 }
 
@@ -614,10 +614,12 @@
 
 .exam-timer-svg__progress--warning {
     stroke: var(--color-amber);
+    stroke-width: 8;
 }
 
 .exam-timer-svg__progress--critical {
     stroke: var(--color-mistake);
+    stroke-width: 8;
 }
 
 .exam-timer-display {
@@ -934,9 +936,15 @@
 
 .exam-results-kpis {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
     margin-bottom: 1.25rem;
+}
+
+@media (min-width: 640px) {
+    .exam-results-kpis {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 }
 
 .exam-results-kpi {
@@ -1052,7 +1060,7 @@
     justify-content: space-between;
     gap: 1rem;
     padding: 0.875rem 1.25rem;
-    background: #2563eb;
+    background: var(--color-primary);
     color: #fff;
 }
 
@@ -1113,9 +1121,9 @@
 }
 
 .ai-tutor-pill--active {
-    border-color: #2563eb;
-    background: #eff6ff;
-    color: #1d4ed8;
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
 }
 
 .ai-tutor-modal__saved {
@@ -1131,7 +1139,7 @@
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 9999px;
-    background: #2563eb;
+    background: var(--color-primary);
 }
 
 .ai-tutor-modal__body {
@@ -1227,7 +1235,7 @@
 
 .ai-tutor-chat__bubble--user {
     align-self: flex-end;
-    background: #2563eb;
+    background: var(--color-primary);
     color: #fff;
 }
 
@@ -3499,6 +3507,37 @@
 
 .summary-panel.is-open {
     display: block;
+}
+
+.app-content.professor-student-detail .summary-panel {
+    left: auto;
+    right: 1.5rem;
+    bottom: 5.5rem;
+    max-width: min(36rem, calc(100vw - 3rem));
+}
+
+@media (min-width: 1024px) {
+    .app-content.professor-student-detail .summary-panel {
+        left: auto;
+        right: 1.5rem;
+    }
+}
+
+.confidence-performance-wrap {
+    position: relative;
+    height: 110px;
+}
+
+.ai-tutor-pill__saved {
+    color: var(--color-primary);
+    font-size: 0.625rem;
+    margin-left: 0.15rem;
+}
+
+.exam-numeric-input--locked {
+    opacity: 0.85;
+    cursor: not-allowed;
+    background: #f8fafc;
 }
 
 .summary-panel-card {

@@ -75,6 +75,7 @@
 <div class="flex gap-4 justify-center flex-wrap mb-8">
     <a href="{% url 'reviews:setup' %}" class="btn-primary">Review Again</a>
     <a href="{% url 'analytics_student:dashboard' %}" class="btn-secondary">View Dashboard</a>
+    <button type="button" class="btn-primary" id="open-ai-tutor-btn">AI Tutor</button>
 </div>
 
 {% include "reviews/partials/ai_tutor_modal.html" %}
@@ -83,12 +84,12 @@
 {% block extra_js %}
 <script src="{% static 'js/ai-tutor-modal.js' %}"></script>
 <script>
-window.ExamiQTutor = {
+window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
     openOnLoad: {% if open_tutor %}true{% else %}false{% endif %},
     feedbackUrl: "{{ feedback_url }}",
     historyUrl: "{{ tutor_history_url }}",
     chatUrl: "{{ tutor_chat_url }}",
     csrfToken: "{{ csrf_token }}",
-};
+});
 </script>
 {% endblock %}

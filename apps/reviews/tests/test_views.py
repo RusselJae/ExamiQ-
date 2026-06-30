@@ -171,6 +171,7 @@ class TestSessionSummaryView:
         assert "Weak Topics This Session" in content
         assert "ai-tutor-modal" in content
         assert "ai-tutor-modal.js" in content
+        assert "open-ai-tutor-btn" in content
         assert "openOnLoad: false" in content
 
         tutor_response = client.get(
@@ -321,7 +322,7 @@ class TestTutorChat:
             difficulty=Question.Difficulty.EASY,
             mode=ReviewSession.Mode.TIMED_EXAM,
         )
-        submit_answer(
+        answer = submit_answer(
             session=session,
             question=question,
             confidence=4,
@@ -335,13 +336,88 @@ class TestTutorChat:
         chat_url = reverse("reviews:tutor_chat", kwargs={"pk": session.pk})
         response = client.post(
             chat_url,
-            data='{"message": "Why was my approach wrong?", "answer_id": %d}' % session.answers.first().pk,
+            data='{"message": "Why was my approach wrong?", "answer_id": %d}' % answer.pk,
             content_type="application/json",
         )
         assert response.status_code == 200
         data = response.json()
         assert data["reply"]
 
-        from apps.reviews.models import TutorMessage
+        from apps.reviews.models import TutorConversation, TutorMessage
 
-        assert TutorMessage.objects.filter(conversation__session=session).count() == 2
+        conversation = TutorConversation.objects.get(student=student, question=question)
+        assert TutorMessage.objects.filter(conversation=conversation).count() == 2
+
+    def test_tutor_history_filters_by_answer_id(self, client, student, topic, mcq_question):
+        question, correct = mcq_question
+        wrong_choice = question.choices.filter(is_correct=False).first()
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        answer = submit_answer(
+            session=session,
+            question=question,
+            confidence=3,
+            selected_choice=wrong_choice,
+            time_spent_seconds=10,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        from apps.reviews.tutor_services import get_or_create_conversation, process_tutor_chat
+
+        process_tutor_chat(session, "Help me understand", answer_id=answer.pk)
+
+        client.force_login(student)
+        history_url = reverse("reviews:tutor_history", kwargs={"pk": session.pk})
+        response = client.get(history_url + f"?answer_id={answer.pk}")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["messages"]) == 2
+        assert data["active_answer_id"] == answer.pk
+
+    def test_tutor_conversation_persists_across_retakes(self, student, topic, mcq_question):
+        question, wrong = mcq_question
+        wrong_choice = question.choices.filter(is_correct=False).first()
+
+        session1 = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        answer1 = submit_answer(
+            session=session1,
+            question=question,
+            confidence=2,
+            selected_choice=wrong_choice,
+            time_spent_seconds=12,
+        )
+        session1.status = ReviewSession.Status.COMPLETED
+        session1.save(update_fields=["status"])
+
+        from apps.reviews.tutor_services import process_tutor_chat, tutor_history_payload
+
+        process_tutor_chat(session1, "Explain this", answer_id=answer1.pk)
+
+        session2 = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        answer2 = submit_answer(
+            session=session2,
+            question=question,
+            confidence=2,
+            selected_choice=wrong_choice,
+            time_spent_seconds=14,
+        )
+        session2.status = ReviewSession.Status.COMPLETED
+        session2.save(update_fields=["status"])
+
+        payload = tutor_history_payload(session2, answer_id=answer2.pk)
+        assert len(payload["messages"]) == 2
