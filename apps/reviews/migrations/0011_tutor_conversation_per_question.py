@@ -1,12 +1,26 @@
 # Generated manually for per-question tutor conversations
 
 import django.db.models.deletion
-import django.utils.timezone
 from django.conf import settings
 from django.db import migrations, models
 
 
 def clear_tutor_data(apps, schema_editor):
+    """Clear tutor rows before schema reshape.
+
+    PostgreSQL rejects ALTER on reviews_tutorconversation in the same
+    transaction as DELETEs that leave pending trigger events, so this
+    migration sets atomic = False and each operation commits separately.
+    """
+    connection = schema_editor.connection
+    if connection.vendor == "postgresql":
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "TRUNCATE TABLE reviews_tutormessage, reviews_tutorconversation "
+                "RESTART IDENTITY CASCADE"
+            )
+        return
+
     TutorMessage = apps.get_model("reviews", "TutorMessage")
     TutorConversation = apps.get_model("reviews", "TutorConversation")
     TutorMessage.objects.all().delete()
@@ -14,6 +28,8 @@ def clear_tutor_data(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # Required on PostgreSQL: DELETE/TRUNCATE then ALTER cannot share one transaction.
+    atomic = False
 
     dependencies = [
         ("questions", "0001_initial"),
