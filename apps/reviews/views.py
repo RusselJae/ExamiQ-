@@ -321,7 +321,7 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
 
 
 class SessionGenerateFeedbackView(StudentRequiredMixin, View):
-    """Batch-generate AI feedback for all answers in a session."""
+    """Batch-generate feedback for all answers in a session."""
 
     def post(self, request, pk):
         from apps.analytics.services import generate_session_feedback
@@ -332,7 +332,13 @@ class SessionGenerateFeedbackView(StudentRequiredMixin, View):
             student=request.user,
             status=ReviewSession.Status.COMPLETED,
         )
-        items = generate_session_feedback(session)
+        try:
+            items = generate_session_feedback(session)
+        except Exception:
+            return JsonResponse(
+                {"items": [], "error": "Feedback generation failed."},
+                status=500,
+            )
         return JsonResponse({"items": items})
 
 

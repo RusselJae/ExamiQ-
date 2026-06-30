@@ -10,8 +10,17 @@
         </div>
         <div id="post-session-feedback-loading" class="feedback-modal__loading">
             <div class="feedback-modal__spinner" aria-hidden="true"></div>
+            <div class="feedback-modal__loading-dots" aria-hidden="true">
+                <span></span><span></span><span></span>
+            </div>
             <p class="text-sm text-examiq-slate">Generating feedback for your answers…</p>
+            <div class="feedback-modal__skeleton-list" aria-hidden="true">
+                <div class="feedback-modal__skeleton"></div>
+                <div class="feedback-modal__skeleton"></div>
+                <div class="feedback-modal__skeleton"></div>
+            </div>
         </div>
+        <div id="post-session-feedback-error" class="feedback-modal__error hidden" role="alert"></div>
         <div id="post-session-feedback-list" class="feedback-modal__list hidden"></div>
         <div class="feedback-modal__footer">
             <button type="button" class="btn-primary w-full" data-dismiss-feedback-modal>Done</button>

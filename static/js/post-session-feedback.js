@@ -60,18 +60,43 @@
         document.body.classList.remove("feedback-modal-open");
     }
 
+    function showError(message) {
+        const loading = document.getElementById("post-session-feedback-loading");
+        const errorEl = document.getElementById("post-session-feedback-error");
+        const list = document.getElementById("post-session-feedback-list");
+        if (loading) loading.classList.add("hidden");
+        if (list) list.classList.add("hidden");
+        if (errorEl) {
+            errorEl.textContent = message;
+            errorEl.classList.remove("hidden");
+        }
+    }
+
+    function resetLoadingState() {
+        const loading = document.getElementById("post-session-feedback-loading");
+        const errorEl = document.getElementById("post-session-feedback-error");
+        const list = document.getElementById("post-session-feedback-list");
+        if (loading) loading.classList.remove("hidden");
+        if (errorEl) {
+            errorEl.textContent = "";
+            errorEl.classList.add("hidden");
+        }
+        if (list) {
+            list.classList.add("hidden");
+            list.innerHTML = "";
+        }
+    }
+
     async function loadFeedback() {
         const config = window.ExamiQPostSessionFeedback;
         if (!config || !config.url) return;
 
         openModal();
+        resetLoadingState();
+
         const loading = document.getElementById("post-session-feedback-loading");
         const list = document.getElementById("post-session-feedback-list");
         if (!loading || !list) return;
-
-        loading.classList.remove("hidden");
-        list.classList.add("hidden");
-        list.innerHTML = "";
 
         try {
             const resp = await fetch(config.url, {
@@ -80,13 +105,33 @@
                     "X-CSRFToken": config.csrfToken,
                     Accept: "application/json",
                 },
+                credentials: "same-origin",
             });
+
+            if (!resp.ok) {
+                if (resp.status === 403) {
+                    showError("Could not verify your session. Refresh the page and try again.");
+                    return;
+                }
+                if (resp.status === 504 || resp.status === 502) {
+                    showError("Feedback took too long to generate. Try again from your mistake log.");
+                    return;
+                }
+                showError("Could not load feedback. Try again from your mistake log.");
+                return;
+            }
+
             const data = await resp.json();
-            list.innerHTML = (data.items || []).map(renderItem).join("");
+            if (!data.items || !data.items.length) {
+                showError("No feedback is available for this session yet.");
+                return;
+            }
+
+            list.innerHTML = data.items.map(renderItem).join("");
             loading.classList.add("hidden");
             list.classList.remove("hidden");
         } catch (err) {
-            loading.innerHTML = '<p class="text-sm text-red-600">Could not load feedback. Try again from your mistake log.</p>';
+            showError("Could not load feedback. Check your connection and try again from your mistake log.");
         }
     }
 

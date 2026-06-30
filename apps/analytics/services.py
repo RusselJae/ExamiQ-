@@ -103,44 +103,88 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
     return ai_feedback
 
 
+def _explanation_steps_text(question) -> str:
+    """Join approved explanation steps for display feedback."""
+    lines = list(question.explanation_steps.order_by("order").values_list("content", flat=True))
+    return "\n".join(lines) if lines else ""
+
+
+def _rule_based_answer_feedback(answer) -> str:
+    """Fast fallback feedback using explanation steps or generic guidance."""
+    steps_text = _explanation_steps_text(answer.question)
+    if answer.is_correct:
+        if steps_text:
+            return f"Correct! {steps_text}"
+        return "Correct answer. Keep practicing to reinforce this topic."
+
+    if answer.timed_out:
+        if steps_text:
+            return f"Time ran out on this question.\n\n{steps_text}"
+        return "Time ran out on this question. Review the solution and try similar problems."
+
+    if steps_text:
+        return steps_text
+
+    return "Review this topic and practice similar questions."
+
+
 def generate_answer_feedback(answer) -> str:
-    """Generate and return AI feedback for a session answer."""
+    """Generate and return feedback for a session answer."""
+    if answer.mistake_record and answer.mistake_record.ai_feedback:
+        return answer.mistake_record.ai_feedback
+
     if answer.mistake_record:
-        if answer.mistake_record.ai_feedback:
-            return answer.mistake_record.ai_feedback
-        return generate_mistake_feedback(answer.mistake_record)
+        try:
+            ai_feedback = generate_mistake_feedback(answer.mistake_record)
+            if ai_feedback:
+                return ai_feedback
+        except Exception:
+            pass
+        return _rule_based_answer_feedback(answer)
 
     from django.conf import settings
 
     if not settings.AI_ENABLED:
-        return "Correct answer. Keep practicing to reinforce this topic."
+        return _rule_based_answer_feedback(answer)
 
-    from apps.ai.factory import get_adaptive_feedback_generator
+    try:
+        from apps.ai.factory import get_adaptive_feedback_generator
 
-    question = answer.question
-    user_answer = ""
-    if answer.selected_choice_id:
-        choice = answer.selected_choice
-        user_answer = f"{choice.label}: {choice.text}"
-    elif answer.numeric_response is not None:
-        user_answer = str(answer.numeric_response)
+        question = answer.question
+        user_answer = ""
+        if answer.selected_choice_id:
+            choice = answer.selected_choice
+            user_answer = f"{choice.label}: {choice.text}"
+        elif answer.numeric_response is not None:
+            user_answer = str(answer.numeric_response)
+        elif answer.timed_out:
+            user_answer = "Timed out"
 
-    correct_answer = ""
-    if question.question_type == Question.QuestionType.MCQ:
-        correct = question.choices.filter(is_correct=True).first()
-        if correct:
-            correct_answer = f"{correct.label}: {correct.text}"
-    elif question.correct_answer is not None:
-        correct_answer = str(question.correct_answer)
+        correct_answer = ""
+        if question.question_type == Question.QuestionType.MCQ:
+            correct = question.choices.filter(is_correct=True).first()
+            if correct:
+                correct_answer = f"{correct.label}: {correct.text}"
+        elif question.correct_answer is not None:
+            correct_answer = str(question.correct_answer)
 
-    confidence = "high" if answer.confidence and answer.confidence >= 4 else "medium"
-    return get_adaptive_feedback_generator().generate(
-        topic=question.topic.name,
-        question=question.stem,
-        user_answer=user_answer or "Correct",
-        correct_answer=correct_answer or "Correct",
-        confidence=confidence,
-    )
+        if answer.is_correct:
+            return _rule_based_answer_feedback(answer)
+
+        confidence = "high" if answer.confidence and answer.confidence >= 4 else "medium"
+        ai_feedback = get_adaptive_feedback_generator().generate(
+            topic=question.topic.name,
+            question=question.stem,
+            user_answer=user_answer or "No answer",
+            correct_answer=correct_answer or "Unknown",
+            confidence=confidence,
+        )
+        if ai_feedback:
+            return ai_feedback
+    except Exception:
+        pass
+
+    return _rule_based_answer_feedback(answer)
 
 
 def generate_session_feedback(session) -> list[dict]:
