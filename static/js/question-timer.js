@@ -1,4 +1,7 @@
 (function() {
+    const TIMER_RADIUS = 45;
+    const TIMER_CIRCUMFERENCE = 2 * Math.PI * TIMER_RADIUS;
+
     function initQuestionTimer() {
         const card = document.getElementById("question-card");
         if (!card || card.dataset.timedExam !== "true") return;
@@ -7,27 +10,43 @@
         let remaining = total;
         const display = document.getElementById("question-timer-display");
         const ring = document.getElementById("question-timer-ring");
+        const progressRing = document.getElementById("question-timer-progress");
         const timeSpentInput = document.getElementById("time-spent");
         const timedOutInput = document.getElementById("timed-out-input");
         const form = document.getElementById("answer-form");
         if (!display || !form) return;
 
+        if (progressRing) {
+            progressRing.style.strokeDasharray = String(TIMER_CIRCUMFERENCE);
+            progressRing.style.strokeDashoffset = "0";
+        }
+
         let elapsed = 0;
         let intervalId = null;
+
+        function updateRing() {
+            if (!progressRing || total <= 0) return;
+            const fraction = Math.max(0, Math.min(1, remaining / total));
+            progressRing.style.strokeDashoffset = String(TIMER_CIRCUMFERENCE * (1 - fraction));
+        }
 
         function updateUI() {
             display.textContent = remaining;
             if (timeSpentInput) timeSpentInput.value = elapsed;
-            const secondsLabel = document.getElementById("question-timer-seconds");
-            if (secondsLabel) secondsLabel.textContent = remaining;
+            updateRing();
+
             card.classList.remove("timer-warning", "timer-critical");
-            ring.classList.remove("timer-urgent", "timer-critical-ring");
+            if (ring) ring.classList.remove("timer-urgent", "timer-critical-ring");
+            if (progressRing) progressRing.classList.remove("exam-timer-svg__progress--warning", "exam-timer-svg__progress--critical");
+
             if (remaining <= 5) {
                 card.classList.add("timer-critical");
-                ring.classList.add("timer-critical-ring");
+                if (ring) ring.classList.add("timer-critical-ring");
+                if (progressRing) progressRing.classList.add("exam-timer-svg__progress--critical");
             } else if (remaining <= 10) {
                 card.classList.add("timer-warning");
-                ring.classList.add("timer-urgent");
+                if (ring) ring.classList.add("timer-urgent");
+                if (progressRing) progressRing.classList.add("exam-timer-svg__progress--warning");
             }
         }
 
@@ -54,7 +73,7 @@
 
         form.addEventListener("submit", function() {
             if (intervalId) clearInterval(intervalId);
-            if (timeSpentInput && !timedOutInput.value) {
+            if (timeSpentInput && timedOutInput && timedOutInput.value !== "true") {
                 timeSpentInput.value = elapsed;
             }
         });

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Exam Setup - {{ course.code }}{% endblock %}
 
@@ -10,7 +11,7 @@
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-<form method="post" class="exam-setup-form">
+<form method="post" class="exam-setup-form" id="professor-exam-setup-form">
     {% csrf_token %}
 
     {% if form.non_field_errors %}
@@ -21,27 +22,42 @@
 
     <div class="exam-setup-grid">
         <section class="exam-setup-card bento-card p-6">
-            <h2 class="exam-setup-card__title">Availability</h2>
-            <p class="exam-setup-card__subtitle">Control whether students in this section can start exams.</p>
-            <label class="exam-setup-toggle flex items-center gap-3 mt-4 cursor-pointer">
-                {{ form.is_enabled }}
-                <span class="text-sm font-medium text-examiq-navy">Exam enabled for this section</span>
-            </label>
+            <div class="exam-setup-card__header">
+                <div>
+                    <h2 class="exam-setup-card__title">Availability</h2>
+                    <p class="exam-setup-card__subtitle">Control whether students in this section can start exams.</p>
+                </div>
+                <button
+                    type="button"
+                    class="exam-setup-availability-pill"
+                    id="exam-availability-pill"
+                    aria-pressed="false"
+                    data-enabled-label="Exam enabled"
+                    data-disabled-label="Exam disabled"
+                >
+                    <span class="exam-setup-availability-pill__dot" aria-hidden="true"></span>
+                    <span class="exam-setup-availability-pill__text">Exam disabled</span>
+                </button>
+            </div>
+            <div class="sr-only">{{ form.is_enabled }}</div>
         </section>
 
         <section class="exam-setup-card bento-card p-6">
             <h2 class="exam-setup-card__title">Timing</h2>
-            <p class="exam-setup-card__subtitle">Set how much time students get per question. Exams end when all questions are answered.</p>
-            <div class="mt-4">
-                <label for="id_seconds_per_question" class="block text-sm font-medium text-examiq-navy mb-1">
+            <p class="exam-setup-card__subtitle">Set how much time students get per question.</p>
+            <div class="exam-setup-timing mt-4">
+                <label for="id_seconds_per_question" class="exam-setup-timing__label">
                     {{ form.seconds_per_question.label }}
                 </label>
-                {{ form.seconds_per_question }}
+                <div class="exam-setup-timing__input-wrap">
+                    {{ form.seconds_per_question }}
+                    <span class="exam-setup-timing__suffix">sec</span>
+                </div>
                 {% if form.seconds_per_question.help_text %}
-                <p class="text-xs text-examiq-slate mt-1">{{ form.seconds_per_question.help_text }}</p>
+                <p class="exam-setup-card__hint">{{ form.seconds_per_question.help_text }}</p>
                 {% endif %}
                 {% if form.seconds_per_question.errors %}
-                <p class="text-xs text-red-600 mt-1">{{ form.seconds_per_question.errors.0 }}</p>
+                <p class="exam-setup-card__error">{{ form.seconds_per_question.errors.0 }}</p>
                 {% endif %}
             </div>
         </section>
@@ -49,28 +65,47 @@
         <section class="exam-setup-card bento-card p-6">
             <h2 class="exam-setup-card__title">Allowed difficulties</h2>
             <p class="exam-setup-card__subtitle">Students may only choose from the levels you enable.</p>
-            <div class="mt-4">
-                {{ form.allowed_difficulties }}
-                {% if form.allowed_difficulties.errors %}
-                <p class="text-xs text-red-600 mt-2">{{ form.allowed_difficulties.errors.0 }}</p>
-                {% endif %}
+            <div class="exam-setup-difficulty-grid" id="exam-difficulty-cards">
+                {% for value, label in form.allowed_difficulties.field.choices %}
+                <button
+                    type="button"
+                    class="select-card exam-setup-difficulty-card"
+                    data-difficulty="{{ value }}"
+                    aria-pressed="false"
+                >
+                    <span class="exam-setup-difficulty-card__label">{{ label }}</span>
+                </button>
+                {% endfor %}
             </div>
+            <div class="exam-setup-hidden-checkboxes">{{ form.allowed_difficulties }}</div>
+            {% if form.allowed_difficulties.errors %}
+            <p class="exam-setup-card__error">{{ form.allowed_difficulties.errors.0 }}</p>
+            {% endif %}
         </section>
 
         <section class="exam-setup-card bento-card p-6 exam-setup-card--wide">
-            <h2 class="exam-setup-card__title">Topics</h2>
-            <p class="exam-setup-card__subtitle">Leave empty to allow all topics for this subject.</p>
-            <div class="mt-4">
-                {{ form.topics }}
-                {% if form.topics.errors %}
-                <p class="text-xs text-red-600 mt-2">{{ form.topics.errors.0 }}</p>
-                {% endif %}
+            <div class="exam-setup-card__header">
+                <div>
+                    <h2 class="exam-setup-card__title">Topics</h2>
+                    <p class="exam-setup-card__subtitle">Leave empty to allow all topics for this subject.</p>
+                </div>
+                <span class="exam-setup-topic-counter" id="exam-topic-counter" aria-live="polite">0 of 0 selected</span>
             </div>
+            <div class="exam-setup-topic-cards" id="exam-topic-cards"></div>
+            <div class="exam-setup-hidden-checkboxes">{{ form.topics }}</div>
+            {% if form.topics.errors %}
+            <p class="exam-setup-card__error">{{ form.topics.errors.0 }}</p>
+            {% endif %}
         </section>
     </div>
 
-    <div class="mt-6">
-        <button type="submit" class="btn-primary">Save exam setup</button>
+    <div class="exam-setup-footer">
+        <p class="exam-setup-footer__note">Changes apply immediately for students starting new exams in this section.</p>
+        <button type="submit" class="btn-primary exam-setup-footer__save">Save exam setup</button>
     </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/professor-exam-setup.js' %}"></script>
 {% endblock %}

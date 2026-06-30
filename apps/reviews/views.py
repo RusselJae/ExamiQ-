@@ -9,9 +9,13 @@ from django.views.generic import DetailView
 from apps.core.mixins import StudentRequiredMixin
 from apps.questions.curriculum import subject_queryset_for_student
 from apps.questions.models import Question, Topic
-from apps.questions.services import get_adaptive_questions_for_session
+from apps.questions.services import count_available_questions, get_adaptive_questions_for_session
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
-from apps.reviews.exam_setup_services import exam_seconds_per_question, student_setup_eligibility
+from apps.reviews.exam_setup_services import (
+    assignment_for_student_subject,
+    exam_seconds_per_question,
+    student_setup_eligibility,
+)
 from apps.reviews.recommendations import build_session_summary, get_review_recommendations
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
 from apps.reviews.models import Answer, ReviewSession
@@ -35,6 +39,25 @@ def _htmx_redirect_or_redirect(request, view_name, **kwargs):
         htmx_response["HX-Redirect"] = response.url
         return htmx_response
     return response
+
+
+def _question_partial_context(session, question, form, **extra):
+    """Shared template context for the active question partial."""
+    answered = session.answers.count()
+    planned = session.planned_question_count or 0
+    timed_exam = session.mode == ReviewSession.Mode.TIMED_EXAM
+    context = {
+        "session": session,
+        "question": question,
+        "form": form,
+        "is_timed_exam": timed_exam,
+        "answered_count": answered,
+        "planned_question_count": planned,
+        "question_position": min(answered + 1, planned) if planned else answered + 1,
+        "progress_percent": int(answered / planned * 100) if planned else 0,
+    }
+    context.update(extra)
+    return context
 
 
 def _next_question_response(request, session):
@@ -63,12 +86,7 @@ def _next_question_response(request, session):
     return render(
         request,
         "reviews/partials/question.html",
-        {
-            "session": session,
-            "question": question,
-            "form": form,
-            "is_timed_exam": timed_exam,
-        },
+        _question_partial_context(session, question, form),
     )
 
 
@@ -165,6 +183,27 @@ class ReviewSetupTimingView(StudentRequiredMixin, View):
         })
 
 
+class ReviewSetupPreviewAPIView(StudentRequiredMixin, View):
+    """GET ?topic=<pk> — question counts per difficulty and timing for exam preview."""
+
+    def get(self, request):
+        topic_id = request.GET.get("topic", "")
+        if not topic_id.isdigit():
+            return JsonResponse({})
+        topic = Topic.objects.filter(pk=int(topic_id)).select_related("subject").first()
+        if not topic:
+            return JsonResponse({})
+        assignment = assignment_for_student_subject(request.user, topic.subject)
+        if not assignment or not assignment.course:
+            return JsonResponse({})
+        return JsonResponse({
+            "easy": count_available_questions(topic, Question.Difficulty.EASY),
+            "medium": count_available_questions(topic, Question.Difficulty.MEDIUM),
+            "hard": count_available_questions(topic, Question.Difficulty.HARD),
+            "seconds_per_question": exam_seconds_per_question(assignment.course),
+        })
+
+
 class ReviewSessionView(StudentRequiredMixin, DetailView):
     """Active review session container."""
 
@@ -177,11 +216,12 @@ class ReviewSessionView(StudentRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["answered_count"] = self.object.answers.count()
+        answered = self.object.answers.count()
+        planned = self.object.planned_question_count or 0
+        context["answered_count"] = answered
+        context["planned_question_count"] = planned
         context["remaining_seconds"] = self.object.remaining_seconds
         context["is_timed_exam"] = self.object.mode == ReviewSession.Mode.TIMED_EXAM
-        planned = self.object.planned_question_count
-        answered = context["answered_count"]
         context["question_position"] = min(answered + 1, planned) if planned else answered + 1
         context["remaining_questions"] = max(0, (planned or 0) - answered)
         context["progress_percent"] = (
@@ -223,13 +263,7 @@ class SubmitAnswerView(StudentRequiredMixin, View):
             return render(
                 request,
                 "reviews/partials/question.html",
-                {
-                    "session": session,
-                    "question": question,
-                    "form": form,
-                    "errors": True,
-                    "is_timed_exam": timed_exam,
-                },
+                _question_partial_context(session, question, form, errors=True),
             )
 
         time_spent = int(request.POST.get("time_spent_seconds", 0) or 0)

@@ -623,6 +623,21 @@ class TeachingAssignmentForm(forms.Form):
         current_term = AcademicTerm.get_current()
         if current_term:
             self.fields["term"].initial = current_term.pk
+        if dept_id:
+            from apps.questions.models import Subject
+
+            subject_qs = Subject.objects.filter(
+                program__managing_department_id=dept_id,
+            ).select_related("program", "year_level")
+            if current_term:
+                from apps.questions.curriculum import term_semester
+
+                semester = term_semester(current_term)
+                if semester is not None:
+                    subject_qs = subject_qs.filter(semester=semester)
+            self.fields["subject"].queryset = subject_qs.order_by(
+                "program__name", "year_level__order", "code"
+            )
         section_ids = self.data.getlist("program_sections") if self.data else []
         term_id = self.data.get("term") if self.data else None
         first_section_id = next(

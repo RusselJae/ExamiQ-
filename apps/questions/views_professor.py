@@ -41,11 +41,11 @@ from apps.questions.views_curriculum import (
     ProfessorCurriculumSubjectsView as ProfessorCurriculumSubjectsAPI,
 )
 from apps.questions.services import (
+    activate_question,
     build_steps_from_post,
     create_question,
     deactivate_question,
     find_duplicate_question,
-    submit_question_for_review,
 )
 from apps.users.assignment_services import (
     get_assigned_subjects_queryset,
@@ -73,7 +73,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
 
         queryset = (
             Question.objects.filter(topic__subject__program=self.course.program)
-            .select_related("topic")
+            .select_related("topic", "topic__subject")
             .annotate(mistake_count=Count("mistake_records"))
         )
         queryset = apply_date_range(queryset, self.request, "created")
@@ -91,6 +91,10 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         topic_id = get_filter_param(self.request, "topic")
         if topic_id.isdigit():
             queryset = queryset.filter(topic_id=int(topic_id))
+
+        subject_id = get_filter_param(self.request, "subject")
+        if subject_id.isdigit():
+            queryset = queryset.filter(topic__subject_id=int(subject_id))
 
         difficulty = get_filter_param(self.request, "difficulty")
         if difficulty in Question.Difficulty.values:
@@ -117,7 +121,10 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         context["active_tab"] = "questions"
         context["ai_provider_label"] = get_ai_provider_label()
         topics = Topic.objects.filter(subject__program=self.course.program).order_by("name")
-        filter_names = ["q", "topic", "difficulty", "type", "active", "date_from", "date_to", "sort"]
+        subjects = get_assigned_subjects_queryset(
+            self.request.user, self.course.program_id
+        ).order_by("code")
+        filter_names = ["q", "topic", "subject", "difficulty", "type", "active", "date_from", "date_to", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -126,6 +133,12 @@ class QuestionListView(ProfessorCourseMixin, ListView):
                     "name": "q",
                     "label": "Search",
                     "placeholder": "Question stem text",
+                },
+                {
+                    "type": "select",
+                    "name": "subject",
+                    "label": "Course",
+                    "choices": [(str(s.pk), s.name) for s in subjects],
                 },
                 {
                     "type": "select",
@@ -223,7 +236,7 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         self.object.question_type = Question.QuestionType.MCQ
 
-        self.object.status = Question.Status.PENDING
+        self.object.status = Question.Status.APPROVED
 
         self.object.proposed_by = self.request.user
 
@@ -233,7 +246,18 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         choice_formset.save()
 
-        messages.success(self.request, "Question submitted for chairperson review.")
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        log_audit_event(
+            self.request.user,
+            AuditLog.Action.QUESTION_CREATE,
+            message=f"Created question #{self.object.pk}",
+            target_type="Question",
+            target_id=self.object.pk,
+        )
+
+        messages.success(self.request, "Question saved and published.")
 
         return redirect(self.get_success_url())
 
@@ -315,9 +339,18 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
         choice_formset.save()
 
-        submit_question_for_review(self.object, self.request.user)
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
 
-        messages.success(self.request, "Changes submitted for chairperson review.")
+        log_audit_event(
+            self.request.user,
+            AuditLog.Action.QUESTION_UPDATE,
+            message=f"Updated question #{self.object.pk}",
+            target_type="Question",
+            target_id=self.object.pk,
+        )
+
+        messages.success(self.request, "Question updated.")
 
         return redirect(self.get_success_url())
 
@@ -374,6 +407,36 @@ class QuestionDeleteView(ProfessorCourseMixin, DeleteView):
 
 
 
+class QuestionToggleActiveView(ProfessorCourseMixin, View):
+    """Toggle question is_active without a confirmation page."""
+
+    def post(self, request, course_pk, question_pk):
+        question = get_object_or_404(
+            Question,
+            pk=question_pk,
+            topic__subject__program=self.course.program,
+        )
+        was_active = question.is_active
+        if was_active:
+            deactivate_question(question)
+            messages.success(request, "Question deactivated.")
+        else:
+            activate_question(question)
+            messages.success(request, "Question reactivated.")
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        log_audit_event(
+            request.user,
+            AuditLog.Action.QUESTION_TOGGLE,
+            message=f"{'Deactivated' if was_active else 'Reactivated'} question #{question.pk}",
+            target_type="Question",
+            target_id=question.pk,
+        )
+        return redirect("analytics_professor:question_list", course_pk=self.course.pk)
+
+
+
 
 class QuestionSuggestDifficultyView(ProfessorCourseMixin, View):
 
@@ -396,136 +459,6 @@ class QuestionSuggestDifficultyView(ProfessorCourseMixin, View):
         )
 
 
-
-
-
-class QuestionGenerateVariationsView(ProfessorCourseMixin, View):
-
-    def post(self, request, course_pk, question_pk):
-
-        question = Question.objects.filter(
-
-            pk=question_pk,
-
-            topic__subject__program=self.course.program,
-
-        ).select_related("topic").first()
-
-        if not question:
-            return HttpResponse(status=404)
-
-        ai_error = None
-        variations = []
-        try:
-            variations = normalize_generated_questions(
-                get_question_generator().generate(
-                    question.topic,
-                    question.difficulty,
-                    count=3,
-                    reference_stem=question.stem,
-                )
-            )
-        except AIServiceUnavailableError as exc:
-            ai_error = exc.message
-
-        return render(
-            request,
-            "professor/questions/partials/variations_modal.html",
-            {
-                "variations": variations,
-                "question": question,
-                "course": self.course,
-                "ai_error": ai_error,
-            },
-        )
-
-
-
-
-
-class QuestionConfirmVariationsView(ProfessorCourseMixin, View):
-
-    def post(self, request, course_pk, question_pk):
-
-        question = Question.objects.filter(
-
-            pk=question_pk,
-
-            topic__subject__program=self.course.program,
-
-        ).select_related("topic").first()
-
-        if not question:
-
-            return HttpResponse(status=404)
-
-
-
-        indices = request.POST.getlist("selected")
-
-        created = 0
-        skipped_invalid = 0
-        skipped_duplicates: list[str] = []
-
-        for index in indices:
-            stem = request.POST.get(f"stem_{index}", "").strip()
-            if not stem:
-                continue
-            choices_data = []
-            correct_label = ""
-            for label in ("A", "B", "C", "D"):
-                text = request.POST.get(f"choice_{index}_{label}", "").strip()
-                is_correct = request.POST.get(f"correct_{index}_{label}") == "on"
-                if is_correct:
-                    correct_label = label
-                if text:
-                    choices_data.append({"label": label, "text": text, "is_correct": is_correct})
-
-            validation = validate_question_for_submit(
-                stem, choices_data, question.topic, question.difficulty, correct_label
-            )
-            if not validation.get("is_valid"):
-                skipped_invalid += 1
-                continue
-
-            if find_duplicate_question(question.topic_id, stem):
-                skipped_duplicates.append(stem[:60])
-                continue
-
-            steps = build_steps_from_post(
-                request.POST.get(f"steps_{index}", ""),
-                solution_summary=request.POST.get(f"solution_summary_{index}", ""),
-            )
-            if not steps:
-                steps = [{"order": 1, "content": f"See original question #{question.pk} for explanation pattern."}]
-
-            create_question(
-                {
-                    "topic": question.topic,
-                    "difficulty": question.difficulty,
-                    "question_type": Question.QuestionType.MCQ,
-                    "stem": stem,
-                    "is_active": True,
-                    "status": Question.Status.PENDING,
-                    "proposed_by": request.user,
-                },
-                choices_data,
-                steps,
-            )
-            created += 1
-
-        if skipped_invalid:
-            messages.error(request, f"Skipped {skipped_invalid} invalid variation(s).")
-        if skipped_duplicates:
-            messages.warning(
-                request,
-                "Skipped duplicate variation(s) already in the question bank.",
-            )
-        if created:
-            messages.success(request, f"Created {created} variation(s) pending review.")
-        else:
-            messages.warning(request, "No variations were saved.")
-        return redirect("analytics_professor:question_list", course_pk=self.course.pk)
 
 
 class ProfessorCurriculumSubjectsView(ProfessorCourseMixin, ProfessorCurriculumSubjectsAPI):
@@ -649,7 +582,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 concept_tag=concept_tag,
                 solution_summary=request.POST.get(f"solution_summary_{index}", ""),
             )
-            create_question(
+            question = create_question(
                 {
                     "topic": topic,
                     "difficulty": difficulty,
@@ -657,11 +590,21 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     "stem": stem,
                     "concept_tag": concept_tag,
                     "is_active": True,
-                    "status": Question.Status.PENDING,
+                    "status": Question.Status.APPROVED,
                     "proposed_by": request.user,
                 },
                 choices_data,
                 steps,
+            )
+            from apps.core.audit import log_audit_event
+            from apps.core.models import AuditLog
+
+            log_audit_event(
+                request.user,
+                AuditLog.Action.QUESTION_CREATE,
+                message=f"Created question #{question.pk}",
+                target_type="Question",
+                target_id=question.pk,
             )
             created += 1
 
@@ -678,7 +621,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 + ("…" if len(skipped_duplicates) > 3 else ""),
             )
         if created:
-            messages.success(request, f"Submitted {created} question(s) for chairperson review.")
+            messages.success(request, f"Saved {created} question(s) to the question bank.")
             return redirect("analytics_professor:question_list", course_pk=self.course.pk)
         if not skipped_invalid and not skipped_duplicates:
             messages.warning(request, "No questions were saved. Add at least one complete question.")

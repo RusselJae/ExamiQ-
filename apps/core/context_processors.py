@@ -1,6 +1,5 @@
 """Template context processors for global navigation."""
 
-from apps.analytics.services import pending_question_review_count
 from apps.users.assignment_services import get_professor_course_queryset
 from apps.users.models import Course, User
 from apps.users.notification_services import unread_notification_count
@@ -11,7 +10,6 @@ def navigation_context(request):
     context = {
         "professor_courses": [],
         "sidebar_course": None,
-        "pending_question_count": 0,
         "summary_courses": [],
         "unread_notification_count": 0,
     }
@@ -20,9 +18,6 @@ def navigation_context(request):
         return context
 
     context["unread_notification_count"] = unread_notification_count(user)
-
-    if user.role == User.Role.CHAIRPERSON:
-        context["pending_question_count"] = pending_question_review_count(user)
 
     if user.role != User.Role.PROFESSOR:
         return context

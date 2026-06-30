@@ -110,19 +110,14 @@ urlpatterns = [
         name="question_delete",
     ),
     path(
+        "courses/<int:course_pk>/questions/<int:question_pk>/toggle-active/",
+        question_views.QuestionToggleActiveView.as_view(),
+        name="question_toggle_active",
+    ),
+    path(
         "courses/<int:course_pk>/questions/suggest-difficulty/",
         question_views.QuestionSuggestDifficultyView.as_view(),
         name="question_suggest_difficulty",
-    ),
-    path(
-        "courses/<int:course_pk>/questions/<int:question_pk>/generate-variations/",
-        question_views.QuestionGenerateVariationsView.as_view(),
-        name="question_generate_variations",
-    ),
-    path(
-        "courses/<int:course_pk>/questions/<int:question_pk>/confirm-variations/",
-        question_views.QuestionConfirmVariationsView.as_view(),
-        name="question_confirm_variations",
     ),
     path(
         "courses/<int:course_pk>/feedback/",

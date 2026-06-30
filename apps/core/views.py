@@ -1,6 +1,11 @@
+from django.db import connection
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
+from django.utils.decorators import method_decorator
 
 from apps.users.models import User
 
@@ -23,3 +28,22 @@ class HomeView(View):
         if request.user.is_authenticated:
             return redirect(get_role_dashboard_url(request.user))
         return render(request, "landing/home.html")
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class HealthCheckView(View):
+    """Lightweight health probe for load balancers and uptime monitors."""
+
+    @method_decorator(require_GET)
+    def get(self, request):
+        db_status = "ok"
+        status_code = 200
+        try:
+            connection.ensure_connection()
+        except Exception:
+            db_status = "error"
+            status_code = 503
+        return JsonResponse(
+            {"status": "ok" if db_status == "ok" else "degraded", "database": db_status},
+            status=status_code,
+        )

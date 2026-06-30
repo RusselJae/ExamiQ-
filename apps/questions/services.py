@@ -375,6 +375,12 @@ def update_question(
 
 
 
+def activate_question(question: "Question") -> "Question":
+    question.is_active = True
+    question.save(update_fields=["is_active"])
+    return question
+
+
 def deactivate_question(question: "Question") -> "Question":
 
     question.is_active = False

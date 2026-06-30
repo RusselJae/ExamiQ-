@@ -149,6 +149,7 @@ class CourseRosterView(ProfessorCourseMixin, ListView):
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
+        context["filter_bar_compact"] = True
         return context
 
 

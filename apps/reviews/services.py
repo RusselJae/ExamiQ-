@@ -39,7 +39,7 @@ def start_review_session(
         settings, "DEFAULT_SECONDS_PER_QUESTION", 30
     )
     planned_question_count = count_available_questions(topic, difficulty)
-    return ReviewSession.objects.create(
+    session = ReviewSession.objects.create(
         student=student,
         topic=topic,
         difficulty=difficulty,
@@ -53,6 +53,18 @@ def start_review_session(
         pre_session_confidence=pre_session_confidence,
         session_goal=session_goal,
     )
+    from apps.core.audit import log_audit_event
+    from apps.core.models import AuditLog
+
+    log_audit_event(
+        student,
+        AuditLog.Action.SESSION_START,
+        target_user=student,
+        message=f"Started exam on {topic.name} ({difficulty})",
+        target_type="ReviewSession",
+        target_id=session.pk,
+    )
+    return session
 
 
 def start_session_from_window(
@@ -170,6 +182,17 @@ def complete_session(session: ReviewSession) -> ReviewSession:
         session.status = ReviewSession.Status.COMPLETED
         session.ended_at = timezone.now()
         session.save(update_fields=["status", "ended_at"])
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        log_audit_event(
+            session.student,
+            AuditLog.Action.SESSION_COMPLETE,
+            target_user=session.student,
+            message=f"Completed exam on {session.topic.name}",
+            target_type="ReviewSession",
+            target_id=session.pk,
+        )
     return session
 
 

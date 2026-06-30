@@ -349,17 +349,6 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
     return cards
 
 
-def pending_question_review_count(chairperson: User) -> int:
-    """Return pending question count for a chairperson's department."""
-    department = chairperson.department
-    if not department:
-        return 0
-    return Question.objects.filter(
-        status=Question.Status.PENDING,
-        topic__subject__program__managing_department=department,
-    ).count()
-
-
 def _course_student_ids(course: Course):
     """Students who have practiced via this course offering."""
     return (

@@ -1,13 +1,9 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags static %}
+{% load static %}
 
 {% block title %}Start Exam - EXAMIQ+{% endblock %}
 
 {% block main_class %}review-setup-page{% endblock %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/custom.css' %}">
-{% endblock %}
 
 {% block content %}
 {% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick your subject, topic, and difficulty. Questions are timed — explanations appear at the end." %}
@@ -22,33 +18,76 @@
 {% endif %}
 
 <div class="review-setup-grid review-setup-grid--single">
-    <div class="bento-card p-6">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Exam setup</h2>
-
-        <div class="review-setup-instructions rounded-xl bg-sky-50 border border-sky-100 text-sm text-examiq-navy px-4 py-3 mb-6">
-            <p class="font-semibold mb-2">How it works</p>
-            <ul class="list-disc list-inside space-y-1 text-examiq-slate">
-                <li>Choose a subject assigned to your section this term.</li>
-                <li>Pick a topic and difficulty level enabled by your instructor.</li>
-                <li>Each question is timed — answer honestly when rating confidence.</li>
-                <li>Explanations appear after you finish the exam.</li>
-            </ul>
-        </div>
-
+    <div class="student-setup-card bento-card">
         {% if no_exams_available %}
-        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3">
+        <div class="student-setup-empty">
             No exams available for your section right now. Check back when your instructor enables exam setup.
         </div>
         {% else %}
-        <form method="post" id="review-setup-form" class="space-y-4">
+        <form
+            method="post"
+            id="review-setup-form"
+            class="student-setup-form"
+            data-topics-api="{% url 'reviews:setup_topics' %}"
+            data-preview-api="{% url 'reviews:setup_preview' %}"
+            data-preselected-topic="{% if preselected_topic_id %}{{ preselected_topic_id }}{% endif %}"
+        >
             {% csrf_token %}
             {{ form.pre_session_confidence.as_hidden }}
             {{ form.session_goal.as_hidden }}
-            {{ form.subject|as_crispy_field }}
-            {{ form.topic|as_crispy_field }}
-            {{ form.difficulty|as_crispy_field }}
-            <p id="exam-timing-summary" class="text-sm text-examiq-slate hidden mt-2" role="status"></p>
-            <button type="submit" class="btn-primary w-full mt-2">Start exam</button>
+
+            <div class="student-setup-callout" role="note">
+                <p class="student-setup-callout__title">How it works</p>
+                <ul class="student-setup-callout__list">
+                    <li>Choose a subject assigned to your section this term.</li>
+                    <li>Pick a topic and difficulty level enabled by your instructor.</li>
+                    <li>Each question is timed — answer honestly when rating confidence.</li>
+                    <li>Explanations appear after you finish the exam.</li>
+                </ul>
+            </div>
+
+            <div class="student-setup-fields">
+                <div class="student-setup-field">
+                    <label class="student-setup-field__label" for="id_subject">Subject</label>
+                    {{ form.subject }}
+                </div>
+                <div class="student-setup-field">
+                    <label class="student-setup-field__label" for="id_topic">Topic</label>
+                    {{ form.topic }}
+                </div>
+            </div>
+
+            <fieldset class="student-setup-difficulty">
+                <legend class="student-setup-field__label">Difficulty</legend>
+                <div class="student-setup-difficulty__grid" id="difficulty-cards" role="radiogroup" aria-label="Difficulty level">
+                    {% for value, label in form.difficulty.field.choices %}
+                    <button
+                        type="button"
+                        class="select-card student-setup-difficulty__card"
+                        data-difficulty="{{ value }}"
+                        aria-pressed="false"
+                    >
+                        <span class="student-setup-difficulty__name">{{ label }}</span>
+                        <span class="student-setup-difficulty__count" data-difficulty-count="{{ value }}">—</span>
+                        <span class="student-setup-difficulty__hint">questions</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div class="sr-only">{{ form.difficulty }}</div>
+            </fieldset>
+
+            <div class="student-setup-summary">
+                <div class="student-setup-summary__card">
+                    <span class="student-setup-summary__label">Questions</span>
+                    <span class="student-setup-summary__value" id="summary-question-count">—</span>
+                </div>
+                <div class="student-setup-summary__card">
+                    <span class="student-setup-summary__label">Seconds per question</span>
+                    <span class="student-setup-summary__value" id="summary-seconds">—</span>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary student-setup-submit" id="start-exam-btn">Start exam</button>
         </form>
         {% endif %}
     </div>
@@ -61,54 +100,11 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/pre-exam-modals.js' %}"></script>
+{% if not no_exams_available %}
 <script>
-(function() {
-    const subjectSelect = document.getElementById("id_subject");
-    const topicSelect = document.getElementById("id_topic");
-    const timingSummary = document.getElementById("exam-timing-summary");
-    if (!subjectSelect || !topicSelect) return;
-
-    const preselectedTopicId = {% if preselected_topic_id %}{{ preselected_topic_id }}{% else %}null{% endif %};
-
-    async function loadTiming(subjectId) {
-        if (!timingSummary) return;
-        timingSummary.classList.add("hidden");
-        timingSummary.textContent = "";
-        if (!subjectId) return;
-        const resp = await fetch("{% url 'reviews:setup_timing' %}?subject=" + encodeURIComponent(subjectId));
-        const data = await resp.json();
-        if (data.seconds_per_question) {
-            timingSummary.textContent = data.seconds_per_question + " seconds per question";
-            timingSummary.classList.remove("hidden");
-        }
-    }
-
-    async function loadTopics(subjectId, selectTopicId) {
-        topicSelect.innerHTML = '<option value="">---------</option>';
-        if (!subjectId) return;
-        const resp = await fetch("{% url 'reviews:setup_topics' %}?subject=" + encodeURIComponent(subjectId));
-        const data = await resp.json();
-        data.topics.forEach(function(t) {
-            const opt = document.createElement("option");
-            opt.value = t.id;
-            opt.textContent = t.name;
-            topicSelect.appendChild(opt);
-        });
-        if (selectTopicId) {
-            topicSelect.value = String(selectTopicId);
-        }
-    }
-
-    subjectSelect.addEventListener("change", function() {
-        loadTopics(subjectSelect.value, null);
-        loadTiming(subjectSelect.value);
-    });
-
-    if (subjectSelect.value) {
-        loadTopics(subjectSelect.value, preselectedTopicId);
-        loadTiming(subjectSelect.value);
-    }
-})();
+    var preselectedTopicId = {% if preselected_topic_id %}{{ preselected_topic_id }}{% else %}null{% endif %};
 </script>
+<script src="{% static 'js/pre-exam-modals.js' %}"></script>
+<script src="{% static 'js/exam-setup.js' %}"></script>
+{% endif %}
 {% endblock %}

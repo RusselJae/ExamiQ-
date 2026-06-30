@@ -31,8 +31,20 @@ class ExamSetupUpdateView(ProfessorCourseMixin, UpdateView):
         return kwargs
 
     def form_valid(self, form):
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        response = super().form_valid(form)
+        log_audit_event(
+            self.request.user,
+            AuditLog.Action.EXAM_SETUP_SAVE,
+            message=f"Saved exam setup for {self.course.code}",
+            target_type="Course",
+            target_id=self.course.pk,
+            metadata={"course_code": self.course.code},
+        )
         messages.success(self.request, "Exam setup saved.")
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return reverse("analytics_professor:exam_setup", kwargs={"course_pk": self.course.pk})
@@ -68,6 +80,7 @@ class ReviewWindowListView(ProfessorCourseMixin, ListView):
             STANDARD_DATE_SORT_FILTER_SPECS,
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
+        context["filter_bar_compact"] = True
         now = timezone.now()
         context["upcoming_windows"] = [w for w in context["windows"] if w.opens_at > now]
         context["active_windows"] = [w for w in context["windows"] if w.is_open]

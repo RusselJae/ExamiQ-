@@ -4,7 +4,10 @@
 {% block app_shell %}
 <div class="focus-shell w-full min-h-screen">
 <header class="focus-header">
-    <a href="{% url 'core:home' %}" class="focus-header__logo">EXAMIQ+</a>
+    <a href="{% url 'core:home' %}" class="focus-header__logo" aria-label="ExamiQ+ home">
+        {% include "components/landing_logo_icon.html" %}
+        <span class="focus-header__logo-text">ExamiQ+</span>
+    </a>
 </header>
 
 <a href="{% url 'analytics_student:dashboard' %}" class="focus-exit-fab" aria-label="Exit review session">
@@ -14,6 +17,10 @@
     <span>Exit</span>
 </a>
 
+{% if is_timed_exam %}
+<div class="focus-layout focus-layout--exam px-4 pb-4 min-h-[calc(100vh-4rem)]">
+    <div class="min-w-0 focus-layout__center">
+{% else %}
 <div class="focus-layout grid grid-cols-1 lg:grid-cols-[auto_1fr_auto] gap-4 px-4 pb-4 min-h-[calc(100vh-4rem)]">
     {# Left sidebar #}
     <aside id="left-sidebar" class="focus-sidebar w-64 shrink-0" data-sidebar="left">
@@ -83,7 +90,12 @@
 
     {# Center — question container #}
     <div class="min-w-0">
+{% endif %}
         {% block focus_center %}{% endblock %}
+{% if is_timed_exam %}
+    </div>
+</div>
+{% else %}
     </div>
 
     {# Right sidebar #}
@@ -102,7 +114,6 @@
         </div>
 
         <div class="sidebar-content space-y-3">
-            {% if not is_timed_exam %}
             <div class="focus-card focus-card--center">
                 <p class="focus-card__label">Time Remaining</p>
                 <div id="timer"
@@ -111,13 +122,6 @@
                     --:--
                 </div>
             </div>
-            {% else %}
-            <div class="focus-card focus-card--center">
-                <p class="focus-card__label">Per question</p>
-                <p class="text-2xl font-mono font-bold text-examiq-navy mt-1">{{ session.seconds_per_question }}s</p>
-                <p class="text-xs text-examiq-slate mt-2">Timer resets each question</p>
-            </div>
-            {% endif %}
             <div class="focus-card focus-card--center">
                 <p class="focus-card__label">Status</p>
                 <p class="focus-status flex items-center justify-center gap-2 text-sm font-medium text-examiq-navy mt-1">
@@ -128,6 +132,7 @@
         </div>
     </aside>
 </div>
+{% endif %}
 
 <form id="expire-form" method="post" action="{% url 'reviews:expire' session.pk %}" class="hidden">
     {% csrf_token %}
@@ -139,6 +144,7 @@
 
 {% block extra_js %}
 <script src="{% static 'js/review-focus.js' %}"></script>
+{% if not is_timed_exam %}
 <script>
 (function() {
     const timerEl = document.getElementById("timer");
@@ -185,5 +191,6 @@
     tick();
 })();
 </script>
+{% endif %}
 {% block focus_extra_js %}{% endblock %}
 {% endblock %}

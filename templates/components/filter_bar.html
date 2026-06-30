@@ -1,6 +1,6 @@
 <div class="span-full filter-bar-container">
-    <div class="bento-card filter-bar-card">
-        <form method="get" class="filter-bar" role="search">
+    <div class="bento-card filter-bar-card{% if filter_bar_compact %} filter-bar-card--compact{% endif %}">
+        <form method="get" class="filter-bar{% if filter_bar_compact %} filter-bar--compact{% endif %}" role="search">
             <div class="filter-bar__grid">
                 {% for field in filter_form_fields %}
                     {% if field.type == "search" %}

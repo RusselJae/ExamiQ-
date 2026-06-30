@@ -1,184 +1,123 @@
-<div class="focus-card question-card-timed p-6 lg:p-8"
-
+<div class="exam-question-card focus-card question-card-timed"
      id="question-card"
-
      data-seconds="{{ session.seconds_per_question }}"
-
      data-timed-exam="{% if is_timed_exam %}true{% else %}false{% endif %}">
 
-    <div class="flex items-center justify-between mb-6">
-
-        <span class="focus-question-type-badge">
-
-            {{ question.get_question_type_display }}
-
-        </span>
-
-        {% if is_timed_exam %}
-
-        <div class="flex items-center gap-2">
-
-            <div id="question-timer-ring" class="question-timer-ring" aria-live="polite">
-
-                <span id="question-timer-display" class="question-timer-display">{{ session.seconds_per_question }}</span>
-
+    <header class="exam-question-header">
+        {% if planned_question_count %}
+        <div class="exam-progress-section">
+            <div class="exam-progress-meta">
+                <span class="exam-progress-label">Question {{ question_position }} of {{ planned_question_count }}</span>
             </div>
-
-            <span class="text-xs text-examiq-slate uppercase tracking-wide" id="question-timer-label">
-
-                <span id="question-timer-seconds">{{ session.seconds_per_question }}</span> seconds left
-
-            </span>
-
+            <div class="exam-progress-bar"
+                 role="progressbar"
+                 aria-valuenow="{{ answered_count }}"
+                 aria-valuemin="0"
+                 aria-valuemax="{{ planned_question_count }}"
+                 aria-label="Exam progress">
+                <div class="exam-progress-bar__fill"
+                     style="width: {{ progress_percent }}%;"></div>
+            </div>
         </div>
-
         {% endif %}
 
-    </div>
+        <div class="exam-meta-row">
+            <div class="exam-meta-chips">
+                <span class="exam-topic-chip">{{ session.topic.name }}</span>
+                <span class="exam-type-badge">{{ question.get_question_type_display }}</span>
+            </div>
 
+            {% if is_timed_exam %}
+            <div class="exam-timer-wrap" id="question-timer-ring" aria-live="polite">
+                <svg class="exam-timer-svg" viewBox="0 0 100 100" aria-hidden="true">
+                    <circle class="exam-timer-svg__track" cx="50" cy="50" r="45"></circle>
+                    <circle class="exam-timer-svg__progress"
+                            id="question-timer-progress"
+                            cx="50"
+                            cy="50"
+                            r="45"
+                            transform="rotate(-90 50 50)"></circle>
+                </svg>
+                <span id="question-timer-display" class="exam-timer-display">{{ session.seconds_per_question }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </header>
 
-
-    <div class="examiq-math-block my-6 rounded-xl bg-examiq-bg border border-slate-200 px-6 py-8 lg:px-8 lg:py-10 text-center text-xl lg:text-2xl text-examiq-navy font-medium leading-relaxed">
-
+    <div class="exam-stem examiq-math-block">
         {{ question.stem|linebreaks }}
-
     </div>
-
-
 
     <form hx-post="{% url 'reviews:submit_answer' session.pk question.pk %}"
-
           hx-target="#question-container"
-
           hx-swap="innerHTML"
-
-          class="space-y-8"
-
+          class="exam-answer-form"
           id="answer-form"
-
           data-confidence-form>
-
         {% csrf_token %}
-
         <input type="hidden" name="time_spent_seconds" value="0" id="time-spent">
-
         <input type="hidden" name="timed_out" value="false" id="timed-out-input">
 
-
-
         {% if form.selected_choice %}
-
-        <fieldset>
-
-            <legend class="focus-field-legend">Select your answer</legend>
-
-            <div class="grid grid-cols-1 gap-3">
-
+        <fieldset class="exam-choices-fieldset">
+            <legend class="sr-only">Select your answer</legend>
+            <div class="exam-choices-grid">
                 {% for choice in form.selected_choice %}
                 {% with choice_obj=choice.data.value.instance %}
-                <label class="choice-tile block cursor-pointer">
+                <label class="choice-tile exam-choice-tile">
                     <input type="radio" name="selected_choice" value="{{ choice.data.value }}" class="sr-only" {% if not is_timed_exam %}required{% endif %}>
-                    <div class="choice-tile-content p-4 rounded-xl border-2 border-slate-200 transition">
-                        <span class="choice-letter flex-shrink-0 w-8 h-8 rounded-full bg-examiq-bg border border-slate-200 flex items-center justify-center text-sm font-bold text-examiq-navy">
-                            {{ choice_obj.label }}
-                        </span>
-                        <span class="choice-tile-text text-examiq-navy">{{ choice_obj.text }}</span>
-                    </div>
+                    <span class="exam-choice-tile__letter">{{ choice_obj.label }}</span>
+                    <span class="exam-choice-tile__text">{{ choice_obj.text }}</span>
                 </label>
                 {% endwith %}
                 {% endfor %}
-
             </div>
-
         </fieldset>
-
         {% endif %}
-
-
 
         {% if form.numeric_response %}
-
-        <div>
-
+        <div class="exam-numeric-field">
             <label for="id_numeric_response" class="focus-field-legend block mb-3">Your answer</label>
-
             <input type="text"
-
                    name="numeric_response"
-
                    id="id_numeric_response"
-
                    placeholder="Enter your answer"
-
                    {% if not is_timed_exam %}required{% endif %}
-
-                   class="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-lg text-examiq-navy focus:border-examiq-cyan focus:ring-2 focus:ring-sky-200 outline-none transition">
-
+                   class="exam-numeric-input">
         </div>
-
         {% endif %}
-
-
 
         {% if not is_timed_exam %}
         <fieldset class="confidence-fieldset">
-
             <legend class="focus-field-legend">How confident are you?</legend>
-
             {{ form.confidence }}
-
             <div class="grid grid-cols-5 gap-2 mt-1">
-
                 {% for level in "12345" %}
-
                 <button type="button"
-
                         class="confidence-btn flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-slate-200 text-examiq-navy font-medium hover:border-examiq-cyan transition text-sm"
-
                         data-confidence="{{ level }}"
-
                         data-theme="{% if level == '1' or level == '2' %}low{% elif level == '3' %}medium{% else %}high{% endif %}"
-
                         aria-pressed="false">
-
                     {{ level }}
-
                 </button>
-
                 {% endfor %}
-
             </div>
-
             <p class="text-xs text-examiq-slate mt-2">1 = not confident &middot; 5 = very confident</p>
-
         </fieldset>
         {% endif %}
 
-
-
         {% if errors %}
-
-        <div class="rounded-xl bg-red-50 border border-red-200 text-examiq-mistake text-sm px-4 py-3">
-
+        <div class="exam-form-error" role="alert">
             {% if is_timed_exam %}
             Please select an answer.
             {% else %}
             Please select an answer and your confidence level.
             {% endif %}
-
         </div>
-
         {% endif %}
 
-
-
-        <button type="submit" class="btn-primary w-full">
-
+        <button type="submit" class="btn-primary exam-submit-btn">
             Submit and next
-
         </button>
-
     </form>
-
 </div>
-

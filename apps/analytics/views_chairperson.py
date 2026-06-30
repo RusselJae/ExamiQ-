@@ -17,10 +17,7 @@ from apps.core.filtering import (
     get_filter_param,
     has_active_filters,
 )
-from apps.core.mixins import ChairpersonRequiredMixin, QuestionApprovalMixin
-from apps.questions.forms import ExplanationStepFormSet, QuestionChoiceFormSet, QuestionForm
-from apps.questions.models import Question, Topic
-from apps.questions.services import approve_question, reject_question
+from apps.core.mixins import ChairpersonRequiredMixin
 from apps.research.models import SurveyResponse
 from apps.reviews.models import Answer, ReviewSession
 from apps.users.constants import PROGRAM_DEFINITIONS, home_programs_for_department, students_in_department
@@ -57,157 +54,6 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
         ]
         context["department"] = department
         return context
-
-
-class QuestionReviewListView(ChairpersonRequiredMixin, ListView):
-    model = Question
-    template_name = "chairperson/questions/review.html"
-    context_object_name = "questions"
-    paginate_by = 15
-
-    def get_queryset(self):
-        department = self.request.user.department
-        if not department:
-            return Question.objects.none()
-        queryset = (
-            Question.objects.filter(
-                status=Question.Status.PENDING,
-                topic__subject__program__managing_department=department,
-            )
-            .select_related("topic", "topic__subject__program", "proposed_by")
-        )
-        queryset = apply_date_range(queryset, self.request, "created")
-        queryset = apply_sort(
-            queryset,
-            self.request,
-            newest_field="-created",
-            oldest_field="created",
-        )
-
-        search = get_filter_param(self.request, "q")
-        if search:
-            queryset = queryset.filter(
-                Q(stem__icontains=search)
-                | Q(proposed_by__first_name__icontains=search)
-                | Q(proposed_by__last_name__icontains=search)
-                | Q(proposed_by__email__icontains=search)
-            )
-
-        program_id = get_filter_param(self.request, "program")
-        if program_id.isdigit():
-            queryset = queryset.filter(topic__subject__program_id=int(program_id))
-
-        topic_id = get_filter_param(self.request, "topic")
-        if topic_id.isdigit():
-            queryset = queryset.filter(topic_id=int(topic_id))
-
-        return queryset
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        department = self.request.user.department
-        programs = Program.objects.filter(managing_department=department).order_by("name")
-        topics = Topic.objects.filter(subject__program__managing_department=department).order_by(
-            "subject__program__name", "name"
-        )
-        filter_names = ["q", "program", "topic", "date_from", "date_to", "sort"]
-        context["filter_form_fields"] = build_filter_fields(
-            self.request,
-            [
-                {
-                    "type": "search",
-                    "name": "q",
-                    "label": "Search",
-                    "placeholder": "Question text or proposer",
-                },
-                {
-                    "type": "select",
-                    "name": "program",
-                    "label": "Program",
-                    "choices": [(str(program.pk), program.name) for program in programs],
-                },
-                {
-                    "type": "select",
-                    "name": "topic",
-                    "label": "Topic",
-                    "choices": [
-                        (str(topic.pk), f"{topic.subject.program.name} · {topic.name}")
-                        for topic in topics
-                    ],
-                },
-                *STANDARD_DATE_SORT_FILTER_SPECS,
-            ],
-        )
-        context["filter_has_active"] = has_active_filters(self.request, filter_names)
-        return context
-
-
-class QuestionReviewApproveView(QuestionApprovalMixin, View):
-    def post(self, request, question_pk):
-        question = get_object_or_404(
-            Question,
-            pk=question_pk,
-            status=Question.Status.PENDING,
-            topic__subject__program__managing_department=request.user.department,
-        )
-        approve_question(question, request.user)
-        messages.success(request, "Question approved and published.")
-        return redirect("analytics_chairperson:question_review")
-
-
-class QuestionReviewRejectView(QuestionApprovalMixin, View):
-    def post(self, request, question_pk):
-        question = get_object_or_404(
-            Question,
-            pk=question_pk,
-            status=Question.Status.PENDING,
-            topic__subject__program__managing_department=request.user.department,
-        )
-        note = request.POST.get("rejection_note", "")
-        reject_question(question, request.user, note=note)
-        messages.warning(request, "Question rejected.")
-        return redirect("analytics_chairperson:question_review")
-
-
-class QuestionReviewEditView(QuestionApprovalMixin, UpdateView):
-    model = Question
-    form_class = QuestionForm
-    template_name = "chairperson/questions/review_form.html"
-    pk_url_kwarg = "question_pk"
-
-    def get_queryset(self):
-        return Question.objects.filter(
-            status=Question.Status.PENDING,
-            topic__subject__program__managing_department=self.request.user.department,
-        )
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["program"] = self.object.topic.subject.program
-        return kwargs
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        if self.request.POST:
-            context["choice_formset"] = QuestionChoiceFormSet(self.request.POST, instance=self.object)
-            context["step_formset"] = ExplanationStepFormSet(self.request.POST, instance=self.object)
-        else:
-            context["choice_formset"] = QuestionChoiceFormSet(instance=self.object)
-            context["step_formset"] = ExplanationStepFormSet(instance=self.object)
-        return context
-
-    def form_valid(self, form):
-        context = self.get_context_data()
-        choice_formset = context["choice_formset"]
-        step_formset = context["step_formset"]
-        if not (choice_formset.is_valid() and step_formset.is_valid()):
-            return self.form_invalid(form)
-        self.object = form.save()
-        choice_formset.save()
-        step_formset.save()
-        approve_question(self.object, self.request.user)
-        messages.success(self.request, "Question edited and approved.")
-        return redirect("analytics_chairperson:question_review")
 
 
 class CrossProgramAnalyticsView(ChairpersonRequiredMixin, TemplateView):
@@ -305,6 +151,7 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
+        context["filter_bar_compact"] = True
         return context
 
 

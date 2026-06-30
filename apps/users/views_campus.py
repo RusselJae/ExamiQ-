@@ -185,6 +185,7 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
+        context["filter_bar_compact"] = True
         return context
 
 
@@ -238,6 +239,17 @@ class CampusApproveUserView(CampusAdminRequiredMixin, View):
         user.is_active = True
         user.approval_status = User.ApprovalStatus.APPROVED
         user.save(update_fields=["is_active", "approval_status"])
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        log_audit_event(
+            request.user,
+            AuditLog.Action.USER_APPROVE,
+            target_user=user,
+            message=f"Approved registration for {user.email}",
+            target_type="User",
+            target_id=user.pk,
+        )
         send_account_approved_email(user)
         create_notification(
             user,
@@ -258,6 +270,17 @@ class CampusRejectUserView(CampusAdminRequiredMixin, View):
         user.is_active = False
         user.approval_status = User.ApprovalStatus.REJECTED
         user.save(update_fields=["is_active", "approval_status"])
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        log_audit_event(
+            request.user,
+            AuditLog.Action.USER_REJECT,
+            target_user=user,
+            message=f"Rejected registration for {user.email}",
+            target_type="User",
+            target_id=user.pk,
+        )
         send_account_rejected_email(user)
         create_notification(
             user,

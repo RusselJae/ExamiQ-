@@ -1,6 +1,7 @@
 """Chairperson teaching assignment views."""
 
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views import View
@@ -14,8 +15,11 @@ from apps.core.filtering import (
     get_filter_param,
     has_active_filters,
 )
+from apps.core.audit import log_audit_event
+from apps.core.models import AuditLog
 from apps.core.mixins import ChairpersonRequiredMixin
 from apps.questions.curriculum import subjects_for_teaching_assignment
+from apps.questions.models import Subject
 from apps.users.assignment_services import create_teaching_assignments
 from apps.users.forms import TeachingAssignmentForm
 from apps.users.models import AcademicTerm, ProgramSection, TeachingAssignment
@@ -82,6 +86,9 @@ class ChairpersonAssignmentListView(ChairpersonRequiredMixin, ListView):
         context["filter_has_active"] = has_active_filters(
             self.request, ["term", "date_from", "date_to", "sort"]
         )
+        context["filter_bar_compact"] = True
+        current_term = AcademicTerm.get_current()
+        context["current_term_label"] = str(current_term) if current_term else "Current term"
         context["assignment_stats"] = {
             "total": base_qs.count(),
             "faculty": base_qs.values("professor_id").distinct().count(),
@@ -131,6 +138,17 @@ class ChairpersonAssignmentCreateView(ChairpersonRequiredMixin, FormView):
             )
         else:
             messages.info(self.request, "All selected assignments already exist.")
+        if created:
+            log_audit_event(
+                self.request.user,
+                AuditLog.Action.ASSIGNMENT_CREATE,
+                target_user=form.cleaned_data["professor"],
+                message=(
+                    f"Assigned {form.cleaned_data['professor'].email} to {created} section(s) "
+                    f"for {form.cleaned_data['subject'].code}"
+                ),
+                metadata={"created": created, "skipped": skipped},
+            )
         return super().form_valid(form)
 
     def form_invalid(self, form):
@@ -152,7 +170,16 @@ class ChairpersonAssignmentDeleteView(ChairpersonRequiredMixin, View):
             messages.error(request, "You cannot remove assignments outside your department.")
             return redirect("analytics_chairperson:assignments")
 
+        professor = assignment.professor
+        section_label = assignment.program_section.display_label
+        subject_code = assignment.subject.code
         assignment.delete()
+        log_audit_event(
+            request.user,
+            AuditLog.Action.ASSIGNMENT_DELETE,
+            target_user=professor,
+            message=f"Removed assignment: {professor.email} — {section_label} — {subject_code}",
+        )
         messages.success(request, "Teaching assignment removed.")
         return redirect("analytics_chairperson:assignments")
 
@@ -191,3 +218,54 @@ class ChairpersonAssignmentSubjectsAPIView(ChairpersonRequiredMixin, View):
                 for s in subjects
             ]
         })
+
+
+class ChairpersonAssignmentSectionsAPIView(ChairpersonRequiredMixin, View):
+    """GET ?subject=&term= — sections grouped by year with assignment state."""
+
+    def get(self, request):
+        subject_id = request.GET.get("subject", "")
+        term_id = request.GET.get("term", "")
+        if not subject_id.isdigit():
+            return JsonResponse({"groups": []})
+
+        subject = Subject.objects.filter(pk=int(subject_id)).select_related("program").first()
+        if not subject:
+            return JsonResponse({"groups": []})
+
+        dept_id = request.user.department_id
+        if dept_id and subject.program.managing_department_id != dept_id:
+            return JsonResponse({"groups": []})
+
+        term = AcademicTerm.objects.filter(pk=int(term_id)).first() if term_id.isdigit() else None
+        if not term:
+            term = AcademicTerm.get_current()
+        if not term:
+            return JsonResponse({"groups": []})
+
+        sections = (
+            ProgramSection.queryset_with_counts()
+            .filter(program=subject.program, is_active=True)
+            .select_related("year_level")
+            .order_by("year_level__order", "label")
+        )
+        assigned_ids = set(
+            TeachingAssignment.objects.filter(subject=subject, term=term).values_list(
+                "program_section_id", flat=True
+            )
+        )
+
+        groups: dict[str, dict] = {}
+        for section in sections:
+            year_name = section.year_level.name if section.year_level else "Other"
+            if year_name not in groups:
+                groups[year_name] = {"year": year_name, "sections": []}
+            groups[year_name]["sections"].append(
+                {
+                    "id": section.pk,
+                    "label": f"Section {section.label}",
+                    "student_count": section.student_count,
+                    "already_assigned": section.pk in assigned_ids,
+                }
+            )
+        return JsonResponse({"groups": list(groups.values())})

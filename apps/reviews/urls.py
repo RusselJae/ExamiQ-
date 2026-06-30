@@ -9,6 +9,7 @@ urlpatterns = [
     path("review/setup/subjects/", views.ReviewSetupSubjectsView.as_view(), name="setup_subjects"),
     path("review/setup/topics/", views.ReviewSetupTopicsView.as_view(), name="setup_topics"),
     path("review/setup/timing/", views.ReviewSetupTimingView.as_view(), name="setup_timing"),
+    path("review/setup/preview/", views.ReviewSetupPreviewAPIView.as_view(), name="setup_preview"),
     path("review/<int:pk>/", views.ReviewSessionView.as_view(), name="session"),
     path("review/<int:pk>/question/", views.QuestionPartialView.as_view(), name="question_partial"),
     path(
