@@ -53,7 +53,8 @@
           hx-swap="innerHTML"
           class="exam-answer-form"
           id="answer-form"
-          data-confidence-form>
+          data-confidence-form
+          {% if is_timed_exam %}data-timed-exam-form="true"{% endif %}>
         {% csrf_token %}
         <input type="hidden" name="time_spent_seconds" value="0" id="time-spent">
         <input type="hidden" name="timed_out" value="false" id="timed-out-input">
@@ -116,8 +117,10 @@
         </div>
         {% endif %}
 
+        {% if not is_timed_exam %}
         <button type="submit" class="btn-primary exam-submit-btn">
             Submit and next
         </button>
+        {% endif %}
     </form>
 </div>

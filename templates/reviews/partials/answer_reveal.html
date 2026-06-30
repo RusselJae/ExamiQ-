@@ -1,0 +1,67 @@
+<div class="exam-question-card focus-card question-card-reveal"
+     id="answer-reveal-card"
+     data-exam-reveal="true"
+     data-reveal-ms="1500"
+     {% if is_last %}
+     data-results-url="{% url 'reviews:exam_results' session.pk %}"
+     {% else %}
+     data-advance-url="{% url 'reviews:question_partial' session.pk %}"
+     {% endif %}>
+
+    <header class="exam-question-header">
+        {% if planned_question_count %}
+        <div class="exam-progress-section">
+            <div class="exam-progress-meta">
+                <span class="exam-progress-label">Question {{ question_position }} of {{ planned_question_count }}</span>
+            </div>
+            <div class="exam-progress-bar"
+                 role="progressbar"
+                 aria-valuenow="{{ answered_count }}"
+                 aria-valuemin="0"
+                 aria-valuemax="{{ planned_question_count }}">
+                <div class="exam-progress-bar__fill" style="width: {{ progress_percent }}%;"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="exam-meta-row">
+            <div class="exam-meta-chips">
+                <span class="exam-topic-chip">{{ session.topic.name }}</span>
+                <span class="exam-type-badge">{{ question.get_question_type_display }}</span>
+            </div>
+            <span class="exam-reveal-status {% if answer.is_correct %}exam-reveal-status--correct{% elif answer.timed_out %}exam-reveal-status--timeout{% else %}exam-reveal-status--incorrect{% endif %}">
+                {% if answer.is_correct %}Correct{% elif answer.timed_out %}Timed out{% else %}Incorrect{% endif %}
+            </span>
+        </div>
+    </header>
+
+    <div class="exam-stem examiq-math-block">
+        {{ question.stem|linebreaks }}
+    </div>
+
+    {% if question.question_type == "mcq" %}
+    <div class="exam-choices-grid exam-choices-grid--reveal">
+        {% for choice in question.choices.all %}
+        <div class="exam-choice-tile exam-choice-tile--reveal
+            {% if choice.is_correct %}exam-choice-tile--correct{% endif %}
+            {% if answer.selected_choice_id == choice.pk and not choice.is_correct %}exam-choice-tile--incorrect{% endif %}
+            {% if answer.selected_choice_id == choice.pk %}exam-choice-tile--selected{% endif %}
+            {% if answer.timed_out and choice.is_correct %}exam-choice-tile--correct{% endif %}">
+            <span class="exam-choice-tile__letter">{{ choice.label }}</span>
+            <span class="exam-choice-tile__text">{{ choice.text }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif question.question_type == "numeric" %}
+    <div class="exam-numeric-reveal">
+        <p class="exam-numeric-reveal__label">Your answer</p>
+        <p class="exam-numeric-reveal__value">
+            {% if answer.timed_out %}<em>Timed out</em>{% else %}{{ answer.numeric_response|default:"—" }}{% endif %}
+        </p>
+        {% if not answer.is_correct %}
+        <p class="exam-numeric-reveal__label">Correct answer</p>
+        <p class="exam-numeric-reveal__value exam-numeric-reveal__value--correct">{{ question.correct_answer }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

@@ -193,8 +193,13 @@
             if (!radio || radio.dataset.bound) return;
             radio.dataset.bound = "1";
 
+            const form = tile.closest("form");
+            const isTimedExam = form && form.dataset.timedExamForm === "true";
+            let submitting = false;
+
             function syncSelected() {
-                document.querySelectorAll(".choice-tile").forEach(function (t) {
+                const scope = form || document;
+                scope.querySelectorAll(".choice-tile").forEach(function (t) {
                     t.classList.remove("selected");
                 });
                 if (radio.checked) {
@@ -202,15 +207,89 @@
                 }
             }
 
-            radio.addEventListener("change", syncSelected);
+            function disableChoices() {
+                if (!form) return;
+                form.querySelectorAll(".choice-tile").forEach(function (t) {
+                    t.classList.add("exam-choice-tile--locked");
+                    const input = t.querySelector('input[type="radio"]');
+                    if (input) input.disabled = true;
+                });
+            }
+
+            function submitTimedChoice() {
+                if (!isTimedExam || submitting) return;
+                submitting = true;
+                if (typeof window.stopQuestionTimer === "function") {
+                    window.stopQuestionTimer();
+                }
+                disableChoices();
+                if (typeof htmx !== "undefined") {
+                    htmx.trigger(form, "submit");
+                } else {
+                    form.submit();
+                }
+            }
+
+            radio.addEventListener("change", function () {
+                syncSelected();
+                if (isTimedExam && radio.checked) {
+                    submitTimedChoice();
+                }
+            });
+
             tile.addEventListener("click", function () {
+                if (isTimedExam && tile.classList.contains("exam-choice-tile--locked")) {
+                    return;
+                }
                 radio.checked = true;
                 syncSelected();
+                if (isTimedExam) {
+                    submitTimedChoice();
+                }
             });
 
             if (radio.checked) {
                 tile.classList.add("selected");
             }
+        });
+
+        initTimedNumericSubmit(root);
+    }
+
+    function initTimedNumericSubmit(root) {
+        const form = (root || document).querySelector("[data-timed-exam-form]");
+        if (!form) return;
+        const numericInput = form.querySelector("#id_numeric_response, input[name='numeric_response']");
+        if (!numericInput || numericInput.dataset.bound) return;
+        numericInput.dataset.bound = "1";
+
+        let debounceId = null;
+        let submitting = false;
+
+        function trySubmit() {
+            if (submitting || !numericInput.value.trim()) return;
+            submitting = true;
+            if (typeof window.stopQuestionTimer === "function") {
+                window.stopQuestionTimer();
+            }
+            numericInput.disabled = true;
+            if (typeof htmx !== "undefined") {
+                htmx.trigger(form, "submit");
+            } else {
+                form.submit();
+            }
+        }
+
+        numericInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                trySubmit();
+            }
+        });
+
+        numericInput.addEventListener("input", function () {
+            if (debounceId) clearTimeout(debounceId);
+            debounceId = setTimeout(trySubmit, 600);
         });
     }
 

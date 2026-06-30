@@ -52,11 +52,20 @@ class TestLegacyTutorPrompts:
             "How do I factor x^2 + 5x + 6?",
             history=[{"role": "user", "text": "I'm stuck"}],
             exam_context={"exam_name": "Midterm", "topic": "algebra"},
+            question_context={
+                "stem": "Factor x^2 + 5x + 6",
+                "user_answer": "B: 5",
+                "correct_answer": "A: (x+2)(x+3)",
+                "is_correct": False,
+            },
         )
         assert "ExamiQ+" in system
         assert "Do NOT greet" in user
         assert "Midterm" in user
         assert "I'm stuck" in user
+        assert "TOPIC RESTRICTION" in user
+        assert "Factor x^2 + 5x + 6" in user
+        assert "unrelated to math" in user.lower() or "outside this topic" in user.lower()
 
     def test_tutor_intro_format(self):
         _, user = build_tutor_intro_prompt("Calculus")

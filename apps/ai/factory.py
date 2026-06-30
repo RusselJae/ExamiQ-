@@ -143,6 +143,13 @@ def get_spaced_repetition_scheduler() -> SpacedRepetitionScheduler:
 
 
 def get_tutor_engine() -> TutorEngine:
+    if _ai_available():
+        try:
+            from apps.ai.stubs import LiveTutorEngine
+
+            return LiveTutorEngine()
+        except Exception as exc:
+            logger.warning("Falling back to stub TutorEngine: %s", exc)
     return StubTutorEngine()
 
 

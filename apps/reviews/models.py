@@ -296,3 +296,54 @@ class StepFeedbackView(models.Model):
 
     def __str__(self) -> str:
         return f"Step view for Answer #{self.answer_id} step #{self.explanation_step_id}"
+
+
+class TutorConversation(TimeStampedModel):
+    session = models.OneToOneField(
+        ReviewSession,
+        on_delete=models.CASCADE,
+        related_name="tutor_conversation",
+    )
+    active_answer = models.ForeignKey(
+        Answer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "Tutor Conversation"
+        verbose_name_plural = "Tutor Conversations"
+
+    def __str__(self) -> str:
+        return f"Tutor chat for session #{self.session_id}"
+
+
+class TutorMessage(TimeStampedModel):
+    class Role(models.TextChoices):
+        USER = "user", "User"
+        ASSISTANT = "assistant", "Assistant"
+
+    conversation = models.ForeignKey(
+        TutorConversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField()
+    answer = models.ForeignKey(
+        Answer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tutor_messages",
+    )
+
+    class Meta:
+        verbose_name = "Tutor Message"
+        verbose_name_plural = "Tutor Messages"
+        ordering = ["created"]
+
+    def __str__(self) -> str:
+        return f"{self.role} message in conversation #{self.conversation_id}"

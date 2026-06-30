@@ -8,20 +8,23 @@ from apps.reviews.services import start_review_session, submit_answer
 
 @pytest.mark.django_db
 class TestQuestionPartialView:
-    def test_htmx_redirect_when_no_questions(self, client, student, topic):
+    def test_htmx_returns_exam_results_when_no_questions(self, client, student, topic):
         session = ReviewSession.objects.create(
             student=student,
             topic=topic,
             difficulty=Question.Difficulty.EASY,
             status=ReviewSession.Status.ACTIVE,
             planned_question_count=0,
+            mode=ReviewSession.Mode.TIMED_EXAM,
         )
         client.force_login(student)
         url = reverse("reviews:question_partial", kwargs={"pk": session.pk})
         response = client.get(url, HTTP_HX_REQUEST="true")
 
-        assert response.status_code == 204
-        assert response["HX-Redirect"] == reverse("reviews:summary", kwargs={"pk": session.pk})
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Exam submitted!" in content
+        assert "exam-results-card" in content
         session.refresh_from_db()
         assert session.status == ReviewSession.Status.COMPLETED
 
@@ -139,7 +142,7 @@ class TestReviewSetupPrefill:
 
 @pytest.mark.django_db
 class TestSessionSummaryView:
-    def test_summary_shows_calibration_and_feedback_modal(
+    def test_summary_shows_calibration_and_ai_tutor_modal(
         self, client, student, topic, mcq_question
     ):
         question, _ = mcq_question
@@ -166,8 +169,14 @@ class TestSessionSummaryView:
         assert response.status_code == 200
         assert "calibration-row" in content or "calibration_tier" in content
         assert "Weak Topics This Session" in content
-        assert "post-session-feedback-modal" in content
-        assert "post-session-feedback.js" in content
+        assert "ai-tutor-modal" in content
+        assert "ai-tutor-modal.js" in content
+        assert "openOnLoad: false" in content
+
+        tutor_response = client.get(
+            reverse("reviews:summary", kwargs={"pk": session.pk}) + "?open_tutor=1"
+        )
+        assert "openOnLoad: true" in tutor_response.content.decode()
 
 
 @pytest.mark.django_db
@@ -194,9 +203,38 @@ class TestSubmitAnswerView:
             HTTP_HX_REQUEST="true",
         )
 
-        assert response.status_code in (200, 204)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "data-exam-reveal" in content
+        assert "answer-reveal-card" in content
         answer = session.answers.get()
         assert answer.confidence == 5
+
+    def test_timed_submit_returns_reveal_partial(self, client, student, topic, mcq_question):
+        question, correct = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        session.planned_question_count = 1
+        session.save(update_fields=["planned_question_count"])
+        client.force_login(student)
+        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        response = client.post(
+            url,
+            {
+                "selected_choice": correct.pk,
+                "time_spent_seconds": "5",
+                "timed_out": "false",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "data-exam-reveal" in content
+        assert "data-results-url" in content
 
     def test_timed_exam_derives_average_confidence(self, client, student, topic, mcq_question):
         question, correct = mcq_question
@@ -271,3 +309,39 @@ class TestSubmitAnswerView:
         )
         assert response.status_code in (200, 204)
         assert session.answers.get().confidence == 5
+
+
+@pytest.mark.django_db
+class TestTutorChat:
+    def test_tutor_chat_persists_messages(self, client, student, topic, mcq_question):
+        question, correct = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        submit_answer(
+            session=session,
+            question=question,
+            confidence=4,
+            selected_choice=correct,
+            time_spent_seconds=8,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        client.force_login(student)
+        chat_url = reverse("reviews:tutor_chat", kwargs={"pk": session.pk})
+        response = client.post(
+            chat_url,
+            data='{"message": "Why was my approach wrong?", "answer_id": %d}' % session.answers.first().pk,
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["reply"]
+
+        from apps.reviews.models import TutorMessage
+
+        assert TutorMessage.objects.filter(conversation__session=session).count() == 2

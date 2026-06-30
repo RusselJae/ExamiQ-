@@ -18,4 +18,7 @@
 
 {% block focus_extra_js %}
 <script src="{% static 'js/question-timer.js' %}"></script>
+{% if is_timed_exam %}
+<script src="{% static 'js/exam-auto-advance.js' %}"></script>
+{% endif %}
 {% endblock %}

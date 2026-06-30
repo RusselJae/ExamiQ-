@@ -53,6 +53,19 @@ class TutorEngine:
     def reexplain(self, step, student_history: dict | None = None) -> str:
         return step.content
 
+    def chat(
+        self,
+        topic: str,
+        message: str,
+        *,
+        history: list[dict[str, str]] | None = None,
+        exam_context: dict | None = None,
+        question_context: dict | None = None,
+    ) -> str:
+        return (
+            f"Let's focus on {topic}. Ask about the exam question or the steps to solve it."
+        )
+
 
 class ErrorClassifier:
     def classify(self, question, answer):

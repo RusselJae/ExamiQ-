@@ -28,10 +28,13 @@ urlpatterns = [
         name="step_feedback_view",
     ),
     path("review/<int:pk>/summary/", views.SessionSummaryView.as_view(), name="summary"),
+    path("review/<int:pk>/results/", views.ExamResultsPartialView.as_view(), name="exam_results"),
     path(
         "review/<int:pk>/generate-feedback/",
         views.SessionGenerateFeedbackView.as_view(),
         name="session_generate_feedback",
     ),
+    path("review/<int:pk>/tutor/history/", views.SessionTutorHistoryView.as_view(), name="tutor_history"),
+    path("review/<int:pk>/tutor/chat/", views.SessionTutorChatView.as_view(), name="tutor_chat"),
     path("review/<int:pk>/expire/", views.SessionExpireView.as_view(), name="expire"),
 ]

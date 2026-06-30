@@ -77,14 +77,17 @@
     <a href="{% url 'analytics_student:dashboard' %}" class="btn-secondary">View Dashboard</a>
 </div>
 
-{% include "reviews/partials/post_session_feedback_modal.html" %}
+{% include "reviews/partials/ai_tutor_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/post-session-feedback.js' %}"></script>
+<script src="{% static 'js/ai-tutor-modal.js' %}"></script>
 <script>
-window.ExamiQPostSessionFeedback = {
-    url: "{{ feedback_url }}",
+window.ExamiQTutor = {
+    openOnLoad: {% if open_tutor %}true{% else %}false{% endif %},
+    feedbackUrl: "{{ feedback_url }}",
+    historyUrl: "{{ tutor_history_url }}",
+    chatUrl: "{{ tutor_chat_url }}",
     csrfToken: "{{ csrf_token }}",
 };
 </script>

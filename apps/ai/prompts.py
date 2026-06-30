@@ -341,19 +341,45 @@ TUTOR_CHAT_SYSTEM = (
 )
 
 
+def format_question_context(question_context: dict[str, Any] | None) -> str:
+    if not question_context:
+        return ""
+    parts = []
+    if question_context.get("stem"):
+        parts.append(f"Current question: {question_context['stem']}")
+    if question_context.get("user_answer"):
+        parts.append(f"Student answer: {question_context['user_answer']}")
+    if question_context.get("correct_answer"):
+        parts.append(f"Correct answer: {question_context['correct_answer']}")
+    if "is_correct" in question_context:
+        parts.append(f"Was correct: {question_context['is_correct']}")
+    if question_context.get("timed_out"):
+        parts.append("Student timed out on this question.")
+    if question_context.get("difficulty"):
+        parts.append(f"Difficulty: {question_context['difficulty']}")
+    if not parts:
+        return ""
+    return "Active question context:\n" + "\n".join(f"- {p}" for p in parts) + "\n\n"
+
+
 def build_tutor_chat_prompt(
     topic: str,
     user_message: str,
     *,
     history: list[dict[str, str]] | None = None,
     exam_context: dict[str, Any] | None = None,
+    question_context: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     user_prompt = (
         f"Topic: {topic or 'general'}\n\n"
+        f"{ADAPTIVE_TOPIC_RESTRICTION}\n\n"
         f"{format_exam_context(exam_context)}"
+        f"{format_question_context(question_context)}"
         f"{format_conversation_history(history)}"
         f"User: {user_message}\n\n"
         f"{TUTOR_CHAT_RULES}\n\n"
+        "Only answer questions related to this topic, the current exam, or the active question. "
+        "If the student asks something unrelated to math or this topic, politely redirect them.\n\n"
         "Now answer clearly and continue the conversation, using prior context where helpful."
     )
     return TUTOR_CHAT_SYSTEM, user_prompt

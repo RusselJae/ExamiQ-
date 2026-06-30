@@ -99,7 +99,72 @@ class StubSpacedRepetitionScheduler(SpacedRepetitionScheduler):
 
 
 class StubTutorEngine(TutorEngine):
-    pass
+    def chat(
+        self,
+        topic: str,
+        message: str,
+        *,
+        history: list[dict[str, str]] | None = None,
+        exam_context: dict | None = None,
+        question_context: dict | None = None,
+    ) -> str:
+        stem = (question_context or {}).get("stem", "")
+        if stem:
+            return (
+                f"Regarding this question: let's work through {topic} step by step. "
+                f"You asked: \"{message[:120]}\". "
+                "Review the correction steps above, then try a similar problem."
+            )
+        return (
+            f"Let's stay focused on {topic}. "
+            f"Pick a question from your exam to discuss, or ask about a specific step."
+        )
+
+
+class LiveTutorEngine(TutorEngine):
+    def chat(
+        self,
+        topic: str,
+        message: str,
+        *,
+        history: list[dict[str, str]] | None = None,
+        exam_context: dict | None = None,
+        question_context: dict | None = None,
+    ) -> str:
+        from apps.ai.prompts import build_tutor_chat_prompt
+
+        system, user_prompt = build_tutor_chat_prompt(
+            topic,
+            message,
+            history=history,
+            exam_context=exam_context,
+            question_context=question_context,
+        )
+        from django.conf import settings
+
+        try:
+            if settings.LLM_PROVIDER == "gemini":
+                from apps.ai.providers.gemini_client import chat_with_fallback
+
+                return chat_with_fallback(user_prompt, system=system, max_output_tokens=800).text
+            if settings.LLM_PROVIDER == "ollama":
+                from apps.ai.providers.ollama_client import chat_with_fallback
+
+                return chat_with_fallback(user_prompt, system=system, max_output_tokens=800).text
+            from apps.ai.providers.openai_provider import _chat
+
+            result = _chat(user_prompt, system=system)
+            if result:
+                return result
+            raise RuntimeError("OpenAI returned empty response")
+        except Exception:
+            return StubTutorEngine().chat(
+                topic,
+                message,
+                history=history,
+                exam_context=exam_context,
+                question_context=question_context,
+            )
 
 
 class StubErrorClassifier(ErrorClassifier):

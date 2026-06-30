@@ -1,0 +1,55 @@
+<div id="ai-tutor-modal" class="ai-tutor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ai-tutor-title">
+    <div class="ai-tutor-modal__backdrop" data-dismiss-ai-tutor></div>
+    <div class="ai-tutor-modal__panel">
+        <div class="ai-tutor-modal__header">
+            <h2 id="ai-tutor-title" class="ai-tutor-modal__title">ExamiQ+ AI Tutor</h2>
+            <button type="button" class="ai-tutor-modal__close" data-dismiss-ai-tutor aria-label="Close">&times;</button>
+        </div>
+
+        <div class="ai-tutor-modal__subheader">
+            <span class="ai-tutor-modal__review-count" id="ai-tutor-review-count">Reviewing items…</span>
+            <div class="ai-tutor-modal__pills" id="ai-tutor-question-pills" role="tablist"></div>
+            <span class="ai-tutor-modal__saved">
+                <span class="ai-tutor-modal__saved-dot" aria-hidden="true"></span>
+                Saved conversation
+            </span>
+        </div>
+
+        <div class="ai-tutor-modal__body">
+            <div id="ai-tutor-loading" class="ai-tutor-modal__loading">
+                <div class="feedback-modal__spinner" aria-hidden="true"></div>
+                <p class="text-sm text-examiq-slate">Loading your exam feedback…</p>
+            </div>
+
+            <div id="ai-tutor-content" class="ai-tutor-modal__content hidden">
+                <div class="ai-tutor-feedback-panel" id="ai-tutor-feedback-panel">
+                    <h3 class="ai-tutor-feedback-panel__stem" id="ai-tutor-stem"></h3>
+                    <div class="ai-tutor-feedback-panel__section" id="ai-tutor-why-section">
+                        <h4 class="ai-tutor-feedback-panel__label">Why this is wrong</h4>
+                        <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-why"></div>
+                    </div>
+                    <div class="ai-tutor-feedback-panel__section" id="ai-tutor-steps-section">
+                        <h4 class="ai-tutor-feedback-panel__label">Correction steps</h4>
+                        <ol class="ai-tutor-feedback-panel__steps examiq-math-block" id="ai-tutor-steps"></ol>
+                    </div>
+                    <p class="ai-tutor-feedback-panel__meta" id="ai-tutor-meta"></p>
+                </div>
+
+                <div class="ai-tutor-chat" id="ai-tutor-chat">
+                    <div class="ai-tutor-chat__messages" id="ai-tutor-messages" role="log" aria-live="polite"></div>
+                    <form class="ai-tutor-chat__form" id="ai-tutor-chat-form">
+                        <input type="text"
+                               id="ai-tutor-chat-input"
+                               class="ai-tutor-chat__input"
+                               placeholder="Ask something…"
+                               autocomplete="off"
+                               maxlength="2000">
+                        <button type="submit" class="btn-primary ai-tutor-chat__send" id="ai-tutor-send-btn">Send</button>
+                    </form>
+                </div>
+            </div>
+
+            <div id="ai-tutor-error" class="ai-tutor-modal__error hidden" role="alert"></div>
+        </div>
+    </div>
+</div>

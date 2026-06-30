@@ -1,0 +1,58 @@
+<div class="exam-question-card focus-card exam-results-card" id="exam-results-card">
+    <div class="exam-results-header">
+        <div class="exam-results-check" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="28" height="28">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+            </svg>
+        </div>
+        <h2 class="exam-results-title">Exam submitted!</h2>
+        <p class="exam-results-subtitle">Here's how you did — review each question below.</p>
+    </div>
+
+    <div class="exam-results-score">
+        <div class="exam-score-ring" style="--score-percent: {{ session_summary.accuracy }};">
+            <svg class="exam-score-ring__svg" viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="exam-score-ring__track" cx="50" cy="50" r="42"></circle>
+                <circle class="exam-score-ring__progress" cx="50" cy="50" r="42"
+                        transform="rotate(-90 50 50)"
+                        stroke-dasharray="{{ score_ring_dasharray }}"
+                        stroke-dashoffset="{{ score_ring_dashoffset }}"></circle>
+            </svg>
+            <div class="exam-score-ring__label">
+                <span class="exam-score-ring__percent">{{ session_summary.accuracy|floatformat:0 }}%</span>
+                <span class="exam-score-ring__fraction">{{ session_summary.correct_count }} / {{ session_summary.total_questions }} correct</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="exam-results-kpis">
+        <div class="exam-results-kpi">
+            <span class="exam-results-kpi__value exam-results-kpi__value--good">{{ session_summary.correct_count }}</span>
+            <span class="exam-results-kpi__label">Correct</span>
+        </div>
+        <div class="exam-results-kpi">
+            <span class="exam-results-kpi__value exam-results-kpi__value--bad">{{ incorrect_count }}</span>
+            <span class="exam-results-kpi__label">Incorrect</span>
+        </div>
+        <div class="exam-results-kpi">
+            <span class="exam-results-kpi__value">{{ session_summary.accuracy|floatformat:0 }}%</span>
+            <span class="exam-results-kpi__label">Accuracy</span>
+        </div>
+    </div>
+
+    {% if suggestions %}
+    <div class="exam-results-suggestions" role="note">
+        <p class="exam-results-suggestions__title">Based on your results, we suggest</p>
+        <ul class="exam-results-suggestions__list">
+            {% for item in suggestions %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="exam-results-actions">
+        <a href="{% url 'reviews:summary' session.pk %}?open_tutor=1" class="btn-primary exam-results-actions__primary">AI Tutor</a>
+        <a href="{% url 'reviews:setup' %}?topic={{ session.topic_id }}" class="btn-secondary exam-results-actions__secondary">Retake exam</a>
+    </div>
+</div>

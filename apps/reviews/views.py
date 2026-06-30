@@ -60,12 +60,82 @@ def _question_partial_context(session, question, form, **extra):
     return context
 
 
+def _session_has_more_questions(session) -> bool:
+    answered_ids = get_answered_question_ids(session)
+    return get_adaptive_questions_for_session(
+        session.student,
+        session.topic,
+        session.difficulty,
+        count=1,
+        exclude_ids=answered_ids,
+    ).exists()
+
+
+def _is_last_timed_answer(session) -> bool:
+    planned = session.planned_question_count or 0
+    answered = session.answers.count()
+    if planned and answered >= planned:
+        return True
+    return not _session_has_more_questions(session)
+
+
+def _answer_reveal_context(session, question, answer, **extra):
+    answered = session.answers.count()
+    planned = session.planned_question_count or 0
+    context = {
+        "session": session,
+        "question": question,
+        "answer": answer,
+        "is_timed_exam": True,
+        "answered_count": answered,
+        "planned_question_count": planned,
+        "question_position": answered if planned else answered,
+        "progress_percent": int(answered / planned * 100) if planned else 100,
+        "is_last": _is_last_timed_answer(session),
+    }
+    context.update(extra)
+    return context
+
+
+def _exam_results_context(session):
+    import math
+
+    session_summary = build_session_summary(session)
+    total = session_summary["total_questions"]
+    incorrect = max(0, total - session_summary["correct_count"])
+    circumference = 2 * math.pi * 42
+    fraction = (session_summary["accuracy"] or 0) / 100
+    suggestions = []
+    if incorrect:
+        suggestions.append("Review your mistakes before retaking")
+    suggestions.append("Retake the exam once you feel confident")
+    return {
+        "session": session,
+        "session_summary": session_summary,
+        "incorrect_count": incorrect,
+        "score_ring_dasharray": f"{circumference:.2f}",
+        "score_ring_dashoffset": f"{circumference * (1 - fraction):.2f}",
+        "suggestions": suggestions,
+    }
+
+
+def _exam_results_response(request, session):
+    complete_session(session)
+    return render(
+        request,
+        "reviews/partials/exam_results.html",
+        _exam_results_context(session),
+    )
+
+
 def _next_question_response(request, session):
-    """Return the next question partial or redirect to summary when done."""
+    """Return the next question partial or exam results when done."""
     try:
         validate_session_active(session)
     except SessionExpiredError:
         complete_session(session)
+        if session.mode == ReviewSession.Mode.TIMED_EXAM:
+            return _exam_results_response(request, session)
         return _htmx_redirect_or_redirect(request, "reviews:summary", pk=session.pk)
 
     answered_ids = get_answered_question_ids(session)
@@ -78,6 +148,8 @@ def _next_question_response(request, session):
     )
     question = questions.first()
     if not question:
+        if session.mode == ReviewSession.Mode.TIMED_EXAM:
+            return _exam_results_response(request, session)
         complete_session(session)
         return _htmx_redirect_or_redirect(request, "reviews:summary", pk=session.pk)
 
@@ -290,13 +362,33 @@ class SubmitAnswerView(StudentRequiredMixin, View):
         )
 
         if timed_exam:
-            return _next_question_response(request, session)
+            return render(
+                request,
+                "reviews/partials/answer_reveal.html",
+                _answer_reveal_context(session, question, answer),
+            )
 
         steps = question.explanation_steps.all()
         return render(
             request,
             "reviews/partials/explanation.html",
             {"session": session, "answer": answer, "steps": steps},
+        )
+
+
+class ExamResultsPartialView(StudentRequiredMixin, View):
+    """HTMX partial for timed exam results (focus layout)."""
+
+    def get(self, request, pk):
+        if not request.headers.get("HX-Request"):
+            return redirect("reviews:session", pk=pk)
+        session = get_object_or_404(ReviewSession, pk=pk, student=request.user)
+        if session.status != ReviewSession.Status.COMPLETED:
+            complete_session(session)
+        return render(
+            request,
+            "reviews/partials/exam_results.html",
+            _exam_results_context(session),
         )
 
 
@@ -317,6 +409,9 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
         context["calibration_tier_max"] = session_summary["calibration_tier_max"]
         context["recommendations"] = get_review_recommendations(self.request.user, limit=5)
         context["feedback_url"] = reverse("reviews:session_generate_feedback", kwargs={"pk": self.object.pk})
+        context["tutor_history_url"] = reverse("reviews:tutor_history", kwargs={"pk": self.object.pk})
+        context["tutor_chat_url"] = reverse("reviews:tutor_chat", kwargs={"pk": self.object.pk})
+        context["open_tutor"] = self.request.GET.get("open_tutor") == "1"
         return context
 
 
@@ -372,3 +467,46 @@ class SessionExpireView(StudentRequiredMixin, View):
             session.ended_at = timezone.now()
             session.save(update_fields=["status", "ended_at"])
         return redirect("reviews:summary", pk=session.pk)
+
+
+class SessionTutorHistoryView(StudentRequiredMixin, View):
+    def get(self, request, pk):
+        session = get_object_or_404(
+            ReviewSession,
+            pk=pk,
+            student=request.user,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        from apps.reviews.tutor_services import tutor_history_payload
+
+        return JsonResponse(tutor_history_payload(session))
+
+
+class SessionTutorChatView(StudentRequiredMixin, View):
+    def post(self, request, pk):
+        import json
+
+        session = get_object_or_404(
+            ReviewSession,
+            pk=pk,
+            student=request.user,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        try:
+            payload = json.loads(request.body.decode() or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+        message = (payload.get("message") or request.POST.get("message") or "").strip()
+        answer_id = payload.get("answer_id") or request.POST.get("answer_id")
+        if answer_id is not None:
+            try:
+                answer_id = int(answer_id)
+            except (TypeError, ValueError):
+                answer_id = None
+
+        from apps.reviews.tutor_services import process_tutor_chat
+
+        result = process_tutor_chat(session, message, answer_id=answer_id)
+        if result.get("error"):
+            return JsonResponse(result, status=400)
+        return JsonResponse(result)
