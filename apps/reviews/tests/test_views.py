@@ -421,3 +421,63 @@ class TestTutorChat:
 
         payload = tutor_history_payload(session2, answer_id=answer2.pk)
         assert len(payload["messages"]) == 2
+
+    def test_tutor_history_with_correct_and_wrong_answers(
+        self, client, student, topic, mcq_question
+    ):
+        """Sessions mixing correct and wrong answers must still load tutor history."""
+        from apps.questions.models import QuestionChoice
+
+        question1, correct1 = mcq_question
+
+        question2 = Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            stem="What is 3+3?",
+            status=Question.Status.APPROVED,
+        )
+        correct2 = QuestionChoice.objects.create(
+            question=question2, label="A", text="6", is_correct=True
+        )
+        wrong2 = QuestionChoice.objects.create(
+            question=question2, label="B", text="7", is_correct=False
+        )
+
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        submit_answer(
+            session=session,
+            question=question1,
+            confidence=5,
+            selected_choice=correct1,
+            time_spent_seconds=8,
+        )
+        submit_answer(
+            session=session,
+            question=question2,
+            confidence=2,
+            selected_choice=wrong2,
+            time_spent_seconds=10,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        client.force_login(student)
+        history_url = reverse("reviews:tutor_history", kwargs={"pk": session.pk})
+        history_response = client.get(history_url)
+        assert history_response.status_code == 200
+        history_data = history_response.json()
+        assert len(history_data["items"]) == 2
+        assert any(item["is_correct"] for item in history_data["items"])
+        assert any(not item["is_correct"] for item in history_data["items"])
+
+        feedback_url = reverse("reviews:session_generate_feedback", kwargs={"pk": session.pk})
+        feedback_response = client.post(feedback_url)
+        assert feedback_response.status_code == 200
+        feedback_data = feedback_response.json()
+        assert len(feedback_data["items"]) == 2

@@ -1,5 +1,6 @@
 """Analytics and performance aggregation services."""
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Avg, Count, Q, Sum
 from django.db.models.functions import TruncDate
 
@@ -128,14 +129,23 @@ def _rule_based_answer_feedback(answer) -> str:
     return "Review this topic and practice similar questions."
 
 
+def _get_answer_mistake_record(answer):
+    """Return mistake record for an answer, or None when the answer was correct."""
+    try:
+        return answer.mistake_record
+    except ObjectDoesNotExist:
+        return None
+
+
 def generate_answer_feedback(answer) -> str:
     """Generate and return feedback for a session answer."""
-    if answer.mistake_record and answer.mistake_record.ai_feedback:
-        return answer.mistake_record.ai_feedback
+    mistake_record = _get_answer_mistake_record(answer)
+    if mistake_record and mistake_record.ai_feedback:
+        return mistake_record.ai_feedback
 
-    if answer.mistake_record:
+    if mistake_record:
         try:
-            ai_feedback = generate_mistake_feedback(answer.mistake_record)
+            ai_feedback = generate_mistake_feedback(mistake_record)
             if ai_feedback:
                 return ai_feedback
         except Exception:
