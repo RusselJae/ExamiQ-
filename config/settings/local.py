@@ -6,6 +6,9 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
+# Avoid login lockouts during local development.
+AXES_ENABLED = False
+
 try:
     import debug_toolbar  # noqa: F401
 

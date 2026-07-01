@@ -129,8 +129,11 @@ ACCOUNT_FORMS = {
 CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
 CRISPY_TEMPLATE_PACK = "tailwind"
 
-AXES_FAILURE_LIMIT = 5
-AXES_COOLOFF_TIME = 1
+AXES_ENABLED = env.bool("AXES_ENABLED", default=True)
+AXES_FAILURE_LIMIT = env.int("AXES_FAILURE_LIMIT", default=5)
+AXES_COOLOFF_TIME = env.float("AXES_COOLOFF_TIME", default=1)
+# Lock by email (username) so one bad actor on a shared IP does not block everyone.
+AXES_LOCKOUT_PARAMETERS = ["username"]
 
 SESSION_COOKIE_AGE = 86400
 
