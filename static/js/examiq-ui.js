@@ -32,8 +32,7 @@
 
         const toast = document.createElement("div");
         toast.className =
-            "toast-item pointer-events-auto px-4 py-3 pr-10 text-sm text-slate-800 relative " +
-            (TOAST_BORDER[type] || TOAST_BORDER.info);
+            "toast-item " + (TOAST_BORDER[type] || TOAST_BORDER.info);
         toast.setAttribute("role", "alert");
 
         const messageEl = document.createElement("span");
@@ -77,8 +76,7 @@
 
         const banner = document.createElement("div");
         banner.className =
-            "banner-item toast-item pointer-events-auto px-4 py-3 pr-10 text-sm text-slate-800 relative " +
-            (TOAST_BORDER[type] || TOAST_BORDER.info);
+            "banner-item toast-item " + (TOAST_BORDER[type] || TOAST_BORDER.info);
         banner.setAttribute("role", "alert");
 
         const messageEl = document.createElement("span");

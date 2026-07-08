@@ -163,12 +163,21 @@ html {
     width: 2.25rem;
     height: 2.25rem;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.landing-logo__icon svg {
+.landing-logo__icon svg,
+.landing-logo__icon .examiq-logo {
     width: 100%;
     height: 100%;
     display: block;
+}
+
+.examiq-logo {
+    object-fit: contain;
+    border-radius: 6px;
 }
 
 .landing-logo__text {
@@ -193,8 +202,13 @@ html {
 }
 
 .landing-nav {
-    position: relative;
-    z-index: 10;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(244, 249, 241, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--landing-border);
     padding: 1rem var(--landing-section-x);
 }
 
@@ -267,6 +281,12 @@ html {
 
 .landing-nav__signup:hover {
     background: var(--landing-primary-dark);
+}
+
+#home,
+#about,
+#features {
+    scroll-margin-top: 5rem;
 }
 
 .landing-hero {
@@ -657,6 +677,50 @@ html {
     font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
     background: var(--landing-bg);
     color: var(--landing-text);
+}
+
+.auth-page .examiq-toast-stack {
+    top: 1.25rem;
+    right: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.auth-page .toast-item {
+    background: var(--landing-card);
+    border: 1px solid var(--landing-border);
+    border-left-width: 1px;
+    box-shadow: var(--landing-shadow);
+    border-radius: var(--landing-radius);
+    color: var(--landing-text);
+    font-size: 0.875rem;
+}
+
+.auth-page .toast-item--success {
+    border-color: rgba(58, 122, 48, 0.35);
+    background: #f4f9f1;
+}
+
+.auth-page .toast-item--error {
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+
+.auth-page .toast-item--info {
+    border-color: rgba(59, 130, 246, 0.35);
+    background: #eff6ff;
+}
+
+.auth-page .toast-item--warning {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: #fffbeb;
+}
+
+.auth-page .toast-close {
+    color: var(--landing-text-muted);
+}
+
+.auth-page .toast-close:hover {
+    color: var(--landing-text);
+    background-color: rgba(58, 122, 48, 0.08);
 }
 
 .auth-page__viewport {

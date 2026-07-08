@@ -29,15 +29,15 @@
     --color-action: var(--color-primary);
     --sidebar-width: 220px;
     --sidebar-collapsed-width: 64px;
-    --sidebar-bg: #1C2B1E;
-    --sidebar-bg-elevated: #243529;
-    --sidebar-border: rgba(255, 255, 255, 0.06);
-    --sidebar-text: #CBD5E1;
+    --sidebar-bg: #FFFFFF;
+    --sidebar-bg-elevated: #F8FAF7;
+    --sidebar-border: rgba(26, 86, 50, 0.12);
+    --sidebar-text: #64748B;
     --sidebar-text-muted: #94A3B8;
-    --sidebar-text-active: #FFFFFF;
-    --sidebar-active-border: #EEF4EE;
-    --sidebar-active-bg: rgba(238, 244, 238, 0.14);
-    --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+    --sidebar-text-active: #1A5632;
+    --sidebar-active-border: #1A5632;
+    --sidebar-active-bg: #EEF4EE;
+    --sidebar-hover-bg: rgba(26, 86, 50, 0.06);
 }
 
 .examiq-math-block {
@@ -157,14 +157,20 @@
 }
 
 .toast-item {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
     animation: toast-in 0.3s ease forwards;
-    border-radius: 0;
+    border-radius: var(--radius-card);
     border: none;
     border-left-width: 4px;
     border-left-style: solid;
     background: #fff;
     box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.1);
     color: #1e293b;
+    font-size: 0.875rem;
     pointer-events: auto;
 }
 
@@ -190,7 +196,8 @@
 
 .toast-close {
     position: absolute;
-    top: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
     right: 0.5rem;
     width: 1.5rem;
     height: 1.5rem;
@@ -428,12 +435,13 @@
 }
 
 .focus-header__logo .landing-logo__icon {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.75rem;
+    height: 1.75rem;
     flex-shrink: 0;
 }
 
-.focus-header__logo .landing-logo__icon svg {
+.focus-header__logo .landing-logo__icon svg,
+.focus-header__logo .landing-logo__icon .examiq-logo {
     width: 100%;
     height: 100%;
     display: block;
@@ -2541,7 +2549,7 @@
 }
 
 .app-sidebar-brand:hover {
-    color: #fff;
+    color: var(--color-primary);
 }
 
 .landing-logo--compact {
@@ -2549,9 +2557,13 @@
 }
 
 .landing-logo--compact .landing-logo__icon {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.75rem;
+    height: 1.75rem;
     flex-shrink: 0;
+}
+
+.landing-logo--compact .landing-logo__icon .examiq-logo {
+    border-radius: 5px;
 }
 
 .landing-logo--compact .landing-logo__name {
@@ -2561,7 +2573,7 @@
     letter-spacing: -0.02em;
 }
 
-.app-sidebar.is-collapsed .landing-logo--compact .landing-logo__text {
+.app-sidebar.is-collapsed .app-sidebar-brand {
     display: none;
 }
 
@@ -2697,6 +2709,38 @@
 .sidebar-mobile-toggle:hover {
     background: #f1f5f9;
     color: var(--color-primary);
+}
+
+.app-topbar-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    color: #0F172A;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+    min-width: 0;
+}
+
+.app-topbar-brand:hover {
+    color: var(--color-primary);
+}
+
+.app-topbar-brand .landing-logo__icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+}
+
+.app-topbar-brand__text {
+    white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+    .app-topbar-brand__text {
+        display: none;
+    }
 }
 
 /* Profile dropdown */

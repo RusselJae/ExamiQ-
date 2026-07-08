@@ -7,6 +7,11 @@
             </svg>
         </button>
 
+        <a href="{% url 'core:home' %}" class="app-topbar-brand lg:hidden" aria-label="ExamiQ+ home">
+            {% include "components/landing_logo_icon.html" %}
+            <span class="app-topbar-brand__text">ExamiQ+</span>
+        </a>
+
         <div class="flex-1"></div>
 
         <a href="{% url 'users:notifications' %}" class="relative p-2 text-examiq-slate hover:text-examiq-navy" aria-label="Notifications">
