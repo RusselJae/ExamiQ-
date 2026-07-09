@@ -201,14 +201,19 @@ html {
         height: 16px;
     }
 
+    .landing-shape--c3,
+    .landing-shape--c5 {
+        display: none;
+    }
+
     .landing-shape--square-sm {
-        width: 7px;
-        height: 7px;
+        width: 18px;
+        height: 18px;
     }
 
     .landing-shape--square-md {
-        width: 11px;
-        height: 11px;
+        width: 28px;
+        height: 28px;
     }
 
     .landing-shape--c2 { top: 62%; left: 2%; right: auto; }
@@ -754,6 +759,10 @@ html {
     overflow-x: hidden;
 }
 
+html:has(body.auth-page) {
+    scrollbar-gutter: stable;
+}
+
 .auth-page .examiq-toast-stack {
     top: 1.25rem;
     right: clamp(1.25rem, 4vw, 2.5rem);
@@ -1207,14 +1216,24 @@ html {
 }
 
 @media (max-width: 639px) {
+    .auth-page {
+        overflow-y: hidden;
+    }
+
     .auth-page__viewport {
         width: 100%;
-        max-width: 100vw;
+        max-width: 100%;
+        min-height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
     }
 
     .auth-page__main {
         width: 100%;
         box-sizing: border-box;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
         flex-direction: column;
         align-items: center;
         justify-content: flex-start;
@@ -1222,26 +1241,34 @@ html {
     }
 
     .auth-page__column {
-        width: min(20rem, calc(100% - 0.5rem));
+        width: min(20rem, 100%);
         max-width: 20rem;
-        flex: 0 0 auto;
+        flex: 0 1 auto;
+        min-height: 0;
+        max-height: calc(100dvh - 5.5rem);
         margin-left: auto;
         margin-right: auto;
         align-self: center;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
     }
 
     .auth-page__card,
     .auth-page__card--signup {
         width: 100%;
         max-width: none;
+        max-height: none;
+        overflow: visible;
         padding: 1rem 1.125rem;
-        max-height: calc(100dvh - 5.5rem);
-        overflow-y: auto;
+        border: 1px solid var(--landing-border);
+        box-shadow: var(--landing-shadow);
     }
 
     .auth-page__footer {
         width: 100%;
         text-align: center;
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
     }
 
     .auth-page__nav {
