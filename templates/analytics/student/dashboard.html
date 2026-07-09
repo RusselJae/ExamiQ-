@@ -73,9 +73,7 @@
         <div class="bento-card bento-card-inner">
             {% include "components/section_header.html" with label="History" title="Recent Sessions" action_url="/student/sessions/" action_label="View all" %}
             {% if summary.recent_session_rows %}
-            <div class="overflow-x-auto">
-                {% include "components/session_history_table.html" with session_history_rows=summary.recent_session_rows show_status_column=False show_summary_link=False %}
-            </div>
+            {% include "components/session_history_table.html" with session_history_rows=summary.recent_session_rows show_status_column=False show_summary_link=False %}
             {% else %}
             {% include "components/empty_state.html" with compact=True title="No sessions yet" body="Start a review to build your performance history." cta_url="/student/review/setup/" cta_label="Start your first review" %}
             {% endif %}

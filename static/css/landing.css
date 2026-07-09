@@ -151,6 +151,45 @@ html {
 .landing-glyph--infinity { top: 42%; right: 38%; font-size: 1.4rem; }
 .landing-glyph--equals { top: 72%; left: 22%; font-size: 1.25rem; }
 
+@media (max-width: 639px) {
+    .landing-shape--1 {
+        top: -80px;
+        right: -80px;
+        left: auto;
+    }
+
+    .landing-shape--2 {
+        top: 35%;
+        left: -100px;
+        right: auto;
+    }
+
+    .landing-shape--3 {
+        bottom: 15%;
+        right: -50px;
+        left: auto;
+    }
+
+    .landing-shape--4 {
+        bottom: -100px;
+        left: -80px;
+        right: auto;
+    }
+
+    .landing-shape--c2 { top: 62%; left: 2%; right: auto; }
+    .landing-shape--c3 { bottom: 8%; right: 2%; left: auto; }
+    .landing-shape--c4 { top: 8%; right: 2%; left: auto; }
+    .landing-shape--c5 { bottom: 20%; left: 4%; right: auto; }
+    .landing-shape--s1 { top: 22%; right: 4%; left: auto; }
+    .landing-shape--s2 { top: 48%; left: 4%; right: auto; }
+    .landing-shape--s3 { bottom: 18%; right: 4%; left: auto; }
+    .landing-shape--s4 { top: 42%; right: 2%; left: auto; }
+
+    .landing-glyph {
+        display: none;
+    }
+}
+
 .landing-logo {
     display: inline-flex;
     align-items: center;
@@ -1129,4 +1168,24 @@ html {
 
 .auth-password-strength--compact .auth-password-strength__item.is-met .auth-password-strength__marker::before {
     content: "✓";
+}
+
+@media (max-width: 639px) {
+    .auth-page__main {
+        align-items: flex-start;
+        padding-top: 0.5rem;
+    }
+
+    .auth-page__card {
+        max-height: calc(100dvh - 5.5rem);
+        overflow-y: auto;
+    }
+
+    .auth-page__nav {
+        padding-bottom: 0.25rem;
+    }
+
+    .landing-logo__tagline {
+        display: none;
+    }
 }

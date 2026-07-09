@@ -3840,6 +3840,17 @@
     white-space: nowrap;
 }
 
+.session-history-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 640px) {
+    .session-history-table {
+        min-width: 36rem;
+    }
+}
+
 .session-status-pill {
     display: inline-flex;
     align-items: center;
@@ -4034,6 +4045,25 @@
 .filter-bar--compact .filter-bar__select {
     padding: 0.4rem 0.6rem;
     font-size: 0.8125rem;
+}
+
+@media (max-width: 639px) {
+    .filter-bar--compact {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-bar--compact .filter-bar__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .filter-bar--compact .filter-bar__field--search {
+        grid-column: 1 / -1;
+    }
+
+    .filter-bar--compact .filter-bar__actions {
+        justify-content: flex-end;
+    }
 }
 
 .pagination-bar {
