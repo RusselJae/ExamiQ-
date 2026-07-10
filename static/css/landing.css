@@ -151,6 +151,47 @@ html {
 .landing-glyph--infinity { top: 42%; right: 38%; font-size: 1.4rem; }
 .landing-glyph--equals { top: 72%; left: 22%; font-size: 1.25rem; }
 
+@media (min-width: 640px) {
+    .landing-shape--3 {
+        right: -50px;
+        bottom: 22%;
+        left: auto;
+    }
+
+    .landing-shape--4 {
+        left: -100px;
+        bottom: -90px;
+        right: auto;
+    }
+
+    .landing-shape--2 {
+        left: -100px;
+    }
+
+    .landing-shape--c2 { left: 2%; }
+    .landing-shape--c4 { top: 10%; right: 3%; left: auto; }
+    .landing-shape--c5 { bottom: 18%; left: 3%; right: auto; }
+    .landing-shape--s1 { top: 20%; right: 3%; left: auto; }
+    .landing-shape--s2 { top: 46%; left: 2%; right: auto; }
+    .landing-shape--s3 { bottom: 14%; right: 2%; left: auto; }
+    .landing-shape--s4 { display: none; }
+
+    .landing-glyph--sum,
+    .landing-glyph--integral,
+    .landing-glyph--infinity,
+    .landing-glyph--sqrt {
+        display: none;
+    }
+
+    .landing-glyph--plus { left: 4%; }
+    .landing-glyph--minus { right: 4%; }
+    .landing-glyph--times { left: 3%; }
+    .landing-glyph--divide { right: 3%; }
+    .landing-glyph--pi { right: 5%; }
+    .landing-glyph--triangle { left: 5%; }
+    .landing-glyph--equals { left: 6%; }
+}
+
 @media (max-width: 639px) {
     .landing-shape--1,
     .landing-shape--2,
@@ -216,14 +257,12 @@ html {
         height: 28px;
     }
 
-    .landing-shape--c2 { top: 62%; left: 2%; right: auto; }
-    .landing-shape--c3 { bottom: 8%; right: 2%; left: auto; }
-    .landing-shape--c4 { top: 8%; right: 2%; left: auto; }
-    .landing-shape--c5 { bottom: 20%; left: 4%; right: auto; }
-    .landing-shape--s1 { top: 22%; right: 4%; left: auto; }
-    .landing-shape--s2 { top: 48%; left: 4%; right: auto; }
-    .landing-shape--s3 { bottom: 18%; right: 4%; left: auto; }
-    .landing-shape--s4 { top: 42%; right: 2%; left: auto; }
+    .landing-shape--c2 { top: 62%; left: -6px; right: auto; }
+    .landing-shape--c4 { top: auto; bottom: 10%; left: 8%; right: auto; }
+    .landing-shape--s1 { top: auto; bottom: 22%; left: 3%; right: auto; }
+    .landing-shape--s2 { top: 48%; left: -4px; right: auto; }
+    .landing-shape--s3 { bottom: 4%; left: 14%; right: auto; }
+    .landing-shape--s4 { top: auto; bottom: 32%; left: -6px; right: auto; }
 
     .landing-glyph {
         display: none;
@@ -836,30 +875,33 @@ html:has(body.auth-page) {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0.75rem clamp(1rem, 4vw, 2rem) 1.25rem;
+    padding: 0.75rem 10px 1.25rem;
+    box-sizing: border-box;
 }
 
 .auth-page__column {
     width: 100%;
-    max-width: 32rem;
+    max-width: min(32rem, calc(100vw - 20px));
     display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: 0.875rem;
+    box-sizing: border-box;
 }
 
 .auth-page__card {
     width: 100%;
-    max-width: 32rem;
+    max-width: none;
     background: #f4f9f1;
-    border: none;
+    border: 1px solid var(--landing-border);
     border-radius: var(--landing-radius);
-    padding: 1.25rem 1.5rem;
+    padding: 1.25rem 10px;
     box-shadow: none;
+    box-sizing: border-box;
 }
 
 .auth-page__card--signup {
-    max-width: 32rem;
+    max-width: none;
 }
 
 @media (max-height: 700px) {
@@ -887,7 +929,8 @@ html:has(body.auth-page) {
     text-align: center;
     font-size: 0.875rem;
     color: var(--landing-text-muted);
-    margin: 0;
+    margin: 1.5rem 0 0;
+    padding-top: 0;
 }
 
 .auth-page__footer a {
@@ -911,12 +954,27 @@ html:has(body.auth-page) {
     border: 1px solid rgba(58, 122, 48, 0.28);
     border-radius: var(--landing-radius);
     color: var(--landing-text);
-    padding: 0.625rem 0.875rem;
+    padding: 0 0.875rem;
     font-size: 0.875rem;
     width: 100%;
     appearance: none;
+    height: 2.5rem;
     min-height: 2.5rem;
     box-sizing: border-box;
+    line-height: 1.25;
+}
+
+.auth-page .auth-field__input--password {
+    padding-right: 2.75rem;
+}
+
+.auth-page .auth-password-wrap {
+    display: block;
+}
+
+.auth-page .auth-password-wrap .auth-field__input--password {
+    height: 2.5rem;
+    min-height: 2.5rem;
 }
 
 .auth-page select.auth-field__input {
@@ -968,6 +1026,7 @@ html:has(body.auth-page) {
 .auth-page .auth-btn-submit {
     width: 100%;
     margin-top: 0.375rem;
+    margin-bottom: 0.25rem;
     padding: 0.6875rem 1rem;
     font-size: 0.9375rem;
     font-weight: 600;
@@ -1137,6 +1196,7 @@ html:has(body.auth-page) {
     font-size: 0.8125rem;
     color: var(--landing-text);
     flex-shrink: 0;
+    height: 2.5rem;
     min-height: 2.5rem;
     box-sizing: border-box;
 }
@@ -1216,6 +1276,10 @@ html:has(body.auth-page) {
 }
 
 @media (max-width: 639px) {
+    .auth-page:has(.auth-page__card--signup) {
+        overflow-y: auto;
+    }
+
     .auth-page {
         overflow-y: hidden;
     }
@@ -1228,6 +1292,11 @@ html:has(body.auth-page) {
         overflow: hidden;
     }
 
+    .auth-page__viewport:has(.auth-page__card--signup) {
+        max-height: none;
+        overflow: visible;
+    }
+
     .auth-page__main {
         width: 100%;
         box-sizing: border-box;
@@ -1237,12 +1306,17 @@ html:has(body.auth-page) {
         flex-direction: column;
         align-items: center;
         justify-content: flex-start;
-        padding: 0.5rem 15px 1rem;
+        padding: 0.5rem 10px 1rem;
+    }
+
+    .auth-page__main:has(.auth-page__card--signup) {
+        overflow: visible;
+        min-height: auto;
     }
 
     .auth-page__column {
-        width: min(20rem, calc(100% - 30px));
-        max-width: calc(100% - 30px);
+        width: 100%;
+        max-width: calc(100vw - 20px);
         flex: 0 1 auto;
         min-height: 0;
         max-height: calc(100dvh - 5.5rem);
@@ -1251,8 +1325,13 @@ html:has(body.auth-page) {
         align-self: center;
         overflow-y: auto;
         overflow-x: hidden;
-        scrollbar-gutter: stable;
+        scrollbar-gutter: auto;
         box-sizing: border-box;
+    }
+
+    .auth-page__column:has(.auth-page__card--signup) {
+        max-height: none;
+        overflow-y: visible;
     }
 
     .auth-page__card,
@@ -1261,9 +1340,9 @@ html:has(body.auth-page) {
         max-width: none;
         max-height: none;
         overflow: visible;
-        padding: 1rem 15px;
+        padding: 1rem 10px;
         border: 1px solid var(--landing-border);
-        box-shadow: var(--landing-shadow);
+        box-shadow: none;
         box-sizing: border-box;
         min-width: 0;
     }
@@ -1271,14 +1350,14 @@ html:has(body.auth-page) {
     .auth-page__footer {
         width: 100%;
         text-align: center;
-        margin-top: 0.75rem;
-        padding-top: 0.75rem;
+        margin-top: 1rem;
+        padding-top: 0;
     }
 
     .auth-page__nav {
         padding-bottom: 0.25rem;
-        padding-left: 15px;
-        padding-right: 15px;
+        padding-left: 10px;
+        padding-right: 10px;
     }
 
     .auth-page__nav-inner {
@@ -1301,8 +1380,18 @@ html:has(body.auth-page) {
     .auth-page .auth-field__input,
     .auth-page .auth-field__input--password,
     .auth-page select.auth-field__input {
-        padding: 0.5rem 0.75rem;
+        padding: 0 0.75rem;
         font-size: 0.8125rem;
+        height: 2.25rem;
+        min-height: 2.25rem;
+    }
+
+    .auth-page .auth-field__input--password {
+        padding-right: 2.5rem;
+    }
+
+    .auth-page .auth-password-wrap .auth-field__input--password {
+        height: 2.25rem;
         min-height: 2.25rem;
     }
 
@@ -1335,13 +1424,13 @@ html:has(body.auth-page) {
     }
 
     .auth-page__column:has(.auth-page__card:not(.auth-page__card--signup)) {
-        width: min(21.5rem, calc(100% - 30px));
-        max-width: min(21.5rem, calc(100% - 30px));
+        width: 100%;
+        max-width: calc(100vw - 20px);
         scrollbar-gutter: auto;
     }
 
     .auth-page__card:not(.auth-page__card--signup) {
-        padding: 0.975rem 15px;
+        padding: 0.975rem 10px;
     }
 
     .auth-page__card:not(.auth-page__card--signup) .auth-page__heading {
@@ -1365,8 +1454,18 @@ html:has(body.auth-page) {
     .auth-page__card:not(.auth-page__card--signup) .auth-field__input,
     .auth-page__card:not(.auth-page__card--signup) .auth-field__input--password,
     .auth-page__card:not(.auth-page__card--signup) select.auth-field__input {
-        padding: 0.5625rem 0.8125rem;
+        padding: 0 0.8125rem;
         font-size: 0.975rem;
+        height: 2.6rem;
+        min-height: 2.6rem;
+    }
+
+    .auth-page__card:not(.auth-page__card--signup) .auth-field__input--password {
+        padding-right: 2.75rem;
+    }
+
+    .auth-page__card:not(.auth-page__card--signup) .auth-password-wrap .auth-field__input--password {
+        height: 2.6rem;
         min-height: 2.6rem;
     }
 
@@ -1407,18 +1506,18 @@ html:has(body.auth-page) {
 
     .auth-page__card:not(.auth-page__card--signup) .auth-page__footer {
         font-size: 0.975rem;
-        margin-top: 0.8125rem;
-        padding-top: 0.8125rem;
+        margin-top: 1rem;
+        padding-top: 0;
     }
 
     .auth-page__column:has(.auth-page__card--signup) {
-        width: min(22.5rem, calc(100% - 30px));
-        max-width: min(22.5rem, calc(100% - 30px));
+        width: 100%;
+        max-width: calc(100vw - 20px);
         scrollbar-gutter: auto;
     }
 
     .auth-page__card--signup {
-        padding: 0.875rem 15px;
+        padding: 0.875rem 10px;
     }
 
     .auth-page__card--signup .auth-form-row--2 {
@@ -1446,8 +1545,18 @@ html:has(body.auth-page) {
     .auth-page__card--signup .auth-field__input,
     .auth-page__card--signup .auth-field__input--password,
     .auth-page__card--signup select.auth-field__input {
-        padding: 0.4375rem 0.625rem;
+        padding: 0 0.625rem;
         font-size: 0.75rem;
+        height: 2rem;
+        min-height: 2rem;
+    }
+
+    .auth-page__card--signup .auth-field__input--password {
+        padding-right: 2.25rem;
+    }
+
+    .auth-page__card--signup .auth-password-wrap .auth-field__input--password {
+        height: 2rem;
         min-height: 2rem;
     }
 
@@ -1473,6 +1582,7 @@ html:has(body.auth-page) {
     .auth-page__card--signup .auth-phone-prefix {
         padding: 0 0.5rem;
         font-size: 0.6875rem;
+        height: 2rem;
         min-height: 2rem;
         gap: 0.25rem;
     }
@@ -1483,5 +1593,7 @@ html:has(body.auth-page) {
 
     .auth-page__card--signup .auth-page__footer {
         font-size: 0.75rem;
+        margin-top: 1rem;
+        padding-top: 0;
     }
 }
