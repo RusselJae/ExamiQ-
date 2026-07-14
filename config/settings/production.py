@@ -15,7 +15,13 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
-CSRF_TRUSTED_ORIGINS = [
-    "https://examiq-v2ic.onrender.com",
-]
+
+# Public https origins only (not *.railway.internal). Set on the host, e.g.:
+# CSRF_TRUSTED_ORIGINS=https://your-app.up.railway.app,https://examiq-v2ic.onrender.com
+CSRF_TRUSTED_ORIGINS = env.list(  # noqa: F405
+    "CSRF_TRUSTED_ORIGINS",
+    default=[
+        "https://examiq-v2ic.onrender.com",
+    ],
+)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
