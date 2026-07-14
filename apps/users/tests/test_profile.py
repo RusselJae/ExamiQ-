@@ -78,6 +78,23 @@ class TestProfileView:
         assert student.middle_name == "Q"
         assert student.get_full_name() == "Alex Q Student"
 
+    def test_update_suffix(self, client, student):
+        client.force_login(student)
+        response = client.post(
+            reverse("users:profile"),
+            {
+                "action": "update_profile",
+                "first_name": "Alex",
+                "middle_name": "",
+                "last_name": "Student",
+                "suffix": "Jr.",
+            },
+        )
+        assert response.status_code == 302
+        student.refresh_from_db()
+        assert student.suffix == "Jr."
+        assert student.get_full_name() == "Alex Student Jr."
+
     def test_upload_profile_photo(self, client, student):
         from io import BytesIO
 

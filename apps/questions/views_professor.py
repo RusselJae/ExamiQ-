@@ -26,6 +26,7 @@ from apps.core.filtering import (
     build_filter_fields,
     get_filter_param,
     has_active_filters,
+    redirect_preserving_filters,
 )
 from apps.core.mixins import ProfessorCourseMixin
 
@@ -433,7 +434,11 @@ class QuestionToggleActiveView(ProfessorCourseMixin, View):
             target_type="Question",
             target_id=question.pk,
         )
-        return redirect("analytics_professor:question_list", course_pk=self.course.pk)
+        return redirect_preserving_filters(
+            request,
+            "analytics_professor:question_list",
+            course_pk=self.course.pk,
+        )
 
 
 
@@ -629,24 +634,85 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
 
 class QuestionAIGenerateView(ProfessorCourseMixin, View):
+    """Enqueue AI question generation and return a job id for polling."""
+
     def post(self, request, course_pk):
+        from apps.ai.job_services import start_question_generation_job
+
         topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
+        try:
+            count = int(request.POST.get("count") or 3)
+        except (TypeError, ValueError):
+            count = 3
         topic = Topic.objects.filter(
             pk=topic_id,
             subject__program=self.course.program,
         ).select_related("subject").first()
         if not topic:
-            return HttpResponse("Select a topic first.", status=400)
+            return JsonResponse({"error": "Select a topic first."}, status=400)
 
-        ai_error = None
-        variations = []
-        try:
-            variations = normalize_generated_questions(
-                get_question_generator().generate(topic, difficulty, count=3)
+        job = start_question_generation_job(
+            user=request.user,
+            course_id=self.course.pk,
+            topic_id=topic.pk,
+            difficulty=difficulty,
+            count=count,
+        )
+        return JsonResponse(
+            {
+                "job_id": job.pk,
+                "status": job.status,
+                "status_url": reverse(
+                    "analytics_professor:question_ai_generate_status",
+                    kwargs={"course_pk": self.course.pk, "job_id": job.pk},
+                ),
+            },
+            status=202,
+        )
+
+
+class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
+    """Poll job status; return JSON while running, HTML modal when finished."""
+
+    def get(self, request, course_pk, job_id):
+        from apps.ai.models import AIGenerationJob
+
+        job = get_object_or_404(
+            AIGenerationJob,
+            pk=job_id,
+            created_by=request.user,
+            course_id=self.course.pk,
+            job_type=AIGenerationJob.JobType.QUESTION_GENERATE,
+        )
+        topic = Topic.objects.filter(pk=job.topic_id).first()
+        if job.status in (
+            AIGenerationJob.Status.PENDING,
+            AIGenerationJob.Status.RUNNING,
+        ):
+            return JsonResponse(
+                {
+                    "job_id": job.pk,
+                    "status": job.status,
+                    "done": False,
+                }
             )
-        except AIServiceUnavailableError as exc:
-            ai_error = exc.message
+
+        variations = []
+        if job.status == AIGenerationJob.Status.SUCCEEDED:
+            variations = normalize_generated_questions(job.result.get("variations") or [])
+
+        wants_json = "application/json" in (request.headers.get("Accept") or "")
+        if wants_json and request.GET.get("html") != "1":
+            return JsonResponse(
+                {
+                    "job_id": job.pk,
+                    "status": job.status,
+                    "done": True,
+                    "error": job.error_message or None,
+                    "variations": variations,
+                }
+            )
 
         return render(
             request,
@@ -655,8 +721,8 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                 "variations": variations,
                 "course": self.course,
                 "topic": topic,
-                "difficulty": difficulty,
-                "ai_error": ai_error,
+                "difficulty": job.difficulty or Question.Difficulty.EASY,
+                "ai_error": job.error_message or None,
             },
         )
 

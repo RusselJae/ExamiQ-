@@ -1,0 +1,18 @@
+<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="generate-modal">
+    <div class="bento-card bento-card--elevated p-6 max-w-md w-full mx-4 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="generate-loading-title">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h2 id="generate-loading-title" class="text-lg font-semibold text-examiq-navy">Generating questions</h2>
+                <p class="text-sm text-examiq-slate mt-1" id="generate-loading-status">
+                    Working with the AI provider — this can take a minute.
+                </p>
+            </div>
+            <button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+        </div>
+        <div class="flex items-center gap-3 py-4">
+            <div class="feedback-modal__spinner" aria-hidden="true"></div>
+            <p class="text-sm text-examiq-slate" id="generate-loading-detail">Queued…</p>
+        </div>
+        <button type="button" id="close-generate-modal-footer" class="btn-secondary">Hide</button>
+    </div>
+</div>

@@ -27,6 +27,18 @@ PROGRAM_DEFINITIONS: list[tuple[str, str, str]] = [
     (User.HomeDegreeProgram.CRIMINOLOGY, "Criminology", "Criminology"),
 ]
 
+# Short codes for section labels (e.g. "BSCS 1-2").
+PROGRAM_ABBREVIATIONS: dict[str, str] = {
+    User.HomeDegreeProgram.CS: "BSCS",
+    User.HomeDegreeProgram.IT: "BSIT",
+    User.HomeDegreeProgram.BSED_MATH: "BSED-MATH",
+    User.HomeDegreeProgram.PSYCHOLOGY: "BSPSY",
+    User.HomeDegreeProgram.MARKETING: "BSBA-MKT",
+    User.HomeDegreeProgram.HR: "BSBA-HR",
+    User.HomeDegreeProgram.HOSPITALITY: "BSHM",
+    User.HomeDegreeProgram.CRIMINOLOGY: "BSCRIM",
+}
+
 
 def home_programs_for_department(department) -> list[str]:
     """Return home_degree_program values whose students belong to this department."""

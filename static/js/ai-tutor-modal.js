@@ -7,6 +7,7 @@
         activeAnswerId: null,
         sending: false,
         loaded: false,
+        enriching: {},
     };
 
     function escapeHtml(text) {
@@ -36,6 +37,13 @@
         if (!answerId) return config.historyUrl;
         var sep = config.historyUrl.indexOf("?") >= 0 ? "&" : "?";
         return config.historyUrl + sep + "answer_id=" + encodeURIComponent(answerId);
+    }
+
+    function feedbackUrlForAnswer(answerId) {
+        var config = getConfig();
+        if (!config.feedbackUrl) return "";
+        var sep = config.feedbackUrl.indexOf("?") >= 0 ? "&" : "?";
+        return config.feedbackUrl + sep + "answer_id=" + encodeURIComponent(answerId);
     }
 
     function openModal() {
@@ -89,6 +97,75 @@
         }
     }
 
+    function mergeFeedbackItem(fbItem) {
+        var existing = state.items.find(function (item) {
+            return item.answer_id === fbItem.answer_id;
+        });
+        if (existing) {
+            existing.feedback = fbItem.feedback;
+            existing.needs_ai = false;
+        } else {
+            fbItem.needs_ai = false;
+            state.items.push(fbItem);
+        }
+    }
+
+    async function enrichAnswerFeedback(answerId) {
+        var item = state.items.find(function (entry) {
+            return entry.answer_id === answerId;
+        });
+        if (!item || !item.needs_ai || state.enriching[answerId]) {
+            return;
+        }
+        state.enriching[answerId] = true;
+        renderFeedbackPanel();
+        try {
+            var resp = await fetch(feedbackUrlForAnswer(answerId), {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": getConfig().csrfToken,
+                    Accept: "application/json",
+                },
+                credentials: "same-origin",
+            });
+            if (!resp.ok) throw new Error("feedback failed");
+            var data = await resp.json();
+            if (data.items && data.items.length) {
+                data.items.forEach(mergeFeedbackItem);
+            }
+        } catch (err) {
+            item.needs_ai = false;
+            if (typeof showToast === "function") {
+                showToast("Could not enrich AI feedback for this question. Showing available explanation.", "warning");
+            }
+        } finally {
+            delete state.enriching[answerId];
+            if (state.activeAnswerId === answerId) {
+                renderFeedbackPanel();
+            }
+            renderPills();
+        }
+    }
+
+    function enrichPendingFeedback() {
+        var queue = state.items.filter(function (item) {
+            return item.needs_ai;
+        });
+        // Active first, then remaining — one at a time to avoid host timeouts.
+        queue.sort(function (a, b) {
+            if (a.answer_id === state.activeAnswerId) return -1;
+            if (b.answer_id === state.activeAnswerId) return 1;
+            return 0;
+        });
+        var chain = Promise.resolve();
+        queue.forEach(function (item) {
+            chain = chain.then(function () {
+                return enrichAnswerFeedback(item.answer_id);
+            });
+        });
+        return chain;
+    }
+
     function renderPills() {
         var container = document.getElementById("ai-tutor-question-pills");
         var countEl = document.getElementById("ai-tutor-review-count");
@@ -109,10 +186,13 @@
             .map(function (item, index) {
                 var active = item.answer_id === state.activeAnswerId ? " ai-tutor-pill--active" : "";
                 var saved = item.message_count > 0 ? ' <span class="ai-tutor-pill__saved" title="Saved conversation">●</span>' : "";
+                var pending = item.needs_ai || state.enriching[item.answer_id]
+                    ? ' <span class="ai-tutor-pill__pending" title="Generating feedback">…</span>'
+                    : "";
                 return (
                     '<button type="button" class="ai-tutor-pill' + active + '" data-answer-id="' +
                     item.answer_id + '" role="tab" aria-selected="' + (active ? "true" : "false") + '">' +
-                    "Q" + (index + 1) + ": " + escapeHtml(truncateStem(item.stem)) + saved +
+                    "Q" + (index + 1) + ": " + escapeHtml(truncateStem(item.stem)) + saved + pending +
                     "</button>"
                 );
             })
@@ -127,6 +207,7 @@
                     renderPills();
                     renderFeedbackPanel();
                     renderMessages();
+                    enrichAnswerFeedback(answerId);
                 } catch (err) {
                     if (typeof showToast === "function") {
                         showToast("Could not load saved conversation for this question.", "error");
@@ -154,7 +235,28 @@
 
         stemEl.textContent = "Review: " + item.stem;
 
-        if (item.is_correct) {
+        if (state.enriching[item.answer_id]) {
+            if (whySection) whySection.classList.remove("hidden");
+            if (whyEl) {
+                whyEl.innerHTML = escapeHtml(item.feedback || "Loading AI feedback…").replace(/\n/g, "<br>");
+                whyEl.insertAdjacentHTML(
+                    "beforeend",
+                    '<p class="text-sm text-examiq-slate mt-2">Enriching with AI tutor feedback…</p>'
+                );
+            }
+            if (stepsSection) {
+                if (item.correction_steps && item.correction_steps.length) {
+                    stepsSection.classList.remove("hidden");
+                    stepsEl.innerHTML = item.correction_steps
+                        .map(function (step) {
+                            return "<li>" + escapeHtml(step) + "</li>";
+                        })
+                        .join("");
+                } else {
+                    stepsSection.classList.add("hidden");
+                }
+            }
+        } else if (item.is_correct) {
             if (whySection) whySection.classList.add("hidden");
             if (stepsSection) stepsSection.classList.remove("hidden");
             if (stepsEl) {
@@ -197,33 +299,6 @@
             })
             .join("");
         container.scrollTop = container.scrollHeight;
-    }
-
-    async function loadFeedback() {
-        var config = getConfig();
-        if (!config.feedbackUrl) return;
-        var resp = await fetch(config.feedbackUrl, {
-            method: "POST",
-            headers: {
-                "X-CSRFToken": config.csrfToken,
-                Accept: "application/json",
-            },
-            credentials: "same-origin",
-        });
-        if (!resp.ok) throw new Error("feedback failed");
-        var data = await resp.json();
-        if (data.items && data.items.length) {
-            data.items.forEach(function (fbItem) {
-                var existing = state.items.find(function (item) {
-                    return item.answer_id === fbItem.answer_id;
-                });
-                if (existing) {
-                    existing.feedback = fbItem.feedback;
-                } else {
-                    state.items.push(fbItem);
-                }
-            });
-        }
     }
 
     function pickDefaultAnswer() {
@@ -309,12 +384,13 @@
 
         try {
             await loadHistoryForAnswer(null);
-            await loadFeedback();
             if (state.activeAnswerId) {
                 await loadHistoryForAnswer(state.activeAnswerId);
             }
             showContent();
             state.loaded = true;
+            // Enrich in background after UI is usable — do not block open.
+            enrichPendingFeedback();
         } catch (err) {
             showError("Could not load tutor feedback. Try again from your session summary.");
         }

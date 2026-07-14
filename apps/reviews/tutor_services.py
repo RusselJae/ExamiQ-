@@ -81,12 +81,18 @@ def _exam_context(session: ReviewSession, answer: Answer | None = None) -> dict:
 
 
 def session_answer_items(session: ReviewSession) -> list[dict]:
+    """Build tutor item payloads without blocking on LLM calls."""
     from apps.analytics.confidence import confidence_tier_key
-    from apps.analytics.services import generate_answer_feedback
+    from apps.analytics.services import get_answer_feedback_quick
 
     items = []
     answers = (
-        session.answers.select_related("question", "selected_choice", "question__topic")
+        session.answers.select_related(
+            "question",
+            "selected_choice",
+            "question__topic",
+            "mistake_record",
+        )
         .prefetch_related("question__choices", "question__explanation_steps")
         .order_by("answered_at")
     )
@@ -98,6 +104,7 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
             student=session.student,
             question=answer.question,
         ).first()
+        feedback, needs_ai = get_answer_feedback_quick(answer)
         items.append(
             {
                 "answer_id": answer.pk,
@@ -106,7 +113,8 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "is_correct": answer.is_correct,
                 "timed_out": answer.timed_out,
                 "confidence_tier": confidence_tier_key(answer.confidence),
-                "feedback": generate_answer_feedback(answer),
+                "feedback": feedback,
+                "needs_ai": needs_ai,
                 "correction_steps": steps,
                 "topic": answer.question.topic.name,
                 "difficulty": answer.question.get_difficulty_display(),

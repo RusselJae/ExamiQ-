@@ -44,6 +44,15 @@
         {% endif %}
     </div>
 
+    <div class="auth-form-row auth-form-row--2">
+        {% include "components/auth_field.html" with field=form.first_name %}
+        {% include "components/auth_field.html" with field=form.last_name %}
+    </div>
+    <div class="auth-form-row auth-form-row--2">
+        {% include "components/auth_field.html" with field=form.middle_name %}
+        {% include "components/auth_field.html" with field=form.suffix %}
+    </div>
+
     <div id="signup-student-fields" class="signup-role-fields">
         {% include "components/auth_field.html" with field=form.student_number %}
         <div class="auth-form-row auth-form-row--2">

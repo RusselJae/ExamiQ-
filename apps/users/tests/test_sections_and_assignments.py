@@ -17,6 +17,8 @@ class TestCampusSections:
         response = client.get(reverse("campus:section_list"))
         assert response.status_code == 200
         assert program_section.display_label in response.content.decode()
+        assert program_section.display_label == "BSCS 2-A"
+        assert "Computer Science ·" not in response.content.decode()
 
     def test_bulk_create_sections(self, client, program, year_level, academic_year):
         admin = User.objects.create_superuser(

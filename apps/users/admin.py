@@ -82,7 +82,9 @@ class UserAdmin(BaseUserAdmin):
             {
                 "fields": (
                     "first_name",
+                    "middle_name",
                     "last_name",
+                    "suffix",
                     "department",
                     "home_degree_program",
                     "year_level",

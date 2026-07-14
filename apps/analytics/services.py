@@ -137,6 +137,24 @@ def _get_answer_mistake_record(answer):
         return None
 
 
+def get_answer_feedback_quick(answer) -> tuple[str, bool]:
+    """Return cached/rule feedback quickly without calling the LLM.
+
+    Second value is True when AI enrichment should be requested later.
+    """
+    from django.conf import settings
+
+    mistake_record = _get_answer_mistake_record(answer)
+    if mistake_record and mistake_record.ai_feedback:
+        return mistake_record.ai_feedback, False
+
+    rule = _rule_based_answer_feedback(answer)
+    if answer.is_correct:
+        return rule, False
+    needs_ai = bool(settings.AI_ENABLED)
+    return rule, needs_ai
+
+
 def generate_answer_feedback(answer) -> str:
     """Generate and return feedback for a session answer."""
     mistake_record = _get_answer_mistake_record(answer)

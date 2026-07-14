@@ -1,6 +1,11 @@
 <div class="span-full filter-bar-container">
     <div class="bento-card filter-bar-card{% if filter_bar_compact %} filter-bar-card--compact{% endif %}">
         <form method="get" class="filter-bar{% if filter_bar_compact %} filter-bar--compact{% endif %}" role="search">
+            {% if filter_preserve_params %}
+            {% for name, value in filter_preserve_params %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            {% endif %}
             <div class="filter-bar__grid">
                 {% for field in filter_form_fields %}
                     {% if field.type == "search" %}
@@ -43,7 +48,7 @@
             <div class="filter-bar__actions">
                 <button type="submit" class="btn-primary btn-primary-sm">Apply filters</button>
                 {% if filter_has_active %}
-                <a href="{{ request.path }}" class="btn-secondary btn-primary-sm">Reset</a>
+                <a href="{{ request.path }}" class="btn-secondary btn-primary-sm">Remove filters</a>
                 {% endif %}
             </div>
         </form>

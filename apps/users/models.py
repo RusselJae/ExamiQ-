@@ -161,10 +161,10 @@ class ProgramSection(models.Model):
 
     @property
     def display_label(self) -> str:
-        return (
-            f"{self.program.name} · {self.year_level.name} · "
-            f"Section {self.label} · {self.academic_year.label}"
-        )
+        from apps.users.constants import PROGRAM_ABBREVIATIONS
+
+        abbr = PROGRAM_ABBREVIATIONS.get(self.program.slug, self.program.name)
+        return f"{abbr} {self.year_level.order}-{self.label}"
 
     @property
     def student_count(self) -> int:
@@ -255,6 +255,12 @@ class User(AbstractUser):
         help_text="When the user last changed their password.",
     )
     middle_name = models.CharField(max_length=150, blank=True, default="")
+    suffix = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text='Name suffix, e.g. "Jr.", "Sr.", "III".',
+    )
     profile_photo = models.ImageField(upload_to="profile_photos/", blank=True, null=True)
     student_number = models.CharField(
         max_length=9,
@@ -296,7 +302,10 @@ class User(AbstractUser):
 
     def get_full_name(self) -> str:
         parts = [self.first_name, self.middle_name, self.last_name]
-        return " ".join(part for part in parts if part).strip()
+        name = " ".join(part for part in parts if part).strip()
+        if self.suffix:
+            name = f"{name} {self.suffix}".strip()
+        return name
 
     @property
     def initials(self) -> str:

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.analytics import views_assignments, views_chairperson, views_chairperson_logs
+from apps.analytics import views_assignments, views_chairperson
 
 app_name = "analytics_chairperson"
 
@@ -27,8 +27,6 @@ urlpatterns = [
         views_assignments.ChairpersonAssignmentSectionsAPIView.as_view(),
         name="assignment_sections_api",
     ),
-    path("logs/faculty/", views_chairperson_logs.FacultyAuditLogView.as_view(), name="logs_faculty"),
-    path("logs/students/", views_chairperson_logs.StudentAuditLogView.as_view(), name="logs_students"),
     path(
         "analytics/by-program/",
         views_chairperson.CrossProgramAnalyticsView.as_view(),

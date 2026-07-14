@@ -11,12 +11,10 @@ from django.views import View
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
 from apps.core.filtering import (
-    STANDARD_DATE_SORT_FILTER_SPECS,
     apply_date_range,
     apply_sort,
-    build_filter_fields,
-    get_filter_param,
     has_active_filters,
+    redirect_preserving_filters,
 )
 from apps.core.mixins import CampusAdminRequiredMixin
 from apps.users.email_services import send_account_approved_email, send_account_rejected_email
@@ -159,33 +157,9 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
         context["search_query"] = self.request.GET.get("q", "")
         context["role_choices"] = User.Role.choices
         context["status_choices"] = User.ApprovalStatus.choices
-        filter_names = ["role", "status", "q", "date_from", "date_to", "sort"]
-        context["filter_form_fields"] = build_filter_fields(
-            self.request,
-            [
-                {
-                    "type": "search",
-                    "name": "q",
-                    "label": "Search",
-                    "placeholder": "Name, email, or student number",
-                },
-                {
-                    "type": "select",
-                    "name": "role",
-                    "label": "Role",
-                    "choices": User.Role.choices,
-                },
-                {
-                    "type": "select",
-                    "name": "status",
-                    "label": "Status",
-                    "choices": User.ApprovalStatus.choices,
-                },
-                *STANDARD_DATE_SORT_FILTER_SPECS,
-            ],
+        context["filter_has_active"] = has_active_filters(
+            self.request, ["q", "role", "status"]
         )
-        context["filter_has_active"] = has_active_filters(self.request, filter_names)
-        context["filter_bar_compact"] = True
         return context
 
 
@@ -216,17 +190,17 @@ class CampusToggleUserActiveView(CampusAdminRequiredMixin, View):
         user = get_object_or_404(User, pk=pk)
         if user == request.user:
             messages.error(request, "You cannot deactivate your own account.")
-            return redirect("campus:user_list")
+            return redirect_preserving_filters(request, "campus:user_list")
 
         if user.approval_status == User.ApprovalStatus.PENDING:
             messages.error(request, "Use Accept or Reject for pending registrations.")
-            return redirect("campus:user_list")
+            return redirect_preserving_filters(request, "campus:user_list")
 
         user.is_active = not user.is_active
         user.save(update_fields=["is_active"])
         state = "activated" if user.is_active else "deactivated"
         messages.success(request, f"{user.email} has been {state}.")
-        return redirect("campus:user_list")
+        return redirect_preserving_filters(request, "campus:user_list")
 
 
 class CampusApproveUserView(CampusAdminRequiredMixin, View):
@@ -234,7 +208,7 @@ class CampusApproveUserView(CampusAdminRequiredMixin, View):
         user = get_object_or_404(User, pk=pk)
         if user.approval_status != User.ApprovalStatus.PENDING:
             messages.error(request, "Only pending registrations can be approved.")
-            return redirect("campus:user_list")
+            return redirect_preserving_filters(request, "campus:user_list")
 
         user.is_active = True
         user.approval_status = User.ApprovalStatus.APPROVED
@@ -257,7 +231,7 @@ class CampusApproveUserView(CampusAdminRequiredMixin, View):
             link="/accounts/login/",
         )
         messages.success(request, f"{user.email} has been approved.")
-        return redirect("campus:user_list")
+        return redirect_preserving_filters(request, "campus:user_list")
 
 
 class CampusRejectUserView(CampusAdminRequiredMixin, View):
@@ -265,7 +239,7 @@ class CampusRejectUserView(CampusAdminRequiredMixin, View):
         user = get_object_or_404(User, pk=pk)
         if user.approval_status != User.ApprovalStatus.PENDING:
             messages.error(request, "Only pending registrations can be rejected.")
-            return redirect("campus:user_list")
+            return redirect_preserving_filters(request, "campus:user_list")
 
         user.is_active = False
         user.approval_status = User.ApprovalStatus.REJECTED
@@ -288,7 +262,7 @@ class CampusRejectUserView(CampusAdminRequiredMixin, View):
             link="/accounts/login/?registered=rejected",
         )
         messages.success(request, f"{user.email} has been rejected.")
-        return redirect("campus:user_list")
+        return redirect_preserving_filters(request, "campus:user_list")
 
 
 class CampusSectionListView(CampusAdminRequiredMixin, ListView):

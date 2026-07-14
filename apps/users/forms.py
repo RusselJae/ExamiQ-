@@ -79,6 +79,52 @@ class ExamiQSignupForm(SignupForm):
         label="I am registering as",
         widget=forms.Select(attrs={"class": "auth-role-select-hidden", "id": "id_signup_role", "tabindex": "-1"}),
     )
+    first_name = forms.CharField(
+        max_length=150,
+        label="First name",
+        widget=forms.TextInput(
+            attrs={
+                "class": "auth-field__input",
+                "placeholder": "First name",
+                "autocomplete": "given-name",
+            }
+        ),
+    )
+    last_name = forms.CharField(
+        max_length=150,
+        label="Last name",
+        widget=forms.TextInput(
+            attrs={
+                "class": "auth-field__input",
+                "placeholder": "Last name",
+                "autocomplete": "family-name",
+            }
+        ),
+    )
+    middle_name = forms.CharField(
+        max_length=150,
+        required=False,
+        label="Middle name (optional)",
+        widget=forms.TextInput(
+            attrs={
+                "class": "auth-field__input",
+                "placeholder": "Middle name",
+                "autocomplete": "additional-name",
+            }
+        ),
+    )
+    suffix = forms.CharField(
+        max_length=20,
+        required=False,
+        label="Suffix (optional)",
+        widget=forms.TextInput(
+            attrs={
+                "class": "auth-field__input",
+                "placeholder": "Jr., Sr., III",
+                "autocomplete": "honorific-suffix",
+            }
+        ),
+    )
     student_number = forms.CharField(
         max_length=9,
         required=False,
@@ -240,6 +286,10 @@ class ExamiQSignupForm(SignupForm):
         user = super().save(request)
         role = self.cleaned_data["role"]
         user.role = role
+        user.first_name = self.cleaned_data["first_name"].strip()
+        user.last_name = self.cleaned_data["last_name"].strip()
+        user.middle_name = self.cleaned_data.get("middle_name", "").strip()
+        user.suffix = self.cleaned_data.get("suffix", "").strip()
         user.phone_number = self.cleaned_data["phone_number"]
 
         if role == User.Role.STUDENT:
@@ -269,6 +319,7 @@ class ProfileUpdateForm(forms.Form):
     first_name = forms.CharField(max_length=150, required=False, label="First name")
     middle_name = forms.CharField(max_length=150, required=False, label="Middle name")
     last_name = forms.CharField(max_length=150, required=False, label="Last name")
+    suffix = forms.CharField(max_length=20, required=False, label="Suffix")
     profile_photo = forms.ImageField(required=False, label="Profile photo")
     home_degree_program = forms.ChoiceField(
         choices=[("", "— Select your program —")] + list(User.HomeDegreeProgram.choices),
@@ -294,6 +345,7 @@ class ProfileUpdateForm(forms.Form):
         self.fields["first_name"].initial = user.first_name
         self.fields["middle_name"].initial = user.middle_name
         self.fields["last_name"].initial = user.last_name
+        self.fields["suffix"].initial = user.suffix
         if user.role != User.Role.STUDENT:
             del self.fields["home_degree_program"]
             del self.fields["year_level"]
@@ -348,7 +400,8 @@ class ProfileUpdateForm(forms.Form):
         self.user.first_name = self.cleaned_data["first_name"]
         self.user.middle_name = self.cleaned_data.get("middle_name", "")
         self.user.last_name = self.cleaned_data["last_name"]
-        update_fields = ["first_name", "middle_name", "last_name"]
+        self.user.suffix = self.cleaned_data.get("suffix", "").strip()
+        update_fields = ["first_name", "middle_name", "last_name", "suffix"]
         photo = self.cleaned_data.get("profile_photo")
         if photo:
             if self.user.profile_photo:

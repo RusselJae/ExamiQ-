@@ -106,7 +106,7 @@
         </div>
         <div class="assign-term-tabs" role="tablist" aria-label="Filter by term">
             {% for tab in term_tabs %}
-            <a href="?term={{ tab.key }}"
+            <a href="{% if tab.key %}{% querystring term=tab.key page=None %}{% else %}{% querystring term=None page=None %}{% endif %}"
                class="assign-term-tab{% if term_filter == tab.key %} assign-term-tab--active{% endif %}"
                role="tab"
                {% if term_filter == tab.key %}aria-selected="true"{% endif %}>

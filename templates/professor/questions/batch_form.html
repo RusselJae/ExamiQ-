@@ -578,6 +578,57 @@
         window.ExamiQBatch.persist(batchConfig);
     });
 
+    function showGenerateLoading(detail) {
+        const container = document.getElementById("generate-modal-container");
+        container.innerHTML =
+            '<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="generate-modal">' +
+            '<div class="bento-card bento-card--elevated p-6 max-w-md w-full mx-4 shadow-xl" role="dialog" aria-modal="true">' +
+            '<div class="flex justify-between items-start mb-4">' +
+            '<div><h2 class="text-lg font-semibold text-examiq-navy">Generating questions</h2>' +
+            '<p class="text-sm text-examiq-slate mt-1">Working with the AI provider — this can take a minute.</p></div>' +
+            '<button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>' +
+            '</div><div class="flex items-center gap-3 py-4">' +
+            '<div class="feedback-modal__spinner" aria-hidden="true"></div>' +
+            '<p class="text-sm text-examiq-slate" id="generate-loading-detail">' + (detail || "Queued…") + "</p>" +
+            '</div><button type="button" id="close-generate-modal-footer" class="btn-secondary">Hide</button></div></div>';
+    }
+
+    function sleep(ms) {
+        return new Promise(function (resolve) { setTimeout(resolve, ms); });
+    }
+
+    async function pollGenerateJob(statusUrl) {
+        const maxAttempts = 90;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const detail = document.getElementById("generate-loading-detail");
+            if (detail) {
+                detail.textContent = attempt < 2 ? "Starting…" : "Still generating (" + (attempt + 1) + ")…";
+            }
+            const resp = await fetch(statusUrl + "?html=1", {
+                headers: { Accept: "text/html" },
+                credentials: "same-origin",
+            });
+            const contentType = resp.headers.get("Content-Type") || "";
+            if (contentType.indexOf("application/json") !== -1) {
+                const data = await resp.json();
+                if (!data.done) {
+                    await sleep(2000);
+                    continue;
+                }
+                if (data.error && window.showToast) {
+                    window.showToast(data.error, "error");
+                }
+                break;
+            }
+            document.getElementById("generate-modal-container").innerHTML = await resp.text();
+            return;
+        }
+        if (window.showToast) {
+            window.showToast("Generation is taking too long. Try again with a smaller model or fewer questions.", "error");
+        }
+        document.getElementById("generate-modal-container").innerHTML = "";
+    }
+
     generateBtn.addEventListener("click", async function() {
         if (!topicSelect.value) {
             if (window.showToast) window.showToast("Select a topic before generating questions.", "warning");
@@ -586,12 +637,24 @@
         if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
             window.ExamiQUI.setButtonLoading(generateBtn, true, "Generating…");
         }
+        showGenerateLoading("Queued…");
         try {
             const fd = getSettingsFormData();
-            const resp = await fetch(generateUrl, { method: "POST", body: fd });
-            document.getElementById("generate-modal-container").innerHTML = await resp.text();
+            fd.append("count", "3");
+            const resp = await fetch(generateUrl, {
+                method: "POST",
+                body: fd,
+                headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+                credentials: "same-origin",
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok || !data.status_url) {
+                throw new Error(data.error || "Generation failed. Please try again.");
+            }
+            await pollGenerateJob(data.status_url);
         } catch (err) {
-            if (window.showToast) window.showToast("Generation failed. Please try again.", "error");
+            document.getElementById("generate-modal-container").innerHTML = "";
+            if (window.showToast) window.showToast(err.message || "Generation failed. Please try again.", "error");
         } finally {
             if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
                 window.ExamiQUI.setButtonLoading(generateBtn, false);

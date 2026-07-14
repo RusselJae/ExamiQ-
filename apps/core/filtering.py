@@ -4,14 +4,46 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from django.db.models import QuerySet
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils import timezone
 
 
 def get_filter_param(request, name: str, default: str = "") -> str:
     """Return a stripped GET parameter value."""
     return request.GET.get(name, default).strip()
+
+
+def redirect_preserving_filters(
+    request,
+    viewname: str,
+    *args,
+    **kwargs,
+) -> HttpResponseRedirect:
+    """Redirect to a list view, keeping filters when Referer matches that path.
+
+    Table row POSTs must not wipe active GET filters. Filters clear only via the
+    explicit Remove filters control (bare list URL).
+    """
+    fallback = reverse(viewname, args=args, kwargs=kwargs)
+    referer = request.META.get("HTTP_REFERER", "")
+    if not referer:
+        return redirect(fallback)
+
+    parsed = urlparse(referer)
+    if parsed.netloc and parsed.netloc != request.get_host():
+        return redirect(fallback)
+    if parsed.path.rstrip("/") != fallback.rstrip("/"):
+        return redirect(fallback)
+
+    target = fallback
+    if parsed.query:
+        target = f"{fallback}?{parsed.query}"
+    return redirect(target)
 
 
 def build_filter_fields(request, specs: list[dict[str, Any]]) -> list[dict[str, Any]]:

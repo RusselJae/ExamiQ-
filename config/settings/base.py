@@ -1,6 +1,6 @@
 """Base settings shared across all environments."""
 from pathlib import Path
-
+import os
 import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -75,7 +75,15 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
-    "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+    "default": {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'railway',
+        'USER': 'postgres',
+        'PASSWORD': 'UFVvGfRrGljTCyhGWwcVbkjIcuVQkJfx',
+        # This forces it to use the public web host when running locally:
+        'HOST': 'tokaido.proxy.rlwy.net',
+        'PORT': '11132', 
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [

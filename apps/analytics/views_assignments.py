@@ -14,6 +14,7 @@ from apps.core.filtering import (
     build_filter_fields,
     get_filter_param,
     has_active_filters,
+    redirect_preserving_filters,
 )
 from apps.core.audit import log_audit_event
 from apps.core.models import AuditLog
@@ -87,6 +88,10 @@ class ChairpersonAssignmentListView(ChairpersonRequiredMixin, ListView):
             self.request, ["term", "date_from", "date_to", "sort"]
         )
         context["filter_bar_compact"] = True
+        term_filter = context["term_filter"]
+        context["filter_preserve_params"] = (
+            [("term", term_filter)] if term_filter else []
+        )
         current_term = AcademicTerm.get_current()
         context["current_term_label"] = str(current_term) if current_term else "Current term"
         context["assignment_stats"] = {
@@ -163,12 +168,12 @@ class ChairpersonAssignmentDeleteView(ChairpersonRequiredMixin, View):
         ).filter(pk=pk).first()
         if not assignment:
             messages.error(request, "Assignment not found.")
-            return redirect("analytics_chairperson:assignments")
+            return redirect_preserving_filters(request, "analytics_chairperson:assignments")
 
         dept_id = request.user.department_id
         if dept_id and assignment.program_section.program.managing_department_id != dept_id:
             messages.error(request, "You cannot remove assignments outside your department.")
-            return redirect("analytics_chairperson:assignments")
+            return redirect_preserving_filters(request, "analytics_chairperson:assignments")
 
         professor = assignment.professor
         section_label = assignment.program_section.display_label
@@ -181,7 +186,7 @@ class ChairpersonAssignmentDeleteView(ChairpersonRequiredMixin, View):
             message=f"Removed assignment: {professor.email} — {section_label} — {subject_code}",
         )
         messages.success(request, "Teaching assignment removed.")
-        return redirect("analytics_chairperson:assignments")
+        return redirect_preserving_filters(request, "analytics_chairperson:assignments")
 
 
 class ChairpersonAssignmentSubjectsAPIView(ChairpersonRequiredMixin, View):

@@ -9,6 +9,10 @@ STUDENT_SIGNUP_DATA = {
     "email": "newstudent@test.edu",
     "password1": "strongpass123!",
     "password2": "strongpass123!",
+    "first_name": "Ana",
+    "last_name": "Santos",
+    "middle_name": "",
+    "suffix": "",
     "student_number": "123456789",
     "home_degree_program": User.HomeDegreeProgram.CS,
     "phone_number": "09123456789",
@@ -34,6 +38,43 @@ class TestSignupRoles:
         assert user.section_id == program_section.pk
         assert user.is_active is True
         assert user.approval_status == User.ApprovalStatus.APPROVED
+        assert user.first_name == "Ana"
+        assert user.last_name == "Santos"
+        assert user.middle_name == ""
+        assert user.suffix == ""
+
+    def test_student_signup_accepts_optional_middle_name_and_suffix(
+        self, client, year_level, program_section
+    ):
+        data = {
+            **STUDENT_SIGNUP_DATA,
+            "email": "namedstudent@test.edu",
+            "student_number": "987654321",
+            "year_level": year_level.pk,
+            "section": program_section.pk,
+            "middle_name": "Marie",
+            "suffix": "Jr.",
+        }
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 302
+        user = User.objects.get(email="namedstudent@test.edu")
+        assert user.middle_name == "Marie"
+        assert user.suffix == "Jr."
+        assert user.get_full_name() == "Ana Marie Santos Jr."
+
+    def test_student_signup_requires_first_and_last_name(
+        self, client, year_level, program_section
+    ):
+        data = {
+            **STUDENT_SIGNUP_DATA,
+            "year_level": year_level.pk,
+            "section": program_section.pk,
+            "first_name": "",
+            "last_name": "",
+        }
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 200
+        assert not User.objects.filter(email="newstudent@test.edu").exists()
 
     def test_faculty_signup_creates_pending_inactive_account(self, client, department):
         response = client.post(
@@ -43,6 +84,8 @@ class TestSignupRoles:
                 "email": "newprof@test.edu",
                 "password1": "strongpass123!",
                 "password2": "strongpass123!",
+                "first_name": "Rico",
+                "last_name": "Cruz",
                 "department": department.pk,
                 "employee_id": "EMP-2024-001",
                 "phone_number": "09123456789",
@@ -56,6 +99,8 @@ class TestSignupRoles:
         assert user.employee_id == "EMP-2024-001"
         assert user.is_active is False
         assert user.approval_status == User.ApprovalStatus.PENDING
+        assert user.first_name == "Rico"
+        assert user.last_name == "Cruz"
 
     def test_faculty_signup_requires_employee_id(self, client, department):
         response = client.post(
@@ -65,6 +110,8 @@ class TestSignupRoles:
                 "email": "noprof@test.edu",
                 "password1": "strongpass123!",
                 "password2": "strongpass123!",
+                "first_name": "No",
+                "last_name": "Prof",
                 "department": department.pk,
                 "employee_id": "",
                 "phone_number": "09123456789",
@@ -93,6 +140,8 @@ class TestSignupRoles:
                 "email": "newchair@test.edu",
                 "password1": "strongpass123!",
                 "password2": "strongpass123!",
+                "first_name": "Chair",
+                "last_name": "Person",
                 "department": "",
                 "employee_id": "EMP-CHAIR-01",
                 "phone_number": "09123456789",
@@ -146,3 +195,7 @@ class TestAuthTemplates:
         assert "auth-page__badge" not in content
         assert "auth-form__divider" in content
         assert "name@school.edu.ph" in content
+        assert "First name" in content
+        assert "Middle name (optional)" in content
+        assert "Suffix (optional)" in content
+        assert "auth-password-strength--compact" in content

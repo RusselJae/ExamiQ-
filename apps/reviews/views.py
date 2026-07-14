@@ -416,10 +416,11 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
 
 
 class SessionGenerateFeedbackView(StudentRequiredMixin, View):
-    """Batch-generate feedback for all answers in a session."""
+    """Generate feedback for one answer, or all answers when answer_id is omitted."""
 
     def post(self, request, pk):
-        from apps.analytics.services import generate_session_feedback
+        from apps.analytics.confidence import confidence_tier_key
+        from apps.analytics.services import generate_answer_feedback, generate_session_feedback
 
         session = get_object_or_404(
             ReviewSession,
@@ -427,6 +428,42 @@ class SessionGenerateFeedbackView(StudentRequiredMixin, View):
             student=request.user,
             status=ReviewSession.Status.COMPLETED,
         )
+        answer_id = request.GET.get("answer_id") or request.POST.get("answer_id")
+        if answer_id is not None:
+            try:
+                answer_id = int(answer_id)
+            except (TypeError, ValueError):
+                return JsonResponse({"error": "Invalid answer_id."}, status=400)
+            answer = get_object_or_404(
+                Answer.objects.select_related(
+                    "question", "selected_choice", "mistake_record"
+                ).prefetch_related("question__choices"),
+                pk=answer_id,
+                session=session,
+            )
+            try:
+                feedback = generate_answer_feedback(answer)
+            except Exception:
+                return JsonResponse(
+                    {"error": "Feedback generation failed."},
+                    status=500,
+                )
+            return JsonResponse(
+                {
+                    "items": [
+                        {
+                            "answer_id": answer.pk,
+                            "stem": answer.question.stem,
+                            "is_correct": answer.is_correct,
+                            "timed_out": answer.timed_out,
+                            "confidence_tier": confidence_tier_key(answer.confidence),
+                            "feedback": feedback,
+                            "needs_ai": False,
+                        }
+                    ]
+                }
+            )
+
         try:
             items = generate_session_feedback(session)
         except Exception:
@@ -434,6 +471,8 @@ class SessionGenerateFeedbackView(StudentRequiredMixin, View):
                 {"items": [], "error": "Feedback generation failed."},
                 status=500,
             )
+        for item in items:
+            item["needs_ai"] = False
         return JsonResponse({"items": items})
 
 

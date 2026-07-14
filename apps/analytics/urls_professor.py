@@ -95,6 +95,11 @@ urlpatterns = [
         name="question_ai_generate",
     ),
     path(
+        "courses/<int:course_pk>/questions/ai-generate/<int:job_id>/",
+        question_views.QuestionAIGenerateStatusView.as_view(),
+        name="question_ai_generate_status",
+    ),
+    path(
         "courses/<int:course_pk>/questions/ai-validate/",
         question_views.QuestionAIValidateView.as_view(),
         name="question_ai_validate",

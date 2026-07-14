@@ -57,10 +57,11 @@
                 <div class="sr-only">
                     {{ profile_form.profile_photo }}
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {{ profile_form.first_name|as_crispy_field }}
-                    {{ profile_form.middle_name|as_crispy_field }}
                     {{ profile_form.last_name|as_crispy_field }}
+                    {{ profile_form.middle_name|as_crispy_field }}
+                    {{ profile_form.suffix|as_crispy_field }}
                 </div>
                 {% if profile_form.home_degree_program %}
                 {{ profile_form.home_degree_program|as_crispy_field }}
