@@ -804,9 +804,13 @@ class TopicListView(ProfessorCourseMixin, ListView):
         context["year_levels"] = YearLevel.objects.all()
         context["program"] = self.course.program
         subject_id = self.request.GET.get("subject", "")
+        year_level_id = self.request.GET.get("year_level", "")
         context["selected_subject_id"] = subject_id
         selected_subject = _get_program_subject(self.course, subject_id, self.request.user)
         context["selected_subject"] = selected_subject
+        if selected_subject and not year_level_id and selected_subject.year_level_id:
+            year_level_id = str(selected_subject.year_level_id)
+        context["selected_year_level_id"] = year_level_id
         return context
 
 

@@ -154,7 +154,7 @@ class Command(BaseCommand):
         self._retire_gen_placeholder_questions(programs.get("cs"))
         self._seed_questions(topics)
         self._seed_extras(courses.get("cs"), prof2, topics)
-        self._ensure_admin_user(edu)
+        self._ensure_admin_user()
         self._seed_demo_narrative(courses, topics, programs)
 
         self.stdout.write(self.style.SUCCESS("Seed complete!"))
@@ -377,21 +377,24 @@ class Command(BaseCommand):
             for order, content in enumerate(spec["steps"], start=1):
                 ExplanationStep.objects.create(question=q, order=order, content=content)
 
-    def _ensure_admin_user(self, department):
+    def _ensure_admin_user(self):
         admin_user, created = User.objects.get_or_create(
             email="admin@examiq.edu",
             defaults={
                 "first_name": "Admin",
                 "last_name": "User",
-                "role": User.Role.CHAIRPERSON,
-                "department": department,
+                "role": User.Role.CAMPUS_ADMIN,
                 "is_staff": True,
                 "is_superuser": True,
             },
         )
+        admin_user.role = User.Role.CAMPUS_ADMIN
+        admin_user.department = None
+        admin_user.is_staff = True
+        admin_user.is_superuser = True
         if created or not admin_user.has_usable_password():
             admin_user.set_password("admin1234")
-            admin_user.save()
+        admin_user.save()
 
     def _seed_extras(self, course, professor, topics):
         if not course or not professor:
@@ -428,23 +431,38 @@ class Command(BaseCommand):
     def _seed_demo_narrative(self, courses, topics, programs):
         cs_course = courses.get("cs")
         psych_course = courses.get("psychology")
+        bsed_course = courses.get("bsed_math")
         cs_derivatives = topics.get("cs:Derivatives")
         psych_stats = topics.get("psychology:Research Statistics")
+        bsed_algebra = topics.get("bsed_math:Algebra for Teachers")
 
         student3 = User.objects.filter(email="student3@examiq.edu").first()
         student5 = User.objects.filter(email="student5@examiq.edu").first()
         student1 = User.objects.filter(email="student1@examiq.edu").first()
+        student9 = User.objects.filter(email="student9@examiq.edu").first()
 
-        if student3 and cs_course and cs_derivatives:
-            student3.home_degree_program = User.HomeDegreeProgram.CS
-            student3.save(update_fields=["home_degree_program"])
+        if student9 and cs_course and cs_derivatives:
+            student9.home_degree_program = User.HomeDegreeProgram.CS
+            student9.save(update_fields=["home_degree_program"])
             self._create_demo_session(
-                student3,
+                student9,
                 cs_course,
                 cs_derivatives,
                 Question.Difficulty.EASY,
                 days_ago=3,
                 answers_spec=[(5, False), (5, False), (4, False), (3, True)],
+            )
+
+        if student3 and bsed_course and bsed_algebra:
+            student3.home_degree_program = User.HomeDegreeProgram.BSED_MATH
+            student3.save(update_fields=["home_degree_program"])
+            self._create_demo_session(
+                student3,
+                bsed_course,
+                bsed_algebra,
+                Question.Difficulty.EASY,
+                days_ago=5,
+                answers_spec=[(4, True), (3, False), (4, True), (2, False)],
             )
 
         if student5 and psych_course and psych_stats:
@@ -563,7 +581,8 @@ class Command(BaseCommand):
         self.stdout.write("  Chair (CS):        chair.computersci@examiq.edu")
         self.stdout.write("  Professor:         prof.calculus@examiq.edu")
         self.stdout.write("  Professor:         prof.algebra@examiq.edu")
-        self.stdout.write("  Student (CS demo): student3@examiq.edu - misconception pattern")
+        self.stdout.write("  Student (CS demo): student9@examiq.edu - misconception pattern")
+        self.stdout.write("  Student (BSEd):    student3@examiq.edu - education dept analytics")
         self.stdout.write("  Student (Psych):   student5@examiq.edu - low practice / accuracy")
         self.stdout.write("  Student (trends):  student1@examiq.edu - multi-date sessions")
         self.stdout.write("  Students:          student1@examiq.edu ... student10@examiq.edu")

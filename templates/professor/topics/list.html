@@ -18,7 +18,7 @@
             <select id="topics-year-level" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
                 <option value="">---------</option>
                 {% for yl in year_levels %}
-                <option value="{{ yl.pk }}">{{ yl.name }}</option>
+                <option value="{{ yl.pk }}" {% if selected_year_level_id == yl.pk|stringformat:"s" %}selected{% endif %}>{{ yl.name }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -30,12 +30,15 @@
             <label for="topics-subject" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course Code</label>
             <select id="topics-subject" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
                 <option value="">---------</option>
+                {% if selected_subject %}
+                <option value="{{ selected_subject.pk }}" selected data-name="{{ selected_subject.name }}">{{ selected_subject.code }}</option>
+                {% endif %}
             </select>
             <p id="topics-subjects-fallback" class="text-xs text-amber-700 mt-1 hidden"></p>
         </div>
         <div>
             <label for="topics-course-title" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course Title</label>
-            <input type="text" id="topics-course-title" readonly class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-examiq-navy shadow-sm" placeholder="Select a course code">
+            <input type="text" id="topics-course-title" readonly value="{{ selected_subject.name|default:'' }}" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-examiq-navy shadow-sm" placeholder="Select a course code">
         </div>
     </div>
 </div>
@@ -97,6 +100,7 @@
     const listBaseUrl = "{% url 'analytics_professor:topic_list' course.pk %}";
     const createUrl = "{% url 'analytics_professor:topic_create' course.pk %}";
     const selectedSubjectId = "{{ selected_subject_id|default:'' }}";
+    const selectedYearLevelId = "{{ selected_year_level_id|default:'' }}";
 
     const yearSelect = document.getElementById("topics-year-level");
     const subjectSelect = document.getElementById("topics-subject");
@@ -107,6 +111,8 @@
     const topicNameInput = document.getElementById("topic-name-input");
     const topicSubjectInput = document.getElementById("topic-subject-input");
     const topicModalTitle = document.getElementById("topic-modal-title");
+    let restoringFilters = false;
+    let loadSubjectsRequest = 0;
 
     function updateCourseTitle() {
         const selected = subjectSelect.options[subjectSelect.selectedIndex];
@@ -114,24 +120,37 @@
     }
 
     function navigateToSubject(subjectId) {
+        const params = new URLSearchParams();
         if (subjectId) {
-            window.location.href = listBaseUrl + "?subject=" + subjectId;
+            params.set("subject", subjectId);
+            if (yearSelect.value) {
+                params.set("year_level", yearSelect.value);
+            }
+            window.location.href = listBaseUrl + "?" + params.toString();
         } else {
             window.location.href = listBaseUrl;
         }
     }
 
     async function loadSubjects(preserveSubjectId) {
+        const requestId = ++loadSubjectsRequest;
         const yearLevel = yearSelect.value;
         subjectSelect.innerHTML = '<option value="">---------</option>';
-        courseTitleInput.value = "";
+        if (!preserveSubjectId) {
+            courseTitleInput.value = "";
+        }
         if (fallbackEl) {
             fallbackEl.textContent = "";
             fallbackEl.classList.add("hidden");
         }
-        if (!yearLevel) return;
+        if (!yearLevel) {
+            return;
+        }
         const resp = await fetch(subjectsUrl + "?program=" + programId + "&year_level=" + yearLevel);
         const data = await resp.json();
+        if (requestId !== loadSubjectsRequest) {
+            return;
+        }
         data.subjects.forEach(function(s) {
             const opt = document.createElement("option");
             opt.value = s.id;
@@ -166,6 +185,9 @@
     }
 
     yearSelect.addEventListener("change", function() {
+        if (restoringFilters) {
+            return;
+        }
         loadSubjects();
     });
 
@@ -187,10 +209,13 @@
     document.getElementById("close-topic-modal")?.addEventListener("click", closeModal);
     document.getElementById("cancel-topic-modal")?.addEventListener("click", closeModal);
 
-    if (selectedSubjectId) {
-        {% if selected_subject %}
-        yearSelect.value = "{{ selected_subject.year_level_id }}";
-        {% endif %}
+    restoringFilters = true;
+    if (selectedYearLevelId) {
+        yearSelect.value = selectedYearLevelId;
+    }
+    restoringFilters = false;
+
+    if (selectedSubjectId && yearSelect.value) {
         loadSubjects(selectedSubjectId);
     }
 })();
