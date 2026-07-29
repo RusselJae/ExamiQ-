@@ -8,6 +8,7 @@
         sending: false,
         loaded: false,
         enriching: {},
+        screen: "ai",
     };
 
     function escapeHtml(text) {
@@ -143,7 +144,7 @@
             if (state.activeAnswerId === answerId) {
                 renderFeedbackPanel();
             }
-            renderPills();
+            renderQuestionSelect();
         }
     }
 
@@ -166,55 +167,87 @@
         return chain;
     }
 
-    function renderPills() {
-        var container = document.getElementById("ai-tutor-question-pills");
-        var countEl = document.getElementById("ai-tutor-review-count");
-        if (!container) return;
-
-        var reviewItems = state.items.filter(function (item) {
+    function reviewItems() {
+        var items = state.items.filter(function (item) {
             return !item.is_correct;
         });
-        if (!reviewItems.length) {
-            reviewItems = state.items;
-        }
+        return items.length ? items : state.items;
+    }
 
+    async function selectAnswer(answerId) {
+        state.activeAnswerId = answerId;
+        try {
+            await loadHistoryForAnswer(answerId);
+            renderQuestionSelect();
+            renderFeedbackPanel();
+            renderMessages();
+            enrichAnswerFeedback(answerId);
+        } catch (err) {
+            if (typeof showToast === "function") {
+                showToast("Could not load saved conversation for this question.", "error");
+            }
+        }
+    }
+
+    function renderQuestionSelect() {
+        var select = document.getElementById("ai-tutor-question-select");
+        var countEl = document.getElementById("ai-tutor-review-count");
+        if (!select) return;
+
+        var items = reviewItems();
         if (countEl) {
-            countEl.textContent = "Reviewing " + reviewItems.length + " item" + (reviewItems.length === 1 ? "" : "s");
+            countEl.textContent = "Reviewing " + items.length + " item" + (items.length === 1 ? "" : "s");
         }
 
-        container.innerHTML = reviewItems
+        select.innerHTML = items
             .map(function (item, index) {
-                var active = item.answer_id === state.activeAnswerId ? " ai-tutor-pill--active" : "";
-                var saved = item.message_count > 0 ? ' <span class="ai-tutor-pill__saved" title="Saved conversation">●</span>' : "";
-                var pending = item.needs_ai || state.enriching[item.answer_id]
-                    ? ' <span class="ai-tutor-pill__pending" title="Generating feedback">…</span>'
-                    : "";
+                var pending = item.needs_ai || state.enriching[item.answer_id] ? " …" : "";
+                var saved = item.message_count > 0 ? " ●" : "";
+                var selected = item.answer_id === state.activeAnswerId ? " selected" : "";
                 return (
-                    '<button type="button" class="ai-tutor-pill' + active + '" data-answer-id="' +
-                    item.answer_id + '" role="tab" aria-selected="' + (active ? "true" : "false") + '">' +
-                    "Q" + (index + 1) + ": " + escapeHtml(truncateStem(item.stem)) + saved + pending +
-                    "</button>"
+                    '<option value="' +
+                    item.answer_id +
+                    '"' +
+                    selected +
+                    ">" +
+                    "Q" +
+                    (index + 1) +
+                    ": " +
+                    escapeHtml(truncateStem(item.stem)) +
+                    saved +
+                    pending +
+                    "</option>"
                 );
             })
             .join("");
+    }
 
-        container.querySelectorAll(".ai-tutor-pill").forEach(function (pill) {
-            pill.addEventListener("click", async function () {
-                var answerId = parseInt(pill.dataset.answerId, 10);
-                state.activeAnswerId = answerId;
-                try {
-                    await loadHistoryForAnswer(answerId);
-                    renderPills();
-                    renderFeedbackPanel();
-                    renderMessages();
-                    enrichAnswerFeedback(answerId);
-                } catch (err) {
-                    if (typeof showToast === "function") {
-                        showToast("Could not load saved conversation for this question.", "error");
-                    }
-                }
-            });
+    function setTutorScreen(screen) {
+        state.screen = screen === "faculty" ? "faculty" : "ai";
+        var ai = document.getElementById("ai-tutor-screen-ai");
+        var faculty = document.getElementById("ai-tutor-screen-faculty");
+        if (ai) ai.classList.toggle("hidden", state.screen !== "ai");
+        if (faculty) faculty.classList.toggle("hidden", state.screen !== "faculty");
+        document.querySelectorAll("[data-tutor-screen]").forEach(function (btn) {
+            var active = btn.getAttribute("data-tutor-screen") === state.screen;
+            btn.classList.toggle("ai-tutor-modal__tab--active", active);
+            btn.setAttribute("aria-selected", active ? "true" : "false");
         });
+    }
+
+    function renderFacultyNotes(item) {
+        var el = document.getElementById("ai-tutor-faculty-notes");
+        if (!el) return;
+        var notes = (item && item.faculty_notes) || [];
+        if (!notes.length) {
+            el.textContent = "No faculty note for this question yet.";
+            return;
+        }
+        el.innerHTML = notes
+            .map(function (note) {
+                return '<p class="mb-3">' + escapeHtml(note).replace(/\n/g, "<br>") + "</p>";
+            })
+            .join("");
     }
 
     function activeItem() {
@@ -223,17 +256,37 @@
         });
     }
 
+    function renderSolutionSteps(stepsEl, steps) {
+        if (!stepsEl) return;
+        stepsEl.innerHTML = (steps || [])
+            .map(function (step, index) {
+                return (
+                    '<li class="ai-tutor-solution-timeline__item">' +
+                    '<span class="ai-tutor-solution-timeline__index" aria-hidden="true">' +
+                    (index + 1) +
+                    "</span>" +
+                    '<div class="ai-tutor-solution-timeline__body examiq-math-block">' +
+                    escapeHtml(step).replace(/\n/g, "<br>") +
+                    "</div></li>"
+                );
+            })
+            .join("");
+    }
+
     function renderFeedbackPanel() {
         var item = activeItem();
         var stemEl = document.getElementById("ai-tutor-stem");
         var whyEl = document.getElementById("ai-tutor-why");
         var stepsEl = document.getElementById("ai-tutor-steps");
         var metaEl = document.getElementById("ai-tutor-meta");
+        var finalEl = document.getElementById("ai-tutor-final");
+        var finalSection = document.getElementById("ai-tutor-final-section");
         var whySection = document.getElementById("ai-tutor-why-section");
         var stepsSection = document.getElementById("ai-tutor-steps-section");
         if (!item || !stemEl) return;
 
-        stemEl.textContent = "Review: " + item.stem;
+        stemEl.textContent = item.stem;
+        renderFacultyNotes(item);
 
         if (state.enriching[item.answer_id]) {
             if (whySection) whySection.classList.remove("hidden");
@@ -247,11 +300,7 @@
             if (stepsSection) {
                 if (item.correction_steps && item.correction_steps.length) {
                     stepsSection.classList.remove("hidden");
-                    stepsEl.innerHTML = item.correction_steps
-                        .map(function (step) {
-                            return "<li>" + escapeHtml(step) + "</li>";
-                        })
-                        .join("");
+                    renderSolutionSteps(stepsEl, item.correction_steps);
                 } else {
                     stepsSection.classList.add("hidden");
                 }
@@ -259,25 +308,32 @@
         } else if (item.is_correct) {
             if (whySection) whySection.classList.add("hidden");
             if (stepsSection) stepsSection.classList.remove("hidden");
-            if (stepsEl) {
-                stepsEl.innerHTML = "<li>" + escapeHtml(item.feedback).replace(/\n/g, "</li><li>") + "</li>";
+            if (item.correction_steps && item.correction_steps.length) {
+                renderSolutionSteps(stepsEl, item.correction_steps);
+            } else if (stepsEl) {
+                renderSolutionSteps(stepsEl, [item.feedback || "You solved this correctly."]);
             }
         } else {
             if (whySection) whySection.classList.remove("hidden");
             if (whyEl) {
-                whyEl.innerHTML = escapeHtml(item.feedback).replace(/\n/g, "<br>");
+                whyEl.innerHTML = escapeHtml(item.feedback || "").replace(/\n/g, "<br>");
             }
             if (stepsSection) {
                 if (item.correction_steps && item.correction_steps.length) {
                     stepsSection.classList.remove("hidden");
-                    stepsEl.innerHTML = item.correction_steps
-                        .map(function (step) {
-                            return "<li>" + escapeHtml(step) + "</li>";
-                        })
-                        .join("");
+                    renderSolutionSteps(stepsEl, item.correction_steps);
                 } else {
                     stepsSection.classList.add("hidden");
                 }
+            }
+        }
+
+        if (finalSection && finalEl) {
+            if (item.final_answer && item.final_answer !== "Unknown") {
+                finalSection.classList.remove("hidden");
+                finalEl.textContent = item.final_answer;
+            } else {
+                finalSection.classList.add("hidden");
             }
         }
 
@@ -295,10 +351,17 @@
         container.innerHTML = state.messages
             .map(function (msg) {
                 var cls = msg.role === "user" ? "ai-tutor-chat__bubble--user" : "ai-tutor-chat__bubble--assistant";
-                return '<div class="ai-tutor-chat__bubble ' + cls + '">' + escapeHtml(msg.content) + "</div>";
+                return (
+                    '<div class="ai-tutor-chat__bubble ' +
+                    cls +
+                    ' examiq-math-block">' +
+                    escapeHtml(msg.content).replace(/\n/g, "<br>") +
+                    "</div>"
+                );
             })
             .join("");
         container.scrollTop = container.scrollHeight;
+        katexRender(container);
     }
 
     function pickDefaultAnswer() {
@@ -320,7 +383,8 @@
         if (errorEl) errorEl.classList.add("hidden");
         if (content) content.classList.remove("hidden");
         pickDefaultAnswer();
-        renderPills();
+        setTutorScreen("ai");
+        renderQuestionSelect();
         renderFeedbackPanel();
         renderMessages();
     }
@@ -360,7 +424,7 @@
             if (item) {
                 item.message_count = (item.message_count || 0) + 2;
             }
-            renderPills();
+            renderQuestionSelect();
             renderMessages();
         } catch (err) {
             state.messages.pop();
@@ -411,6 +475,22 @@
                 openTutorModal();
             });
         }
+
+        var select = document.getElementById("ai-tutor-question-select");
+        if (select) {
+            select.addEventListener("change", function () {
+                var answerId = parseInt(select.value, 10);
+                if (!isNaN(answerId)) {
+                    selectAnswer(answerId);
+                }
+            });
+        }
+
+        document.querySelectorAll("[data-tutor-screen]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                setTutorScreen(btn.getAttribute("data-tutor-screen"));
+            });
+        });
 
         var form = document.getElementById("ai-tutor-chat-form");
         var input = document.getElementById("ai-tutor-chat-input");

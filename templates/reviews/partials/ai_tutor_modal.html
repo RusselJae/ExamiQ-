@@ -6,13 +6,19 @@
             <button type="button" class="ai-tutor-modal__close" data-dismiss-ai-tutor aria-label="Close">&times;</button>
         </div>
 
-        <div class="ai-tutor-modal__subheader">
+        <div class="ai-tutor-modal__subheader ai-tutor-modal__subheader--select">
             <span class="ai-tutor-modal__review-count" id="ai-tutor-review-count">Reviewing items…</span>
-            <div class="ai-tutor-modal__pills" id="ai-tutor-question-pills" role="tablist"></div>
+            <label for="ai-tutor-question-select" class="sr-only">Question</label>
+            <select id="ai-tutor-question-select" class="ai-tutor-question-select"></select>
             <span class="ai-tutor-modal__saved">
                 <span class="ai-tutor-modal__saved-dot" aria-hidden="true"></span>
                 Saved conversation
             </span>
+        </div>
+
+        <div class="ai-tutor-modal__tabs" role="tablist">
+            <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-tutor-screen="ai" role="tab" aria-selected="true">AI message</button>
+            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="faculty" role="tab" aria-selected="false">Faculty note</button>
         </div>
 
         <div class="ai-tutor-modal__body">
@@ -23,25 +29,41 @@
 
             <div id="ai-tutor-content" class="ai-tutor-modal__content hidden">
                 <div class="ai-tutor-feedback-panel" id="ai-tutor-feedback-panel">
+                    <p class="ai-tutor-feedback-panel__eyebrow">Worked solution</p>
                     <h3 class="ai-tutor-feedback-panel__stem" id="ai-tutor-stem"></h3>
-                    <div class="ai-tutor-feedback-panel__section" id="ai-tutor-why-section">
-                        <h4 class="ai-tutor-feedback-panel__label">Why this is wrong</h4>
-                        <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-why"></div>
+
+                    <div id="ai-tutor-screen-ai" class="ai-tutor-screen">
+                        <div class="ai-tutor-feedback-panel__section" id="ai-tutor-why-section">
+                            <h4 class="ai-tutor-feedback-panel__label">Why this is wrong</h4>
+                            <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-why"></div>
+                        </div>
+                        <div class="ai-tutor-feedback-panel__section" id="ai-tutor-steps-section">
+                            <h4 class="ai-tutor-feedback-panel__label">Proper solving process</h4>
+                            <ol class="ai-tutor-solution-timeline examiq-math-block" id="ai-tutor-steps"></ol>
+                        </div>
+                        <div class="ai-tutor-feedback-panel__section hidden" id="ai-tutor-final-section">
+                            <h4 class="ai-tutor-feedback-panel__label">Final answer</h4>
+                            <div class="ai-tutor-feedback-panel__final examiq-math-block" id="ai-tutor-final"></div>
+                        </div>
+                        <p class="ai-tutor-feedback-panel__meta" id="ai-tutor-meta"></p>
                     </div>
-                    <div class="ai-tutor-feedback-panel__section" id="ai-tutor-steps-section">
-                        <h4 class="ai-tutor-feedback-panel__label">Correction steps</h4>
-                        <ol class="ai-tutor-feedback-panel__steps examiq-math-block" id="ai-tutor-steps"></ol>
+
+                    <div id="ai-tutor-screen-faculty" class="ai-tutor-screen hidden">
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">Faculty notes</h4>
+                            <div class="ai-tutor-feedback-panel__text whitespace-pre-line" id="ai-tutor-faculty-notes"></div>
+                        </div>
                     </div>
-                    <p class="ai-tutor-feedback-panel__meta" id="ai-tutor-meta"></p>
                 </div>
 
                 <div class="ai-tutor-chat" id="ai-tutor-chat">
+                    <p class="ai-tutor-chat__hint">Ask a follow-up — request another approach, a simpler analogy, or check a step.</p>
                     <div class="ai-tutor-chat__messages" id="ai-tutor-messages" role="log" aria-live="polite"></div>
                     <form class="ai-tutor-chat__form" id="ai-tutor-chat-form">
                         <input type="text"
                                id="ai-tutor-chat-input"
                                class="ai-tutor-chat__input"
-                               placeholder="Ask something…"
+                               placeholder="Ask how to solve this step by step…"
                                autocomplete="off"
                                maxlength="2000">
                         <button type="submit" class="btn-primary ai-tutor-chat__send" id="ai-tutor-send-btn">Send</button>

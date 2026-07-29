@@ -15,9 +15,10 @@ def get_role_dashboard_url(user: User) -> str:
     if user.role == User.Role.STUDENT:
         return reverse("analytics_student:dashboard")
     if user.role == User.Role.PROFESSOR:
-        return reverse("analytics_professor:course_list")
+        return reverse("analytics_professor:overview")
+    # Legacy chairperson accounts land on faculty overview; campus ops use Django admin.
     if user.role == User.Role.CHAIRPERSON:
-        return reverse("analytics_chairperson:dashboard")
+        return reverse("analytics_professor:overview")
     return reverse("admin:index")
 
 

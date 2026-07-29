@@ -1,0 +1,72 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'actorBkg': '#dbeafe',
+    'actorBorder': '#2563eb',
+    'actorTextColor': '#1e3a5f',
+    'participantBkg': '#eff6ff',
+    'participantBorder': '#3b82f6',
+    'signalColor': '#1f2937',
+    'noteBkgColor': '#ffffff',
+    'noteBorderColor': '#ffffff',
+    'labelBoxBkgColor': '#ffffff',
+    'labelBoxBorderColor': '#ffffff',
+    'activationBkgColor': '#93c5fd',
+    'activationBorderColor': '#2563eb',
+    'sequenceNumberColor': '#ffffff'
+  },
+  'sequence': { 'showSequenceNumbers': true, 'actorMargin': 80, 'messageMargin': 36, 'width': 180 }
+}}%%
+sequenceDiagram
+    autonumber
+    actor CA as Campus Admin
+    participant Sys as ExamiQ+ System
+    participant DB as Database
+
+    CA->>Sys: Login Credentials
+    activate Sys
+    Sys->>DB: Validate Account
+    activate DB
+    DB-->>Sys: Account Verified
+    deactivate DB
+    Sys-->>CA: Access Granted
+    deactivate Sys
+    CA->>Sys: Display Dashboard
+
+    CA->>Sys: Approve / Reject Staff
+    activate Sys
+    Sys->>DB: Update User Status
+    activate DB
+    DB-->>Sys: Confirmation
+    deactivate DB
+    Sys-->>CA: Success Message
+    deactivate Sys
+    CA->>Sys: Display Updated Records
+
+    CA->>Sys: Create / Update Sections
+    activate Sys
+    Sys->>DB: Save Section Data
+    activate DB
+    DB-->>Sys: Confirmation
+    deactivate DB
+    Sys-->>CA: Success Message
+    deactivate Sys
+    CA->>Sys: Display Section List
+
+    CA->>Sys: Set Current Year & Term
+    activate Sys
+    Sys->>DB: Save Calendar Data
+    activate DB
+    DB-->>Sys: Confirmation
+    deactivate DB
+    Sys-->>CA: Success Message
+    deactivate Sys
+
+    CA->>Sys: Logout Request
+    activate Sys
+    Sys->>DB: End Session
+    activate DB
+    DB-->>Sys: Session Ended
+    deactivate DB
+    Sys-->>CA: Logout Successful
+    deactivate Sys

@@ -15,6 +15,11 @@ urlpatterns = [
         name="answer_detail",
     ),
     path(
+        "mistakes/answers/<int:answer_pk>/concern/",
+        views_student.UploadMistakeConcernView.as_view(),
+        name="upload_mistake_concern",
+    ),
+    path(
         "mistakes/answers/<int:answer_pk>/generate-feedback/",
         views_student.GenerateAnswerFeedbackView.as_view(),
         name="generate_answer_feedback",

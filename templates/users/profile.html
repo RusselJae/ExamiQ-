@@ -39,7 +39,7 @@
                     <span class="profile-pill">{{ user.year_level.name }}</span>
                     {% endif %}
                     {% if user.role == "student" and user.section %}
-                    <span class="profile-pill">Section {{ user.section.label }}</span>
+                    <span class="profile-pill">{{ user.section.display_label }}</span>
                     {% endif %}
                     <span class="profile-pill">Member since {{ user.date_joined|date:"M Y" }}</span>
                 </div>
@@ -63,14 +63,15 @@
                     {{ profile_form.middle_name|as_crispy_field }}
                     {{ profile_form.suffix|as_crispy_field }}
                 </div>
-                {% if profile_form.home_degree_program %}
-                {{ profile_form.home_degree_program|as_crispy_field }}
-                {% endif %}
-                {% if profile_form.year_level %}
-                {{ profile_form.year_level|as_crispy_field }}
-                {% endif %}
-                {% if profile_form.section %}
-                {{ profile_form.section|as_crispy_field }}
+                {% if profile_form.year_level or profile_form.section %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {% if profile_form.year_level %}
+                    {{ profile_form.year_level|as_crispy_field }}
+                    {% endif %}
+                    {% if profile_form.section %}
+                    {{ profile_form.section|as_crispy_field }}
+                    {% endif %}
+                </div>
                 {% endif %}
             </div>
             <div class="profile-card-footer">

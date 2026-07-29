@@ -93,6 +93,7 @@ class AcademicTerm(models.Model):
     class Semester(models.IntegerChoices):
         FIRST = 1, "1st Semester"
         SECOND = 2, "2nd Semester"
+        MIDYEAR = 3, "Midyear"
 
     academic_year = models.ForeignKey(
         AcademicYear,
@@ -140,7 +141,7 @@ class ProgramSection(models.Model):
     )
     label = models.CharField(
         max_length=10,
-        help_text='Numeric section label, e.g. "1", "2", "3".',
+        help_text='Section block label, e.g. "1M", "2M".',
     )
     academic_year = models.ForeignKey(
         AcademicYear,
@@ -384,6 +385,32 @@ class Enrollment(models.Model):
         return f"{self.student.email} in {self.course.code}"
 
 
+class StudentSubject(models.Model):
+    """Subjects a BSED Math student selected (minimum three at signup/profile)."""
+
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="student_subjects",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    subject = models.ForeignKey(
+        "questions.Subject",
+        on_delete=models.CASCADE,
+        related_name="student_selections",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Student Subject"
+        verbose_name_plural = "Student Subjects"
+        ordering = ["subject__code"]
+        unique_together = [["student", "subject"]]
+
+    def __str__(self) -> str:
+        return f"{self.student.email} — {self.subject.code}"
+
+
 class TeachingAssignment(models.Model):
     """Chairperson-assigned teaching load for a faculty member."""
 
@@ -414,7 +441,7 @@ class TeachingAssignment(models.Model):
         null=True,
         blank=True,
         related_name="assignments_created",
-        limit_choices_to={"role": User.Role.CHAIRPERSON},
+        limit_choices_to={"role__in": [User.Role.PROFESSOR, User.Role.CHAIRPERSON]},
     )
     course = models.OneToOneField(
         Course,

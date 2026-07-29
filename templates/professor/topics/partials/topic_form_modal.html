@@ -6,7 +6,7 @@
         </div>
         <form method="post" id="topic-form" action="{% url 'analytics_professor:topic_create' course.pk %}">
             {% csrf_token %}
-            <input type="hidden" name="subject" id="topic-subject-input" value="{{ selected_subject_id|default:'' }}">
+            <input type="hidden" name="subject" id="topic-subject-input" value="{{ course_subject.pk|default:'' }}">
             <div class="mb-5">
                 <label for="topic-name-input" class="block text-sm font-medium text-examiq-slate mb-1">Topic name</label>
                 <input type="text"

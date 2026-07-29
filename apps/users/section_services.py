@@ -1,5 +1,9 @@
 """Program section lookup and validation helpers."""
 
+from __future__ import annotations
+
+import re
+
 from django.core.exceptions import ValidationError
 
 from apps.users.models import AcademicYear, Program, ProgramSection, User
@@ -19,6 +23,59 @@ def get_current_academic_year() -> AcademicYear | None:
         year.is_current = True
         year.save(update_fields=["is_current"])
     return year
+
+
+def parse_section_label(raw: str) -> str:
+    """Normalize typed section text to a ProgramSection.label (e.g. 1M, 2M).
+
+    Accepts: ``1M``, ``2-1M``, ``BSE 2-1M``, ``bse2-1m``.
+    """
+    text = (raw or "").strip().upper()
+    text = re.sub(r"\s+", " ", text)
+    if not text:
+        raise ValidationError("Section is required.")
+
+    text = re.sub(r"^BSE[\s\-]?", "", text)
+    # year-block e.g. 2-1M or 2-1
+    match = re.fullmatch(r"(\d+)\s*[-–]\s*([0-9A-Z]+)", text)
+    if match:
+        return match.group(2)
+
+    # bare block e.g. 1M, 2M, 3
+    if re.fullmatch(r"[0-9A-Z]{1,10}", text):
+        return text
+
+    raise ValidationError(
+        "Enter a section like 1M, 2-1M, or BSE 2-1M."
+    )
+
+
+def get_or_create_student_section(
+    year_level,
+    label: str,
+    *,
+    exclude_user: User | None = None,
+) -> ProgramSection:
+    """Ensure a BSED Math ProgramSection exists for year + block label."""
+    program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
+    if program is None:
+        raise ValidationError("BSEd Mathematics program is not configured.")
+    academic_year = get_current_academic_year()
+    if academic_year is None:
+        raise ValidationError("No academic year is configured.")
+
+    section, _ = ProgramSection.objects.get_or_create(
+        program=program,
+        year_level=year_level,
+        label=label,
+        academic_year=academic_year,
+        defaults={"max_students": 40, "is_active": True},
+    )
+    if not section.is_active:
+        section.is_active = True
+        section.save(update_fields=["is_active"])
+    validate_section_capacity(section, exclude_user=exclude_user)
+    return section
 
 
 def sections_for_student(

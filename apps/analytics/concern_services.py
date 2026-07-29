@@ -1,0 +1,303 @@
+"""Student–faculty concern thread helpers and notifications."""
+
+from __future__ import annotations
+
+from django.db.models import Q
+from django.urls import reverse
+from django.utils import timezone
+
+from apps.analytics.models import MistakeConcernMessage, MistakeRecord
+from apps.users.assignment_services import get_or_create_catalog_course
+from apps.users.models import Course, TeachingAssignment, User
+from apps.users.notification_services import create_notification
+
+
+def concern_has_activity(record: MistakeRecord) -> bool:
+    """True when the mistake has thread messages or legacy concern fields."""
+    if record.concern_messages.exists():
+        return True
+    if (record.student_note or "").strip():
+        return True
+    if record.student_image:
+        return True
+    if (record.faculty_note or "").strip():
+        return True
+    return False
+
+
+def concern_thread_for(record: MistakeRecord):
+    """Ordered concern messages for a mistake record."""
+    return record.concern_messages.select_related("author").order_by("created_at")
+
+
+def latest_concern_message(record: MistakeRecord) -> MistakeConcernMessage | None:
+    return record.concern_messages.order_by("-created_at").select_related("author").first()
+
+
+def concern_needs_faculty_reply(record: MistakeRecord) -> bool:
+    """Pending when the latest message is from the student."""
+    latest = latest_concern_message(record)
+    if latest:
+        return latest.author_id == record.student_id
+    return bool((record.student_note or "").strip() or record.student_image)
+
+
+def concern_has_faculty_reply(record: MistakeRecord) -> bool:
+    latest = latest_concern_message(record)
+    if latest:
+        return latest.author_id != record.student_id
+    return bool((record.faculty_note or "").strip())
+
+
+def _concern_activity_filter() -> Q:
+    return (
+        Q(concern_messages__isnull=False)
+        | Q(student_note__gt="")
+        | (Q(student_image__isnull=False) & ~Q(student_image=""))
+        | Q(faculty_note__gt="")
+    )
+
+
+def concern_queryset_with_messages(queryset):
+    """Prefetch thread messages for concern list/API payloads."""
+    return queryset.prefetch_related(
+        "concern_messages__author",
+    ).distinct()
+
+
+def post_concern_message(
+    mistake_record: MistakeRecord,
+    author: User,
+    *,
+    body: str = "",
+    image=None,
+) -> MistakeConcernMessage:
+    """Append a message to a concern thread."""
+    body = (body or "").strip()
+    if not body and not image:
+        raise ValueError("Message must include text or an image.")
+
+    message = MistakeConcernMessage.objects.create(
+        mistake_record=mistake_record,
+        author=author,
+        body=body,
+        image=image,
+    )
+
+    if author.role == User.Role.STUDENT:
+        update_fields: list[str] = []
+        if body:
+            mistake_record.student_note = body
+            update_fields.append("student_note")
+        if image:
+            mistake_record.student_image = image
+            update_fields.append("student_image")
+        if update_fields:
+            mistake_record.save(update_fields=update_fields)
+        _notify_professors_of_student_message(mistake_record, message)
+    elif author.role == User.Role.PROFESSOR:
+        mistake_record.faculty_note = body
+        mistake_record.faculty_noted_at = timezone.now()
+        mistake_record.save(update_fields=["faculty_note", "faculty_noted_at"])
+        _notify_student_of_faculty_reply(mistake_record, message)
+
+    return message
+
+
+def mark_faculty_viewed(mistake_record: MistakeRecord) -> None:
+    now = timezone.now()
+    if mistake_record.faculty_viewed_at != now:
+        mistake_record.faculty_viewed_at = now
+        mistake_record.save(update_fields=["faculty_viewed_at"])
+
+
+def mark_concern_notifications_read(user: User, mistake_record_id: int) -> None:
+    """Mark notifications tied to a mistake concern as read."""
+    from apps.users.notification_services import mark_notifications_read
+
+    ids = list(
+        user.notifications.filter(
+            read_at__isnull=True,
+            link__contains=f"mistake_id={mistake_record_id}",
+        ).values_list("pk", flat=True)
+    )
+    if ids:
+        mark_notifications_read(user, ids)
+
+
+def _message_image_url(message: MistakeConcernMessage) -> str:
+    if not message.image:
+        return ""
+    try:
+        return message.image.url
+    except ValueError:
+        return ""
+
+
+def serialize_concern_message(message: MistakeConcernMessage) -> dict:
+    author = message.author
+    role = "student" if author.role == User.Role.STUDENT else "faculty"
+    return {
+        "id": message.pk,
+        "author_role": role,
+        "author_name": author.get_full_name() or author.email,
+        "body": message.body or "",
+        "image_url": _message_image_url(message),
+        "created_at": message.created_at.isoformat() if message.created_at else "",
+    }
+
+
+def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
+    messages = list(concern_thread_for(record))
+    if messages:
+        return [serialize_concern_message(msg) for msg in messages]
+
+    legacy: list[dict] = []
+    if (record.student_note or "").strip() or record.student_image:
+        image_url = ""
+        if record.student_image:
+            try:
+                image_url = record.student_image.url
+            except ValueError:
+                image_url = ""
+        legacy.append(
+            {
+                "id": None,
+                "author_role": "student",
+                "author_name": record.student.get_full_name() or record.student.email,
+                "body": record.student_note or "",
+                "image_url": image_url,
+                "created_at": record.occurred_at.isoformat() if record.occurred_at else "",
+            }
+        )
+    if (record.faculty_note or "").strip():
+        legacy.append(
+            {
+                "id": None,
+                "author_role": "faculty",
+                "author_name": "Faculty",
+                "body": record.faculty_note or "",
+                "image_url": "",
+                "created_at": (
+                    record.faculty_noted_at.isoformat() if record.faculty_noted_at else ""
+                ),
+            }
+        )
+    return legacy
+
+
+def _professors_for_mistake(record: MistakeRecord) -> list[User]:
+    subject = record.question.topic.subject
+    professors: list[User] = []
+    seen: set[int] = set()
+
+    student_section = getattr(record.student, "section", None)
+    if student_section:
+        assignments = TeachingAssignment.objects.filter(
+            program_section=student_section,
+            subject=subject,
+        ).select_related("professor")
+        for assignment in assignments:
+            if assignment.professor_id and assignment.professor_id not in seen:
+                professors.append(assignment.professor)
+                seen.add(assignment.professor_id)
+
+    course = (
+        Course.objects.filter(
+            code=subject.code,
+            program=subject.program,
+            professor__isnull=False,
+        )
+        .select_related("professor")
+        .first()
+    )
+    if course and course.professor_id and course.professor_id not in seen:
+        professors.append(course.professor)
+        seen.add(course.professor_id)
+
+    catalog_course = Course.objects.filter(
+        code=subject.code,
+        program=subject.program,
+        section="Catalog",
+        professor__isnull=False,
+    ).select_related("professor").first()
+    if catalog_course and catalog_course.professor_id and catalog_course.professor_id not in seen:
+        professors.append(catalog_course.professor)
+        seen.add(catalog_course.professor_id)
+
+    return professors
+
+
+def _feedback_link_for_professor(record: MistakeRecord, professor: User) -> str:
+    subject = record.question.topic.subject
+    course = get_or_create_catalog_course(professor, subject)
+    return (
+        reverse("analytics_professor:feedback_list", kwargs={"course_pk": course.pk})
+        + f"?mistake_id={record.pk}"
+    )
+
+
+def _section_feedback_link(record: MistakeRecord) -> str:
+    section = record.student.section
+    if not section:
+        return ""
+    return (
+        reverse(
+            "analytics_professor:section_feedback",
+            kwargs={"section_pk": section.pk},
+        )
+        + f"?mistake_id={record.pk}"
+    )
+
+
+def _notify_professors_of_student_message(
+    record: MistakeRecord,
+    message: MistakeConcernMessage,
+) -> None:
+    student_name = record.student.get_full_name() or record.student.email
+    text = f"{student_name} asked about Q{record.question_id}"
+    section_link = _section_feedback_link(record)
+    for professor in _professors_for_mistake(record):
+        link = _feedback_link_for_professor(record, professor)
+        if not link and section_link:
+            link = section_link
+        create_notification(professor, text, link=link)
+
+
+def _notify_student_of_faculty_reply(
+    record: MistakeRecord,
+    message: MistakeConcernMessage,
+) -> None:
+    topic_name = record.topic.name
+    link = reverse(
+        "analytics_student:answer_detail",
+        kwargs={"answer_pk": record.answer_id},
+    )
+    create_notification(
+        record.student,
+        f"Faculty replied to your question on {topic_name}",
+        link=link,
+    )
+
+
+def pending_concern_count_for_course(course: Course) -> int:
+    """Concerns in this course scope where faculty has not replied yet."""
+    from apps.questions.models import Subject
+
+    subject = Subject.objects.filter(code=course.code, program=course.program).first()
+    if not subject:
+        return 0
+    qs = MistakeRecord.objects.filter(question__topic__subject=subject)
+    return _pending_concern_count(qs)
+
+
+def pending_concern_count_for_section(section) -> int:
+    qs = MistakeRecord.objects.filter(student__section=section)
+    return _pending_concern_count(qs)
+
+
+def _pending_concern_count(queryset):
+    qs = concern_queryset_with_messages(
+        queryset.filter(_concern_activity_filter())
+    ).select_related("student")
+    return sum(1 for record in qs if concern_needs_faculty_reply(record))

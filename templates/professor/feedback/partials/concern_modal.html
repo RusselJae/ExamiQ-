@@ -1,0 +1,62 @@
+<div id="faculty-concern-modal" class="ai-tutor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="faculty-concern-title">
+    <div class="ai-tutor-modal__backdrop" data-dismiss-faculty-concern></div>
+    <div class="ai-tutor-modal__panel">
+        <div class="ai-tutor-modal__header">
+            <h2 id="faculty-concern-title" class="ai-tutor-modal__title">Student concern</h2>
+            <button type="button" class="ai-tutor-modal__close" data-dismiss-faculty-concern aria-label="Close">&times;</button>
+        </div>
+
+        <div class="ai-tutor-modal__subheader ai-tutor-modal__subheader--select">
+            <label for="faculty-concern-select" class="ai-tutor-modal__review-count">Concern</label>
+            <select id="faculty-concern-select" class="ai-tutor-question-select"></select>
+        </div>
+
+        <div class="ai-tutor-modal__tabs" role="tablist">
+            <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-faculty-screen="ai" role="tab" aria-selected="true">AI message</button>
+            <button type="button" class="ai-tutor-modal__tab" data-faculty-screen="conversation" role="tab" aria-selected="false">Conversation</button>
+        </div>
+
+        <div class="ai-tutor-modal__body">
+            <div id="faculty-concern-loading" class="ai-tutor-modal__loading">
+                <div class="feedback-modal__spinner" aria-hidden="true"></div>
+                <p class="text-sm text-examiq-slate">Loading concerns…</p>
+            </div>
+
+            <div id="faculty-concern-content" class="ai-tutor-modal__content hidden">
+                <div class="ai-tutor-feedback-panel">
+                    <p class="ai-tutor-feedback-panel__eyebrow" id="faculty-concern-student"></p>
+                    <h3 class="ai-tutor-feedback-panel__stem" id="faculty-concern-stem"></h3>
+
+                    <div id="faculty-screen-ai" class="faculty-concern-screen">
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">Student answer</h4>
+                            <div class="ai-tutor-feedback-panel__text" id="faculty-concern-user-answer"></div>
+                        </div>
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">Correct answer</h4>
+                            <div class="ai-tutor-feedback-panel__text" id="faculty-concern-correct-answer"></div>
+                        </div>
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">AI feedback</h4>
+                            <div class="ai-tutor-feedback-panel__text whitespace-pre-line examiq-math-block" id="faculty-concern-ai-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div id="faculty-screen-conversation" class="faculty-concern-screen hidden">
+                        <div id="faculty-concern-thread" class="concern-thread concern-thread--modal mb-4"></div>
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">Your reply</h4>
+                            <textarea id="faculty-concern-note-input"
+                                      rows="4"
+                                      class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm"
+                                      placeholder="Clarify the misconception, point to a step, or suggest what to practice next…"></textarea>
+                            <button type="button" id="faculty-concern-save-btn" class="btn-primary mt-3">Send reply</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="faculty-concern-error" class="ai-tutor-modal__error hidden" role="alert"></div>
+        </div>
+    </div>
+</div>

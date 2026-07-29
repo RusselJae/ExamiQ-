@@ -1,0 +1,86 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'actorBkg': '#ede9fe',
+    'actorBorder': '#7c3aed',
+    'actorTextColor': '#4c1d95',
+    'participantBkg': '#f5f3ff',
+    'participantBorder': '#8b5cf6',
+    'signalColor': '#1f2937',
+    'noteBkgColor': '#ffffff',
+    'noteBorderColor': '#ffffff',
+    'labelBoxBkgColor': '#ffffff',
+    'labelBoxBorderColor': '#ffffff',
+    'loopTextColor': '#4c1d95',
+    'activationBkgColor': '#c4b5fd',
+    'activationBorderColor': '#7c3aed',
+    'sequenceNumberColor': '#ffffff'
+  },
+  'sequence': { 'showSequenceNumbers': true, 'actorMargin': 80, 'messageMargin': 28, 'width': 180 }
+}}%%
+sequenceDiagram
+    autonumber
+    actor Stu as Student
+    participant Sys as ExamiQ+ System
+    participant DB as Database
+
+    Stu->>Sys: Login Credentials
+    activate Sys
+    Sys->>DB: Validate Account
+    activate DB
+    DB-->>Sys: Account Verified
+    deactivate DB
+    Sys-->>Stu: Access Granted
+    deactivate Sys
+    Stu->>Sys: Display Dashboard
+
+    Stu->>Sys: Start Review Session
+    activate Sys
+    Sys->>DB: Retrieve Question Set
+    activate DB
+    DB-->>Sys: Question Data
+    deactivate DB
+    Sys-->>Stu: Display First Question
+    deactivate Sys
+
+    loop LOOP UNTIL EXAM COMPLETED
+        Stu->>Sys: Submit Answer & Confidence
+        activate Sys
+        Sys->>DB: Save Answer Data
+        activate DB
+        DB-->>Sys: Confirmation
+        deactivate DB
+        Sys->>DB: Evaluate Answer
+        activate DB
+        DB-->>Sys: Result Data
+        deactivate DB
+        Sys-->>Stu: Real-Time Feedback
+        Sys->>DB: Record Mistake & Analytics
+        activate DB
+        DB-->>Sys: Updated Records
+        deactivate DB
+        Sys->>DB: Get Next Adaptive Question
+        activate DB
+        DB-->>Sys: Next Question
+        deactivate DB
+        Sys-->>Stu: Display Next Question
+        deactivate Sys
+    end
+
+    Stu->>Sys: Finish Session
+    activate Sys
+    Sys->>DB: Generate Summary
+    activate DB
+    DB-->>Sys: Performance Data
+    deactivate DB
+    Sys-->>Stu: Display Performance Report
+    deactivate Sys
+
+    Stu->>Sys: Logout Request
+    activate Sys
+    Sys->>DB: End Session
+    activate DB
+    DB-->>Sys: Session Ended
+    deactivate DB
+    Sys-->>Stu: Logout Successful
+    deactivate Sys

@@ -268,7 +268,7 @@ class ChairpersonAssignmentSectionsAPIView(ChairpersonRequiredMixin, View):
             groups[year_name]["sections"].append(
                 {
                     "id": section.pk,
-                    "label": f"Section {section.label}",
+                    "label": section.display_label,
                     "student_count": section.student_count,
                     "already_assigned": section.pk in assigned_ids,
                 }

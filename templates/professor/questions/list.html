@@ -1,13 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Question Bank - {{ course.code }}{% endblock %}
+{% block title %}Saved Questions - {{ course.code }}{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
-    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Question Bank</h1>
-    <p class="text-examiq-slate text-sm mt-1">Program: {{ course.program.name }}</p>
-</div>
+{% include "components/professor_section_header.html" with course=course page_label="Saved Questions" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
 <div class="flex justify-between items-center mb-4">
@@ -15,7 +11,7 @@
     <a href="{% url 'analytics_professor:question_create' course.pk %}" class="btn-primary">Add question</a>
 </div>
 
-<div class="bento-grid">
+<div class="bento-grid{% if filter_bar_single_row %} filter-bar-grid--single-row{% endif %}">
     {% include "components/filter_bar.html" %}
 
     <div class="span-full">

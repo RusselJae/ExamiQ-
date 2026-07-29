@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.analytics.models import ErrorType, MistakeRecord
+from apps.analytics.models import ErrorType, MistakeConcernMessage, MistakeRecord
 
 
 @admin.register(ErrorType)
@@ -11,6 +11,13 @@ class ErrorTypeAdmin(admin.ModelAdmin):
     ordering = ["category", "label"]
 
 
+class MistakeConcernMessageInline(admin.TabularInline):
+    model = MistakeConcernMessage
+    extra = 0
+    readonly_fields = ["author", "body", "image", "created_at"]
+    can_delete = False
+
+
 @admin.register(MistakeRecord)
 class MistakeRecordAdmin(admin.ModelAdmin):
     list_display = ["student", "topic", "question", "error_type", "occurred_at"]
@@ -18,3 +25,4 @@ class MistakeRecordAdmin(admin.ModelAdmin):
     search_fields = ["student__email", "topic__name"]
     ordering = ["-occurred_at"]
     readonly_fields = ["occurred_at"]
+    inlines = [MistakeConcernMessageInline]

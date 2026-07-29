@@ -11,8 +11,8 @@
 <div class="bento-grid mb-6">
     <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.total_questions label="Questions" variant="primary" %}</div>
     <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.correct_count label="Correct" variant="soft" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.accuracy suffix="%" label="Accuracy" variant="soft" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.avg_confidence label="Avg Confidence" variant="primary" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.accuracy suffix="%" label="Average Score" variant="soft" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.avg_confidence label="Average Confidence" variant="primary" %}</div>
 
     <div class="span-half">
         <div class="bento-card bento-card-inner h-full">
@@ -20,7 +20,7 @@
             <p class="text-sm text-examiq-slate mb-4">{{ session_summary.narrative }}</p>
             <p class="text-xs text-examiq-slate mb-3">
                 Calibration gap: <strong class="{% if session_summary.calibration_gap > 10 %}text-examiq-mistake{% else %}text-examiq-navy{% endif %}">{{ session_summary.calibration_gap }} pts</strong>
-                (confidence vs accuracy)
+                (confidence vs average score)
             </p>
         </div>
     </div>
@@ -43,30 +43,12 @@
                             {{ rec.priority|capfirst }} priority{% if rec.is_due %} — due now{% endif %}
                         </span>
                     </div>
-                    <a href="{% url 'reviews:setup' %}?topic={{ rec.topic.pk }}" class="btn-primary btn-primary-sm shrink-0">Review</a>
+                    <a href="{% url 'reviews:setup' %}" class="btn-primary btn-primary-sm shrink-0">Review</a>
                 </li>
                 {% endfor %}
             </ul>
             {% else %}
             {% include "components/empty_state.html" with compact=True title="You're caught up" body="No urgent topics flagged. Keep practicing to stay sharp." %}
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="span-half">
-        <div class="bento-card bento-card--list bento-card-inner h-full">
-            <h2 class="text-lg font-semibold text-examiq-navy mb-4">Weak Topics This Session</h2>
-            {% if session_summary.weak_topics %}
-            <ul class="space-y-2 bento-card-scroll">
-                {% for item in session_summary.weak_topics %}
-                <li class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-examiq-navy">{{ item.topic__name }}</span>
-                    <span class="misconception-badge">{{ item.mistake_count }}</span>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            {% include "components/empty_state.html" with compact=True title="No mistakes this session" body="Great work — you answered everything correctly." %}
             {% endif %}
         </div>
     </div>

@@ -98,15 +98,19 @@ class OpenAIDifficultyTagger(DifficultyTagger):
 
 
 class OpenAIQuestionGenerator(QuestionGenerator):
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = ""):
+    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
         if topic is None:
-            return StubQuestionGenerator().generate(topic, difficulty, count, reference_stem)
+            return StubQuestionGenerator().generate(
+                topic, difficulty, count, reference_stem, source_material=source_material
+            )
         system, user_prompt, _max_tokens = build_question_generation_prompt(
-            topic, difficulty, count, reference_stem
+            topic, difficulty, count, reference_stem, source_material=source_material
         )
         raw = _chat(user_prompt, system=system)
         if not raw:
-            return StubQuestionGenerator().generate(topic, difficulty, count, reference_stem)
+            return StubQuestionGenerator().generate(
+                topic, difficulty, count, reference_stem, source_material=source_material
+            )
         try:
             cleaned = raw
             match = re.search(r"\[.*\]", raw, re.DOTALL)

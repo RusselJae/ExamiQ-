@@ -1,0 +1,29 @@
+{# Threaded student–faculty concern messages. Expects concern_messages list. #}
+<div class="concern-thread" id="concern-thread">
+    {% if concern_messages %}
+    <div class="concern-thread__messages space-y-3 mb-4 max-h-96 overflow-y-auto pr-1">
+        {% for msg in concern_messages %}
+        <div class="concern-thread__message concern-thread__message--{{ msg.author_role }}">
+            <div class="concern-thread__bubble">
+                {% if msg.body %}
+                <p class="concern-thread__body whitespace-pre-line">{{ msg.body }}</p>
+                {% endif %}
+                {% if msg.image_url %}
+                <a href="{{ msg.image_url }}" target="_blank" rel="noopener" class="concern-thread__image-link">
+                    <img src="{{ msg.image_url }}" alt="Attachment" class="concern-thread__image">
+                </a>
+                {% endif %}
+            </div>
+            <p class="concern-thread__meta">
+                {{ msg.author_name }}
+                {% if msg.created_at %}
+                · {{ msg.created_at|date:"M d, Y g:i A" }}
+                {% endif %}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-examiq-slate mb-4">No messages yet. Start the conversation below.</p>
+    {% endif %}
+</div>

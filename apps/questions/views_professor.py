@@ -36,7 +36,7 @@ from apps.questions.forms import (
     TopicForm,
 )
 
-from apps.questions.models import Question, Subject, Topic, YearLevel
+from apps.questions.models import Question, Subject, Topic
 from apps.questions.views_curriculum import (
     CurriculumTopicsView,
     ProfessorCurriculumSubjectsView as ProfessorCurriculumSubjectsAPI,
@@ -50,8 +50,10 @@ from apps.questions.services import (
 )
 from apps.users.assignment_services import (
     get_assigned_subjects_queryset,
+    get_professor_course_queryset,
     professor_can_access_subject,
 )
+from apps.users.models import Course
 from apps.questions.validation import validate_question_for_submit
 
 
@@ -72,11 +74,14 @@ class QuestionListView(ProfessorCourseMixin, ListView):
 
     def get_queryset(self):
 
-        queryset = (
-            Question.objects.filter(topic__subject__program=self.course.program)
-            .select_related("topic", "topic__subject")
-            .annotate(mistake_count=Count("mistake_records"))
+        course_subject = _subject_for_course(self.course)
+        queryset = Question.objects.select_related("topic", "topic__subject").annotate(
+            mistake_count=Count("mistake_records")
         )
+        if course_subject:
+            queryset = queryset.filter(topic__subject=course_subject)
+        else:
+            queryset = queryset.none()
         queryset = apply_date_range(queryset, self.request, "created")
         queryset = apply_sort(
             queryset,
@@ -121,11 +126,8 @@ class QuestionListView(ProfessorCourseMixin, ListView):
 
         context["active_tab"] = "questions"
         context["ai_provider_label"] = get_ai_provider_label()
-        topics = Topic.objects.filter(subject__program=self.course.program).order_by("name")
-        subjects = get_assigned_subjects_queryset(
-            self.request.user, self.course.program_id
-        ).order_by("code")
-        filter_names = ["q", "topic", "subject", "difficulty", "type", "active", "date_from", "date_to", "sort"]
+        topics = topics_for_course_subject(self.course, self.request.user)
+        filter_names = ["q", "topic", "difficulty", "active", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -134,12 +136,6 @@ class QuestionListView(ProfessorCourseMixin, ListView):
                     "name": "q",
                     "label": "Search",
                     "placeholder": "Question stem text",
-                },
-                {
-                    "type": "select",
-                    "name": "subject",
-                    "label": "Course",
-                    "choices": [(str(s.pk), s.name) for s in subjects],
                 },
                 {
                     "type": "select",
@@ -155,12 +151,6 @@ class QuestionListView(ProfessorCourseMixin, ListView):
                 },
                 {
                     "type": "select",
-                    "name": "type",
-                    "label": "Type",
-                    "choices": Question.QuestionType.choices,
-                },
-                {
-                    "type": "select",
                     "name": "active",
                     "label": "Status",
                     "choices": [
@@ -168,10 +158,20 @@ class QuestionListView(ProfessorCourseMixin, ListView):
                         ("no", "Inactive"),
                     ],
                 },
-                *STANDARD_DATE_SORT_FILTER_SPECS,
+                {
+                    "type": "sort",
+                    "name": "sort",
+                    "label": "Sort",
+                    "choices": [
+                        ("newest", "Newest first"),
+                        ("oldest", "Oldest first"),
+                    ],
+                },
             ],
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
+        context["filter_bar_compact"] = True
+        context["filter_bar_single_row"] = True
 
         return context
 
@@ -503,17 +503,14 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
     template_name = "professor/questions/batch_form.html"
 
     def get_context_data(self):
-        year_levels = YearLevel.objects.all()
-        subjects = get_assigned_subjects_queryset(
-            self.request.user, self.course.program_id
-        ).select_related("year_level")
+        topics = topics_for_course_section(self.course, self.request.user)
+        subject = _subject_for_course(self.course)
         return {
             "course": self.course,
             "active_tab": "questions",
             "form_title": "Add Questions",
-            "year_levels": year_levels,
-            "subjects": subjects,
-            "program": self.course.program,
+            "topics": topics,
+            "course_subject": subject,
             "difficulty_choices": [
                 (Question.Difficulty.EASY, "Beginner"),
                 (Question.Difficulty.MEDIUM, "Intermediate"),
@@ -528,9 +525,8 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
         topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.MEDIUM)
-        topic = Topic.objects.filter(
-            pk=topic_id,
-            subject__program=self.course.program,
+        topic = topics_for_course_section(self.course, request.user).filter(
+            pk=topic_id
         ).first()
         if not topic:
             messages.error(request, "Select a valid topic before submitting.")
@@ -551,6 +547,8 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             if not stem:
                 continue
             concept_tag = request.POST.get(f"concept_tag_{index}", "").strip()
+            question_type = Question.QuestionType.MCQ
+            skip_ai_gate = request.POST.get(f"ai_generated_{index}", "") == "1"
             correct_label = request.POST.get(f"correct_{index}", "A").upper()
             choices_data = []
             for label in ("A", "B", "C", "D"):
@@ -563,7 +561,13 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     })
 
             validation = validate_question_for_submit(
-                stem, choices_data, topic, difficulty, correct_label, ai_enabled=False
+                stem,
+                choices_data,
+                topic,
+                difficulty,
+                correct_label,
+                ai_enabled=False,
+                question_type=question_type,
             )
             if not validation.get("is_valid"):
                 skipped_invalid += 1
@@ -587,20 +591,24 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 concept_tag=concept_tag,
                 solution_summary=request.POST.get(f"solution_summary_{index}", ""),
             )
+            question_payload = {
+                "topic": topic,
+                "difficulty": difficulty,
+                "question_type": question_type,
+                "stem": stem,
+                "concept_tag": concept_tag,
+                "is_active": True,
+                "status": Question.Status.APPROVED,
+                "proposed_by": request.user,
+            }
+
             question = create_question(
-                {
-                    "topic": topic,
-                    "difficulty": difficulty,
-                    "question_type": Question.QuestionType.MCQ,
-                    "stem": stem,
-                    "concept_tag": concept_tag,
-                    "is_active": True,
-                    "status": Question.Status.APPROVED,
-                    "proposed_by": request.user,
-                },
+                question_payload,
                 choices_data,
                 steps,
             )
+            # ai_generated flag is client-side only (skip_ai_gate used at validate time)
+            _ = skip_ai_gate
             from apps.core.audit import log_audit_event
             from apps.core.models import AuditLog
 
@@ -637,7 +645,10 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
     """Enqueue AI question generation and return a job id for polling."""
 
     def post(self, request, course_pk):
+        from apps.ai.ingest import ingest_learning_upload
         from apps.ai.job_services import start_question_generation_job
+        from apps.ai.retrieval import retrieve_material_for_topic
+        from apps.ai.source_extract import SourceMaterialError
 
         topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
@@ -645,12 +656,37 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             count = int(request.POST.get("count") or 3)
         except (TypeError, ValueError):
             count = 3
-        topic = Topic.objects.filter(
-            pk=topic_id,
-            subject__program=self.course.program,
-        ).select_related("subject").first()
+        count = max(1, min(count, 10))
+        topic = (
+            topics_for_course_section(self.course, request.user)
+            .filter(pk=topic_id)
+            .select_related("subject")
+            .first()
+        )
         if not topic:
             return JsonResponse({"error": "Select a topic first."}, status=400)
+
+        uploaded = request.FILES.get("source_file")
+        if not uploaded:
+            return JsonResponse(
+                {"error": "Upload a module or learning material file to generate questions."},
+                status=400,
+            )
+        try:
+            document = ingest_learning_upload(
+                uploaded_file=uploaded,
+                course_id=self.course.pk,
+                user=request.user,
+            )
+        except SourceMaterialError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        source_material = retrieve_material_for_topic(document=document, topic=topic)
+        if not source_material:
+            return JsonResponse(
+                {"error": "Could not retrieve enough module text for this topic."},
+                status=400,
+            )
 
         job = start_question_generation_job(
             user=request.user,
@@ -658,6 +694,8 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             topic_id=topic.pk,
             difficulty=difficulty,
             count=count,
+            source_material=source_material,
+            learning_document=document,
         )
         return JsonResponse(
             {
@@ -735,10 +773,12 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
         stem = request.POST.get("stem", "")
         correct_label = request.POST.get("correct_label", "A").upper()
-        topic = Topic.objects.filter(
-            pk=topic_id,
-            subject__program=self.course.program,
-        ).select_related("subject").first()
+        topic = (
+            topics_for_course_section(self.course, request.user)
+            .filter(pk=topic_id)
+            .select_related("subject")
+            .first()
+        )
         if not topic:
             return HttpResponse("Select a topic first.", status=400)
 
@@ -759,7 +799,13 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
                 peer_stems = []
 
         result = validate_question_for_submit(
-            stem, choices, topic, difficulty, correct_label, peer_stems=peer_stems
+            stem,
+            choices,
+            topic,
+            difficulty,
+            correct_label,
+            peer_stems=peer_stems,
+            question_type=Question.QuestionType.MCQ,
         )
 
         if "application/json" in request.headers.get("Accept", ""):
@@ -770,6 +816,45 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
             "professor/questions/partials/validate_modal.html",
             {"result": result, "course": self.course},
         )
+
+
+class QuestionAIDetectTopicsView(ProfessorCourseMixin, View):
+    """Detect math topics/branches from an uploaded learning module."""
+
+    def post(self, request, course_pk):
+        from apps.ai.ingest import ingest_learning_upload
+        from apps.ai.retrieval import sample_material_for_detection
+        from apps.ai.source_extract import SourceMaterialError
+        from apps.ai.topic_detect import detect_topics_from_material
+
+        uploaded = request.FILES.get("source_file")
+        if not uploaded:
+            return JsonResponse(
+                {"error": "Upload a module file to detect topics."},
+                status=400,
+            )
+        try:
+            document = ingest_learning_upload(
+                uploaded_file=uploaded,
+                course_id=self.course.pk,
+                user=request.user,
+            )
+        except SourceMaterialError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        source_material = sample_material_for_detection(document)
+        if not source_material:
+            return JsonResponse(
+                {"error": "Could not extract enough text to detect topics."},
+                status=400,
+            )
+
+        existing_topics = list(
+            topics_for_course_section(self.course, request.user).values("id", "name")
+        )
+        result = detect_topics_from_material(source_material, existing_topics)
+        result["document_id"] = document.pk
+        return JsonResponse(result)
 
 
 def _get_program_subject(course, subject_id, professor=None):
@@ -784,41 +869,87 @@ def _get_program_subject(course, subject_id, professor=None):
     return subject
 
 
+def _subject_for_course(course):
+    """Resolve the curriculum subject bound to a faculty course offering."""
+    assignment = getattr(course, "teaching_assignment", None)
+    if assignment and assignment.subject_id:
+        return assignment.subject
+    return Subject.objects.filter(
+        code=course.code,
+        program=course.program,
+    ).first()
+
+
+def subjects_for_course_section(course, professor=None):
+    """All curriculum subjects for courses sharing this section label."""
+    section = (course.section or "").strip()
+    if professor is not None:
+        section_courses = get_professor_course_queryset(professor)
+    else:
+        section_courses = Course.objects.filter(
+            professor_id=course.professor_id,
+            is_archived=False,
+        )
+    if section:
+        section_courses = section_courses.filter(section=section)
+    else:
+        section_courses = section_courses.filter(pk=course.pk)
+
+    subject_ids: set[int] = set()
+    for offering in section_courses.select_related("teaching_assignment__subject"):
+        subject = _subject_for_course(offering)
+        if subject:
+            subject_ids.add(subject.pk)
+    if not subject_ids:
+        return Subject.objects.none()
+    return Subject.objects.filter(pk__in=subject_ids)
+
+
+def topics_for_course_subject(course, professor=None):
+    """Top-level topics for the curriculum subject bound to this course only."""
+    subject = _subject_for_course(course)
+    if not subject:
+        return Topic.objects.none()
+    if professor is not None and not professor_can_access_subject(professor, subject):
+        return Topic.objects.none()
+    return (
+        Topic.objects.filter(subject=subject, parent__isnull=True)
+        .select_related("subject")
+        .order_by("name")
+    )
+
+
+def topics_for_course_section(course, professor=None):
+    """Deprecated alias — course tools are subject-scoped."""
+    return topics_for_course_subject(course, professor)
+
+
 class TopicListView(ProfessorCourseMixin, ListView):
     model = Topic
     template_name = "professor/topics/list.html"
     context_object_name = "topics"
 
     def get_queryset(self):
-        queryset = Topic.objects.filter(
-            subject__program=self.course.program,
-        ).select_related("subject")
-        subject_id = self.request.GET.get("subject")
-        if subject_id and subject_id.isdigit():
-            queryset = queryset.filter(subject_id=int(subject_id))
-        return queryset.order_by("name")
+        return topics_for_course_section(self.course, self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "topics"
-        context["year_levels"] = YearLevel.objects.all()
-        context["program"] = self.course.program
-        subject_id = self.request.GET.get("subject", "")
-        year_level_id = self.request.GET.get("year_level", "")
-        context["selected_subject_id"] = subject_id
-        selected_subject = _get_program_subject(self.course, subject_id, self.request.user)
-        context["selected_subject"] = selected_subject
-        if selected_subject and not year_level_id and selected_subject.year_level_id:
-            year_level_id = str(selected_subject.year_level_id)
-        context["selected_year_level_id"] = year_level_id
+        context["course_subject"] = _subject_for_course(self.course)
         return context
 
 
 class TopicCreateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
-        subject = _get_program_subject(self.course, request.POST.get("subject"), request.user)
+        wants_json = "application/json" in (request.headers.get("Accept") or "")
+        subject = _subject_for_course(self.course)
         if not subject:
-            messages.error(request, "Select a valid course code first.")
+            if wants_json:
+                return JsonResponse(
+                    {"error": "This course has no linked subject."},
+                    status=400,
+                )
+            messages.error(request, "This course has no linked subject.")
             return redirect(
                 reverse("analytics_professor:topic_list", kwargs={"course_pk": course_pk})
             )
@@ -828,23 +959,33 @@ class TopicCreateView(ProfessorCourseMixin, View):
             topic.subject = subject
             try:
                 topic.save()
+                if wants_json:
+                    return JsonResponse(
+                        {"id": topic.pk, "name": topic.name},
+                        status=201,
+                    )
                 messages.success(request, f'Topic "{topic.name}" added.')
             except IntegrityError:
+                if wants_json:
+                    return JsonResponse(
+                        {"error": "A topic with this name already exists for this course."},
+                        status=400,
+                    )
                 messages.error(request, "A topic with this name already exists for this course.")
         else:
+            if wants_json:
+                return JsonResponse({"error": "Enter a valid topic name."}, status=400)
             messages.error(request, "Enter a valid topic name.")
         return redirect(
             reverse("analytics_professor:topic_list", kwargs={"course_pk": course_pk})
-            + f"?subject={subject.pk}"
         )
 
 
 class TopicUpdateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk, topic_pk):
         topic = get_object_or_404(
-            Topic,
+            topics_for_course_section(self.course, request.user),
             pk=topic_pk,
-            subject__program=self.course.program,
         )
         form = TopicForm(request.POST, instance=topic)
         if form.is_valid():
@@ -854,18 +995,15 @@ class TopicUpdateView(ProfessorCourseMixin, View):
             messages.error(request, "Enter a valid topic name.")
         return redirect(
             reverse("analytics_professor:topic_list", kwargs={"course_pk": course_pk})
-            + f"?subject={topic.subject_id}"
         )
 
 
 class TopicDeleteView(ProfessorCourseMixin, View):
     def post(self, request, course_pk, topic_pk):
         topic = get_object_or_404(
-            Topic,
+            topics_for_course_section(self.course, request.user),
             pk=topic_pk,
-            subject__program=self.course.program,
         )
-        subject_id = topic.subject_id
         if topic.questions.exists():
             messages.error(
                 request,
@@ -876,6 +1014,5 @@ class TopicDeleteView(ProfessorCourseMixin, View):
             messages.success(request, "Topic deleted.")
         return redirect(
             reverse("analytics_professor:topic_list", kwargs={"course_pk": course_pk})
-            + f"?subject={subject_id}"
         )
 

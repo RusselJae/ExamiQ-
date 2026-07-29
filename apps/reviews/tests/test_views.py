@@ -93,11 +93,19 @@ class TestReviewSessionFocusUI:
 
 @pytest.mark.django_db
 class TestReviewSetupPage:
-    def test_setup_includes_pre_exam_modals(self, client, student, teaching_assignment, mcq_question):
+    def test_setup_includes_course_difficulty_and_modals(
+        self, client, student, mcq_question, bsed_program, subject
+    ):
+        from conftest import make_bsed_student
+
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+
         client.force_login(student)
         response = client.get(reverse("reviews:setup"))
         content = response.content.decode()
         assert response.status_code == 200
+        assert "id_setup_subjects" in content
+        assert "id_setup_difficulty" in content
         assert "pre-exam-step-confidence" in content
         assert "review_window" not in content
         assert "Open review windows" not in content
@@ -105,39 +113,47 @@ class TestReviewSetupPage:
 
 @pytest.mark.django_db
 class TestReviewSetupPrefill:
-    def test_setup_prefills_subject_and_topic_from_query(
-        self, client, student, topic, teaching_assignment, mcq_question
+    def test_setup_shows_course_choices(
+        self, client, student, topic, mcq_question, bsed_program
     ):
+        from conftest import make_bsed_student
+
+        make_bsed_student(
+            student, subject=topic.subject, bsed_program=bsed_program
+        )
+
         client.force_login(student)
-        url = reverse("reviews:setup") + f"?topic={topic.pk}"
-        response = client.get(url)
+        response = client.get(reverse("reviews:setup"))
         assert response.status_code == 200
         content = response.content.decode()
-        assert f'value="{topic.subject_id}"' in content or f'value="{topic.subject.pk}"' in content
-        assert str(topic.pk) in content
-        assert "preselectedTopicId" in content or str(topic.pk) in content
+        assert topic.subject.code in content
+        assert "id_setup_subjects" in content
+        assert "id_setup_difficulty" in content
 
-    def test_setup_ignores_topic_outside_curriculum(self, client, student, year_level, program):
+    def test_setup_lists_subjects_across_years(
+        self, client, student, year_level, bsed_program, mcq_question, subject
+    ):
         from apps.questions.models import Subject, Topic
+        from conftest import make_bsed_student
+
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
 
         other_year, _ = YearLevel.objects.get_or_create(
             order=99, defaults={"name": "Other Year"}
         )
         other_subject = Subject.objects.create(
-            program=program,
+            program=bsed_program,
             code="OTH-101",
             name="Other Subject",
             year_level=other_year,
             semester=1,
         )
-        other_topic = Topic.objects.create(subject=other_subject, name="Other Topic")
+        Topic.objects.create(subject=other_subject, name="Other Topic")
         client.force_login(student)
-        url = reverse("reviews:setup") + f"?topic={other_topic.pk}"
-        response = client.get(url)
+        response = client.get(reverse("reviews:setup"))
         assert response.status_code == 200
         content = response.content.decode()
-        assert f"preselectedTopicId = {other_topic.pk}" not in content
-        assert "preselectedTopicId = null" in content
+        assert "OTH-101" in content
 
 
 @pytest.mark.django_db

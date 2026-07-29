@@ -15,6 +15,56 @@ urlpatterns = [
     path("courses/create/", course_views.ProfessorCourseCreateView.as_view(), name="course_create"),
     path("courses/<int:pk>/clone/", course_views.ProfessorCourseCloneView.as_view(), name="course_clone"),
     path("courses/<int:pk>/archive/", course_views.ProfessorCourseArchiveView.as_view(), name="course_archive"),
+    path(
+        "sections/<int:pk>/",
+        views_professor.SectionDetailView.as_view(),
+        name="section_detail",
+    ),
+    path(
+        "sections/<int:section_pk>/roster/",
+        views_professor.SectionRosterView.as_view(),
+        name="section_roster",
+    ),
+    path(
+        "sections/<int:section_pk>/roster/<int:student_pk>/",
+        views_professor.SectionStudentDetailView.as_view(),
+        name="section_student_detail",
+    ),
+    path(
+        "sections/<int:section_pk>/exam-setup/",
+        views_professor.SectionExamSetupView.as_view(),
+        name="section_exam_setup",
+    ),
+    path(
+        "sections/<int:section_pk>/heatmap/",
+        views_professor.SectionHeatmapView.as_view(),
+        name="section_heatmap",
+    ),
+    path(
+        "sections/<int:section_pk>/feedback/",
+        views_professor.SectionFeedbackView.as_view(),
+        name="section_feedback",
+    ),
+    path(
+        "sections/<int:section_pk>/feedback/concerns/",
+        views_professor_feedback.SectionFeedbackConcernsApiView.as_view(),
+        name="section_feedback_concerns_api",
+    ),
+    path(
+        "sections/<int:section_pk>/feedback/<int:mistake_pk>/note/",
+        views_professor_feedback.SectionFeedbackFacultyNoteView.as_view(),
+        name="section_feedback_faculty_note",
+    ),
+    path(
+        "subjects/<int:pk>/",
+        views_professor.SubjectDetailView.as_view(),
+        name="subject_detail",
+    ),
+    path(
+        "subjects/<int:subject_pk>/roster/",
+        views_professor.SubjectRosterView.as_view(),
+        name="subject_roster",
+    ),
     path("courses/<int:pk>/", views_professor.CourseDetailView.as_view(), name="course_detail"),
     path(
         "courses/<int:pk>/summary/generate/",
@@ -105,6 +155,11 @@ urlpatterns = [
         name="question_ai_validate",
     ),
     path(
+        "courses/<int:course_pk>/questions/ai-detect-topics/",
+        question_views.QuestionAIDetectTopicsView.as_view(),
+        name="question_ai_detect_topics",
+    ),
+    path(
         "courses/<int:course_pk>/questions/<int:question_pk>/edit/",
         question_views.QuestionUpdateView.as_view(),
         name="question_edit",
@@ -130,8 +185,13 @@ urlpatterns = [
         name="feedback_list",
     ),
     path(
-        "courses/<int:course_pk>/feedback/<int:question_pk>/edit/",
-        views_professor_feedback.FeedbackEditView.as_view(),
-        name="feedback_edit",
+        "courses/<int:course_pk>/feedback/concerns/",
+        views_professor_feedback.FeedbackConcernsApiView.as_view(),
+        name="feedback_concerns_api",
+    ),
+    path(
+        "courses/<int:course_pk>/feedback/<int:mistake_pk>/note/",
+        views_professor_feedback.FeedbackFacultyNoteView.as_view(),
+        name="feedback_faculty_note",
     ),
 ]

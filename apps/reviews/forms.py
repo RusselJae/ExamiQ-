@@ -1,19 +1,22 @@
 from django import forms
 
-from apps.questions.curriculum import subject_queryset_for_student
-from apps.questions.models import Question, Subject, Topic
-from apps.questions.services import count_available_questions
+from apps.questions.models import Question, Subject
 from apps.reviews.exam_setup_services import (
-    assignment_for_student_subject,
-    difficulties_for_student_subject,
+    MIN_EXAM_SUBJECTS,
+    build_multi_subject_exam_target,
     student_setup_eligibility,
-    topics_for_student_subject,
+    subjects_available_for_student,
 )
-from apps.users.models import User
 
 FORM_INPUT_CLASS = (
     "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
     "focus:border-examiq-green focus:ring-2 focus:ring-green-100 outline-none transition"
+)
+
+FORM_MULTISELECT_CLASS = (
+    "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
+    "focus:border-examiq-green focus:ring-2 focus:ring-green-100 outline-none transition "
+    "min-h-[10rem]"
 )
 
 PILOT_DIFFICULTY_CHOICES = [
@@ -37,18 +40,24 @@ SESSION_GOAL_CHOICES = [
 
 
 class ReviewSetupForm(forms.Form):
-    subject = forms.ModelChoiceField(
+    """Student picks 3+ courses (subjects) + difficulty, then pre-exam wizard."""
+
+    subjects = forms.ModelMultipleChoiceField(
         queryset=Subject.objects.none(),
-        label="Subject",
-        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_subject"}),
-    )
-    topic = forms.ModelChoiceField(
-        queryset=Topic.objects.none(),
-        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_topic"}),
+        label="Courses",
+        widget=forms.SelectMultiple(
+            attrs={
+                "class": FORM_MULTISELECT_CLASS,
+                "id": "id_setup_subjects",
+                "size": "8",
+            }
+        ),
+        help_text=f"Hold Ctrl/Cmd to select at least {MIN_EXAM_SUBJECTS} courses.",
     )
     difficulty = forms.ChoiceField(
         choices=PILOT_DIFFICULTY_CHOICES,
-        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_difficulty"}),
+        label="Difficulty",
+        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}),
     )
     pre_session_confidence = forms.ChoiceField(
         choices=PRE_SESSION_CONFIDENCE_CHOICES,
@@ -64,68 +73,47 @@ class ReviewSetupForm(forms.Form):
     def __init__(self, *args, student=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.student = student
-        if student:
-            self.fields["subject"].queryset = subject_queryset_for_student(student)
-
-        subject = None
-        if self.data.get("subject"):
-            try:
-                subject = Subject.objects.get(pk=self.data["subject"])
-            except (Subject.DoesNotExist, ValueError, KeyError):
-                pass
-        elif self.initial.get("subject"):
-            subject = self.initial["subject"]
-        if subject and student:
-            self.fields["topic"].queryset = topics_for_student_subject(student, subject)
-            allowed = difficulties_for_student_subject(student, subject)
-            if allowed:
-                self.fields["difficulty"].choices = [
-                    c for c in PILOT_DIFFICULTY_CHOICES if c[0] in allowed
-                ]
-            topic_initial = self.initial.get("topic")
-            if topic_initial and not self.data.get("topic"):
-                self.fields["topic"].initial = topic_initial
+        self._exam_target = None
+        qs = subjects_available_for_student(student)
+        self.fields["subjects"].queryset = qs
+        self.fields["subjects"].label_from_instance = (
+            lambda obj: f"{obj.code} — {obj.name}"
+        )
 
     def clean(self):
         cleaned = super().clean()
-        subject = cleaned.get("subject")
-        topic = cleaned.get("topic")
+        if not self.student:
+            raise forms.ValidationError("Student is required.")
+
+        eligibility = student_setup_eligibility(self.student)
+        if not eligibility.get("eligible"):
+            raise forms.ValidationError(eligibility["message"])
+
+        subjects = cleaned.get("subjects")
         difficulty = cleaned.get("difficulty")
+        if not subjects or not difficulty:
+            return cleaned
 
-        if self.student:
-            eligibility = student_setup_eligibility(self.student)
-            if not eligibility.get("eligible"):
-                raise forms.ValidationError(eligibility["message"])
+        if subjects.count() < MIN_EXAM_SUBJECTS:
+            raise forms.ValidationError(
+                f"Select at least {MIN_EXAM_SUBJECTS} courses before starting."
+            )
 
-        if subject and topic and topic.subject_id != subject.pk:
-            raise forms.ValidationError("Selected topic does not belong to this subject.")
-
-        if self.student and subject:
-            allowed_topics = topics_for_student_subject(self.student, subject)
-            if topic and not allowed_topics.filter(pk=topic.pk).exists():
-                raise forms.ValidationError("Selected topic is not available for this exam.")
-            allowed_difficulties = difficulties_for_student_subject(self.student, subject)
-            if difficulty and allowed_difficulties and difficulty not in allowed_difficulties:
-                raise forms.ValidationError(
-                    "Selected difficulty is not available for this exam."
-                )
-
-        if topic and difficulty:
-            available = count_available_questions(topic, difficulty)
-            if available == 0:
-                raise forms.ValidationError(
-                    "No approved questions for this topic and difficulty. "
-                    "Try another topic or difficulty."
-                )
+        try:
+            self._exam_target = build_multi_subject_exam_target(
+                self.student, subjects, difficulty
+            )
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from exc
         return cleaned
 
-    def get_course_for_session(self):
-        subject = self.cleaned_data.get("subject")
-        if subject and self.student:
-            assignment = assignment_for_student_subject(self.student, subject)
-            if assignment:
-                return assignment.course
-        return None
+    def get_auto_target(self) -> dict:
+        """Return resolved multi-subject exam target after successful clean()."""
+        if self._exam_target is None:
+            raise forms.ValidationError(
+                "Form must be validated before starting an exam."
+            )
+        return self._exam_target
 
 
 class AnswerForm(forms.Form):
@@ -139,7 +127,12 @@ class AnswerForm(forms.Form):
     )
     numeric_response = forms.CharField(
         required=False,
-        widget=forms.TextInput(attrs={"class": "w-full rounded-lg border-gray-300", "placeholder": "Enter your answer"}),
+        widget=forms.TextInput(
+            attrs={
+                "class": "w-full rounded-lg border-gray-300",
+                "placeholder": "Enter your answer",
+            }
+        ),
     )
     selected_choice = forms.ModelChoiceField(
         queryset=None,

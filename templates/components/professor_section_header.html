@@ -1,0 +1,15 @@
+{# Course/catalog page chrome for faculty tools. #}
+{# Optional: page_label (e.g. "Saved Questions"), show_subject_subtitle (default true) #}
+<div class="mb-6">
+    <a href="{% url 'analytics_professor:course_list' %}" class="text-link">&larr; Back to courses</a>
+    <h1 class="text-3xl font-bold text-examiq-navy mt-2">
+        {% if course.section == "Catalog" %}
+            {{ course.code }} Catalog{% if page_label %}: {{ page_label }}{% endif %}
+        {% else %}
+            {{ course.section|default:course.code }}{% if page_label %}: {{ page_label }}{% endif %}
+        {% endif %}
+    </h1>
+    {% if show_subject_subtitle != False %}
+    <p class="text-examiq-slate text-sm mt-1">{{ course.code }} — {{ course.name }}</p>
+    {% endif %}
+</div>

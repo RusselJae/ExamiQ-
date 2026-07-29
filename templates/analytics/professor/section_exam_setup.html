@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Exam Setup - {{ section.display_label }} - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="Choose which courses students in this section can take." %}
+
+<form method="post" class="exam-setup-form space-y-6" id="section-exam-setup-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bento-card p-4 border-red-200 bg-red-50 text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <section class="bento-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-lg font-semibold text-examiq-navy">Availability</h2>
+                <p class="text-sm text-examiq-slate">Control whether students in {{ section.display_label }} can start exams.</p>
+            </div>
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-examiq-navy">
+                {{ form.is_enabled }}
+                <span>Exam enabled</span>
+            </label>
+        </div>
+        {% if form.is_enabled.errors %}
+        <p class="text-sm text-examiq-coral">{{ form.is_enabled.errors.0 }}</p>
+        {% endif %}
+    </section>
+
+    <section class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-1">{{ form.subjects.label }}</h2>
+        <p class="text-sm text-examiq-slate mb-4">{{ form.subjects.help_text }}</p>
+        <div class="multi-select" data-multi-select data-selected-heading="Selected course titles">
+            {{ form.subjects }}
+        </div>
+        {% if form.subjects.errors %}
+        <p class="text-sm text-examiq-coral mt-2">{{ form.subjects.errors.0 }}</p>
+        {% endif %}
+    </section>
+
+    <section class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Timing</h2>
+        <label class="block text-sm font-medium text-examiq-slate mb-1" for="{{ form.seconds_per_question.id_for_label }}">
+            {{ form.seconds_per_question.label }}
+        </label>
+        {{ form.seconds_per_question }}
+        {% if form.seconds_per_question.errors %}
+        <p class="text-sm text-examiq-coral mt-1">{{ form.seconds_per_question.errors.0 }}</p>
+        {% endif %}
+    </section>
+
+    <div class="exam-setup-footer">
+        <p class="exam-setup-footer__note">Leave courses empty to allow the full BSED Math catalog.</p>
+        <button type="submit" class="btn-primary exam-setup-footer__save">Save exam setup</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/multi-select-dropdown.js' %}"></script>
+{% endblock %}

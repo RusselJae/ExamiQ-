@@ -1,0 +1,71 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'actorBkg': '#dcfce7',
+    'actorBorder': '#16a34a',
+    'actorTextColor': '#14532d',
+    'participantBkg': '#f0fdf4',
+    'participantBorder': '#22c55e',
+    'signalColor': '#1f2937',
+    'noteBkgColor': '#ffffff',
+    'noteBorderColor': '#ffffff',
+    'labelBoxBkgColor': '#ffffff',
+    'labelBoxBorderColor': '#ffffff',
+    'activationBkgColor': '#86efac',
+    'activationBorderColor': '#16a34a',
+    'sequenceNumberColor': '#ffffff'
+  },
+  'sequence': { 'showSequenceNumbers': true, 'actorMargin': 80, 'messageMargin': 36, 'width': 180 }
+}}%%
+sequenceDiagram
+    autonumber
+    actor Fac as Faculty
+    participant Sys as ExamiQ+ System
+    participant DB as Database
+
+    Fac->>Sys: Login Credentials
+    activate Sys
+    Sys->>DB: Validate Account
+    activate DB
+    DB-->>Sys: Account Verified
+    deactivate DB
+    Sys-->>Fac: Access Granted
+    deactivate Sys
+    Fac->>Sys: Display Dashboard
+
+    Fac->>Sys: Configure Exam Settings
+    activate Sys
+    Sys->>DB: Save Exam Setup
+    activate DB
+    DB-->>Sys: Confirmation
+    deactivate DB
+    Sys-->>Fac: Success Message
+    deactivate Sys
+
+    Fac->>Sys: Add / Edit Questions
+    activate Sys
+    Sys->>DB: Save Question Data
+    activate DB
+    DB-->>Sys: Confirmation
+    deactivate DB
+    Sys-->>Fac: Success Message
+    deactivate Sys
+    Fac->>Sys: Display Updated Records
+
+    Fac->>Sys: Request Analytics
+    activate Sys
+    Sys->>DB: Retrieve Performance Data
+    activate DB
+    DB-->>Sys: Analytics Data
+    deactivate DB
+    Sys-->>Fac: Display Reports
+    deactivate Sys
+
+    Fac->>Sys: Logout Request
+    activate Sys
+    Sys->>DB: End Session
+    activate DB
+    DB-->>Sys: Session Ended
+    deactivate DB
+    Sys-->>Fac: Logout Successful
+    deactivate Sys

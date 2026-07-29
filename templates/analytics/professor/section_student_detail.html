@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ student.get_full_name|default:student.email }} - {{ section.display_label }}{% endblock %}
+
+{% block main_class %}professor-student-detail{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="Student performance across all courses they practiced." %}
+
+{% include "analytics/professor/partials/student_detail_dashboard.html" with detail_scope="section" scope_label=section.display_label back_url=back_url empty_body="This student is enrolled in the section but has not answered questions yet. Metrics will fill in after their first exam." %}
+{% endblock %}
+
+{% block extra_js %}
+{% if summary.total_answers %}
+{{ summary.score_trend|json_script:"score-trend-data" }}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const trendData = JSON.parse(document.getElementById("score-trend-data").textContent);
+    const canvas = document.getElementById("scoreTrendChart");
+    if (window.ExamiQUI && window.ExamiQUI.renderAccuracyChart) {
+        window.ExamiQUI.renderAccuracyChart(canvas, trendData, {
+            wrapEl: document.getElementById("score-trend-wrap"),
+            emptyEl: document.getElementById("score-trend-empty"),
+        });
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

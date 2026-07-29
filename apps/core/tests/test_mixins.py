@@ -9,10 +9,11 @@ class TestRoleAccess:
         response = client.get(reverse("analytics_professor:dashboard"))
         assert response.status_code == 403
 
-    def test_professor_cannot_access_chairperson_dashboard(self, client, professor):
+    def test_professor_cannot_access_campus_admin_index_as_staff_only(self, client, professor):
         client.force_login(professor)
-        response = client.get(reverse("analytics_chairperson:dashboard"))
-        assert response.status_code == 403
+        response = client.get(reverse("admin:index"))
+        # Faculty are not staff; Django admin redirects or forbids.
+        assert response.status_code in (302, 403)
 
     def test_student_can_access_own_dashboard(self, client, student):
         client.force_login(student)

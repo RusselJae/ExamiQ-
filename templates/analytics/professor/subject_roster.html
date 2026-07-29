@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Masterlist - {{ subject.code }} - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title=subject.code subtitle="Students from any year who answered this course." %}
+
+<nav class="flex flex-wrap gap-2 mb-6" aria-label="Course tabs">
+    <a href="{% url 'analytics_professor:subject_detail' subject.pk %}"
+       class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
+    <a href="{% url 'analytics_professor:subject_roster' subject.pk %}"
+       class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Masterlist</a>
+    <a href="{% url 'analytics_professor:topic_list' catalog_course.pk %}"
+       class="course-nav-link">Topics</a>
+    <a href="{% url 'analytics_professor:question_list' catalog_course.pk %}"
+       class="course-nav-link">Saved Questions</a>
+</nav>
+
+{% include "components/filter_bar.html" %}
+
+<div class="bento-card overflow-x-auto masterlist-card">
+    <table class="w-full text-sm masterlist-table">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-100">
+                <th class="p-4 font-medium">Student</th>
+                <th class="p-4 font-medium">Year</th>
+                <th class="p-4 font-medium">Section</th>
+                <th class="p-4 font-medium text-center">Sessions</th>
+                <th class="p-4 font-medium text-center">Accuracy</th>
+                <th class="p-4 font-medium text-center">Avg confidence</th>
+                <th class="p-4 font-medium text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in roster %}
+            <tr class="border-b border-slate-50 masterlist-row">
+                <td class="p-4">
+                    <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
+                    <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                </td>
+                <td class="p-4 text-examiq-slate">{{ row.year_level|default:"—" }}</td>
+                <td class="p-4 text-examiq-slate">{{ row.section_label|default:"—" }}</td>
+                <td class="p-4 text-center">{{ row.sessions_completed }}</td>
+                <td class="p-4 text-center {% if row.accuracy >= 75 %}stat-value-good{% elif row.accuracy < 60 %}stat-value-warning{% endif %}">{{ row.accuracy }}%</td>
+                <td class="p-4 text-center">{{ row.avg_confidence }}</td>
+                <td class="p-4 text-right">
+                    <a href="{% url 'analytics_professor:student_detail' catalog_course.pk row.student.pk %}"
+                       class="btn-secondary masterlist-detail-btn">Detail</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="p-8 text-center text-examiq-slate">No students have answered this course yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

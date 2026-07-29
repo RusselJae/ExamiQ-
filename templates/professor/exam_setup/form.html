@@ -1,14 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Exam Setup - {{ course.code }}{% endblock %}
+{% block title %}Exam Setup - {{ course.section|default:course.code }}{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-    <a href="{% url 'analytics_professor:course_detail' course.pk %}" class="text-link">&larr; Back to course</a>
-    <h1 class="text-3xl font-bold text-examiq-navy mt-2">Manage Exam Setup</h1>
-    <p class="text-examiq-slate mt-1">{{ course.display_label }}</p>
-</div>
+{% include "components/professor_section_header.html" with course=course page_label="Exam Setup" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
 <form method="post" class="exam-setup-form" id="professor-exam-setup-form">

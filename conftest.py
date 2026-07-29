@@ -51,6 +51,35 @@ def topic(db, subject):
 
 
 @pytest.fixture
+def bsed_program(db):
+    edu, _ = Department.objects.get_or_create(name="College of Education")
+    prog, _ = Program.objects.get_or_create(
+        slug=User.HomeDegreeProgram.BSED_MATH,
+        defaults={"name": "BSEd Mathematics", "managing_department": edu},
+    )
+    return prog
+
+
+def make_bsed_student(student, *, subject=None, course=None, bsed_program=None):
+    """Point student (and optional subject/course) at BSEd Math for open-exam tests."""
+    if bsed_program is None:
+        edu, _ = Department.objects.get_or_create(name="College of Education")
+        bsed_program, _ = Program.objects.get_or_create(
+            slug=User.HomeDegreeProgram.BSED_MATH,
+            defaults={"name": "BSEd Mathematics", "managing_department": edu},
+        )
+    student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
+    student.save(update_fields=["home_degree_program"])
+    if subject is not None:
+        subject.program = bsed_program
+        subject.save(update_fields=["program_id"])
+    if course is not None:
+        course.program = bsed_program
+        course.save(update_fields=["program_id"])
+    return bsed_program
+
+
+@pytest.fixture
 def academic_year(db):
     year, _ = AcademicYear.objects.get_or_create(
         label="2025-2026",
@@ -64,7 +93,7 @@ def program_section(db, program, year_level, academic_year):
     section, _ = ProgramSection.objects.get_or_create(
         program=program,
         year_level=year_level,
-        label="A",
+        label="1M",
         academic_year=academic_year,
         defaults={"max_students": 40},
     )

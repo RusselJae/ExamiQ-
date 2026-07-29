@@ -31,7 +31,7 @@ PROGRAM_DEFINITIONS: list[tuple[str, str, str]] = [
 PROGRAM_ABBREVIATIONS: dict[str, str] = {
     User.HomeDegreeProgram.CS: "BSCS",
     User.HomeDegreeProgram.IT: "BSIT",
-    User.HomeDegreeProgram.BSED_MATH: "BSED-MATH",
+    User.HomeDegreeProgram.BSED_MATH: "BSE",
     User.HomeDegreeProgram.PSYCHOLOGY: "BSPSY",
     User.HomeDegreeProgram.MARKETING: "BSBA-MKT",
     User.HomeDegreeProgram.HR: "BSBA-HR",

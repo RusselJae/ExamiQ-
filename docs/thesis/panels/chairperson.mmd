@@ -1,0 +1,71 @@
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'actorBkg': '#dcfce7',
+    'actorBorder': '#16a34a',
+    'actorTextColor': '#14532d',
+    'participantBkg': '#f0fdf4',
+    'participantBorder': '#22c55e',
+    'signalColor': '#1f2937',
+    'noteBkgColor': '#ffffff',
+    'noteBorderColor': '#ffffff',
+    'labelBoxBkgColor': '#ffffff',
+    'labelBoxBorderColor': '#ffffff',
+    'activationBkgColor': '#86efac',
+    'activationBorderColor': '#16a34a',
+    'sequenceNumberColor': '#ffffff'
+  },
+  'sequence': { 'showSequenceNumbers': true, 'actorMargin': 80, 'messageMargin': 36, 'width': 180 }
+}}%%
+sequenceDiagram
+    autonumber
+    actor Chair as Chairperson
+    participant Sys as ExamiQ+ System
+    participant DB as Database
+
+    Chair->>Sys: Login Credentials
+    activate Sys
+    Sys->>DB: Validate Account
+    activate DB
+    DB-->>Sys: Account Verified
+    deactivate DB
+    Sys-->>Chair: Access Granted
+    deactivate Sys
+    Chair->>Sys: Display Dashboard
+
+    Chair->>Sys: Assign Faculty to Sections
+    activate Sys
+    Sys->>DB: Save Assignment Data
+    activate DB
+    DB-->>Sys: Confirmation
+    deactivate DB
+    Sys-->>Chair: Success Message
+    deactivate Sys
+    Chair->>Sys: Display Assignment Records
+
+    Chair->>Sys: Request Performance Data
+    activate Sys
+    Sys->>DB: Retrieve Analytics
+    activate DB
+    DB-->>Sys: Performance Data
+    deactivate DB
+    Sys-->>Chair: Display Reports
+    deactivate Sys
+
+    Chair->>Sys: Request Audit Logs
+    activate Sys
+    Sys->>DB: Retrieve Log Data
+    activate DB
+    DB-->>Sys: Log Records
+    deactivate DB
+    Sys-->>Chair: Display Audit Reports
+    deactivate Sys
+
+    Chair->>Sys: Logout Request
+    activate Sys
+    Sys->>DB: End Session
+    activate DB
+    DB-->>Sys: Session Ended
+    deactivate DB
+    Sys-->>Chair: Logout Successful
+    deactivate Sys

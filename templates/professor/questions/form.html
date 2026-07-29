@@ -12,7 +12,7 @@
 {% if is_edit and mistake_count %}
 <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-examiq-navy">
     This question has {{ mistake_count }} recorded mistake{{ mistake_count|pluralize }}.
-    <a href="{% url 'analytics_professor:feedback_edit' course.pk object.pk %}" class="text-link font-medium ml-1">Edit explanation feedback &rarr;</a>
+    <a href="{% url 'analytics_professor:feedback_list' course.pk %}" class="text-link font-medium ml-1">View student concerns &rarr;</a>
 </div>
 {% endif %}
 

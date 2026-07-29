@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Masterlist - {{ section.display_label }} - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="All students in this section." %}
+
+{% include "components/filter_bar.html" %}
+
+<div class="bento-card overflow-x-auto masterlist-card">
+    <table class="w-full text-sm masterlist-table">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-100">
+                <th class="p-4 font-medium">Student</th>
+                <th class="p-4 font-medium">Year</th>
+                <th class="p-4 font-medium">Courses</th>
+                <th class="p-4 font-medium text-center">Sessions</th>
+                <th class="p-4 font-medium text-center">Questions</th>
+                <th class="p-4 font-medium text-center">Accuracy</th>
+                <th class="p-4 font-medium text-center">Avg confidence</th>
+                <th class="p-4 font-medium text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in roster %}
+            <tr class="border-b border-slate-50 masterlist-row">
+                <td class="p-4">
+                    <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
+                    <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                </td>
+                <td class="p-4 text-examiq-slate">{{ row.year_level|default:"—" }}</td>
+                <td class="p-4 text-examiq-slate max-w-xs">
+                    {% if row.subjects_taken %}
+                    <div class="masterlist-subject-chips">
+                        {% for code in row.subjects_taken %}
+                        <span class="masterlist-subject-chip">{{ code }}</span>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
+                <td class="p-4 text-center">{{ row.sessions_completed }}</td>
+                <td class="p-4 text-center">{{ row.questions_answered }}</td>
+                <td class="p-4 text-center {% if row.questions_answered and row.accuracy < 60 %}stat-value-warning{% elif row.accuracy >= 75 %}stat-value-good{% endif %}">{{ row.accuracy }}%</td>
+                <td class="p-4 text-center">{{ row.avg_confidence }}</td>
+                <td class="p-4 text-right">
+                    <a href="{% url 'analytics_professor:section_student_detail' section.pk row.student.pk %}"
+                       class="btn-secondary masterlist-detail-btn">Detail</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" class="p-8 text-center text-examiq-slate">No students enrolled in this section yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

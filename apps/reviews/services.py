@@ -28,6 +28,8 @@ def start_review_session(
     seconds_per_question: int | None = None,
     pre_session_confidence: str = "",
     session_goal: str = "",
+    question_queue: list[int] | None = None,
+    subjects=None,
 ) -> ReviewSession:
     """Create a new active review session."""
     if review_window:
@@ -38,7 +40,11 @@ def start_review_session(
     seconds_per_question = seconds_per_question or getattr(
         settings, "DEFAULT_SECONDS_PER_QUESTION", 30
     )
-    planned_question_count = count_available_questions(topic, difficulty)
+    queue = list(question_queue or [])
+    if queue:
+        planned_question_count = len(queue)
+    else:
+        planned_question_count = count_available_questions(topic, difficulty)
     session = ReviewSession.objects.create(
         student=student,
         topic=topic,
@@ -50,9 +56,12 @@ def start_review_session(
         course=course,
         review_window=review_window,
         planned_question_count=planned_question_count,
+        question_queue=queue,
         pre_session_confidence=pre_session_confidence,
         session_goal=session_goal,
     )
+    if subjects:
+        session.subjects.set(subjects)
     from apps.core.audit import log_audit_event
     from apps.core.models import AuditLog
 
@@ -199,3 +208,36 @@ def complete_session(session: ReviewSession) -> ReviewSession:
 def get_answered_question_ids(session: ReviewSession) -> list[int]:
     """Return IDs of questions already answered in this session."""
     return list(session.answers.values_list("question_id", flat=True))
+
+
+def get_next_queued_question(session: ReviewSession):
+    """Return the next unanswered question from the session queue, if any."""
+    queue = session.question_queue or []
+    if not queue:
+        return None
+    answered = set(get_answered_question_ids(session))
+    for question_id in queue:
+        if question_id not in answered:
+            return (
+                Question.objects.filter(pk=question_id)
+                .prefetch_related("choices", "explanation_steps")
+                .first()
+            )
+    return None
+
+
+def session_has_more_questions(session: ReviewSession) -> bool:
+    """Whether the session still has unanswered questions available."""
+    if session.question_queue:
+        answered = set(get_answered_question_ids(session))
+        return any(qid not in answered for qid in session.question_queue)
+    from apps.questions.services import get_adaptive_questions_for_session
+
+    answered_ids = get_answered_question_ids(session)
+    return get_adaptive_questions_for_session(
+        session.student,
+        session.topic,
+        session.difficulty,
+        count=1,
+        exclude_ids=answered_ids,
+    ).exists()

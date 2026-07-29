@@ -1,0 +1,18 @@
+{# Section page chrome + tab nav. Expects section, active_tab. #}
+{% include "components/page_header.html" with title=section.display_label subtitle=section_subtitle|default:"" %}
+
+<nav class="flex flex-wrap gap-2 mb-6" aria-label="Section navigation">
+    <a href="{% url 'analytics_professor:section_detail' section.pk %}"
+       class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
+    <a href="{% url 'analytics_professor:section_roster' section.pk %}"
+       class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Masterlist</a>
+    <a href="{% url 'analytics_professor:section_exam_setup' section.pk %}"
+       class="course-nav-link {% if active_tab == 'exam_setup' %}course-nav-link-active{% endif %}">Exam Setup</a>
+    <a href="{% url 'analytics_professor:section_heatmap' section.pk %}"
+       class="course-nav-link {% if active_tab == 'heatmap' %}course-nav-link-active{% endif %}">Heatmap</a>
+    <a href="{% url 'analytics_professor:section_feedback' section.pk %}"
+       class="course-nav-link {% if active_tab == 'feedback' %}course-nav-link-active{% endif %}">
+        Feedback
+        {% if pending_concern_count %}<span class="course-nav-badge">{{ pending_concern_count }}</span>{% endif %}
+    </a>
+</nav>

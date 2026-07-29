@@ -24,17 +24,18 @@ _STUB_LABELS = ("B", "C", "D")
 
 
 class StubQuestionGenerator(QuestionGenerator):
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = ""):
+    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
         logger.info("AI question generation stub called (AI_ENABLED=%s)", settings.AI_ENABLED)
         if topic is None:
             return []
         from apps.ai.normalize import normalize_generated_questions
 
         items = []
+        prefix = "[From module] " if source_material else "[Stub] "
         for i in range(min(count, 3)):
             label = _STUB_LABELS[i % len(_STUB_LABELS)]
             items.append({
-                "stem": f"[Stub] Sample {difficulty} question about {topic.name}? ({i + 1})",
+                "stem": f"{prefix}Sample {difficulty} question about {topic.name}? ({i + 1})",
                 "concept_tag": f"Concept: {topic.name}",
                 "correct_label": label,
                 "choices": [

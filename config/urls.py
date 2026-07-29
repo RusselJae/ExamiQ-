@@ -11,12 +11,10 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("profile/", include("apps.users.urls")),
-    path("campus/", include("apps.users.urls_campus")),
     path("", include("apps.core.urls")),
     path("student/", include("apps.reviews.urls", namespace="reviews")),
     path("student/", include("apps.analytics.urls_student", namespace="analytics_student")),
     path("professor/", include("apps.analytics.urls_professor", namespace="analytics_professor")),
-    path("chairperson/", include("apps.analytics.urls_chairperson", namespace="analytics_chairperson")),
 ]
 
 if settings.DEBUG:

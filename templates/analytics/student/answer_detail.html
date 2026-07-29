@@ -11,6 +11,47 @@
 </p>
 
 {% include "components/answer_review_card.html" with answer=answer %}
+
+{% if answer.mistake_record and concern_form %}
+<div class="bento-card bento-card--elevated p-6 shadow-sm mt-6 max-w-2xl">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-1">Ask about this mistake</h2>
+    <p class="text-sm text-examiq-slate mb-4">
+        Message your professor about this question. Add text and optionally upload a photo.
+    </p>
+
+    {% include "analytics/partials/concern_thread.html" with concern_messages=concern_messages %}
+
+    <form method="post"
+          action="{% url 'analytics_student:upload_mistake_concern' answer.pk %}"
+          enctype="multipart/form-data"
+          class="space-y-4 concern-thread__compose">
+        {% csrf_token %}
+        <div>
+            <label for="{{ concern_form.body.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">
+                Your message
+            </label>
+            {{ concern_form.body }}
+            {% if concern_form.body.errors %}
+            <p class="text-sm text-red-600 mt-1">{{ concern_form.body.errors|striptags }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <label for="{{ concern_form.image.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">
+                Photo (optional)
+            </label>
+            {{ concern_form.image }}
+            <p class="text-xs text-examiq-slate mt-1">JPEG, PNG, or WebP — max 5 MB.</p>
+            {% if concern_form.image.errors %}
+            <p class="text-sm text-red-600 mt-1">{{ concern_form.image.errors|striptags }}</p>
+            {% endif %}
+        </div>
+        {% if concern_form.non_field_errors %}
+        <p class="text-sm text-red-600">{{ concern_form.non_field_errors|striptags }}</p>
+        {% endif %}
+        <button type="submit" class="btn-primary">Send message</button>
+    </form>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

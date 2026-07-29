@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gantt Chart – ExamiQ+</title>
+  <style>
+    @page {
+      size: landscape;
+      margin: 12mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9px;
+      color: #111;
+      background: #fff;
+      margin: 24px;
+    }
+
+    .chart-page {
+      margin-bottom: 40px;
+      page-break-after: always;
+    }
+
+    .chart-title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 13px;
+      border: 1px solid #000;
+      padding: 6px 12px;
+      margin: 0 auto 0;
+      width: fit-content;
+      min-width: 220px;
+    }
+
+    table.gantt {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 0;
+    }
+
+    table.gantt th,
+    table.gantt td {
+      border: 1px solid #000;
+      padding: 3px 4px;
+      vertical-align: middle;
+      line-height: 1.25;
+    }
+
+    .col-task {
+      width: 170px;
+      text-align: left;
+      font-size: 8.5px;
+    }
+
+    .col-status {
+      width: 150px;
+      text-align: left;
+      font-size: 8px;
+    }
+
+    .phase-row td {
+      font-weight: bold;
+      text-transform: uppercase;
+      background: #f5f5f5;
+      font-size: 8.5px;
+    }
+
+    .task-row .col-task {
+      padding-left: 10px;
+      text-transform: uppercase;
+    }
+
+    .month-header {
+      text-align: center;
+      font-weight: bold;
+      font-size: 9px;
+      text-transform: uppercase;
+      background: #fff;
+    }
+
+    .week-header {
+      text-align: center;
+      font-weight: normal;
+      font-size: 8px;
+      background: #fff;
+      width: 18px;
+      min-width: 18px;
+      padding: 2px 0;
+    }
+
+    .week-cell {
+      width: 18px;
+      min-width: 18px;
+      height: 22px;
+      padding: 0;
+    }
+
+    .status-not-started { background: #fff; }
+    .status-in-progress { background: #87ceeb; }
+    .status-completed   { background: #90ee90; }
+    .status-planned     { background: #ffd699; }
+
+    .legend {
+      margin-top: 10px;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      font-size: 9px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-swatch {
+      width: 18px;
+      height: 14px;
+      border: 1px solid #000;
+      display: inline-block;
+    }
+
+    .caption {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 10px;
+      font-style: italic;
+    }
+
+    @media print {
+      body { margin: 0; }
+      .chart-page { page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHART 1 — July to December 2025
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="chart-page">
+    <div class="chart-title">Gantt Chart – 2025</div>
+
+    <table class="gantt" id="chart-2025">
+      <thead>
+        <tr>
+          <th class="col-task" rowspan="2">SPRINT / TASK</th>
+          <th class="month-header" colspan="4">JULY</th>
+          <th class="month-header" colspan="4">AUGUST</th>
+          <th class="month-header" colspan="4">SEPTEMBER</th>
+          <th class="month-header" colspan="4">OCTOBER</th>
+          <th class="month-header" colspan="4">NOVEMBER</th>
+          <th class="month-header" colspan="4">DECEMBER</th>
+          <th class="col-status" rowspan="2">STATUS / DESCRIPTION</th>
+        </tr>
+        <tr>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-2025"></tbody>
+    </table>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch status-not-started"></span> Not Started</div>
+      <div class="legend-item"><span class="legend-swatch status-in-progress"></span> In Progress</div>
+      <div class="legend-item"><span class="legend-swatch status-completed"></span> Completed</div>
+      <div class="legend-item"><span class="legend-swatch status-planned"></span> Planned</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHART 2 — January to July 2026
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="chart-page">
+    <div class="chart-title">Gantt Chart – 2026</div>
+
+    <table class="gantt" id="chart-2026">
+      <thead>
+        <tr>
+          <th class="col-task" rowspan="2">SPRINT / TASK</th>
+          <th class="month-header" colspan="4">JANUARY</th>
+          <th class="month-header" colspan="4">FEBRUARY</th>
+          <th class="month-header" colspan="4">MARCH</th>
+          <th class="month-header" colspan="4">APRIL</th>
+          <th class="month-header" colspan="4">MAY</th>
+          <th class="month-header" colspan="4">JUNE</th>
+          <th class="month-header" colspan="4">JULY</th>
+          <th class="col-status" rowspan="2">STATUS / DESCRIPTION</th>
+        </tr>
+        <tr>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-2026"></tbody>
+    </table>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch status-not-started"></span> Not Started</div>
+      <div class="legend-item"><span class="legend-swatch status-in-progress"></span> In Progress</div>
+      <div class="legend-item"><span class="legend-swatch status-completed"></span> Completed</div>
+      <div class="legend-item"><span class="legend-swatch status-planned"></span> Planned</div>
+    </div>
+  </div>
+
+  <p class="caption">
+    Gantt Chart of ExamiQ+: A Web-Based Self-Regulated Mathematics Exam Review System
+  </p>
+
+  <script>
+    /**
+     * Build a week array of status classes.
+     * @param {number} totalWeeks
+     * @param {Array<{start:number, end:number, status:string}>} spans - 0-indexed inclusive
+     */
+    function buildWeeks(totalWeeks, spans) {
+      const weeks = Array(totalWeeks).fill('status-not-started');
+      for (const { start, end, status } of spans) {
+        for (let i = start; i <= end && i < totalWeeks; i++) {
+          weeks[i] = `status-${status}`;
+        }
+      }
+      return weeks;
+    }
+
+    function renderRow(tbody, { phase, task, weeks, status }) {
+      const tr = document.createElement('tr');
+      tr.className = phase ? 'phase-row' : 'task-row';
+
+      const taskTd = document.createElement('td');
+      taskTd.className = 'col-task';
+      taskTd.textContent = phase || task;
+      tr.appendChild(taskTd);
+
+      for (const cls of weeks) {
+        const td = document.createElement('td');
+        td.className = `week-cell ${cls}`;
+        tr.appendChild(td);
+      }
+
+      const statusTd = document.createElement('td');
+      statusTd.className = 'col-status';
+      statusTd.textContent = status || '';
+      tr.appendChild(statusTd);
+
+      tbody.appendChild(tr);
+    }
+
+    /* ── 2025 DATA (24 weeks: Jul–Dec) ── */
+    const data2025 = [
+      {
+        phase: 'PHASE 1: SYSTEM ANALYSIS AND DESIGN',
+        weeks: buildWeeks(24, [{ start: 0, end: 7, status: 'completed' }]),
+        status: 'COMPLETED'
+      },
+      {
+        task: 'REQUIREMENTS REVIEW AND SPRINT PLANNING',
+        weeks: buildWeeks(24, [{ start: 0, end: 1, status: 'completed' }]),
+        status: 'BASED ON JUNE 2025 STUDENT INTERVIEWS'
+      },
+      {
+        task: 'SYSTEM ARCHITECTURE',
+        weeks: buildWeeks(24, [{ start: 1, end: 4, status: 'completed' }]),
+        status: 'THREE-TIER WEB APPLICATION DESIGN'
+      },
+      {
+        task: 'DATABASE STRUCTURE',
+        weeks: buildWeeks(24, [{ start: 3, end: 6, status: 'completed' }]),
+        status: 'ERD AND SCHEMA DEFINITION'
+      },
+      {
+        task: 'UI PROTOTYPING',
+        weeks: buildWeeks(24, [{ start: 5, end: 9, status: 'completed' }]),
+        status: 'WIREFRAMES AND INTERFACE MOCKUPS'
+      },
+      {
+        task: 'PROCESS FLOW DIAGRAMS',
+        weeks: buildWeeks(24, [{ start: 7, end: 9, status: 'completed' }]),
+        status: 'USER WORKFLOWS AND SEQUENCE DIAGRAMS'
+      },
+
+      {
+        phase: 'PHASE 2: SYSTEM DEVELOPMENT (PART 1)',
+        weeks: buildWeeks(24, [{ start: 8, end: 23, status: 'completed' }]),
+        status: 'COMPLETED'
+      },
+      {
+        task: 'USER AND ACCOUNT MANAGEMENT',
+        weeks: buildWeeks(24, [{ start: 8, end: 10, status: 'completed' }]),
+        status: 'REGISTRATION, LOGIN, AND PROFILE MODULES'
+      },
+      {
+        task: 'SUBJECT AND TOPIC MANAGEMENT',
+        weeks: buildWeeks(24, [{ start: 10, end: 12, status: 'completed' }]),
+        status: 'PROGRAM-SCOPED MATH CONTENT ORGANIZATION'
+      },
+      {
+        task: 'QUESTION BANK MANAGEMENT',
+        weeks: buildWeeks(24, [{ start: 12, end: 15, status: 'completed' }]),
+        status: 'CRUD AND APPROVAL WORKFLOW FOR QUESTIONS'
+      },
+      {
+        task: 'CONFIDENCE-BASED TEST FLOW',
+        weeks: buildWeeks(24, [{ start: 15, end: 17, status: 'completed' }]),
+        status: 'TIMED REVIEW SESSIONS WITH CONFIDENCE RATING'
+      },
+      {
+        task: 'AI-POWERED EXPLANATORY FEEDBACK',
+        weeks: buildWeeks(24, [{ start: 17, end: 19, status: 'completed' }]),
+        status: 'STEP-BY-STEP SOLUTION AND HINT GENERATION'
+      },
+      {
+        task: 'MISTAKE TRACKING AND ANALYTICS',
+        weeks: buildWeeks(24, [{ start: 19, end: 21, status: 'completed' }]),
+        status: 'PERFORMANCE METRICS AND ERROR PATTERNS'
+      },
+      {
+        task: 'EXAM HISTORY AND REPORTS',
+        weeks: buildWeeks(24, [{ start: 21, end: 22, status: 'completed' }]),
+        status: 'SESSION LOGS AND EXPORTABLE REPORTS'
+      },
+      {
+        task: 'VALIDATION INTERVIEW',
+        weeks: buildWeeks(24, [{ start: 22, end: 22, status: 'completed' }]),
+        status: 'FOLLOW-UP INTERVIEW TO VERIFY REQUIREMENTS (DEC 2025)'
+      },
+    ];
+
+    /* ── 2026 DATA (28 weeks: Jan–Jul) ── */
+    const data2026 = [
+      {
+        phase: 'PHASE 2: SYSTEM DEVELOPMENT (PART 2)',
+        weeks: buildWeeks(28, [{ start: 0, end: 10, status: 'completed' }]),
+        status: 'COMPLETED'
+      },
+      {
+        task: 'ONLINE SURVEY',
+        weeks: buildWeeks(28, [{ start: 0, end: 1, status: 'completed' }]),
+        status: 'USABILITY AND RELEVANCE FEEDBACK (JAN 2026)'
+      },
+      {
+        task: 'SURVEY-BASED SYSTEM REFINEMENT',
+        weeks: buildWeeks(28, [{ start: 1, end: 4, status: 'completed' }]),
+        status: 'IMPROVEMENTS FROM SURVEY RESULTS'
+      },
+      {
+        task: 'ROLE-BASED ACCESS IMPLEMENTATION',
+        weeks: buildWeeks(28, [{ start: 8, end: 10, status: 'completed' }]),
+        status: 'ADMIN, CHAIRPERSON, FACULTY, AND STUDENT ROLES (MAR 2026)'
+      },
+
+      {
+        phase: 'PHASE 3: INTEGRATION AND REVISIONS',
+        weeks: buildWeeks(28, [{ start: 11, end: 18, status: 'completed' }]),
+        status: 'COMPLETED'
+      },
+      {
+        task: 'SYSTEM INTEGRATION',
+        weeks: buildWeeks(28, [{ start: 11, end: 14, status: 'completed' }]),
+        status: 'MODULE INTEGRATION AND END-TO-END FLOW'
+      },
+      {
+        task: 'DEBUGGING',
+        weeks: buildWeeks(28, [{ start: 13, end: 16, status: 'completed' }]),
+        status: 'DEFECT IDENTIFICATION AND RESOLUTION'
+      },
+      {
+        task: 'FEATURE ENHANCEMENT',
+        weeks: buildWeeks(28, [{ start: 15, end: 17, status: 'completed' }]),
+        status: 'ADVISER AND EVALUATION RECOMMENDATIONS'
+      },
+      {
+        task: 'MANUSCRIPT REFINEMENT',
+        weeks: buildWeeks(28, [{ start: 14, end: 18, status: 'completed' }]),
+        status: 'THESIS ALIGNMENT WITH SYSTEM FEATURES'
+      },
+
+      {
+        phase: 'PHASE 4: TESTING AND EVALUATION',
+        weeks: buildWeeks(28, [{ start: 17, end: 23, status: 'completed' }]),
+        status: 'COMPLETED'
+      },
+      {
+        task: 'FUNCTIONALITY AND INTEGRATION TESTING',
+        weeks: buildWeeks(28, [{ start: 17, end: 19, status: 'completed' }]),
+        status: 'CORE FEATURE AND MODULE INTERACTION TESTS'
+      },
+      {
+        task: 'USABILITY AND PERFORMANCE TESTING',
+        weeks: buildWeeks(28, [{ start: 19, end: 21, status: 'completed' }]),
+        status: 'USER EXPERIENCE AND LOAD EVALUATION'
+      },
+      {
+        task: 'USER ACCEPTANCE TESTING (UAT)',
+        weeks: buildWeeks(28, [{ start: 21, end: 22, status: 'completed' }]),
+        status: 'TARGET RESPONDENT VALIDATION'
+      },
+      {
+        task: 'ISSUE CORRECTION',
+        weeks: buildWeeks(28, [{ start: 22, end: 23, status: 'completed' }]),
+        status: 'FIXES FROM TESTING AND UAT FINDINGS'
+      },
+
+      {
+        phase: 'PHASE 5: FINAL REVISION AND DOCUMENTATION',
+        weeks: buildWeeks(28, [{ start: 23, end: 27, status: 'in-progress' }]),
+        status: 'IN PROGRESS'
+      },
+      {
+        task: 'FINAL SYSTEM REVISIONS',
+        weeks: buildWeeks(28, [{ start: 23, end: 25, status: 'completed' }]),
+        status: 'LAST-MILE BUG FIXES AND POLISH'
+      },
+      {
+        task: 'THESIS MANUSCRIPT COMPLETION',
+        weeks: buildWeeks(28, [{ start: 24, end: 26, status: 'in-progress' }]),
+        status: 'CHAPTERS 1–5 FINALIZATION'
+      },
+      {
+        task: 'UPDATING SUPPORTING DOCUMENTS',
+        weeks: buildWeeks(28, [{ start: 26, end: 27, status: 'planned' }]),
+        status: 'USER GUIDE, TEST REPORTS, AND APPENDICES'
+      },
+    ];
+
+    const tbody2025 = document.getElementById('tbody-2025');
+    const tbody2026 = document.getElementById('tbody-2026');
+
+    for (const row of data2025) renderRow(tbody2025, row);
+    for (const row of data2026) renderRow(tbody2026, row);
+  </script>
+</body>
+</html>

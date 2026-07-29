@@ -1,13 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Insights - {{ course.code }}{% endblock %}
+{% block title %}Insights - {{ course.section|default:course.code }}{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
-    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Course Insights</h1>
-    <p class="text-examiq-slate mt-1">Calibration patterns and review recommendations.</p>
-</div>
+{% include "components/professor_section_header.html" with course=course page_label="Course Insights" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
 {% if not ai_enabled %}

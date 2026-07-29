@@ -31,7 +31,7 @@ class TestAnswerDetailAndMistakeLog:
         assert "View" in content
         assert reverse("analytics_student:answer_detail", kwargs={"answer_pk": answer.pk}) in content
 
-    def test_weak_areas_no_longer_has_view_answers(self, client, student, topic, mcq_question):
+    def test_weak_areas_redirects_to_mistakes(self, client, student, topic, mcq_question):
         question, _ = mcq_question
         session = start_review_session(
             student=student,
@@ -49,10 +49,8 @@ class TestAnswerDetailAndMistakeLog:
 
         client.force_login(student)
         response = client.get(reverse("analytics_student:mistake_patterns"))
-        content = response.content.decode()
-        assert response.status_code == 200
-        assert "View answers" not in content
-        assert "weak-area-card" in content
+        assert response.status_code == 302
+        assert response.url == reverse("analytics_student:mistakes")
 
     def test_answer_detail_shows_feedback_after_generate(self, client, student, topic, mcq_question):
         question, _ = mcq_question

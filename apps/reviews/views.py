@@ -7,7 +7,6 @@ from django.views import View
 from django.views.generic import DetailView
 
 from apps.core.mixins import StudentRequiredMixin
-from apps.questions.curriculum import subject_queryset_for_student
 from apps.questions.models import Question, Topic
 from apps.questions.services import count_available_questions, get_adaptive_questions_for_session
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
@@ -25,6 +24,8 @@ from apps.reviews.services import (
     SessionExpiredError,
     complete_session,
     get_answered_question_ids,
+    get_next_queued_question,
+    session_has_more_questions,
     start_review_session,
     submit_answer,
     validate_session_active,
@@ -61,14 +62,7 @@ def _question_partial_context(session, question, form, **extra):
 
 
 def _session_has_more_questions(session) -> bool:
-    answered_ids = get_answered_question_ids(session)
-    return get_adaptive_questions_for_session(
-        session.student,
-        session.topic,
-        session.difficulty,
-        count=1,
-        exclude_ids=answered_ids,
-    ).exists()
+    return session_has_more_questions(session)
 
 
 def _is_last_timed_answer(session) -> bool:
@@ -138,15 +132,20 @@ def _next_question_response(request, session):
             return _exam_results_response(request, session)
         return _htmx_redirect_or_redirect(request, "reviews:summary", pk=session.pk)
 
-    answered_ids = get_answered_question_ids(session)
-    questions = get_adaptive_questions_for_session(
-        session.student,
-        session.topic,
-        session.difficulty,
-        count=1,
-        exclude_ids=answered_ids,
-    )
-    question = questions.first()
+    question = None
+    if session.question_queue:
+        question = get_next_queued_question(session)
+    else:
+        answered_ids = get_answered_question_ids(session)
+        questions = get_adaptive_questions_for_session(
+            session.student,
+            session.topic,
+            session.difficulty,
+            count=1,
+            exclude_ids=answered_ids,
+        )
+        question = questions.first()
+
     if not question:
         if session.mode == ReviewSession.Mode.TIMED_EXAM:
             return _exam_results_response(request, session)
@@ -163,7 +162,7 @@ def _next_question_response(request, session):
 
 
 class ReviewSetupView(StudentRequiredMixin, View):
-    """Select subject, topic, and difficulty to start a timed exam."""
+    """Start a timed exam — multi-course + difficulty; wizard collects readiness."""
 
     template_name = "reviews/setup.html"
 
@@ -171,8 +170,7 @@ class ReviewSetupView(StudentRequiredMixin, View):
         import json
 
         eligibility = student_setup_eligibility(self.request.user)
-        subjects = subject_queryset_for_student(self.request.user)
-        no_exams = eligibility.get("eligible") and not subjects.exists()
+        no_exams = eligibility.get("reason") == "no_questions"
         return {
             "form": form,
             "setup_eligibility": eligibility,
@@ -182,35 +180,23 @@ class ReviewSetupView(StudentRequiredMixin, View):
         }
 
     def get(self, request):
-        initial = {}
-        preselected_topic_id = None
-
-        topic_pk = request.GET.get("topic")
-        if topic_pk:
-            topic = get_object_or_404(Topic.objects.select_related("subject"), pk=topic_pk)
-            if subject_queryset_for_student(request.user).filter(pk=topic.subject_id).exists():
-                initial = {"subject": topic.subject, "topic": topic}
-                preselected_topic_id = topic.pk
-
-        form = ReviewSetupForm(student=request.user, initial=initial)
-        return render(
-            request,
-            self.template_name,
-            self._setup_context(form, preselected_topic_id=preselected_topic_id),
-        )
+        form = ReviewSetupForm(student=request.user)
+        return render(request, self.template_name, self._setup_context(form))
 
     def post(self, request):
         form = ReviewSetupForm(request.POST, student=request.user)
         if form.is_valid():
-            course = form.get_course_for_session()
-            seconds_per_question = exam_seconds_per_question(course) if course else None
+            target = form.get_auto_target()
             session = start_review_session(
                 student=request.user,
-                topic=form.cleaned_data["topic"],
-                difficulty=form.cleaned_data["difficulty"],
-                course=course,
+                topic=target["topic"],
+                difficulty=target["difficulty"],
+                course=target.get("course"),
                 mode=ReviewSession.Mode.TIMED_EXAM,
-                seconds_per_question=seconds_per_question,
+                duration_minutes=target["duration_minutes"],
+                seconds_per_question=target["seconds_per_question"],
+                question_queue=target["question_queue"],
+                subjects=target["subjects"],
                 pre_session_confidence=form.cleaned_data.get("pre_session_confidence") or "",
                 session_goal=form.cleaned_data.get("session_goal") or "",
             )

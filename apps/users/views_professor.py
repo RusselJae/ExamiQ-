@@ -1,91 +1,81 @@
-"""Professor course offering management views."""
+"""Professor course catalog management views."""
 
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
-from django.views.generic import CreateView, ListView
+from django.views.generic import ListView
 
-from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
-from apps.reviews.models import ReviewWindow
-from apps.users.assignment_services import get_professor_course_queryset, professor_has_assignments
-from apps.users.forms import CourseOfferingForm
-from apps.users.models import Course
+from apps.core.mixins import ProfessorRequiredMixin
+from apps.questions.models import Subject
+from apps.users.assignment_services import (
+    create_catalog_subject,
+    get_or_create_catalog_course,
+)
+from apps.users.forms import FacultySelfServeCourseForm
+from apps.users.models import Course, User
 
 
 class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
-    """List active course offerings owned by the professor."""
+    """Grid of all BSED Math curriculum subjects (catalog)."""
 
-    model = Course
+    model = Subject
     template_name = "professor/courses/list.html"
-    context_object_name = "courses"
+    context_object_name = "course_cards"
 
     def get_queryset(self):
         return (
-            get_professor_course_queryset(self.request.user)
-            .select_related("program")
-            .order_by("code", "section", "-academic_year", "term")
+            Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
+            .select_related("program", "year_level")
+            .order_by("year_level__order", "semester", "code")
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["assignments_managed"] = professor_has_assignments(self.request.user)
+        cards = []
+        for subject in context["course_cards"]:
+            catalog_course = get_or_create_catalog_course(self.request.user, subject)
+            cards.append({"subject": subject, "catalog_course": catalog_course})
+        context["course_cards"] = cards
+        context["assignments_managed"] = False
         return context
 
 
-class ProfessorCourseCreateView(ProfessorRequiredMixin, CreateView):
-    model = Course
-    form_class = CourseOfferingForm
+class ProfessorCourseCreateView(ProfessorRequiredMixin, View):
+    """Faculty creates a new BSED Math curriculum subject."""
+
     template_name = "professor/courses/form.html"
 
-    def dispatch(self, request, *args, **kwargs):
-        if professor_has_assignments(request.user):
-            messages.info(
+    def get(self, request):
+        form = FacultySelfServeCourseForm(professor=request.user)
+        return render(request, self.template_name, {"form": form})
+
+    def post(self, request):
+        form = FacultySelfServeCourseForm(request.POST, professor=request.user)
+        if form.is_valid():
+            try:
+                subject, course = create_catalog_subject(
+                    code=form.cleaned_data["code"],
+                    name=form.cleaned_data["name"],
+                    year_level=form.cleaned_data["year_level"],
+                    semester=form.cleaned_data["semester"],
+                    professor=request.user,
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return render(request, self.template_name, {"form": form})
+            messages.success(
                 request,
-                "Your courses are assigned by your department chairperson. "
-                "Contact them if you need a new teaching load.",
+                f"Course {subject.code} — {subject.name} added to the catalog.",
             )
-            return redirect("analytics_professor:course_list")
-        return super().dispatch(request, *args, **kwargs)
-
-    def form_valid(self, form):
-        form.instance.professor = self.request.user
-        messages.success(self.request, "Course offering created.")
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse("analytics_professor:course_list")
+            return redirect("analytics_professor:topic_list", course_pk=course.pk)
+        return render(request, self.template_name, {"form": form})
 
 
 class ProfessorCourseCloneView(ProfessorRequiredMixin, View):
-    """Clone a past offering's metadata and review-window templates into a new term."""
+    """Legacy clone endpoint — kept for URL compatibility; redirects to list."""
 
     def post(self, request, pk):
-        source = get_object_or_404(Course, pk=pk, professor=request.user)
-        new_course = Course.objects.create(
-            code=source.code,
-            name=source.name,
-            program=source.program,
-            term=request.POST.get("term", source.term),
-            academic_year=request.POST.get("academic_year", source.academic_year),
-            section=request.POST.get("section", "A"),
-            professor=request.user,
-        )
-        for window in source.review_windows.all():
-            topics = list(window.topics.all())
-            new_window = ReviewWindow.objects.create(
-                course=new_course,
-                created_by=request.user,
-                title=window.title,
-                exam_type=window.exam_type,
-                opens_at=window.opens_at,
-                closes_at=window.closes_at,
-                allowed_difficulties=window.allowed_difficulties,
-                duration_minutes=window.duration_minutes,
-                is_active=False,
-            )
-            new_window.topics.set(topics)
-        messages.success(request, f"Cloned {source.code} into {new_course.term} {new_course.academic_year}.")
+        messages.info(request, "Cloning offerings is no longer used. Open Courses instead.")
         return redirect("analytics_professor:course_list")
 
 

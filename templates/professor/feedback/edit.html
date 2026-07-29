@@ -7,6 +7,7 @@
     <a href="{% url 'analytics_professor:feedback_list' course.pk %}" class="text-link">&larr; Back to feedback</a>
     <h1 class="text-3xl font-bold text-examiq-navy mt-2">Edit explanation</h1>
     <p class="text-examiq-slate text-sm mt-2 max-w-3xl">{{ object.stem|truncatechars:120 }}</p>
+    <p class="text-sm text-examiq-slate mt-1 max-w-3xl">Step content is shown to students as the solving process. Add a faculty note on any step to clarify common mistakes — notes appear in review and the AI Tutor.</p>
     <p class="text-sm text-examiq-mistake font-medium mt-1">{{ mistake_count }} mistake{{ mistake_count|pluralize }} recorded</p>
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}

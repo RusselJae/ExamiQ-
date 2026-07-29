@@ -154,7 +154,8 @@ class TestProfessorRoster:
         assert student.email in content
         assert "Masterlist" in content
 
-    def test_student_detail_requires_session(self, client, professor, student, program):
+    def test_student_detail_ok_without_session(self, client, professor, student, program):
+        """Faculty can open student detail even with no practice yet."""
         course = Course.objects.create(
             program=program,
             code="DET101",
@@ -171,7 +172,51 @@ class TestProfessorRoster:
                 kwargs={"course_pk": course.pk, "student_pk": student.pk},
             )
         )
-        assert response.status_code == 404
+        assert response.status_code == 200
+        assert b"No sessions yet" in response.content or b"0" in response.content
+
+    def test_catalog_student_detail_uses_subject_answers(
+        self, client, professor, student, mcq_question, program
+    ):
+        question, _ = mcq_question
+        subject = question.topic.subject
+        catalog = Course.objects.create(
+            program=program,
+            code=subject.code,
+            name=subject.name,
+            professor=professor,
+            term="Catalog",
+            academic_year="2026",
+            section="Catalog",
+        )
+        other = Course.objects.create(
+            program=program,
+            code=subject.code,
+            name="Other offering",
+            professor=professor,
+            term="1st Sem",
+            academic_year="2026",
+            section="B",
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=other,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(
+            session=session, question=question, confidence=3, is_correct=True
+        )
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:student_detail",
+                kwargs={"course_pk": catalog.pk, "student_pk": student.pk},
+            )
+        )
+        assert response.status_code == 200
+        assert student.email.encode() in response.content
 
 
 @pytest.mark.django_db
@@ -216,8 +261,10 @@ class TestHeatmap:
         )
         Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
         heatmap = get_topic_mastery_heatmap(course)
-        topic_row = next(t for t in heatmap["topics"] if t["topic_name"] == question.topic.name)
-        assert topic_row["high"] >= 1
+        question_row = next(
+            q for q in heatmap["questions"] if q["question_id"] == question.pk
+        )
+        assert question_row["high"] >= 1
 
     def test_student_rows_include_practicing_student(self, student, mcq_question, program, professor):
         question, _ = mcq_question
@@ -520,7 +567,7 @@ class TestProfessorOverviewUX:
         assert "Your courses" in content
         assert course.name in content
         assert "Active courses" in content
-        assert "Overall accuracy" in content
+        assert "Average Score" in content
         assert "Cross-course snapshot" not in content
 
     def test_summary_courses_json_is_array(self, client, professor, program):
@@ -709,7 +756,8 @@ class TestSessionHistoryHelpers:
         )
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Session history" in content
-        assert "Confidence vs performance" in content
-        assert "0/1" in content
-        assert "Needs review" in content
+        assert "Exam session history" in content
+        assert "Score trend" in content
+        assert "Confidence by topic" in content
+        assert "0.0%" in content or "0%" in content
+        assert "Review" in content

@@ -80,6 +80,7 @@ class TestSetupPreviewAPI:
 
 
 @pytest.mark.django_db
+@pytest.mark.skip(reason="Chairperson assignment API removed")
 class TestAssignmentSectionsAPI:
     def test_sections_api_groups_by_year(
         self, client, chairperson, professor, program_section, subject, program
@@ -123,6 +124,7 @@ class TestProfessorExamSetupUI:
 
 
 @pytest.mark.django_db
+@pytest.mark.skip(reason="Campus approve UI removed; audit still available via Django admin")
 class TestAuditLogging:
     def test_campus_approve_creates_audit_log(self, client, department):
         from django.core import mail

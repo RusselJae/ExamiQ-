@@ -40,10 +40,12 @@ RULES:
 - Do NOT greet the user (no 'Hi', no 'Hello').
 - Do NOT introduce yourself.
 - Respond directly to the topic.
+- When explaining how to solve a problem, always use a numbered step-by-step process
+  (Step 1, Step 2, ...) that shows the proper solving method, then state the final answer.
 - Keep explanations simple unless the user asks for detailed steps.
 - If the message is vague, connect it to the topic or the exam they just took.
-- If it is about a calculation, show clean steps using plain text.
-- If it is conceptual, explain with 1 example."""
+- If it is about a calculation, show clean steps using plain text and KaTeX-friendly $...$ math.
+- If it is conceptual, explain with 1 example and numbered reasoning steps."""
 
 ADAPTIVE_TOPIC_RESTRICTION = """\
 ### TOPIC RESTRICTION (IMPORTANT)
@@ -274,11 +276,18 @@ def build_question_generation_prompt(
     difficulty: str,
     count: int,
     reference_stem: str = "",
+    source_material: str = "",
 ) -> tuple[str, str, int]:
     """Return (system_instruction, user_prompt, max_output_tokens)."""
     subject = topic.subject
     label = difficulty_label(difficulty)
     ref = reference_stem.strip() or "none"
+    material = (source_material or "").strip()
+    material_block = (
+        f"Learning material (base questions on this content):\n{material}\n\n"
+        if material
+        else ""
+    )
     guidance = _difficulty_guidance(difficulty)
 
     user_prompt = (
@@ -287,6 +296,7 @@ def build_question_generation_prompt(
         f"Difficulty: {label} ({difficulty})\n"
         f"{guidance}\n"
         f"Reference (optional): {ref}\n\n"
+        f"{material_block}"
         "Keep stems and choice text short. Escape quotes inside JSON strings.\n"
         "Pick a different correct_label for each question when possible (mix A, B, C, D).\n"
         "Do NOT place the correct answer on the same letter for every question.\n"
@@ -627,3 +637,45 @@ def build_difficulty_tag_prompt(stem: str) -> tuple[str, str]:
         "Reply with only the single word."
     )
     return system, user
+
+
+# ---------------------------------------------------------------------------
+# Topic / branch detection from uploaded learning material
+# ---------------------------------------------------------------------------
+
+TOPIC_DETECTION_SYSTEM = (
+    f"You are {EXAMIQ_PERSONA} curriculum analyst for secondary mathematics education. "
+    "Return valid JSON only. No markdown fences."
+)
+
+TOPIC_DETECTION_JSON_SCHEMA = (
+    '{"detected_topics": ["Algebra", "Functions"], '
+    '"matched_topic_id": 12, '
+    '"matched_topic_name": "Algebra", '
+    '"suggested_new_topics": ["Quadratic Equations"]}'
+)
+
+
+def build_topic_detection_prompt(
+    source_material: str,
+    existing_topics: list[dict[str, Any]],
+) -> tuple[str, str]:
+    """Return (system, user) prompts for detecting math topics in a module."""
+    topics_payload = json.dumps(
+        [{"id": t.get("id"), "name": t.get("name")} for t in existing_topics]
+    )
+    excerpt = (source_material or "").strip()
+    if len(excerpt) > 12000:
+        excerpt = excerpt[:12000] + "\n…[truncated]"
+    user = (
+        "Analyze this secondary mathematics learning module.\n"
+        "Identify the main math topics or branches covered "
+        "(e.g. Algebra, Geometry, Trigonometry, Functions, Statistics).\n"
+        "Match to the best existing topic when possible "
+        "(set matched_topic_id to that id, or null if none fit).\n"
+        "List suggested_new_topics for clear themes not in the existing list.\n\n"
+        f"Existing topics JSON:\n{topics_payload}\n\n"
+        f"Module text:\n{excerpt}\n\n"
+        f"Return JSON only matching:\n{TOPIC_DETECTION_JSON_SCHEMA}"
+    )
+    return TOPIC_DETECTION_SYSTEM, user

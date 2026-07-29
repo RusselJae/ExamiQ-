@@ -1,19 +1,26 @@
 from datetime import timedelta
 
+from django.contrib import messages
 from django.db.models import Q
 from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views import View
-from django.views.generic import DetailView, ListView, TemplateView
+from django.views.generic import DetailView, ListView, RedirectView, TemplateView
 
+from apps.analytics.concern_services import (
+    concern_thread_for,
+    post_concern_message,
+    serialize_concern_message,
+    serialize_concern_thread,
+)
+from apps.analytics.forms import MistakeConcernForm
 from apps.analytics.models import MistakeRecord
 from apps.analytics.services import (
     annotate_session_metrics,
     build_session_history_rows,
     generate_mistake_feedback,
-    get_student_mistake_patterns,
-    get_student_topic_answers,
     student_performance_summary,
     topic_progress_summary,
 )
@@ -108,35 +115,22 @@ class MistakeListView(StudentRequiredMixin, ListView):
         return context
 
 
-class MistakePatternView(StudentRequiredMixin, TemplateView):
-    template_name = "analytics/student/mistake_patterns.html"
+class MistakePatternView(StudentRequiredMixin, RedirectView):
+    """Weak Areas removed — redirect legacy URLs to Mistakes."""
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["patterns"] = get_student_mistake_patterns(self.request.user)
-        return context
+    permanent = False
+
+    def get_redirect_url(self, *args, **kwargs):
+        return reverse("analytics_student:mistakes")
 
 
-class TopicAnswerReviewView(StudentRequiredMixin, ListView):
-    template_name = "analytics/student/topic_answer_review.html"
-    context_object_name = "answers"
-    paginate_by = 20
+class TopicAnswerReviewView(StudentRequiredMixin, RedirectView):
+    """Legacy weak-area topic drill-down — redirect to Mistakes."""
 
-    def get_queryset(self):
-        get_object_or_404(Topic, pk=self.kwargs["topic_id"])
-        topic, answers = get_student_topic_answers(
-            self.request.user,
-            self.kwargs["topic_id"],
-        )
-        if not answers.exists():
-            raise Http404
-        self.topic = topic
-        return answers
+    permanent = False
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["topic"] = self.topic
-        return context
+    def get_redirect_url(self, *args, **kwargs):
+        return reverse("analytics_student:mistakes")
 
 
 class SessionHistoryView(StudentRequiredMixin, ListView):
@@ -238,6 +232,59 @@ class AnswerDetailView(StudentRequiredMixin, DetailView):
                 "mistake_record__error_type",
             )
             .prefetch_related("question__choices", "question__explanation_steps")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        mistake = getattr(self.object, "mistake_record", None)
+        if mistake:
+            context["concern_form"] = MistakeConcernForm()
+            thread = []
+            for msg in concern_thread_for(mistake):
+                entry = serialize_concern_message(msg)
+                entry["created_at"] = msg.created_at
+                thread.append(entry)
+            if not thread:
+                thread = [
+                    {**entry, "created_at": None}
+                    for entry in serialize_concern_thread(mistake)
+                ]
+            context["concern_messages"] = thread
+        return context
+
+
+class UploadMistakeConcernView(StudentRequiredMixin, View):
+    """Save student note/image attached to a mistake record."""
+
+    def post(self, request, answer_pk):
+        answer = get_object_or_404(
+            Answer.objects.select_related("mistake_record", "session"),
+            pk=answer_pk,
+            session__student=request.user,
+        )
+        mistake_record = getattr(answer, "mistake_record", None)
+        if answer.is_correct or not mistake_record:
+            raise Http404
+
+        form = MistakeConcernForm(
+            request.POST,
+            request.FILES,
+        )
+        if form.is_valid():
+            post_concern_message(
+                mistake_record,
+                request.user,
+                body=form.cleaned_data["body"],
+                image=form.cleaned_data.get("image"),
+            )
+            messages.success(request, "Your message was sent.")
+        else:
+            messages.error(
+                request,
+                form.errors.as_text() or "Could not save your note or image.",
+            )
+        return redirect(
+            reverse("analytics_student:answer_detail", kwargs={"answer_pk": answer.pk})
         )
 
 

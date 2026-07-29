@@ -13,8 +13,6 @@
     function emptyDraft() {
         return {
             settings: {
-                yearLevel: "",
-                subjectId: "",
                 topicId: "",
                 difficulty: "",
             },
@@ -52,8 +50,6 @@
 
     function draftFromDom(config) {
         const draft = emptyDraft();
-        draft.settings.yearLevel = config.yearSelect.value || "";
-        draft.settings.subjectId = config.subjectSelect.value || "";
         draft.settings.topicId = config.topicSelect.value || "";
         draft.settings.difficulty = config.difficultySelect.value || "";
         draft.questionIndex = config.questionIndex;
@@ -65,8 +61,8 @@
     }
 
     function syncDomFromDraft(config, draft) {
-        if (draft.settings.yearLevel) {
-            config.yearSelect.value = draft.settings.yearLevel;
+        if (draft.settings.topicId) {
+            config.topicSelect.value = draft.settings.topicId;
         }
         if (draft.settings.difficulty) {
             config.difficultySelect.value = draft.settings.difficulty;
@@ -83,7 +79,9 @@
                 steps: [],
                 solution_summary: "",
                 validation: null,
+                question_type: "mcq",
             };
+            data.question_type = "mcq";
             config.ensureFieldsForIndex(i);
             config.setQuestionData(i, data);
             config.renderTableRow(i);
@@ -92,8 +90,6 @@
     }
 
     function removeQuestion(config, index) {
-        const wrappers = config.fieldsStore.querySelectorAll("[data-index]");
-        const rows = config.tableBody.querySelectorAll("tr[data-index]");
         const questions = [];
         for (let i = 0; i < config.questionIndex; i++) {
             if (i !== index) {

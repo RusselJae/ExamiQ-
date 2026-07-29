@@ -23,6 +23,8 @@ def start_question_generation_job(
     topic_id: int,
     difficulty: str,
     count: int = 3,
+    source_material: str = "",
+    learning_document=None,
 ) -> AIGenerationJob:
     job = AIGenerationJob.objects.create(
         job_type=AIGenerationJob.JobType.QUESTION_GENERATE,
@@ -31,7 +33,9 @@ def start_question_generation_job(
         course_id=course_id,
         topic_id=topic_id,
         difficulty=difficulty,
-        count=max(1, min(count, 5)),
+        count=max(1, min(count, 10)),
+        source_material=source_material or "",
+        learning_document=learning_document,
     )
     thread = threading.Thread(
         target=run_question_generation_job,
@@ -55,12 +59,29 @@ def run_question_generation_job(job_id: int) -> None:
 
     try:
         topic = Topic.objects.select_related("subject", "subject__program").get(pk=job.topic_id)
+        source_material = job.source_material or ""
+        if job.learning_document_id and not source_material:
+            from apps.ai.retrieval import retrieve_material_for_topic
+
+            source_material = retrieve_material_for_topic(
+                document=job.learning_document,
+                topic=topic,
+            )
+            if source_material:
+                job.source_material = source_material
+                job.save(update_fields=["source_material", "updated"])
+
         generator = get_question_generator()
         variations: list[dict] = []
         # One question per provider call — more reliable under host timeouts.
         for _ in range(job.count):
             batch = normalize_generated_questions(
-                generator.generate(topic, job.difficulty, count=1)
+                generator.generate(
+                    topic,
+                    job.difficulty,
+                    count=1,
+                    source_material=source_material,
+                )
             )
             variations.extend(batch)
             if len(variations) >= job.count:

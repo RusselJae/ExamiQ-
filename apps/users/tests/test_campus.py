@@ -4,6 +4,8 @@ from django.urls import reverse
 
 User = get_user_model()
 
+pytestmark = pytest.mark.skip(reason="Campus Admin UI removed; ops use Django /admin/")
+
 
 @pytest.fixture
 def campus_admin(db):

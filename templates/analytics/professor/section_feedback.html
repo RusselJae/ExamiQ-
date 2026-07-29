@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Feedback - {{ section.display_label }}{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="Student concerns from anyone in this section." %}
+
+<div class="bento-card p-6 overflow-x-auto shadow-sm">
+    {% if concerns %}
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-200">
+                <th class="pb-3 pr-4 font-medium">Student</th>
+                <th class="pb-3 pr-4 font-medium">Question</th>
+                <th class="pb-3 pr-4 font-medium">Topic</th>
+                <th class="pb-3 pr-4 font-medium">Course</th>
+                <th class="pb-3 pr-4 font-medium">Submitted</th>
+                <th class="pb-3 pr-4 font-medium w-24">Photo</th>
+                <th class="pb-3 pr-4 font-medium w-28">Your note</th>
+                <th class="pb-3 font-medium w-28"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for concern in concerns %}
+            <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                <td class="py-3 pr-4">
+                    <p class="text-examiq-navy font-medium">{{ concern.student.get_full_name|default:concern.student.email }}</p>
+                    <p class="text-xs text-examiq-slate">{{ concern.student.email }}</p>
+                </td>
+                <td class="py-3 pr-4 text-examiq-navy max-w-md">{{ concern.question.stem|truncatechars:80 }}</td>
+                <td class="py-3 pr-4 text-examiq-slate">{{ concern.topic.name }}</td>
+                <td class="py-3 pr-4 text-examiq-slate">{{ concern.question.topic.subject.code }}</td>
+                <td class="py-3 pr-4 text-examiq-slate">{{ concern.occurred_at|date:"M d, Y" }}</td>
+                <td class="py-3 pr-4">
+                    {% if concern.latest_concern_image %}
+                    <a href="{{ concern.latest_concern_image.url }}" target="_blank" rel="noopener" class="inline-block">
+                        <img src="{{ concern.latest_concern_image.url }}" alt="Student photo" class="h-12 w-12 rounded-lg object-cover border border-slate-200">
+                    </a>
+                    {% else %}
+                    <span class="text-examiq-slate">—</span>
+                    {% endif %}
+                </td>
+                <td class="py-3 pr-4" data-concern-status>
+                    {% if concern.needs_faculty_reply %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Pending</span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Replied</span>
+                    {% endif %}
+                </td>
+                <td class="py-3 text-right">
+                    <button type="button"
+                            class="text-link text-sm font-medium open-concern-btn"
+                            data-mistake-id="{{ concern.pk }}">
+                        View
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% include "components/empty_state.html" with compact=True title="No concerns yet" body="When students in this section flag mistakes with a note or photo, they show up here." %}
+    {% endif %}
+</div>
+
+{% include "professor/feedback/partials/concern_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.ExamiQFacultyFeedback = {
+    concernsUrl: "{% url 'analytics_professor:section_feedback_concerns_api' section.pk %}",
+    noteUrlBase: "{% url 'analytics_professor:section_feedback_faculty_note' section.pk 0 %}".replace("/0/", "/"),
+    csrfToken: "{{ csrf_token }}"
+};
+</script>
+<script src="{% static 'js/faculty-concern-modal.js' %}"></script>
+{% endblock %}

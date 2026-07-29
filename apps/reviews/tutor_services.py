@@ -97,9 +97,24 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
         .order_by("answered_at")
     )
     for answer in answers:
-        steps = list(
-            answer.question.explanation_steps.order_by("order").values_list("content", flat=True)
+        step_rows = list(
+            answer.question.explanation_steps.order_by("order").values(
+                "content", "professor_note", "order"
+            )
         )
+        steps = []
+        faculty_notes = []
+        for row in step_rows:
+            content = (row.get("content") or "").strip()
+            note = (row.get("professor_note") or "").strip()
+            if content:
+                steps.append(content)
+            if note:
+                faculty_notes.append(note)
+        mistake = getattr(answer, "mistake_record", None)
+        if mistake and (mistake.faculty_note or "").strip():
+            faculty_notes.append(mistake.faculty_note.strip())
+        correct_answer = _answer_correct_response(answer)
         conv = TutorConversation.objects.filter(
             student=session.student,
             question=answer.question,
@@ -116,6 +131,8 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "feedback": feedback,
                 "needs_ai": needs_ai,
                 "correction_steps": steps,
+                "faculty_notes": faculty_notes,
+                "final_answer": correct_answer,
                 "topic": answer.question.topic.name,
                 "difficulty": answer.question.get_difficulty_display(),
                 "message_count": conv.messages.count() if conv else 0,

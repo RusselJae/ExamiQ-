@@ -1,25 +1,52 @@
 from django.conf import settings
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
-from apps.ai.factory import get_ai_provider_label, get_calibration_analyzer, get_curriculum_advisor, is_ai_configured
+from apps.ai.factory import get_ai_provider_label, get_curriculum_advisor, is_ai_configured
 from apps.analytics.services import (
     _course_answers,
+    _peer_accuracy_for_answers,
+    _section_answers,
+    _subject_answers,
     course_performance_summary,
     get_intervention_list,
     get_roster_summaries,
+    get_section_heatmap,
+    get_section_roster_summaries,
+    get_subject_roster_summaries,
     get_topic_mastery_heatmap,
     professor_overview_summary,
     professor_overview_course_cards,
+    section_heatmap_subjects,
+    section_performance_summary,
     student_course_summary,
+    student_section_summary,
+    student_subject_summary,
+    subject_performance_summary,
 )
 from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
 from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
-from apps.reviews.models import ReviewSession
-from apps.users.models import Course, User
+from apps.questions.models import Subject
+from apps.reviews.exam_setup_services import get_or_create_section_exam_setup
+from apps.reviews.forms_professor import SectionExamSetupForm
+from apps.users.assignment_services import get_or_create_catalog_course
+from apps.users.models import Course, ProgramSection, User
+
+
+def _student_initials(student: User) -> str:
+    first = (student.first_name or "").strip()
+    last = (student.last_name or "").strip()
+    if first and last:
+        return (first[0] + last[0]).upper()
+    name = (student.get_full_name() or student.email or "?").strip()
+    parts = name.split()
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[1][0]).upper()
+    return name[:2].upper()
 
 
 class ProfessorDashboardView(ProfessorRequiredMixin, ListView):
@@ -159,30 +186,34 @@ class StudentDetailView(ProfessorCourseMixin, DetailView):
     pk_url_kwarg = "student_pk"
 
     def get_object(self):
-        student = get_object_or_404(User, pk=self.kwargs["student_pk"], role=User.Role.STUDENT)
-        has_sessions = ReviewSession.objects.filter(course=self.course, student=student).exists()
-        if not has_sessions:
-            from django.http import Http404
-            raise Http404("Student has not practiced in this course offering.")
-        return student
+        # Always allow faculty to open the page; empty metrics when no practice yet.
+        return get_object_or_404(
+            User, pk=self.kwargs["student_pk"], role=User.Role.STUDENT
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        summary = student_course_summary(self.object, self.course)
-        answers = _course_answers(self.course, student=self.object)
-        calibration = get_calibration_analyzer().analyze(
-            self.object,
-            answers,
-            weak_topics=summary.get("weak_topics"),
-        )
-        context["summary"] = summary
-        context["calibration_narrative"] = calibration["narrative"]
-        context["ai_enabled"] = calibration["ai_enabled"]
-        context["active_tab"] = "roster"
+        is_catalog = (self.course.section or "").strip() == "Catalog"
+        subject = None
+        if is_catalog:
+            subject = Subject.objects.filter(
+                code=self.course.code, program=self.course.program
+            ).first()
 
-        course_summary = course_performance_summary(self.course)
-        course_accuracy = course_summary.get("accuracy", 0)
-        if summary["accuracy"] < course_accuracy:
+        if subject is not None:
+            summary = student_subject_summary(self.object, subject)
+            peer_answers = _subject_answers(subject)
+            peer_accuracy = _peer_accuracy_for_answers(peer_answers)
+        else:
+            summary = student_course_summary(self.object, self.course)
+            peer_answers = _course_answers(self.course)
+            peer_accuracy = _peer_accuracy_for_answers(peer_answers)
+
+        context["summary"] = summary
+        context["active_tab"] = "roster"
+        context["detail_scope"] = "course"
+
+        if summary["accuracy"] < peer_accuracy:
             context["accuracy_subtext"] = "Below class average"
         elif summary["accuracy"] >= 70:
             context["accuracy_subtext"] = "On track"
@@ -200,6 +231,71 @@ class StudentDetailView(ProfessorCourseMixin, DetailView):
         )
         context["review_hours_subtext"] = (
             "Logged practice time" if summary["review_hours"] else "No review logged yet"
+        )
+        context["student_initials"] = _student_initials(self.object)
+        context["back_url"] = reverse(
+            "analytics_professor:course_roster", kwargs={"course_pk": self.course.pk}
+        )
+        return context
+
+
+class SectionStudentDetailView(ProfessorRequiredMixin, DetailView):
+    """Student detail for a ProgramSection — never 404s for missing practice."""
+
+    template_name = "analytics/professor/section_student_detail.html"
+    context_object_name = "student"
+    pk_url_kwarg = "student_pk"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.section = get_object_or_404(
+            ProgramSection.objects.select_related("program", "year_level"),
+            pk=kwargs["section_pk"],
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self):
+        return get_object_or_404(
+            User,
+            pk=self.kwargs["student_pk"],
+            role=User.Role.STUDENT,
+            section=self.section,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        summary = student_section_summary(self.object, self.section)
+        peer_answers = _section_answers(self.section)
+        peer_accuracy = _peer_accuracy_for_answers(peer_answers)
+        context["section"] = self.section
+        context["summary"] = summary
+        context["active_tab"] = "roster"
+        context["detail_scope"] = "section"
+
+        if summary["accuracy"] < peer_accuracy and summary["total_answers"]:
+            context["accuracy_subtext"] = "Below section average"
+        elif summary["accuracy"] >= 70:
+            context["accuracy_subtext"] = "On track"
+        elif summary["total_answers"]:
+            context["accuracy_subtext"] = "Room to improve"
+        else:
+            context["accuracy_subtext"] = "No answers yet"
+
+        if summary["avg_confidence"] >= 4 and summary["accuracy"] < 70:
+            context["confidence_subtext"] = "High confidence, low accuracy"
+        else:
+            context["confidence_subtext"] = ""
+
+        last_date = summary.get("last_session_date")
+        context["last_session_subtext"] = (
+            f"Last session {last_date.strftime('%b %d')}" if last_date else "No sessions yet"
+        )
+        context["review_hours_subtext"] = (
+            "Logged practice time" if summary["review_hours"] else "No review logged yet"
+        )
+        context["student_initials"] = _student_initials(self.object)
+        context["back_url"] = reverse(
+            "analytics_professor:section_roster",
+            kwargs={"section_pk": self.section.pk},
         )
         return context
 
@@ -284,3 +380,268 @@ class CourseInterventionsExportView(ProfessorCourseMixin, View):
                 ]
             )
         return response
+
+
+class SectionDetailView(ProfessorRequiredMixin, DetailView):
+    """Section-scoped analytics: students in a ProgramSection across subjects."""
+
+    model = ProgramSection
+    template_name = "analytics/professor/section_detail.html"
+    context_object_name = "section"
+    pk_url_kwarg = "pk"
+
+    def get_queryset(self):
+        return ProgramSection.objects.select_related(
+            "program", "year_level", "academic_year"
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        summary = section_performance_summary(self.object)
+        context["summary"] = summary
+        context["active_tab"] = "analytics"
+        calibration = summary.get("calibration_matrix") or {}
+        context["calibration_max"] = max(calibration.values()) if calibration else 1
+        return context
+
+
+class SectionRosterView(ProfessorRequiredMixin, ListView):
+    template_name = "analytics/professor/section_roster.html"
+    context_object_name = "roster"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.section = get_object_or_404(
+            ProgramSection.objects.select_related("program", "year_level"),
+            pk=kwargs["section_pk"],
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        roster = get_section_roster_summaries(self.section)
+        search = get_filter_param(self.request, "q").lower()
+        if search:
+            roster = [
+                row
+                for row in roster
+                if search in (row["student"].get_full_name() or "").lower()
+                or search in row["student"].email.lower()
+            ]
+        return roster
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["section"] = self.section
+        context["active_tab"] = "roster"
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            [
+                {
+                    "type": "search",
+                    "name": "q",
+                    "label": "Search",
+                    "placeholder": "Student name or email",
+                },
+            ],
+        )
+        context["filter_has_active"] = has_active_filters(self.request, ["q"])
+        context["filter_bar_compact"] = True
+        return context
+
+
+class SectionExamSetupView(ProfessorRequiredMixin, View):
+    """Faculty configures courses available for a section's exams."""
+
+    template_name = "analytics/professor/section_exam_setup.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.section = get_object_or_404(
+            ProgramSection.objects.select_related("program", "year_level"),
+            pk=kwargs["section_pk"],
+        )
+        self.setup = get_or_create_section_exam_setup(self.section)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, section_pk):
+        form = SectionExamSetupForm(instance=self.setup)
+        return render(
+            request,
+            self.template_name,
+            {
+                "section": self.section,
+                "form": form,
+                "active_tab": "exam_setup",
+            },
+        )
+
+    def post(self, request, section_pk):
+        form = SectionExamSetupForm(request.POST, instance=self.setup)
+        if form.is_valid():
+            setup = form.save(commit=False)
+            setup.section = self.section
+            setup.save()
+            form.save_m2m()
+            from django.contrib import messages
+
+            messages.success(request, f"Exam setup saved for {self.section.display_label}.")
+            return redirect("analytics_professor:section_exam_setup", section_pk=self.section.pk)
+        return render(
+            request,
+            self.template_name,
+            {
+                "section": self.section,
+                "form": form,
+                "active_tab": "exam_setup",
+            },
+        )
+
+
+class SectionHeatmapView(ProfessorRequiredMixin, DetailView):
+    model = ProgramSection
+    template_name = "analytics/professor/section_heatmap.html"
+    context_object_name = "section"
+    pk_url_kwarg = "section_pk"
+
+    def get_queryset(self):
+        return ProgramSection.objects.select_related("program", "year_level")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        subjects = list(section_heatmap_subjects(self.object))
+        selected_subject = None
+        raw_subject = (self.request.GET.get("subject") or "").strip()
+        if raw_subject.isdigit():
+            subject_pk = int(raw_subject)
+            selected_subject = next((s for s in subjects if s.pk == subject_pk), None)
+        if selected_subject is None and subjects:
+            selected_subject = subjects[0]
+
+        context["heatmap_subjects"] = subjects
+        context["selected_subject"] = selected_subject
+        context["heatmap"] = get_section_heatmap(
+            self.object, subject=selected_subject
+        )
+        context["active_tab"] = "heatmap"
+        return context
+
+
+class SectionFeedbackView(ProfessorRequiredMixin, ListView):
+    """Student concerns from anyone in this ProgramSection."""
+
+    template_name = "analytics/professor/section_feedback.html"
+    context_object_name = "concerns"
+    paginate_by = 25
+
+    def dispatch(self, request, *args, **kwargs):
+        self.section = get_object_or_404(
+            ProgramSection.objects.select_related("program", "year_level"),
+            pk=kwargs["section_pk"],
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        from apps.analytics.concern_services import (
+            _concern_activity_filter,
+            concern_queryset_with_messages,
+        )
+        from apps.analytics.models import MistakeRecord
+
+        return concern_queryset_with_messages(
+            MistakeRecord.objects.filter(student__section=self.section)
+            .filter(_concern_activity_filter())
+            .select_related(
+                "student",
+                "question",
+                "topic",
+                "answer",
+                "question__topic",
+                "question__topic__subject",
+            )
+            .order_by("-occurred_at")
+        )
+
+    def get_context_data(self, **kwargs):
+        from apps.analytics.concern_services import pending_concern_count_for_section
+        from apps.reviews.views_professor_feedback import _concern_item_payload
+
+        context = super().get_context_data(**kwargs)
+        context["section"] = self.section
+        context["active_tab"] = "feedback"
+        context["concern_items"] = [
+            _concern_item_payload(record) for record in context["concerns"]
+        ]
+        context["pending_concern_count"] = pending_concern_count_for_section(
+            self.section
+        )
+        return context
+
+
+class SubjectDetailView(ProfessorRequiredMixin, DetailView):
+    """Catalog subject analytics across all year levels."""
+
+    model = Subject
+    template_name = "analytics/professor/subject_detail.html"
+    context_object_name = "subject"
+    pk_url_kwarg = "pk"
+
+    def get_queryset(self):
+        return Subject.objects.filter(
+            program__slug=User.HomeDegreeProgram.BSED_MATH
+        ).select_related("program", "year_level")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        summary = subject_performance_summary(self.object)
+        context["summary"] = summary
+        context["active_tab"] = "analytics"
+        calibration = summary.get("calibration_matrix") or {}
+        context["calibration_max"] = max(calibration.values()) if calibration else 1
+        context["catalog_course"] = get_or_create_catalog_course(
+            self.request.user, self.object
+        )
+        return context
+
+
+class SubjectRosterView(ProfessorRequiredMixin, ListView):
+    template_name = "analytics/professor/subject_roster.html"
+    context_object_name = "roster"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.subject = get_object_or_404(
+            Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH),
+            pk=kwargs["subject_pk"],
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        roster = get_subject_roster_summaries(self.subject)
+        search = get_filter_param(self.request, "q").lower()
+        if search:
+            roster = [
+                row
+                for row in roster
+                if search in (row["student"].get_full_name() or "").lower()
+                or search in row["student"].email.lower()
+            ]
+        return roster
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["subject"] = self.subject
+        context["active_tab"] = "roster"
+        context["catalog_course"] = get_or_create_catalog_course(
+            self.request.user, self.subject
+        )
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            [
+                {
+                    "type": "search",
+                    "name": "q",
+                    "label": "Search",
+                    "placeholder": "Student name or email",
+                },
+            ],
+        )
+        context["filter_has_active"] = has_active_filters(self.request, ["q"])
+        context["filter_bar_compact"] = True
+        return context

@@ -2,6 +2,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+from apps.users.models import Department, Program, ProgramSection
+
 User = get_user_model()
 
 STUDENT_SIGNUP_DATA = {
@@ -14,47 +16,75 @@ STUDENT_SIGNUP_DATA = {
     "middle_name": "",
     "suffix": "",
     "student_number": "123456789",
-    "home_degree_program": User.HomeDegreeProgram.CS,
     "phone_number": "09123456789",
 }
 
 
+@pytest.fixture
+def bsed_program(db):
+    edu, _ = Department.objects.get_or_create(name="College of Education")
+    program, _ = Program.objects.get_or_create(
+        slug=User.HomeDegreeProgram.BSED_MATH,
+        defaults={"name": "BSEd Mathematics", "managing_department": edu},
+    )
+    return program
+
+
+def _student_data(year_level, section_text="1M", **extra):
+    return {
+        **STUDENT_SIGNUP_DATA,
+        "year_level": year_level.pk,
+        "section": section_text,
+        **extra,
+    }
+
+
 @pytest.mark.django_db
 class TestSignupRoles:
-    def test_student_signup_creates_active_student(self, client, year_level, program_section):
-        data = {
-            **STUDENT_SIGNUP_DATA,
-            "year_level": year_level.pk,
-            "section": program_section.pk,
-        }
+    def test_student_signup_creates_active_student(
+        self, client, year_level, bsed_program, academic_year
+    ):
+        data = _student_data(year_level, "BSE 2-1M")
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
         assert user.role == User.Role.STUDENT
         assert user.student_number == "123456789"
         assert user.phone_number == "09123456789"
-        assert user.home_degree_program == User.HomeDegreeProgram.CS
+        assert user.home_degree_program == User.HomeDegreeProgram.BSED_MATH
         assert user.year_level_id == year_level.pk
-        assert user.section_id == program_section.pk
+        assert user.section is not None
+        assert user.section.label == "1M"
+        assert user.section.display_label == "BSE 2-1M"
         assert user.is_active is True
         assert user.approval_status == User.ApprovalStatus.APPROVED
         assert user.first_name == "Ana"
         assert user.last_name == "Santos"
-        assert user.middle_name == ""
-        assert user.suffix == ""
+        assert ProgramSection.objects.filter(
+            program=bsed_program, year_level=year_level, label="1M"
+        ).exists()
+
+    def test_student_signup_creates_new_section_when_typed(
+        self, client, year_level, bsed_program, academic_year
+    ):
+        data = _student_data(year_level, "3M")
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 302
+        assert ProgramSection.objects.filter(
+            program=bsed_program, year_level=year_level, label="3M"
+        ).exists()
 
     def test_student_signup_accepts_optional_middle_name_and_suffix(
-        self, client, year_level, program_section
+        self, client, year_level, bsed_program, academic_year
     ):
-        data = {
-            **STUDENT_SIGNUP_DATA,
-            "email": "namedstudent@test.edu",
-            "student_number": "987654321",
-            "year_level": year_level.pk,
-            "section": program_section.pk,
-            "middle_name": "Marie",
-            "suffix": "Jr.",
-        }
+        data = _student_data(
+            year_level,
+            "1M",
+            email="namedstudent@test.edu",
+            student_number="987654321",
+            middle_name="Marie",
+            suffix="Jr.",
+        )
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 302
         user = User.objects.get(email="namedstudent@test.edu")
@@ -63,20 +93,14 @@ class TestSignupRoles:
         assert user.get_full_name() == "Ana Marie Santos Jr."
 
     def test_student_signup_requires_first_and_last_name(
-        self, client, year_level, program_section
+        self, client, year_level, bsed_program, academic_year
     ):
-        data = {
-            **STUDENT_SIGNUP_DATA,
-            "year_level": year_level.pk,
-            "section": program_section.pk,
-            "first_name": "",
-            "last_name": "",
-        }
+        data = _student_data(year_level, "1M", first_name="", last_name="")
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
-    def test_faculty_signup_creates_pending_inactive_account(self, client, department):
+    def test_faculty_signup_creates_active_approved_account(self, client):
         response = client.post(
             reverse("account_signup"),
             {
@@ -86,23 +110,20 @@ class TestSignupRoles:
                 "password2": "strongpass123!",
                 "first_name": "Rico",
                 "last_name": "Cruz",
-                "department": department.pk,
                 "employee_id": "EMP-2024-001",
                 "phone_number": "09123456789",
             },
         )
         assert response.status_code == 302
-        assert response.url.endswith("registered=pending")
         user = User.objects.get(email="newprof@test.edu")
         assert user.role == User.Role.PROFESSOR
-        assert user.department_id == department.pk
+        assert user.department is not None
+        assert user.department.name == "College of Education"
         assert user.employee_id == "EMP-2024-001"
-        assert user.is_active is False
-        assert user.approval_status == User.ApprovalStatus.PENDING
-        assert user.first_name == "Rico"
-        assert user.last_name == "Cruz"
+        assert user.is_active is True
+        assert user.approval_status == User.ApprovalStatus.APPROVED
 
-    def test_faculty_signup_requires_employee_id(self, client, department):
+    def test_faculty_signup_requires_employee_id(self, client):
         response = client.post(
             reverse("account_signup"),
             {
@@ -112,7 +133,6 @@ class TestSignupRoles:
                 "password2": "strongpass123!",
                 "first_name": "No",
                 "last_name": "Prof",
-                "department": department.pk,
                 "employee_id": "",
                 "phone_number": "09123456789",
             },
@@ -120,19 +140,16 @@ class TestSignupRoles:
         assert response.status_code == 200
         assert not User.objects.filter(email="noprof@test.edu").exists()
 
-    def test_student_signup_does_not_require_employee_id(self, client, year_level, program_section):
-        data = {
-            **STUDENT_SIGNUP_DATA,
-            "year_level": year_level.pk,
-            "section": program_section.pk,
-            "employee_id": "",
-        }
+    def test_student_signup_does_not_require_employee_id(
+        self, client, year_level, bsed_program, academic_year
+    ):
+        data = _student_data(year_level, "1M", employee_id="")
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
         assert user.employee_id == ""
 
-    def test_chairperson_signup_requires_department(self, client):
+    def test_chairperson_role_not_available_on_signup(self, client):
         response = client.post(
             reverse("account_signup"),
             {
@@ -155,6 +172,7 @@ class TestSignupRoles:
             **STUDENT_SIGNUP_DATA,
             "student_number": "12345",
             "year_level": year_level.pk,
+            "section": "1M",
         }
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 200
@@ -199,3 +217,7 @@ class TestAuthTemplates:
         assert "Middle name (optional)" in content
         assert "Suffix (optional)" in content
         assert "auth-password-strength--compact" in content
+        assert "Employee ID" in content
+        assert "Subjects (choose at least 3)" not in content
+        assert "Program" not in content or "home_degree_program" not in content
+        assert "1M or BSE 2-1M" in content

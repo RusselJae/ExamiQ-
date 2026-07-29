@@ -24,6 +24,7 @@ class Subject(TimeStampedModel):
     class Semester(models.IntegerChoices):
         FIRST = 1, "1st Semester"
         SECOND = 2, "2nd Semester"
+        MIDYEAR = 3, "Midyear"
 
     program = models.ForeignKey(
         Program,

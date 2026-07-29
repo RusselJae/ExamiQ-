@@ -5,7 +5,7 @@ from django.utils import timezone
 from model_utils.models import TimeStampedModel
 
 from apps.questions.models import Question, QuestionChoice, Subject, Topic
-from apps.users.models import Course, User
+from apps.users.models import Course, ProgramSection, User
 
 
 class ReviewWindow(TimeStampedModel):
@@ -118,6 +118,43 @@ class ExamSetup(TimeStampedModel):
         return base
 
 
+class SectionExamSetup(TimeStampedModel):
+    """Faculty exam availability for a student ProgramSection cohort."""
+
+    section = models.OneToOneField(
+        ProgramSection,
+        on_delete=models.CASCADE,
+        related_name="exam_setup",
+    )
+    is_enabled = models.BooleanField(default=True)
+    subjects = models.ManyToManyField(
+        Subject,
+        blank=True,
+        related_name="section_exam_setups",
+        help_text="Courses students in this section may select for exams.",
+    )
+    seconds_per_question = models.PositiveIntegerField(
+        default=30,
+        help_text="Fallback per-question time when a course has no ExamSetup.",
+    )
+    allowed_difficulties = models.JSONField(default=list)
+
+    class Meta:
+        verbose_name = "Section Exam Setup"
+        verbose_name_plural = "Section Exam Setups"
+
+    def __str__(self) -> str:
+        return f"Exam setup for {self.section.display_label}"
+
+    def save(self, *args, **kwargs):
+        if not self.allowed_difficulties:
+            self.allowed_difficulties = list(DEFAULT_EXAM_DIFFICULTIES)
+        super().save(*args, **kwargs)
+
+    def effective_difficulties(self) -> list[str]:
+        return self.allowed_difficulties or list(DEFAULT_EXAM_DIFFICULTIES)
+
+
 class ReviewSession(TimeStampedModel):
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -153,6 +190,11 @@ class ReviewSession(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="review_sessions",
     )
+    subjects = models.ManyToManyField(
+        Subject,
+        blank=True,
+        related_name="review_sessions",
+    )
     difficulty = models.CharField(
         max_length=10,
         choices=Question.Difficulty.choices,
@@ -165,6 +207,11 @@ class ReviewSession(TimeStampedModel):
         default=Mode.TIMED_EXAM,
     )
     planned_question_count = models.PositiveSmallIntegerField(default=0)
+    question_queue = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered question PKs for multi-subject timed exams.",
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(

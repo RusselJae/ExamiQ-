@@ -10,6 +10,7 @@ from apps.users.models import (
     Notification,
     Program,
     ProgramSection,
+    StudentSubject,
     TeachingAssignment,
     User,
 )
@@ -149,3 +150,11 @@ class EnrollmentAdmin(admin.ModelAdmin):
     list_filter = ["course__program"]
     search_fields = ["student__email", "course__code"]
     ordering = ["-enrolled_at"]
+
+
+@admin.register(StudentSubject)
+class StudentSubjectAdmin(admin.ModelAdmin):
+    list_display = ["student", "subject", "created"]
+    list_filter = ["subject__program"]
+    search_fields = ["student__email", "subject__code", "subject__name"]
+    ordering = ["student__email", "subject__code"]

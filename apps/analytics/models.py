@@ -49,6 +49,15 @@ class MistakeRecord(models.Model):
         related_name="mistake_records",
     )
     ai_feedback = models.TextField(blank=True)
+    student_note = models.TextField(blank=True)
+    student_image = models.ImageField(
+        upload_to="mistake_concerns/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    faculty_note = models.TextField(blank=True)
+    faculty_noted_at = models.DateTimeField(null=True, blank=True)
+    faculty_viewed_at = models.DateTimeField(null=True, blank=True)
     occurred_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -58,3 +67,48 @@ class MistakeRecord(models.Model):
 
     def __str__(self) -> str:
         return f"Mistake by {self.student.email} on {self.topic.name}"
+
+    @property
+    def needs_faculty_reply(self) -> bool:
+        from apps.analytics.concern_services import concern_needs_faculty_reply
+
+        return concern_needs_faculty_reply(self)
+
+    @property
+    def latest_concern_image(self):
+        from apps.analytics.concern_services import latest_concern_message
+
+        latest = latest_concern_message(self)
+        if latest and latest.image:
+            return latest.image
+        return self.student_image
+
+
+class MistakeConcernMessage(models.Model):
+    """Threaded student–faculty message on a mistake concern."""
+
+    mistake_record = models.ForeignKey(
+        MistakeRecord,
+        on_delete=models.CASCADE,
+        related_name="concern_messages",
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="concern_messages",
+    )
+    body = models.TextField(blank=True)
+    image = models.ImageField(
+        upload_to="mistake_concerns/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Mistake Concern Message"
+        verbose_name_plural = "Mistake Concern Messages"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"Concern message by {self.author.email} on mistake {self.mistake_record_id}"

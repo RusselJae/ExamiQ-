@@ -52,6 +52,45 @@ def count_available_questions(topic, difficulty: str) -> int:
     ).count()
 
 
+def count_available_questions_for_subject(subject, difficulty: str) -> int:
+    """Count approved active questions under all topics of a subject."""
+    from apps.questions.models import Question
+
+    return Question.objects.filter(
+        topic__subject=subject,
+        difficulty=difficulty,
+        is_active=True,
+        status=Question.Status.APPROVED,
+    ).count()
+
+
+def question_ids_for_subject(
+    subject,
+    difficulty: str,
+    *,
+    limit: int = 10,
+) -> list[int]:
+    """Sample up to ``limit`` approved question PKs for a subject at difficulty."""
+    import random
+
+    from apps.questions.models import Question
+
+    ids = list(
+        Question.objects.filter(
+            topic__subject=subject,
+            difficulty=difficulty,
+            is_active=True,
+            status=Question.Status.APPROVED,
+        ).values_list("pk", flat=True)
+    )
+    if not ids:
+        return []
+    if len(ids) <= limit:
+        random.shuffle(ids)
+        return ids
+    return random.sample(ids, limit)
+
+
 def get_adaptive_questions_for_session(
     student,
     topic,

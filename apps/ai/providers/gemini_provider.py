@@ -95,12 +95,12 @@ class GeminiDifficultyTagger(DifficultyTagger):
 
 
 class GeminiQuestionGenerator(QuestionGenerator):
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = ""):
+    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
         if topic is None:
             return []
 
         system, user_prompt, max_tokens = build_question_generation_prompt(
-            topic, difficulty, count, reference_stem
+            topic, difficulty, count, reference_stem, source_material=source_material
         )
         token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
         last_raw = ""

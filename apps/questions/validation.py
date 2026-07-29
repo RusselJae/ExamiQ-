@@ -75,6 +75,25 @@ def validate_question_structure(
     return {"is_valid": not errors, "errors": errors}
 
 
+def validate_numeric_structure(
+    stem: str,
+    correct_answer: str | None,
+) -> dict:
+    """Return {is_valid: bool, errors: list[str]} for numeric questions."""
+    errors: list[str] = []
+    stem_clean = (stem or "").strip()
+    if len(stem_clean) < 5:
+        errors.append("Question stem is too short.")
+    if correct_answer is None or str(correct_answer).strip() == "":
+        errors.append("Numeric questions require a correct answer.")
+    else:
+        try:
+            float(str(correct_answer).strip())
+        except (TypeError, ValueError):
+            errors.append("Correct answer must be a number.")
+    return {"is_valid": not errors, "errors": errors}
+
+
 def validate_question_for_submit(
     stem: str,
     choices: list[dict],
@@ -85,9 +104,15 @@ def validate_question_for_submit(
     ai_enabled: bool = True,
     peer_stems: list[str] | None = None,
     exclude_pk: int | None = None,
+    question_type: str = "mcq",
+    correct_answer: str | None = None,
 ) -> dict:
     """Structural + duplicate + optional AI validation. Returns validator-shaped dict."""
-    structure = validate_question_structure(stem, choices, correct_label)
+    if question_type == "numeric":
+        structure = validate_numeric_structure(stem, correct_answer)
+    else:
+        structure = validate_question_structure(stem, choices, correct_label)
+
     if not structure["is_valid"]:
         return {
             "is_valid": False,
@@ -114,12 +139,12 @@ def validate_question_for_submit(
             "errors": [duplicate_message],
         }
 
-    if not ai_enabled:
+    if question_type == "numeric" or not ai_enabled:
         return {
             "is_valid": True,
             "topic_relevant": True,
             "answer_correct": True,
-            "feedback": "",
+            "feedback": "Structural checks passed." if question_type == "numeric" else "",
             "suggested_concept_tag": "",
             "errors": structure["errors"],
         }

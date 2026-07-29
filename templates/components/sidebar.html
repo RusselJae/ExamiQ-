@@ -37,12 +37,6 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                     <span class="sidebar-label">Mistakes</span>
                 </a>
-                <a href="{% url 'analytics_student:mistake_patterns' %}" title="Weak Areas"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'mistake_patterns' %}sidebar-link-active{% endif %}"
-                   aria-label="Weak Areas">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                    <span class="sidebar-label">Weak Areas</span>
-                </a>
                 <a href="{% url 'analytics_student:topic_progress' %}" title="Topic Progress"
                    class="sidebar-link {% if request.resolver_match.url_name == 'topic_progress' %}sidebar-link-active{% endif %}"
                    aria-label="Topic Progress">
@@ -57,100 +51,52 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                     <span class="sidebar-label">Overview</span>
                 </a>
-                <a href="{% url 'analytics_professor:course_list' %}" title="My Courses"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'course_list' or request.resolver_match.url_name == 'course_create' %}sidebar-link-active{% endif %}"
-                   aria-label="My Courses">
+                <a href="{% url 'analytics_professor:course_list' %}" title="Courses"
+                   class="sidebar-link {% if request.resolver_match.url_name == 'course_list' or request.resolver_match.url_name == 'course_create' or 'topic' in request.resolver_match.url_name or 'question' in request.resolver_match.url_name or request.resolver_match.url_name == 'course_heatmap' %}sidebar-link-active{% endif %}"
+                   aria-label="Courses">
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                    <span class="sidebar-label">My Courses</span>
+                    <span class="sidebar-label">Courses</span>
                 </a>
 
-                {% if professor_courses %}
-                <p class="sidebar-section-label sidebar-course-label">My courses</p>
+                {% if professor_section_nav %}
+                <p class="sidebar-section-label sidebar-course-label">Sections</p>
                 <div class="sidebar-course-list">
-                    {% for course in professor_courses %}
-                    <a href="{% url 'analytics_professor:course_detail' course.pk %}" title="{{ course.display_label }}"
-                       class="sidebar-link sidebar-link-compact {% if sidebar_course.pk == course.pk %}sidebar-link-active{% endif %}">
-                        <span class="sidebar-label">{% if course.section %}{{ course.code }} · Sec {{ course.section }}{% else %}{{ course.code }}{% endif %}</span>
+                    {% for entry in professor_section_nav %}
+                    <a href="{% url 'analytics_professor:section_detail' entry.section_id %}" title="{{ entry.label }}"
+                       class="sidebar-link sidebar-link-compact {% if sidebar_section_label == entry.label %}sidebar-link-active{% endif %}">
+                        <span class="sidebar-label">{{ entry.label }}</span>
                     </a>
                     {% endfor %}
                 </div>
                 {% endif %}
 
-                {% if sidebar_course %}
-                <p class="sidebar-section-label sidebar-course-label">{% if sidebar_course.section %}{{ sidebar_course.code }} · Sec {{ sidebar_course.section }}{% else %}{{ sidebar_course.code }}{% endif %}</p>
+                {% if sidebar_section %}
+                <p class="sidebar-section-label sidebar-course-label">{{ sidebar_section_label }}</p>
+                <nav class="sidebar-subnav" aria-label="Section navigation">
+                    <a href="{% url 'analytics_professor:section_detail' sidebar_section.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'section_detail' %}sidebar-subnav-link-active{% endif %}">Analytics</a>
+                    <a href="{% url 'analytics_professor:section_roster' sidebar_section.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'section_roster' %}sidebar-subnav-link-active{% endif %}">Masterlist</a>
+                    <a href="{% url 'analytics_professor:section_exam_setup' sidebar_section.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'section_exam_setup' %}sidebar-subnav-link-active{% endif %}">Exam Setup</a>
+                    <a href="{% url 'analytics_professor:section_heatmap' sidebar_section.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'section_heatmap' %}sidebar-subnav-link-active{% endif %}">Heatmap</a>
+                    <a href="{% url 'analytics_professor:section_feedback' sidebar_section.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'section_feedback' %}sidebar-subnav-link-active{% endif %}">Feedback</a>
+                </nav>
+                {% elif sidebar_course %}
+                <p class="sidebar-section-label sidebar-course-label">
+                    {% if sidebar_course.section == "Catalog" %}{{ sidebar_course.code }} Catalog{% else %}{{ sidebar_section_label|default:sidebar_course.code }}{% endif %}
+                </p>
                 <nav class="sidebar-subnav" aria-label="Course navigation">
-                    <a href="{% url 'analytics_professor:course_detail' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_detail' %}sidebar-subnav-link-active{% endif %}">Analytics</a>
-                    <a href="{% url 'analytics_professor:course_roster' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_roster' or request.resolver_match.url_name == 'student_detail' %}sidebar-subnav-link-active{% endif %}">Masterlist</a>
-                    <a href="{% url 'analytics_professor:exam_setup' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if 'exam_setup' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Exam Setup</a>
-                    <a href="{% url 'analytics_professor:course_heatmap' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_heatmap' %}sidebar-subnav-link-active{% endif %}">Heatmap</a>
                     <a href="{% url 'analytics_professor:topic_list' sidebar_course.pk %}"
                        class="sidebar-subnav-link {% if request.resolver_match.url_name == 'topic_list' or 'topic_' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Topics</a>
                     <a href="{% url 'analytics_professor:question_list' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if 'question' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Question Bank</a>
-                    <a href="{% url 'analytics_professor:feedback_list' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if 'feedback' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Feedback</a>
+                       class="sidebar-subnav-link {% if 'question' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Saved Questions</a>
+                    <a href="{% url 'analytics_professor:course_heatmap' sidebar_course.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_heatmap' %}sidebar-subnav-link-active{% endif %}">Heatmap</a>
                 </nav>
                 {% endif %}
-            {% elif user.role == "chairperson" %}
-                <p class="sidebar-section-label">Main</p>
-                <a href="{% url 'analytics_chairperson:dashboard' %}" title="Programs"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'analytics_chairperson' %}sidebar-link-active{% endif %}"
-                   aria-label="Programs">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                    <span class="sidebar-label">Programs</span>
-                </a>
-                <a href="{% url 'analytics_chairperson:assignments' %}" title="Teaching Assignments"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'assignments' %}sidebar-link-active{% endif %}"
-                   aria-label="Teaching Assignments">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                    <span class="sidebar-label">Assignments</span>
-                </a>
-
-                <p class="sidebar-section-label">Insights</p>
-                <a href="{% url 'analytics_chairperson:analytics_by_program' %}" title="Cross-Program"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'analytics_by_program' %}sidebar-link-active{% endif %}"
-                   aria-label="Cross-Program Analytics">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    <span class="sidebar-label">Cross-Program</span>
-                </a>
-                <a href="{% url 'analytics_chairperson:course_audit' %}" title="Course Audit"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'course_audit' %}sidebar-link-active{% endif %}"
-                   aria-label="Course Audit">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                    <span class="sidebar-label">Course Audit</span>
-                </a>
-            {% endif %}
-
-            {% if user.is_superuser or user.role == "campus_admin" %}
-                <p class="sidebar-section-label">Campus Admin</p>
-                <a href="{% url 'campus:dashboard' %}" title="Campus Dashboard"
-                   class="sidebar-link {% if request.resolver_match.namespace == 'campus' and request.resolver_match.url_name == 'dashboard' %}sidebar-link-active{% endif %}"
-                   aria-label="Campus Dashboard">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                    <span class="sidebar-label">Dashboard</span>
-                </a>
-                <a href="{% url 'campus:user_list' %}" title="Campus Users"
-                   class="sidebar-link {% if request.resolver_match.namespace == 'campus' and request.resolver_match.url_name == 'user_list' %}sidebar-link-active{% endif %}"
-                   aria-label="Campus Users">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                    <span class="sidebar-label">Users</span>
-                </a>
-                <a href="{% url 'campus:section_list' %}" title="Sections"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'section_list' or request.resolver_match.url_name == 'section_create' or request.resolver_match.url_name == 'section_edit' or request.resolver_match.url_name == 'section_bulk' %}sidebar-link-active{% endif %}"
-                   aria-label="Sections">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                    <span class="sidebar-label">Sections</span>
-                </a>
-                <a href="{% url 'campus:academic_calendar' %}" title="Academic Calendar"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'academic_calendar' %}sidebar-link-active{% endif %}"
-                   aria-label="Academic Calendar">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    <span class="sidebar-label">Calendar</span>
-                </a>
             {% endif %}
         </nav>
 

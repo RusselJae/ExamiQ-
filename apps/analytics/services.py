@@ -1,7 +1,7 @@
 """Analytics and performance aggregation services."""
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, Prefetch, Q, Sum
 from django.db.models.functions import TruncDate
 
 from apps.analytics.confidence import (
@@ -440,6 +440,15 @@ def _course_answers(course: Course, student: User | None = None):
     return qs
 
 
+def _peer_accuracy_for_answers(answers_qs) -> float:
+    """Lightweight class/section average accuracy from an answers queryset."""
+    total = answers_qs.count()
+    if not total:
+        return 0.0
+    correct = answers_qs.filter(is_correct=True).count()
+    return round(correct / total * 100, 1)
+
+
 def course_performance_summary(course: Course) -> dict:
     """Return aggregated performance for a course offering."""
     student_ids = _course_student_ids(course)
@@ -660,6 +669,8 @@ def annotate_session_metrics(queryset):
 
 def build_session_history_rows(sessions) -> list[dict]:
     """Build display rows for session history tables."""
+    from apps.analytics.confidence import confidence_tier_key
+
     rows = []
     for session in sessions:
         total = getattr(session, "session_answer_count", None)
@@ -674,18 +685,56 @@ def build_session_history_rows(sessions) -> list[dict]:
             avg_conf = session.answers.aggregate(avg=Avg("confidence"))["avg"]
         if avg_conf is not None:
             avg_conf = round(float(avg_conf), 1)
+
+        segments = {"none": 0, "low": 0, "average": 0, "high": 0}
+        duration_seconds = 0
+        subject_name = ""
+        subject_code = ""
+        if total:
+            prefetched = getattr(session, "_prefetched_objects_cache", {}).get("answers")
+            if prefetched is not None:
+                answer_rows = prefetched
+            else:
+                answer_rows = session.answers.select_related("question__topic__subject")
+            for answer in answer_rows:
+                segments[confidence_tier_key(answer.confidence)] += 1
+                duration_seconds += answer.time_spent_seconds or 0
+                if not subject_code and getattr(answer.question, "topic_id", None):
+                    subj = answer.question.topic.subject
+                    subject_name = subj.name
+                    subject_code = subj.code
+        if not subject_code and getattr(session, "topic_id", None):
+            subj = session.topic.subject
+            subject_name = subj.name
+            subject_code = subj.code
+
+        duration_min = (
+            max(1, round(duration_seconds / 60))
+            if duration_seconds
+            else (session.duration_minutes or 0)
+        )
+        seg_total = sum(segments.values()) or 1
+        segment_pcts = {
+            k: round(v / seg_total * 100, 1) for k, v in segments.items()
+        }
+
         rows.append(
             {
                 "session": session,
                 "date": session.started_at,
-                "topic_name": session.topic.name,
+                "topic_name": session.topic.name if session.topic_id else "—",
+                "subject_name": subject_name,
+                "subject_code": subject_code,
                 "avg_confidence": avg_conf,
                 "confidence_label": _confidence_label_short(avg_conf),
+                "confidence_segments": segments,
+                "confidence_segment_pcts": segment_pcts,
                 "correct_count": correct,
                 "total_questions": total,
                 "accuracy": accuracy,
                 "score_display": f"{correct}/{total}" if total else "—",
                 "status_label": _session_review_status_label(accuracy),
+                "duration_minutes": duration_min,
                 "summary_url": None,
             }
         )
@@ -720,66 +769,6 @@ def build_confidence_performance_series(sessions) -> list[dict]:
     return series
 
 
-def student_course_summary(student: User, course: Course) -> dict:
-    """Performance summary scoped to a student's activity in a course offering."""
-    sessions = ReviewSession.objects.filter(
-        student=student,
-        course=course,
-        status=ReviewSession.Status.COMPLETED,
-    ).select_related("topic")
-    answers = _course_answers(course, student=student)
-
-    total_answers = answers.count()
-    correct_answers = answers.filter(is_correct=True).count()
-    accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
-    avg_confidence = answers.aggregate(avg=Avg("confidence"))["avg"] or 0
-
-    total_seconds = answers.aggregate(total=Sum("time_spent_seconds"))["total"] or 0
-    review_hours = round(total_seconds / 3600, 1)
-
-    accuracy_trend = list(
-        sessions.annotate(date=TruncDate("started_at"))
-        .values("date")
-        .annotate(
-            total=Count("answers"),
-            correct=Count("answers", filter=Q(answers__is_correct=True)),
-        )
-        .order_by("date")
-    )
-    for item in accuracy_trend:
-        total = item["total"]
-        item["accuracy"] = round(item["correct"] / total * 100, 1) if total else 0
-
-    weak_topics = list(
-        MistakeRecord.objects.filter(student=student, question__topic__subject__program=course.program)
-        .values("topic__name")
-        .annotate(mistake_count=Count("id"))
-        .order_by("-mistake_count")[:5]
-    )
-
-    ordered_sessions = annotate_session_metrics(
-        sessions.order_by("-started_at")
-    )
-    session_list = list(ordered_sessions)
-    last_session = session_list[0] if session_list else None
-
-    return {
-        "sessions_completed": sessions.count(),
-        "total_answers": total_answers,
-        "accuracy": accuracy,
-        "avg_confidence": round(avg_confidence, 1),
-        "review_hours": review_hours,
-        "accuracy_trend": accuracy_trend,
-        "weak_topics": weak_topics,
-        "calibration_matrix": confidence_tier_matrix(answers),
-        "recent_sessions": ordered_sessions[:10],
-        "session_history_rows": build_session_history_rows(session_list),
-        "confidence_performance_series": build_confidence_performance_series(session_list),
-        "last_session_date": last_session.started_at if last_session else None,
-        "calibration_max": max(confidence_tier_matrix(answers).values()) if total_answers else 1,
-    }
-
-
 def get_roster_summaries(course: Course) -> list[dict]:
     """Return per-student summary rows from session participation."""
     student_ids = list(_course_student_ids(course))
@@ -812,18 +801,72 @@ def get_roster_summaries(course: Course) -> list[dict]:
 
 
 def get_topic_mastery_heatmap(course: Course) -> dict:
-    """Build topic×confidence-tier heatmap data for a course."""
+    """Build question×confidence-tier heatmap for a course offering.
+
+    Catalog offerings use subject-wide answers (any year) instead of session.course.
+    """
+    from apps.questions.models import Subject
+
+    subject = Subject.objects.filter(code=course.code, program=course.program).first()
+    if (course.section or "").strip() == "Catalog" and subject:
+        return get_subject_heatmap(subject)
+    return _heatmap_from_answers(
+        _course_answers(course).select_related("question__topic"),
+        student_ids=_course_student_ids(course),
+    )
+
+
+def section_heatmap_subjects(section):
+    """Subjects with answer data from students in this ProgramSection."""
+    from apps.questions.models import Subject
+
+    return (
+        Subject.objects.filter(
+            topics__questions__answers__session__student__section=section,
+        )
+        .distinct()
+        .order_by("code", "name")
+    )
+
+
+def get_section_heatmap(section, subject=None) -> dict:
+    """Heatmap for answers from students in a ProgramSection.
+
+    When ``subject`` is set, only that curriculum subject's questions are
+    included (one subject at a time on the section heatmap).
+    """
+    answers = Answer.objects.filter(
+        session__student__section=section
+    ).select_related("question__topic", "session__student")
+    if subject is not None:
+        answers = answers.filter(question__topic__subject=subject)
+    student_ids = answers.values_list("session__student_id", flat=True).distinct()
+    return _heatmap_from_answers(answers, student_ids=student_ids)
+
+
+def get_subject_heatmap(subject) -> dict:
+    """Heatmap for all answers tied to a curriculum subject (any year)."""
+    answers = Answer.objects.filter(
+        question__topic__subject=subject
+    ).select_related("question__topic", "session__student")
+    student_ids = answers.values_list("session__student_id", flat=True).distinct()
+    return _heatmap_from_answers(answers, student_ids=student_ids)
+
+
+def _heatmap_from_answers(answers, student_ids) -> dict:
     from apps.analytics.confidence import CONFIDENCE_TIER_LABELS, confidence_tier_key
 
-    answers = _course_answers(course).select_related("question__topic")
-    topic_map: dict[int, dict] = {}
-
+    question_map: dict[int, dict] = {}
     for answer in answers:
-        topic = answer.question.topic
-        if topic.id not in topic_map:
-            topic_map[topic.id] = {
-                "topic_id": topic.id,
-                "topic_name": topic.name,
+        question = answer.question
+        if question.id not in question_map:
+            stem = (question.stem or "").strip()
+            if len(stem) > 80:
+                stem = stem[:77] + "..."
+            question_map[question.id] = {
+                "question_id": question.id,
+                "question_stem": stem,
+                "topic_name": question.topic.name,
                 "none": 0,
                 "low": 0,
                 "average": 0,
@@ -831,21 +874,43 @@ def get_topic_mastery_heatmap(course: Course) -> dict:
                 "total": 0,
             }
         tier = confidence_tier_key(answer.confidence)
-        topic_map[topic.id][tier] += 1
-        topic_map[topic.id]["total"] += 1
+        question_map[question.id][tier] += 1
+        question_map[question.id]["total"] += 1
 
-    topics = sorted(topic_map.values(), key=lambda t: t["topic_name"])
+    questions = sorted(
+        question_map.values(),
+        key=lambda q: (
+            -((q["none"] + q["low"]) / max(q["total"], 1)),
+            -(q["none"] + q["low"]),
+            q["question_id"],
+        ),
+    )
     callouts = {
-        "low_confidence": [
-            t for t in topics if (t["none"] + t["low"]) >= 2
-        ],
+        "low_confidence": [q for q in questions if (q["none"] + q["low"]) >= 2],
     }
 
-    student_rows = _build_student_heatmap_rows(course, answers)
+    students = User.objects.filter(pk__in=list(student_ids))
+    rows = []
+    for student in students:
+        student_answers = answers.filter(session__student=student)
+        counts = {"none": 0, "low": 0, "average": 0, "high": 0}
+        for answer in student_answers:
+            counts[confidence_tier_key(answer.confidence)] += 1
+        dominant = max(counts, key=counts.get) if student_answers.exists() else "none"
+        rows.append(
+            {
+                "student_id": student.pk,
+                "student_name": student.get_full_name() or student.email,
+                "counts": counts,
+                "dominant": dominant,
+                "total": student_answers.count(),
+            }
+        )
 
     return {
-        "topics": topics,
-        "student_rows": student_rows,
+        "questions": questions,
+        "topics": questions,
+        "student_rows": sorted(rows, key=lambda r: r["student_name"]),
         "tier_labels": CONFIDENCE_TIER_LABELS,
         "callouts": callouts,
         "matrix": confidence_tier_matrix(answers),
@@ -974,3 +1039,481 @@ def get_intervention_list(course: Course) -> list[dict]:
     priority = {"overconfident": 0, "low_accuracy": 1, "under_practicing": 2, "lucky_guess_pattern": 3}
     rows.sort(key=lambda r: (priority.get(r["flags"][0], 9), -r["misconception_count"]))
     return rows
+
+
+def _section_answers(section, student: User | None = None):
+    """Answers from students enrolled in a ProgramSection (any subject)."""
+    qs = Answer.objects.filter(session__student__section=section)
+    if student:
+        qs = qs.filter(session__student=student)
+    return qs
+
+
+def _section_student_ids(section):
+    return (
+        ReviewSession.objects.filter(student__section=section)
+        .values_list("student_id", flat=True)
+        .distinct()
+    )
+
+
+def section_performance_summary(section) -> dict:
+    """Aggregate analytics for students in a ProgramSection across all subjects."""
+    student_ids = _section_student_ids(section)
+    sessions = ReviewSession.objects.filter(
+        student__section=section,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    answers = _section_answers(section)
+
+    total_answers = answers.count()
+    correct_answers = answers.filter(is_correct=True).count()
+    accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
+
+    subject_breakdown = list(
+        answers.values(
+            "question__topic__subject__code",
+            "question__topic__subject__name",
+            "question__topic__subject_id",
+        )
+        .annotate(
+            answer_count=Count("id"),
+            correct_count=Count("id", filter=Q(is_correct=True)),
+            student_count=Count("session__student_id", distinct=True),
+        )
+        .order_by("question__topic__subject__code")
+    )
+    for row in subject_breakdown:
+        total = row["answer_count"]
+        row["accuracy"] = round(row["correct_count"] / total * 100, 1) if total else 0.0
+        row["code"] = row["question__topic__subject__code"]
+        row["name"] = row["question__topic__subject__name"]
+        row["subject_id"] = row["question__topic__subject_id"]
+
+    calibration_matrix = confidence_tier_matrix(answers)
+    misconception_topic_list = misconception_topics(answers)
+
+    return {
+        "section": section,
+        "enrolled_count": student_ids.count(),
+        "sessions_completed": sessions.count(),
+        "accuracy": accuracy,
+        "total_answers": total_answers,
+        "subject_breakdown": subject_breakdown,
+        "calibration_matrix": calibration_matrix,
+        "misconception_topics": misconception_topic_list,
+    }
+
+
+def get_section_roster_summaries(section) -> list[dict]:
+    """Per-student rows for every student enrolled in a ProgramSection."""
+    students = (
+        User.objects.filter(section=section, role=User.Role.STUDENT)
+        .select_related("year_level", "section")
+        .order_by("last_name", "email")
+    )
+    answers = _section_answers(section)
+    roster = []
+    for student in students:
+        student_answers = answers.filter(session__student=student)
+        total = student_answers.count()
+        correct = student_answers.filter(is_correct=True).count()
+        accuracy = round(correct / total * 100, 1) if total else 0.0
+        avg_conf = student_answers.aggregate(avg=Avg("confidence"))["avg"] or 0
+        sessions_count = ReviewSession.objects.filter(
+            student=student,
+            student__section=section,
+            status=ReviewSession.Status.COMPLETED,
+        ).count()
+        subject_codes = {
+            code
+            for code in student_answers.values_list(
+                "question__topic__subject__code", flat=True
+            )
+            if code
+        }
+        if not subject_codes:
+            subject_codes.update(
+                code
+                for code in ReviewSession.objects.filter(
+                    student=student,
+                    status=ReviewSession.Status.COMPLETED,
+                )
+                .filter(student__section=section)
+                .values_list("subjects__code", flat=True)
+                if code
+            )
+        subjects_taken = sorted(subject_codes)
+        roster.append(
+            {
+                "student": student,
+                "sessions_completed": sessions_count,
+                "questions_answered": total,
+                "accuracy": accuracy,
+                "avg_confidence": round(avg_conf, 1),
+                "subjects_taken": subjects_taken,
+                "year_level": student.year_level.name if student.year_level_id else "",
+            }
+        )
+    return roster
+
+
+def _build_confidence_stack_rows(answers, *, group_by: str = "topic") -> list[dict]:
+    """Stacked confidence rows for student detail (topic or subject)."""
+    if group_by == "subject":
+        name_field = "question__topic__subject__name"
+        code_field = "question__topic__subject__code"
+    else:
+        name_field = "question__topic__name"
+        code_field = "question__topic__subject__code"
+
+    rows = list(
+        answers.values(name_field, code_field)
+        .annotate(
+            total=Count("id"),
+            none=Count("id", filter=Q(confidence__isnull=True)),
+            low=Count("id", filter=Q(confidence=1)),
+            average=Count("id", filter=Q(confidence=3)),
+            high=Count("id", filter=Q(confidence=5)),
+        )
+        .order_by(name_field)
+    )
+    result = []
+    for row in rows:
+        total = row["total"] or 1
+        avg_high = row["average"] + row["high"]
+        avg_high_pct = round(avg_high / total * 100, 1)
+        name = row[name_field] or "—"
+        result.append(
+            {
+                "name": name,
+                "code": row[code_field] or "",
+                "none": row["none"],
+                "low": row["low"],
+                "average": row["average"],
+                "high": row["high"],
+                "total": row["total"],
+                "avg_high_pct": avg_high_pct,
+                "none_pct": round(row["none"] / total * 100, 1),
+                "low_pct": round(row["low"] / total * 100, 1),
+                "average_pct": round(row["average"] / total * 100, 1),
+                "high_pct": round(row["high"] / total * 100, 1),
+            }
+        )
+    # Lowest avg/high first for triage (like heatmap priority)
+    result.sort(key=lambda r: (r["avg_high_pct"], -r["total"]))
+    return result
+
+
+def _build_student_activity_summary(
+    student: User,
+    sessions,
+    answers,
+    *,
+    weak_topics_filter: Q | None = None,
+    confidence_group_by: str = "topic",
+) -> dict:
+    """Shared KPI/chart payload for course, subject, or section student detail."""
+    total_answers = answers.count()
+    correct_answers = answers.filter(is_correct=True).count()
+    accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
+    avg_confidence = answers.aggregate(avg=Avg("confidence"))["avg"] or 0
+    total_seconds = answers.aggregate(total=Sum("time_spent_seconds"))["total"] or 0
+    review_hours = round(total_seconds / 3600, 1)
+
+    accuracy_trend = list(
+        sessions.annotate(date=TruncDate("started_at"))
+        .values("date")
+        .annotate(
+            total=Count("answers"),
+            correct=Count("answers", filter=Q(answers__is_correct=True)),
+        )
+        .order_by("date")
+    )
+    for item in accuracy_trend:
+        total = item["total"]
+        item["accuracy"] = round(item["correct"] / total * 100, 1) if total else 0
+
+    mistake_qs = MistakeRecord.objects.filter(student=student)
+    if weak_topics_filter is not None:
+        mistake_qs = mistake_qs.filter(weak_topics_filter)
+    weak_topics = list(
+        mistake_qs.values("topic__name")
+        .annotate(mistake_count=Count("id"))
+        .order_by("-mistake_count")[:5]
+    )
+
+    ordered_sessions = annotate_session_metrics(
+        sessions.select_related("topic", "topic__subject")
+        .prefetch_related(
+            Prefetch(
+                "answers",
+                queryset=Answer.objects.select_related("question__topic__subject"),
+            )
+        )
+        .order_by("-started_at")[:8]
+    )
+    session_list = list(ordered_sessions)
+    last_session = session_list[0] if session_list else None
+    matrix = confidence_tier_matrix(answers)
+
+    high_avg_count = answers.filter(confidence__in=[3, 5]).count()
+    high_avg_rate = (
+        round(high_avg_count / total_answers * 100, 1) if total_answers else 0.0
+    )
+
+    subjects_taken = sorted(
+        {
+            code
+            for code in answers.values_list(
+                "question__topic__subject__code", flat=True
+            )
+            if code
+        }
+    )
+
+    confidence_stacks = _build_confidence_stack_rows(
+        answers, group_by=confidence_group_by
+    )
+    follow_ups = [
+        {
+            "name": row["name"],
+            "detail": (
+                f"{row['avg_high_pct']}% Average/High confidence across "
+                f"{row['total']} answer{'s' if row['total'] != 1 else ''}."
+            ),
+            "kind": "weak",
+        }
+        for row in confidence_stacks
+        if row["avg_high_pct"] < 50
+    ][:5]
+
+    score_trend = []
+    for session in reversed(session_list):
+        total = getattr(session, "session_answer_count", 0) or 0
+        correct = getattr(session, "session_correct_count", 0) or 0
+        score_trend.append(
+            {
+                "date": session.started_at.strftime("%b %d") if session.started_at else "",
+                "accuracy": round(correct / total * 100, 1) if total else 0,
+            }
+        )
+
+    return {
+        "sessions_completed": sessions.count(),
+        "total_answers": total_answers,
+        "accuracy": accuracy,
+        "avg_confidence": round(avg_confidence, 1),
+        "review_hours": review_hours,
+        "accuracy_trend": accuracy_trend,
+        "score_trend": score_trend,
+        "weak_topics": weak_topics,
+        "follow_ups": follow_ups,
+        "calibration_matrix": matrix,
+        "recent_sessions": ordered_sessions[:10],
+        "session_history_rows": build_session_history_rows(session_list),
+        "confidence_performance_series": build_confidence_performance_series(
+            session_list
+        ),
+        "confidence_stacks": confidence_stacks,
+        "confidence_group_by": confidence_group_by,
+        "subjects_taken": subjects_taken,
+        "subjects_label": ", ".join(subjects_taken) if subjects_taken else "—",
+        "high_avg_confidence_rate": high_avg_rate,
+        "last_session_date": last_session.started_at if last_session else None,
+        "calibration_max": max(matrix.values()) if total_answers else 1,
+        "dominant_tier": max(matrix, key=matrix.get) if total_answers else "none",
+    }
+
+
+def student_course_summary(student: User, course: Course) -> dict:
+    """Performance summary scoped to a student's activity in a course offering."""
+    sessions = ReviewSession.objects.filter(
+        student=student,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    ).select_related("topic", "topic__subject")
+    answers = _course_answers(course, student=student)
+    return _build_student_activity_summary(
+        student,
+        sessions,
+        answers,
+        weak_topics_filter=Q(question__topic__subject__program=course.program),
+        confidence_group_by="topic",
+    )
+
+
+def student_subject_summary(student: User, subject) -> dict:
+    """Performance summary for a student across a curriculum subject."""
+    sessions = (
+        ReviewSession.objects.filter(
+            student=student,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .filter(
+            Q(subjects=subject)
+            | Q(topic__subject=subject)
+            | Q(course__code=subject.code, course__program=subject.program)
+            | Q(answers__question__topic__subject=subject)
+        )
+        .distinct()
+        .select_related("topic", "topic__subject")
+    )
+    answers = _subject_answers(subject, student=student)
+    return _build_student_activity_summary(
+        student,
+        sessions,
+        answers,
+        weak_topics_filter=Q(question__topic__subject=subject),
+        confidence_group_by="topic",
+    )
+
+
+def student_section_summary(student: User, section) -> dict:
+    """Performance summary for a student within a ProgramSection (any subject)."""
+    sessions = ReviewSession.objects.filter(
+        student=student,
+        student__section=section,
+        status=ReviewSession.Status.COMPLETED,
+    ).select_related("topic", "topic__subject")
+    answers = _section_answers(section, student=student)
+    return _build_student_activity_summary(
+        student,
+        sessions,
+        answers,
+        weak_topics_filter=Q(student__section=section),
+        confidence_group_by="subject",
+    )
+
+def _subject_answers(subject, student: User | None = None):
+    qs = Answer.objects.filter(question__topic__subject=subject)
+    if student:
+        qs = qs.filter(session__student=student)
+    return qs
+
+
+def _subject_student_ids(subject):
+    return (
+        Answer.objects.filter(question__topic__subject=subject)
+        .values_list("session__student_id", flat=True)
+        .distinct()
+    )
+
+
+def subject_performance_summary(subject) -> dict:
+    """Aggregate analytics for a curriculum subject across all year levels."""
+    student_ids = _subject_student_ids(subject)
+    answers = _subject_answers(subject)
+    sessions = ReviewSession.objects.filter(
+        Q(subjects=subject) | Q(topic__subject=subject) | Q(course__code=subject.code),
+        status=ReviewSession.Status.COMPLETED,
+    ).distinct()
+
+    total_answers = answers.count()
+    correct_answers = answers.filter(is_correct=True).count()
+    accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
+
+    accuracy_trend = list(
+        sessions.annotate(date=TruncDate("started_at"))
+        .values("date")
+        .annotate(
+            total=Count("answers", filter=Q(answers__question__topic__subject=subject)),
+            correct=Count(
+                "answers",
+                filter=Q(
+                    answers__question__topic__subject=subject,
+                    answers__is_correct=True,
+                ),
+            ),
+        )
+        .order_by("date")
+    )
+    # Prefer answer-based daily trend for multi-subject sessions
+    daily = list(
+        answers.annotate(date=TruncDate("created"))
+        .values("date")
+        .annotate(
+            total=Count("id"),
+            correct=Count("id", filter=Q(is_correct=True)),
+        )
+        .order_by("date")
+    )
+    for item in daily:
+        total = item["total"]
+        item["accuracy"] = round(item["correct"] / total * 100, 1) if total else 0.0
+        item["date"] = item["date"].isoformat() if item["date"] else ""
+
+    for item in accuracy_trend:
+        total = item["total"]
+        item["accuracy"] = round(item["correct"] / total * 100, 1) if total else 0.0
+        item["date"] = item["date"].isoformat() if item["date"] else ""
+
+    year_breakdown = list(
+        answers.values("session__student__year_level__name", "session__student__year_level__order")
+        .annotate(
+            student_count=Count("session__student_id", distinct=True),
+            answer_count=Count("id"),
+            correct_count=Count("id", filter=Q(is_correct=True)),
+        )
+        .order_by("session__student__year_level__order")
+    )
+    for row in year_breakdown:
+        total = row["answer_count"]
+        row["accuracy"] = round(row["correct_count"] / total * 100, 1) if total else 0.0
+        row["year_name"] = row["session__student__year_level__name"] or "Unknown"
+
+    calibration_matrix = confidence_tier_matrix(answers)
+    misconception_topic_list = misconception_topics(answers)
+
+    return {
+        "subject": subject,
+        "enrolled_count": student_ids.count(),
+        "sessions_completed": sessions.count(),
+        "accuracy": accuracy,
+        "total_answers": total_answers,
+        "accuracy_trend": daily or accuracy_trend,
+        "year_breakdown": year_breakdown,
+        "calibration_matrix": calibration_matrix,
+        "misconception_topics": misconception_topic_list,
+    }
+
+
+def get_subject_roster_summaries(subject) -> list[dict]:
+    """Students (any year) who answered questions for this subject."""
+    student_ids = list(_subject_student_ids(subject))
+    students = (
+        User.objects.filter(pk__in=student_ids)
+        .select_related("year_level", "section")
+        .order_by("year_level__order", "last_name", "email")
+    )
+    answers = _subject_answers(subject)
+    roster = []
+    for student in students:
+        student_answers = answers.filter(session__student=student)
+        total = student_answers.count()
+        correct = student_answers.filter(is_correct=True).count()
+        accuracy = round(correct / total * 100, 1) if total else 0.0
+        avg_conf = student_answers.aggregate(avg=Avg("confidence"))["avg"] or 0
+        sessions_count = (
+            ReviewSession.objects.filter(student=student)
+            .filter(
+                Q(subjects=subject)
+                | Q(topic__subject=subject)
+                | Q(answers__question__topic__subject=subject)
+            )
+            .distinct()
+            .count()
+        )
+        roster.append(
+            {
+                "student": student,
+                "sessions_completed": sessions_count,
+                "accuracy": accuracy,
+                "avg_confidence": round(avg_conf, 1),
+                "year_level": student.year_level.name if student.year_level_id else "",
+                "section_label": (
+                    student.section.display_label if student.section_id else ""
+                ),
+            }
+        )
+    return roster

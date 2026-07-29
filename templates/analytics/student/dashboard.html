@@ -10,18 +10,18 @@
     <div class="span-kpi">{% include "components/stat_card.html" with value=summary.total_answers label="Total Answers" variant="navy" %}</div>
     <div class="span-kpi">
         {% if summary.accuracy >= 70 %}
-        {% include "components/stat_card.html" with value=summary.accuracy label="Overall Accuracy" variant="good" suffix="%" %}
+        {% include "components/stat_card.html" with value=summary.accuracy label="Average Score" variant="good" suffix="%" %}
         {% elif summary.accuracy >= 50 %}
-        {% include "components/stat_card.html" with value=summary.accuracy label="Overall Accuracy" variant="warning" suffix="%" %}
+        {% include "components/stat_card.html" with value=summary.accuracy label="Average Score" variant="warning" suffix="%" %}
         {% else %}
-        {% include "components/stat_card.html" with value=summary.accuracy label="Overall Accuracy" variant="good" suffix="%" %}
+        {% include "components/stat_card.html" with value=summary.accuracy label="Average Score" variant="good" suffix="%" %}
         {% endif %}
     </div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.avg_confidence label="Avg Confidence" variant="accent" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.avg_confidence label="Average Confidence" variant="accent" %}</div>
 
     <div class="span-chart">
         <div class="bento-card bento-card--chart bento-card--elevated bento-card-inner h-full">
-            {% include "components/section_header.html" with label="Performance" title="Accuracy Over Time" %}
+            {% include "components/section_header.html" with label="Performance" title="Average Score Over Time" %}
             <div id="accuracy-chart-wrap">
                 <canvas id="accuracyChart" height="200"></canvas>
             </div>
@@ -30,7 +30,7 @@
                     <path d="M0 36 L40 28 L80 32 L120 20 L160 24 L200 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 <p class="empty-state-title">Not enough data yet</p>
-                <p class="empty-state-body">Complete a few review sessions to see your accuracy trend.</p>
+                <p class="empty-state-body">Complete a few review sessions to see your average score trend.</p>
             </div>
         </div>
     </div>
@@ -48,23 +48,6 @@
             </div>
             {% else %}
             {% include "components/empty_state.html" with compact=True title="No recommendations yet" body="Complete more reviews to get personalized topic suggestions." %}
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="span-list">
-        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col">
-            {% include "components/section_header.html" with label="Focus areas" title="Weak Topics" action_url="/student/mistakes/" action_label="View all" %}
-            {% if summary.weak_topics %}
-            <div class="bento-card-scroll flex-1">
-                <ul class="list-none m-0 p-0">
-                    {% for topic in summary.weak_topics %}
-                    {% include "components/topic_row.html" with name=topic.topic__name mistake_count=topic.mistake_count %}
-                    {% endfor %}
-                </ul>
-            </div>
-            {% else %}
-            {% include "components/empty_state.html" with compact=True title="No mistakes logged yet" body="That's a good sign — or you haven't started reviewing." cta_url="/student/review/setup/" cta_label="Start your first review" icon='<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' %}
             {% endif %}
         </div>
     </div>

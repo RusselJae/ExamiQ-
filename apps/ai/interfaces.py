@@ -22,7 +22,14 @@ class QuestionValidator:
 
 
 class QuestionGenerator:
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "") -> list[dict]:
+    def generate(
+        self,
+        topic,
+        difficulty: str,
+        count: int = 5,
+        reference_stem: str = "",
+        source_material: str = "",
+    ) -> list[dict]:
         return []
 
 

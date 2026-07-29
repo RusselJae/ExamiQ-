@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ form_title }} - {{ course.code }}{% endblock %}
+{% block title %}{{ form_title }} - {{ course.section|default:course.code }}{% endblock %}
 
 {% block content %}
 <div class="mb-6">
@@ -16,23 +16,23 @@
             <label for="edit-stem" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
             <textarea id="edit-stem" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm" placeholder="Enter question text..."></textarea>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {% for letter in "ABCD" %}
-            <div>
-                <label for="edit-choice-{{ letter }}" class="block text-sm font-medium text-examiq-slate mb-1">Choice {{ letter }}</label>
-                <input type="text" id="edit-choice-{{ letter }}" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
+        <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {% for letter in "ABCD" %}
+                <div>
+                    <label for="edit-choice-{{ letter }}" class="block text-sm font-medium text-examiq-slate mb-1">Choice {{ letter }}</label>
+                    <input type="text" id="edit-choice-{{ letter }}" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label for="edit-correct" class="block text-sm font-medium text-examiq-slate mb-1">Correct Answer</label>
+                <label for="edit-correct" class="block text-sm font-medium text-examiq-slate mb-1">Correct Answer (A–D)</label>
                 <input type="text" id="edit-correct" value="A" maxlength="1" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy uppercase shadow-sm">
             </div>
-            <div>
-                <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
-                <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="AI-generated concept summary">
-            </div>
+        </div>
+        <div>
+            <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
+            <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="Short concept label">
         </div>
     </div>
     <div class="flex flex-wrap gap-3">
@@ -50,7 +50,8 @@
     const questionIndex = {{ question_index }};
     const draft = window.ExamiQBatch.loadDraft(coursePk);
     const data = draft.questions[questionIndex] || {
-        stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" }
+        stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
+        question_type: "mcq", ai_generated: false
     };
 
     document.getElementById("edit-stem").value = data.stem || "";
@@ -67,14 +68,20 @@
             stem: document.getElementById("edit-stem").value,
             correct: document.getElementById("edit-correct").value,
             concept: document.getElementById("edit-concept").value,
+            question_type: "mcq",
+            ai_generated: !!data.ai_generated,
+            steps: data.steps || [],
+            solution_summary: data.solution_summary || "",
             choices: {},
+            validation: null,
         };
         ["A","B","C","D"].forEach(function(letter) {
             updated.choices[letter] = document.getElementById("edit-choice-" + letter).value;
         });
         while (draft.questions.length <= questionIndex) {
             draft.questions.push({
-                stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" }
+                stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
+                question_type: "mcq"
             });
         }
         draft.questions[questionIndex] = updated;

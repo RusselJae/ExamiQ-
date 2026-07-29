@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}{{ subject.code }} - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title=subject.code subtitle=subject.name %}
+<p class="text-sm text-examiq-slate -mt-4 mb-6">
+    {{ subject.year_level.name }} · {{ subject.get_semester_display }} · All year levels who answered
+</p>
+
+<nav class="flex flex-wrap gap-2 mb-6" aria-label="Course tabs">
+    <a href="{% url 'analytics_professor:subject_detail' subject.pk %}"
+       class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
+    <a href="{% url 'analytics_professor:subject_roster' subject.pk %}"
+       class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Masterlist</a>
+    <a href="{% url 'analytics_professor:topic_list' catalog_course.pk %}"
+       class="course-nav-link">Topics</a>
+    <a href="{% url 'analytics_professor:question_list' catalog_course.pk %}"
+       class="course-nav-link">Question Bank</a>
+    <a href="{% url 'analytics_professor:exam_setup' catalog_course.pk %}"
+       class="course-nav-link">Exam Setup</a>
+</nav>
+
+<div class="bento-grid mb-6">
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.enrolled_count label="Students" variant="primary" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" variant="primary" %}</div>
+    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.accuracy suffix="%" label="Average Score" variant="soft" %}</div>
+
+    <div class="span-full">
+        <div class="bento-card bento-card--chart bento-card-inner">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4 px-6 pt-6">
+                <h2 class="text-lg font-semibold text-examiq-navy">Accuracy over time</h2>
+            </div>
+            <div id="accuracy-trend-wrap" class="px-6 pb-6">
+                <canvas id="accuracyTrendChart" height="110"></canvas>
+            </div>
+            <div id="accuracy-trend-empty" class="chart-empty-state hidden px-6 pb-6">
+                <p class="empty-state-title">Not enough data yet</p>
+                <p class="empty-state-body">Need at least two days of answers to draw the trend line.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="span-half">
+        {% include "components/calibration_tier_card.html" with calibration_matrix=summary.calibration_matrix calibration_max=calibration_max %}
+    </div>
+    <div class="span-half">
+        <div class="bento-card bento-card--list bento-card-inner h-full">
+            <h2 class="text-lg font-semibold text-examiq-navy mb-4">By year level</h2>
+            {% if summary.year_breakdown %}
+            <ul class="space-y-2 bento-card-scroll">
+                {% for item in summary.year_breakdown %}
+                <li class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-examiq-navy">{{ item.year_name }}</span>
+                    <span class="text-sm text-examiq-slate">{{ item.student_count }} · {{ item.accuracy }}%</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            {% include "components/empty_state.html" with compact=True title="No answers yet" body="Students from any year who answer this course will appear here." %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="bento-card bento-card--list bento-card-inner">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Misconception topics</h2>
+    {% if summary.misconception_topics %}
+    <ul class="space-y-2">
+        {% for item in summary.misconception_topics %}
+        <li class="flex justify-between items-center py-2 border-b border-slate-100">
+            <span class="text-examiq-navy">{{ item.question__topic__name }}</span>
+            <span class="misconception-badge">{{ item.mistake_count }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    {% include "components/empty_state.html" with compact=True title="No high-confidence mistakes yet" body="Confident wrong answers for this course will show up here." %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ summary.accuracy_trend|json_script:"accuracy-trend-data" }}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const trendData = JSON.parse(document.getElementById("accuracy-trend-data").textContent);
+    const canvas = document.getElementById("accuracyTrendChart");
+    if (window.ExamiQUI && window.ExamiQUI.renderAccuracyChart) {
+        window.ExamiQUI.renderAccuracyChart(canvas, trendData, {
+            wrapEl: document.getElementById("accuracy-trend-wrap"),
+            emptyEl: document.getElementById("accuracy-trend-empty"),
+        });
+    }
+});
+</script>
+{% endblock %}

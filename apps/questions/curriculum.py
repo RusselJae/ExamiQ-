@@ -9,7 +9,7 @@ def get_year_levels():
 
 
 def term_semester(term: AcademicTerm | None) -> int | None:
-    """Return Subject semester (1 or 2) for an academic term."""
+    """Return Subject semester (1, 2, or 3/Midyear) for an academic term."""
     if not term:
         return None
     return term.semester

@@ -6,7 +6,7 @@
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick your subject, topic, and difficulty. Questions are timed — explanations appear at the end." %}
+{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 3 courses and a difficulty. Up to 10 questions per course — shuffled and timed." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
 <div class="bento-card p-6 mb-6">
@@ -21,71 +21,44 @@
     <div class="student-setup-card bento-card">
         {% if no_exams_available %}
         <div class="student-setup-empty">
-            No exams available for your section right now. Check back when your instructor enables exam setup.
+            No approved questions are available yet. Check back once faculty has published questions for a course.
         </div>
-        {% else %}
-        <form
-            method="post"
-            id="review-setup-form"
-            class="student-setup-form"
-            data-topics-api="{% url 'reviews:setup_topics' %}"
-            data-preview-api="{% url 'reviews:setup_preview' %}"
-            data-preselected-topic="{% if preselected_topic_id %}{{ preselected_topic_id }}{% endif %}"
-        >
+        {% elif setup_eligibility.eligible %}
+        <form method="post" id="review-setup-form" class="student-setup-form">
             {% csrf_token %}
             {{ form.pre_session_confidence.as_hidden }}
             {{ form.session_goal.as_hidden }}
 
+            {% if form.non_field_errors %}
+            <div class="student-setup-empty mb-4">{{ form.non_field_errors }}</div>
+            {% endif %}
+
             <div class="student-setup-callout" role="note">
                 <p class="student-setup-callout__title">How it works</p>
                 <ul class="student-setup-callout__list">
-                    <li>Choose a subject assigned to your section this term.</li>
-                    <li>Pick a topic and difficulty level enabled by your instructor.</li>
-                    <li>Each question is timed — answer honestly when rating confidence.</li>
-                    <li>Explanations appear after you finish the exam.</li>
+                    <li>Select at least 3 BSED Math courses — year and section stay on your profile.</li>
+                    <li>Up to 10 questions per course at your difficulty, shuffled across courses.</li>
+                    <li>Each question is timed — explanations appear after you finish.</li>
                 </ul>
             </div>
 
-            <div class="student-setup-fields">
-                <div class="student-setup-field">
-                    <label class="student-setup-field__label" for="id_subject">Subject</label>
-                    {{ form.subject }}
+            <div class="student-setup-field">
+                <span class="student-setup-field__label">{{ form.subjects.label }}</span>
+                <div class="multi-select" data-multi-select data-selected-heading="Selected courses">
+                    {{ form.subjects }}
                 </div>
-                <div class="student-setup-field">
-                    <label class="student-setup-field__label" for="id_topic">Topic</label>
-                    {{ form.topic }}
-                </div>
+                {% if form.subjects.errors %}
+                <p class="student-setup-field__error">{{ form.subjects.errors.0 }}</p>
+                {% endif %}
             </div>
 
-            <fieldset class="student-setup-difficulty">
-                <legend class="student-setup-field__label">Difficulty</legend>
-                <div class="student-setup-difficulty__grid" id="difficulty-cards" role="radiogroup" aria-label="Difficulty level">
-                    {% for value, label in form.difficulty.field.choices %}
-                    <button
-                        type="button"
-                        class="select-card student-setup-difficulty__card"
-                        data-difficulty="{{ value }}"
-                        aria-pressed="false"
-                    >
-                        <span class="student-setup-difficulty__name">{{ label }}</span>
-                        <span class="student-setup-difficulty__count" data-difficulty-count="{{ value }}">—</span>
-                        <span class="student-setup-difficulty__hint">questions</span>
-                    </button>
-                    {% endfor %}
-                </div>
-                <div class="sr-only">{{ form.difficulty }}</div>
-            </fieldset>
-
-            <div class="student-setup-summary">
-                <div class="student-setup-summary__card">
-                    <span class="student-setup-summary__label">Questions</span>
-                    <span class="student-setup-summary__value" id="summary-question-count">—</span>
-                </div>
-                <div class="student-setup-summary__card">
-                    <span class="student-setup-summary__label">Seconds per question</span>
-                    <span class="student-setup-summary__value" id="summary-seconds">—</span>
-                </div>
-            </div>
+            <label class="student-setup-field" for="{{ form.difficulty.id_for_label }}">
+                <span class="student-setup-field__label">{{ form.difficulty.label }}</span>
+                {{ form.difficulty }}
+                {% if form.difficulty.errors %}
+                <p class="student-setup-field__error">{{ form.difficulty.errors.0 }}</p>
+                {% endif %}
+            </label>
 
             <button type="submit" class="btn-primary student-setup-submit" id="start-exam-btn">Start exam</button>
         </form>
@@ -93,18 +66,15 @@
     </div>
 </div>
 
-{% if not no_exams_available %}
+{% if setup_eligibility.eligible and not no_exams_available %}
 {% include "reviews/partials/pre_exam_modals.html" %}
 <script id="pre-exam-warmup-data" type="application/json">{{ warmup_json|safe }}</script>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
-{% if not no_exams_available %}
-<script>
-    var preselectedTopicId = {% if preselected_topic_id %}{{ preselected_topic_id }}{% else %}null{% endif %};
-</script>
+{% if setup_eligibility.eligible and not no_exams_available %}
+<script src="{% static 'js/multi-select-dropdown.js' %}"></script>
 <script src="{% static 'js/pre-exam-modals.js' %}"></script>
-<script src="{% static 'js/exam-setup.js' %}"></script>
 {% endif %}
 {% endblock %}

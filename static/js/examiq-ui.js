@@ -372,7 +372,7 @@
         const labels = (trendData || []).map(function (d) { return d.date; });
         const values = (trendData || []).map(function (d) { return d.accuracy; });
 
-        if (labels.length < 2) {
+        if (labels.length < 1) {
             if (wrapEl) wrapEl.classList.add("hidden");
             if (emptyEl) emptyEl.classList.remove("hidden");
             return;
@@ -381,20 +381,27 @@
         if (wrapEl) wrapEl.classList.remove("hidden");
         if (emptyEl) emptyEl.classList.add("hidden");
 
+        function scoreColor(score) {
+            if (score < 60) return "#F57C00";
+            if (score < 75) return "#0284C7";
+            return "#388E3C";
+        }
+
         new Chart(canvas, {
-            type: "line",
+            type: "bar",
             data: {
                 labels: labels,
                 datasets: [{
-                    label: "Accuracy %",
+                    label: "Score %",
                     data: values,
-                    borderColor: "#2E7D52",
-                    backgroundColor: "rgba(46, 125, 82, 0.12)",
-                    tension: 0.3,
-                    fill: true,
+                    backgroundColor: values.map(scoreColor),
+                    borderRadius: 6,
+                    maxBarThickness: 36,
                 }]
             },
             options: {
+                responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     y: { min: 0, max: 100, grid: { color: "#f1f5f9" } },
                     x: { grid: { display: false } }
@@ -428,13 +435,13 @@
                     {
                         label: "Confidence",
                         data: data.map(function (d) { return d.confidence; }),
-                        backgroundColor: "rgba(236, 72, 153, 0.65)",
+                        backgroundColor: "#F57C00",
                         borderRadius: 4,
                     },
                     {
                         label: "Performance",
                         data: data.map(function (d) { return d.performance; }),
-                        backgroundColor: "rgba(26, 86, 50, 0.75)",
+                        backgroundColor: "#388E3C",
                         borderRadius: 4,
                     },
                 ],
