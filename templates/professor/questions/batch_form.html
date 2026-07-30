@@ -11,9 +11,7 @@
     {% csrf_token %}
 
     <div class="bento-card bento-card--elevated p-6 shadow-sm">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-1">Exam Topic Settings</h2>
-        <p class="text-xs text-examiq-slate mb-4">Select these once. All questions added below will use these settings.</p>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+        <div class="batch-settings-grid">
             <div>
                 <label for="settings-topic" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Topic</label>
                 <select id="settings-topic" name="topic" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
@@ -25,7 +23,7 @@
                 {% if not course_subject %}
                 <p class="text-xs text-amber-700 mt-1">Link a subject to this course before adding topics.</p>
                 {% elif not topics %}
-                <p class="text-xs text-amber-700 mt-1">No topics yet. Create one under Topics, or from AI suggestions below.</p>
+                <p class="text-xs text-amber-700 mt-1">No topics yet. Create one under Topics first.</p>
                 {% endif %}
             </div>
             <div>
@@ -36,7 +34,35 @@
                     {% endfor %}
                 </select>
             </div>
+            <div>
+                <label for="ai-source-file" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Learning Material</label>
+                <input
+                    type="file"
+                    id="ai-source-file"
+                    accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    class="w-full rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm shadow-sm bg-white"
+                >
+            </div>
+            <div>
+                <label for="ai-generate-count" class="block text-xs font-semibold uppercase text-examiq-slate mb-1"># To Generate</label>
+                <input
+                    type="number"
+                    id="ai-generate-count"
+                    min="1"
+                    max="10"
+                    value="3"
+                    class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm bg-white"
+                >
+            </div>
+            <div class="batch-settings-generate">
+                <button type="button"
+                        id="ai-generate-btn"
+                        class="inline-flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition shadow-sm">
+                    <span aria-hidden="true">+</span> AI Generate
+                </button>
+            </div>
         </div>
+
         <div id="ai-topic-detect-panel" class="mt-4 hidden">
             <p class="text-xs font-semibold uppercase text-examiq-slate mb-2">Detected from module</p>
             <div id="ai-detected-chips" class="flex flex-wrap gap-2 mb-2"></div>
@@ -44,70 +70,23 @@
         </div>
     </div>
 
-    <div class="bento-card bento-card--elevated p-6 shadow-sm">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-1">AI Generate</h2>
-        <p class="text-xs text-examiq-slate mb-4 text-center md:text-left">Upload learning material, then generate MCQs for the topic and difficulty above.</p>
-        <div class="flex flex-col items-center gap-3">
-            <div class="w-full max-w-xl space-y-3">
-                <div>
-                    <label for="ai-source-file" class="block text-xs font-semibold uppercase text-examiq-slate mb-1 text-center">
-                        Learning material (PDF, DOCX, or TXT)
-                    </label>
-                    <input
-                        type="file"
-                        id="ai-source-file"
-                        accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        class="w-full rounded-xl border border-dashed border-slate-300 px-3 py-3 text-sm shadow-sm bg-white"
-                    >
-                    <p class="text-xs text-examiq-slate mt-1 text-center">AI detects topics from this file, then writes questions.</p>
-                </div>
-                <div class="max-w-xs mx-auto">
-                    <label for="ai-generate-count" class="block text-xs font-semibold uppercase text-examiq-slate mb-1 text-center">
-                        Number of questions
-                    </label>
-                    <input
-                        type="number"
-                        id="ai-generate-count"
-                        min="1"
-                        max="10"
-                        value="3"
-                        class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm bg-white text-center"
-                    >
-                    <p class="text-xs text-examiq-slate mt-1 text-center">Enter 1–10 questions per generate run.</p>
-                </div>
-            </div>
-            <button type="button"
-                    id="ai-generate-btn"
-                    class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition shadow-md hover:shadow-lg">
-                <span aria-hidden="true">+</span> AI Generate
-            </button>
-            <div class="flex items-center gap-3 w-full max-w-md my-1">
-                <span class="flex-1 border-t border-slate-200"></span>
-                <span class="text-xs font-semibold uppercase text-examiq-slate">or</span>
-                <span class="flex-1 border-t border-slate-200"></span>
-            </div>
-            <button type="button" id="add-question-inline-btn" class="btn-secondary inline-flex items-center gap-2 border-dashed">
-                <span>+</span> Add a question manually
-            </button>
-        </div>
-    </div>
-
     <div id="generate-modal-container"></div>
     <div id="validate-modal-container"></div>
 
     <div class="bento-card p-6 overflow-x-auto shadow-sm">
-        <div class="flex items-center justify-between mb-4">
+        <div class="batch-questions-toolbar">
             <h2 class="text-lg font-semibold text-examiq-navy">Questions</h2>
-            <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-slate-100 px-3 py-1">0 questions</span>
+            <div class="batch-questions-toolbar__actions">
+                <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1">0 questions</span>
+                <button type="submit" class="btn-primary btn-primary-sm inline-flex items-center gap-1">
+                    Submit all
+                </button>
+            </div>
         </div>
 
         <div id="questions-empty" class="empty-state empty-state--compact">
             <p class="empty-state-title">No questions yet</p>
-            <p class="empty-state-body">Use AI Generate above, or add one manually, to get started.</p>
             <div class="flex flex-wrap justify-center gap-3 mt-4">
-                <button type="button" id="empty-ai-generate-btn" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition text-sm">
-                    <span>+</span> AI Generate
-                </button>
                 <button type="button" id="empty-add-manual-btn" class="btn-secondary inline-flex items-center gap-2 text-sm">
                     <span>+</span> Add manually
                 </button>
@@ -119,13 +98,17 @@
                 <tr class="text-left text-examiq-slate border-b border-slate-200">
                     <th class="pb-3 pr-4 font-medium w-12">#</th>
                     <th class="pb-3 pr-4 font-medium">Question</th>
-                    <th class="pb-3 pr-4 font-medium w-20">Correct</th>
+                    <th class="pb-3 pr-4 font-medium w-20">Answer</th>
                     <th class="pb-3 pr-4 font-medium w-40">Concept</th>
-                    <th class="pb-3 font-medium w-44"></th>
+                    <th class="pb-3 pr-4 font-medium w-28">Status</th>
+                    <th class="pb-3 font-medium w-36"></th>
                 </tr>
             </thead>
             <tbody id="questions-table-body"></tbody>
         </table>
+        <button type="button" id="add-question-row-btn" class="batch-add-row text-link text-sm font-medium hidden">
+            + Add another row
+        </button>
     </div>
 
     <div id="question-fields-store" class="sr-only" aria-hidden="true"></div>
@@ -133,11 +116,9 @@
     <input type="hidden" name="question_count" id="question-count" value="0">
 
     <div class="flex flex-col sm:flex-row gap-3 justify-between">
-        <div class="flex flex-wrap gap-3">
-            <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2">
-                <span>+</span> Add Another Question
-            </button>
-        </div>
+        <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2">
+            <span>+</span> Add Another Question
+        </button>
         <button type="submit" class="btn-primary inline-flex items-center gap-2">
             Submit All Questions
         </button>
@@ -168,7 +149,6 @@
     const generateBtn = document.getElementById("ai-generate-btn");
     const addQuestionBtn = document.getElementById("add-question-btn");
     const addQuestionInlineBtn = document.getElementById("add-question-inline-btn");
-    const emptyAiGenerateBtn = document.getElementById("empty-ai-generate-btn");
     const emptyAddManualBtn = document.getElementById("empty-add-manual-btn");
     const batchForm = document.getElementById("batch-question-form");
     const sourceInput = document.getElementById("ai-source-file");
@@ -240,6 +220,14 @@
         return '<button type="button" class="validate-btn text-link text-sm font-medium mr-2" data-index="' + index + '">Validate</button>';
     }
 
+    function statusBadgeHtml(index) {
+        const validation = validationState[index];
+        if (validation && validation.is_valid === true) {
+            return '<span class="batch-status-badge batch-status-badge--valid">Valid ' + checkIconSvg() + "</span>";
+        }
+        return '<span class="batch-status-badge batch-status-badge--draft">Draft</span>';
+    }
+
     function showValidateModal(result) {
         const validateContainer = document.getElementById("validate-modal-container");
         const validBadge = result.is_valid
@@ -285,6 +273,8 @@
         const hasQuestions = n > 0;
         questionsTable.classList.toggle("hidden", !hasQuestions);
         questionsEmpty.classList.toggle("hidden", hasQuestions);
+        const addRowBtn = document.getElementById("add-question-row-btn");
+        if (addRowBtn) addRowBtn.classList.toggle("hidden", !hasQuestions);
     }
 
     function getField(name) {
@@ -374,9 +364,14 @@
         }
         row.innerHTML =
             '<td class="py-3 pr-4 text-examiq-slate font-medium">' + (index + 1) + "</td>" +
-            '<td class="py-3 pr-4 text-examiq-navy max-w-md">' + truncate(data.stem, 80) + "</td>" +
-            '<td class="py-3 pr-4 text-examiq-navy font-medium">' + (data.correct || "—") + "</td>" +
-            '<td class="py-3 pr-4 text-examiq-slate max-w-[10rem] truncate">' + truncate(data.concept, 24) + "</td>" +
+            '<td class="py-3 pr-4 text-examiq-navy max-w-md">' +
+            (data.stem ? truncate(data.stem, 80) : '<span class="text-examiq-slate italic">Click to write question text…</span>') +
+            "</td>" +
+            '<td class="py-3 pr-4 text-examiq-navy font-medium">' + (data.stem ? (data.correct || "—") : "—") + "</td>" +
+            '<td class="py-3 pr-4 text-examiq-slate max-w-[10rem] truncate">' +
+            (data.concept ? truncate(data.concept, 24) : '<span class="text-examiq-slate">— select —</span>') +
+            "</td>" +
+            '<td class="py-3 pr-4">' + statusBadgeHtml(index) + "</td>" +
             '<td class="py-3 whitespace-nowrap">' +
             '<a href="' + editUrlFor(index) + '" class="text-link text-sm font-medium mr-3">Edit</a>' +
             validateButtonHtml(index) +
@@ -793,14 +788,15 @@
             addQuestionBtn.click();
         });
     }
+    const addQuestionRowBtn = document.getElementById("add-question-row-btn");
+    if (addQuestionRowBtn) {
+        addQuestionRowBtn.addEventListener("click", function () {
+            addQuestion({ question_type: "mcq" }, true);
+        });
+    }
     if (emptyAddManualBtn) {
         emptyAddManualBtn.addEventListener("click", function () {
             addQuestionBtn.click();
-        });
-    }
-    if (emptyAiGenerateBtn) {
-        emptyAiGenerateBtn.addEventListener("click", function () {
-            generateBtn.click();
         });
     }
 

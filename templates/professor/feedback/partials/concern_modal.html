@@ -1,62 +1,81 @@
-<div id="faculty-concern-modal" class="ai-tutor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="faculty-concern-title">
-    <div class="ai-tutor-modal__backdrop" data-dismiss-faculty-concern></div>
-    <div class="ai-tutor-modal__panel">
-        <div class="ai-tutor-modal__header">
-            <h2 id="faculty-concern-title" class="ai-tutor-modal__title">Student concern</h2>
-            <button type="button" class="ai-tutor-modal__close" data-dismiss-faculty-concern aria-label="Close">&times;</button>
-        </div>
-
-        <div class="ai-tutor-modal__subheader ai-tutor-modal__subheader--select">
-            <label for="faculty-concern-select" class="ai-tutor-modal__review-count">Concern</label>
-            <select id="faculty-concern-select" class="ai-tutor-question-select"></select>
-        </div>
-
-        <div class="ai-tutor-modal__tabs" role="tablist">
-            <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-faculty-screen="ai" role="tab" aria-selected="true">AI message</button>
-            <button type="button" class="ai-tutor-modal__tab" data-faculty-screen="conversation" role="tab" aria-selected="false">Conversation</button>
-        </div>
-
-        <div class="ai-tutor-modal__body">
-            <div id="faculty-concern-loading" class="ai-tutor-modal__loading">
-                <div class="feedback-modal__spinner" aria-hidden="true"></div>
-                <p class="text-sm text-examiq-slate">Loading concerns…</p>
-            </div>
-
-            <div id="faculty-concern-content" class="ai-tutor-modal__content hidden">
-                <div class="ai-tutor-feedback-panel">
-                    <p class="ai-tutor-feedback-panel__eyebrow" id="faculty-concern-student"></p>
-                    <h3 class="ai-tutor-feedback-panel__stem" id="faculty-concern-stem"></h3>
-
-                    <div id="faculty-screen-ai" class="faculty-concern-screen">
-                        <div class="ai-tutor-feedback-panel__section">
-                            <h4 class="ai-tutor-feedback-panel__label">Student answer</h4>
-                            <div class="ai-tutor-feedback-panel__text" id="faculty-concern-user-answer"></div>
-                        </div>
-                        <div class="ai-tutor-feedback-panel__section">
-                            <h4 class="ai-tutor-feedback-panel__label">Correct answer</h4>
-                            <div class="ai-tutor-feedback-panel__text" id="faculty-concern-correct-answer"></div>
-                        </div>
-                        <div class="ai-tutor-feedback-panel__section">
-                            <h4 class="ai-tutor-feedback-panel__label">AI feedback</h4>
-                            <div class="ai-tutor-feedback-panel__text whitespace-pre-line examiq-math-block" id="faculty-concern-ai-feedback"></div>
-                        </div>
-                    </div>
-
-                    <div id="faculty-screen-conversation" class="faculty-concern-screen hidden">
-                        <div id="faculty-concern-thread" class="concern-thread concern-thread--modal mb-4"></div>
-                        <div class="ai-tutor-feedback-panel__section">
-                            <h4 class="ai-tutor-feedback-panel__label">Your reply</h4>
-                            <textarea id="faculty-concern-note-input"
-                                      rows="4"
-                                      class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm"
-                                      placeholder="Clarify the misconception, point to a step, or suggest what to practice next…"></textarea>
-                            <button type="button" id="faculty-concern-save-btn" class="btn-primary mt-3">Send reply</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="faculty-concern-error" class="ai-tutor-modal__error hidden" role="alert"></div>
-        </div>
-    </div>
-</div>
+<div id="faculty-concern-modal" class="ai-tutor-modal chat-modal hidden" role="dialog" aria-modal="true" aria-labelledby="faculty-concern-title">
+    <div class="ai-tutor-modal__backdrop" data-dismiss-faculty-concern></div>
+    <div class="ai-tutor-modal__panel chat-modal__panel">
+        <div class="ai-tutor-modal__header">
+            <h2 id="faculty-concern-title" class="ai-tutor-modal__title">Student concern</h2>
+            <button type="button" class="ai-tutor-modal__close" data-dismiss-faculty-concern aria-label="Close">&times;</button>
+        </div>
+
+        <div class="chat-modal__person">
+            <div class="chat-avatar" id="faculty-concern-avatar" aria-hidden="true">?</div>
+            <div class="chat-modal__person-main">
+                <div class="chat-modal__person-row">
+                    <p class="chat-modal__person-name" id="faculty-concern-student-name"></p>
+                </div>
+                <p class="chat-modal__person-q" id="faculty-concern-q-preview"></p>
+            </div>
+        </div>
+
+        <div class="ai-tutor-modal__tabs chat-modal__tabs" role="tablist">
+            <button type="button" class="ai-tutor-modal__tab" data-faculty-screen="ai" role="tab" aria-selected="false">AI message</button>
+            <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-faculty-screen="conversation" role="tab" aria-selected="true">Conversation</button>
+        </div>
+
+        <div class="ai-tutor-modal__body chat-modal__body">
+            <div id="faculty-concern-loading" class="ai-tutor-modal__loading">
+                <div class="feedback-modal__spinner" aria-hidden="true"></div>
+                <p class="text-sm text-examiq-slate">Loading concerns…</p>
+            </div>
+
+            <div id="faculty-concern-content" class="ai-tutor-modal__content hidden chat-modal__content">
+                <div id="faculty-screen-ai" class="faculty-concern-screen hidden">
+                    <div class="ai-tutor-feedback-panel">
+                        <p class="ai-tutor-feedback-panel__eyebrow" id="faculty-concern-student"></p>
+                        <h3 class="ai-tutor-feedback-panel__stem" id="faculty-concern-stem"></h3>
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">Student answer</h4>
+                            <div class="ai-tutor-feedback-panel__text" id="faculty-concern-user-answer"></div>
+                        </div>
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">Correct answer</h4>
+                            <div class="ai-tutor-feedback-panel__text" id="faculty-concern-correct-answer"></div>
+                        </div>
+                        <div class="ai-tutor-feedback-panel__section">
+                            <h4 class="ai-tutor-feedback-panel__label">AI feedback</h4>
+                            <div class="ai-tutor-feedback-panel__text whitespace-pre-line examiq-math-block" id="faculty-concern-ai-feedback"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="faculty-screen-conversation" class="faculty-concern-screen chat-screen">
+                    <div id="faculty-concern-thread" class="chat-thread" role="log" aria-live="polite"></div>
+                    <div class="chat-composer-wrap">
+                        <form class="chat-composer" id="faculty-concern-form" enctype="multipart/form-data">
+                            <label class="chat-composer__attach" for="faculty-concern-image" title="Attach image (max 5 MB)">
+                                <input type="file"
+                                       id="faculty-concern-image"
+                                       accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                                       class="sr-only">
+                                <span aria-hidden="true">+</span>
+                                <span class="sr-only">Attach photo</span>
+                            </label>
+                            <textarea id="faculty-concern-note-input"
+                                      rows="2"
+                                      class="chat-composer__input"
+                                      placeholder="Clarify the misconception, point to a step, or suggest what to practice next…"></textarea>
+                            <button type="button" id="faculty-concern-save-btn" class="chat-composer__send" aria-label="Send">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </button>
+                        </form>
+                        <p id="faculty-concern-image-name" class="chat-composer__file-name hidden"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="faculty-concern-error" class="ai-tutor-modal__error hidden" role="alert"></div>
+        </div>
+    </div>
+</div>

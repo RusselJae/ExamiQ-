@@ -114,6 +114,11 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
         mistake = getattr(answer, "mistake_record", None)
         if mistake and (mistake.faculty_note or "").strip():
             faculty_notes.append(mistake.faculty_note.strip())
+        concern_messages = []
+        if mistake:
+            from apps.analytics.concern_services import serialize_concern_thread
+
+            concern_messages = serialize_concern_thread(mistake)
         correct_answer = _answer_correct_response(answer)
         conv = TutorConversation.objects.filter(
             student=session.student,
@@ -124,6 +129,8 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
             {
                 "answer_id": answer.pk,
                 "question_id": answer.question_id,
+                "session_id": session.pk,
+                "mistake_id": mistake.pk if mistake else None,
                 "stem": answer.question.stem,
                 "is_correct": answer.is_correct,
                 "timed_out": answer.timed_out,
@@ -132,6 +139,7 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "needs_ai": needs_ai,
                 "correction_steps": steps,
                 "faculty_notes": faculty_notes,
+                "concern_messages": concern_messages,
                 "final_answer": correct_answer,
                 "topic": answer.question.topic.name,
                 "difficulty": answer.question.get_difficulty_display(),

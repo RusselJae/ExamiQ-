@@ -62,7 +62,6 @@
             <label class="auth-field{% if form.section.errors %} auth-field--error{% endif %}" for="{{ form.section.id_for_label }}">
                 <span class="auth-field__label">{{ form.section.label }}</span>
                 {{ form.section }}
-                <p class="auth-field__hint">e.g. 1M, 2-1M, or BSE 2-1M</p>
                 {% if form.section.errors %}
                 <p class="auth-field__error">{{ form.section.errors.0 }}</p>
                 {% endif %}

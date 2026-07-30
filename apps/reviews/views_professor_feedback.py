@@ -58,11 +58,18 @@ def _concern_item_payload(record: MistakeRecord) -> dict:
         (m for m in reversed(messages) if m["author_role"] == "student"),
         None,
     )
+    student = record.student
+    name = student.get_full_name() or student.email
+    if student.first_name and student.last_name:
+        initials = (student.first_name[0] + student.last_name[0]).upper()
+    else:
+        initials = (name[:2] or "?").upper()
     return {
         "mistake_id": record.pk,
         "answer_id": answer.pk if answer else None,
-        "student_name": record.student.get_full_name() or record.student.email,
-        "student_email": record.student.email,
+        "student_name": name,
+        "student_email": student.email,
+        "student_initials": initials,
         "stem": record.question.stem,
         "topic": record.topic.name,
         "occurred_at": record.occurred_at.isoformat() if record.occurred_at else "",
@@ -193,14 +200,36 @@ class FeedbackFacultyNoteView(ProfessorCourseMixin, View):
     """Post a faculty reply in a student concern thread."""
 
     def post(self, request, course_pk, mistake_pk):
+        from apps.analytics.forms import MistakeConcernForm
+
         record = get_object_or_404(
             _course_concern_queryset(self.course),
             pk=mistake_pk,
         )
-        body = (request.POST.get("faculty_note") or request.POST.get("body") or "").strip()
-        if not body:
-            return JsonResponse({"ok": False, "error": "Reply cannot be empty."}, status=400)
-        post_concern_message(record, request.user, body=body)
+        form = MistakeConcernForm(
+            {
+                "body": (
+                    request.POST.get("faculty_note")
+                    or request.POST.get("body")
+                    or ""
+                ),
+            },
+            request.FILES,
+        )
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": form.errors.as_text() or "Reply cannot be empty.",
+                },
+                status=400,
+            )
+        post_concern_message(
+            record,
+            request.user,
+            body=form.cleaned_data["body"],
+            image=form.cleaned_data.get("image"),
+        )
         record.refresh_from_db()
         return JsonResponse(
             {
@@ -259,14 +288,36 @@ class SectionFeedbackFacultyNoteView(ProfessorRequiredMixin, View):
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, section_pk, mistake_pk):
+        from apps.analytics.forms import MistakeConcernForm
+
         record = get_object_or_404(
             _section_concern_queryset(self.section),
             pk=mistake_pk,
         )
-        body = (request.POST.get("faculty_note") or request.POST.get("body") or "").strip()
-        if not body:
-            return JsonResponse({"ok": False, "error": "Reply cannot be empty."}, status=400)
-        post_concern_message(record, request.user, body=body)
+        form = MistakeConcernForm(
+            {
+                "body": (
+                    request.POST.get("faculty_note")
+                    or request.POST.get("body")
+                    or ""
+                ),
+            },
+            request.FILES,
+        )
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": form.errors.as_text() or "Reply cannot be empty.",
+                },
+                status=400,
+            )
+        post_concern_message(
+            record,
+            request.user,
+            body=form.cleaned_data["body"],
+            image=form.cleaned_data.get("image"),
+        )
         record.refresh_from_db()
         return JsonResponse(
             {

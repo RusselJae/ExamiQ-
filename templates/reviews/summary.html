@@ -15,31 +15,34 @@
     <div class="span-kpi">{% include "components/stat_card.html" with value=session_summary.avg_confidence label="Average Confidence" variant="primary" %}</div>
 
     <div class="span-half">
-        <div class="bento-card bento-card-inner h-full">
-            <h2 class="text-lg font-semibold text-examiq-navy mb-3">Calibration Insight</h2>
-            <p class="text-sm text-examiq-slate mb-4">{{ session_summary.narrative }}</p>
-            <p class="text-xs text-examiq-slate mb-3">
-                Calibration gap: <strong class="{% if session_summary.calibration_gap > 10 %}text-examiq-mistake{% else %}text-examiq-navy{% endif %}">{{ session_summary.calibration_gap }} pts</strong>
-                (confidence vs average score)
-            </p>
+        <div class="bento-card bento-card-inner h-full session-insight-card">
+            <p class="session-insight-card__eyebrow">Session insight</p>
+            <h2 class="session-insight-card__title">Confidence vs Score</h2>
+            <p class="session-insight-card__body">{{ session_summary.narrative }}</p>
+            <div class="session-insight-card__gap {% if session_summary.calibration_gap > 10 %}session-insight-card__gap--warn{% endif %}">
+                <span class="session-insight-card__gap-label">Confidence gap</span>
+                <span class="session-insight-card__gap-value">{{ session_summary.calibration_gap }} pts</span>
+                <span class="session-insight-card__gap-hint">confidence vs average score</span>
+            </div>
         </div>
     </div>
 
     <div class="span-half">
-        {% include "components/calibration_tier_card.html" with calibration_matrix=session_summary.calibration_tier_matrix calibration_max=calibration_tier_max %}
+        {% include "components/calibration_tier_card.html" with calibration_matrix=session_summary.calibration_tier_matrix calibration_max=calibration_tier_max title="Confidence Breakdown" %}
     </div>
 
     <div class="span-half">
-        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col">
-            <h2 class="text-lg font-semibold text-examiq-navy mb-3">Recommended Next Reviews</h2>
+        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col session-reviews-card">
+            <p class="session-reviews-card__eyebrow">Next up</p>
+            <h2 class="session-reviews-card__title">Recommended Reviews</h2>
             {% if recommendations %}
-            <ul class="space-y-3 bento-card-scroll flex-1">
+            <ul class="session-reviews-list bento-card-scroll flex-1">
                 {% for rec in recommendations %}
-                <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b border-slate-100">
-                    <div>
-                        <p class="font-medium text-examiq-navy">{{ rec.topic_name }}</p>
-                        <p class="text-xs text-examiq-slate">{{ rec.reason }}</p>
-                        <span class="inline-block mt-1 text-xs px-2 py-0.5 rounded-full {% if rec.priority == 'high' %}bg-red-50 text-red-700{% else %}bg-amber-50 text-amber-800{% endif %}">
+                <li class="session-reviews-item">
+                    <div class="session-reviews-item__main">
+                        <p class="session-reviews-item__topic">{{ rec.topic_name }}</p>
+                        <p class="session-reviews-item__reason">{{ rec.reason }}</p>
+                        <span class="session-reviews-item__priority session-reviews-item__priority--{{ rec.priority }}">
                             {{ rec.priority|capfirst }} priority{% if rec.is_due %} — due now{% endif %}
                         </span>
                     </div>
@@ -71,7 +74,9 @@ window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
     feedbackUrl: "{{ feedback_url }}",
     historyUrl: "{{ tutor_history_url }}",
     chatUrl: "{{ tutor_chat_url }}",
+    concernUrlTemplate: "{% url 'analytics_student:upload_mistake_concern' 0 %}".replace("/0/", "/{pk}/"),
     csrfToken: "{{ csrf_token }}",
+    markNotificationsUrl: "{% url 'users:notifications_mark_link' %}",
 });
 </script>
 {% endblock %}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
@@ -10,6 +12,8 @@ from apps.analytics.models import MistakeConcernMessage, MistakeRecord
 from apps.users.assignment_services import get_or_create_catalog_course
 from apps.users.models import Course, TeachingAssignment, User
 from apps.users.notification_services import create_notification
+
+logger = logging.getLogger(__name__)
 
 
 def concern_has_activity(record: MistakeRecord) -> bool:
@@ -96,9 +100,12 @@ def post_concern_message(
             mistake_record.save(update_fields=update_fields)
         _notify_professors_of_student_message(mistake_record, message)
     elif author.role == User.Role.PROFESSOR:
-        mistake_record.faculty_note = body
+        update_fields = ["faculty_noted_at"]
         mistake_record.faculty_noted_at = timezone.now()
-        mistake_record.save(update_fields=["faculty_note", "faculty_noted_at"])
+        if body:
+            mistake_record.faculty_note = body
+            update_fields.append("faculty_note")
+        mistake_record.save(update_fields=update_fields)
         _notify_student_of_faculty_reply(mistake_record, message)
 
     return message
@@ -111,16 +118,23 @@ def mark_faculty_viewed(mistake_record: MistakeRecord) -> None:
         mistake_record.save(update_fields=["faculty_viewed_at"])
 
 
-def mark_concern_notifications_read(user: User, mistake_record_id: int) -> None:
+def mark_concern_notifications_read(
+    user: User,
+    mistake_record_id: int | None = None,
+    *,
+    answer_id: int | None = None,
+) -> None:
     """Mark notifications tied to a mistake concern as read."""
     from apps.users.notification_services import mark_notifications_read
 
-    ids = list(
-        user.notifications.filter(
-            read_at__isnull=True,
-            link__contains=f"mistake_id={mistake_record_id}",
-        ).values_list("pk", flat=True)
-    )
+    qs = user.notifications.filter(read_at__isnull=True)
+    if mistake_record_id is not None:
+        qs = qs.filter(link__contains=f"mistake_id={mistake_record_id}")
+    elif answer_id is not None:
+        qs = qs.filter(link__contains=f"answer_id={answer_id}")
+    else:
+        return
+    ids = list(qs.values_list("pk", flat=True))
     if ids:
         mark_notifications_read(user, ids)
 
@@ -137,12 +151,22 @@ def _message_image_url(message: MistakeConcernMessage) -> str:
 def serialize_concern_message(message: MistakeConcernMessage) -> dict:
     author = message.author
     role = "student" if author.role == User.Role.STUDENT else "faculty"
+    name = author.get_full_name() or author.email
+    parts = (author.first_name or "", author.last_name or "")
+    if parts[0] and parts[1]:
+        initials = (parts[0][0] + parts[1][0]).upper()
+    else:
+        initials = (name[:2] or "?").upper()
     return {
         "id": message.pk,
         "author_role": role,
-        "author_name": author.get_full_name() or author.email,
+        "author_name": name,
+        "author_initials": initials,
         "body": message.body or "",
         "image_url": _message_image_url(message),
+        "image_name": (
+            (message.image.name.rsplit("/", 1)[-1] if message.image else "") or ""
+        ),
         "created_at": message.created_at.isoformat() if message.created_at else "",
     }
 
@@ -165,8 +189,16 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
                 "id": None,
                 "author_role": "student",
                 "author_name": record.student.get_full_name() or record.student.email,
+                "author_initials": (
+                    (
+                        (record.student.first_name or "")[:1]
+                        + (record.student.last_name or "")[:1]
+                    ).upper()
+                    or (record.student.email or "?")[:2].upper()
+                ),
                 "body": record.student_note or "",
                 "image_url": image_url,
+                "image_name": "",
                 "created_at": record.occurred_at.isoformat() if record.occurred_at else "",
             }
         )
@@ -176,8 +208,10 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
                 "id": None,
                 "author_role": "faculty",
                 "author_name": "Faculty",
+                "author_initials": "FA",
                 "body": record.faculty_note or "",
                 "image_url": "",
+                "image_name": "",
                 "created_at": (
                     record.faculty_noted_at.isoformat() if record.faculty_noted_at else ""
                 ),
@@ -202,34 +236,58 @@ def _professors_for_mistake(record: MistakeRecord) -> list[User]:
                 professors.append(assignment.professor)
                 seen.add(assignment.professor_id)
 
-    course = (
-        Course.objects.filter(
-            code=subject.code,
-            program=subject.program,
-            professor__isnull=False,
+    if not professors:
+        course = (
+            Course.objects.filter(
+                code=subject.code,
+                program=subject.program,
+                professor__isnull=False,
+            )
+            .select_related("professor")
+            .first()
         )
-        .select_related("professor")
-        .first()
-    )
-    if course and course.professor_id and course.professor_id not in seen:
-        professors.append(course.professor)
-        seen.add(course.professor_id)
+        if course and course.professor_id and course.professor_id not in seen:
+            professors.append(course.professor)
+            seen.add(course.professor_id)
 
-    catalog_course = Course.objects.filter(
-        code=subject.code,
-        program=subject.program,
-        section="Catalog",
-        professor__isnull=False,
-    ).select_related("professor").first()
-    if catalog_course and catalog_course.professor_id and catalog_course.professor_id not in seen:
-        professors.append(catalog_course.professor)
-        seen.add(catalog_course.professor_id)
+    if not professors:
+        catalog_course = (
+            Course.objects.filter(
+                code=subject.code,
+                program=subject.program,
+                section="Catalog",
+                professor__isnull=False,
+            )
+            .select_related("professor")
+            .first()
+        )
+        if (
+            catalog_course
+            and catalog_course.professor_id
+            and catalog_course.professor_id not in seen
+        ):
+            professors.append(catalog_course.professor)
+            seen.add(catalog_course.professor_id)
 
     return professors
 
 
 def _feedback_link_for_professor(record: MistakeRecord, professor: User) -> str:
+    """Prefer section feedback when the professor teaches that section."""
+    section = getattr(record.student, "section", None)
     subject = record.question.topic.subject
+    if section and TeachingAssignment.objects.filter(
+        professor=professor,
+        program_section=section,
+        subject=subject,
+    ).exists():
+        return (
+            reverse(
+                "analytics_professor:section_feedback",
+                kwargs={"section_pk": section.pk},
+            )
+            + f"?mistake_id={record.pk}"
+        )
     course = get_or_create_catalog_course(professor, subject)
     return (
         reverse("analytics_professor:feedback_list", kwargs={"course_pk": course.pk})
@@ -254,10 +312,22 @@ def _notify_professors_of_student_message(
     record: MistakeRecord,
     message: MistakeConcernMessage,
 ) -> None:
+    professors = _professors_for_mistake(record)
+    if not professors:
+        subject = getattr(getattr(record.question, "topic", None), "subject", None)
+        logger.warning(
+            "No professors to notify for concern message=%s mistake=%s subject=%s student=%s",
+            message.pk,
+            record.pk,
+            getattr(subject, "code", None),
+            record.student_id,
+        )
+        return
+
     student_name = record.student.get_full_name() or record.student.email
     text = f"{student_name} asked about Q{record.question_id}"
     section_link = _section_feedback_link(record)
-    for professor in _professors_for_mistake(record):
+    for professor in professors:
         link = _feedback_link_for_professor(record, professor)
         if not link and section_link:
             link = section_link
@@ -269,9 +339,9 @@ def _notify_student_of_faculty_reply(
     message: MistakeConcernMessage,
 ) -> None:
     topic_name = record.topic.name
-    link = reverse(
-        "analytics_student:answer_detail",
-        kwargs={"answer_pk": record.answer_id},
+    link = (
+        reverse("analytics_student:mistakes")
+        + f"?answer_id={record.answer_id}&open_tutor=1"
     )
     create_notification(
         record.student,

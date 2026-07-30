@@ -1,6 +1,6 @@
-<div id="ai-tutor-modal" class="ai-tutor-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ai-tutor-title">
+<div id="ai-tutor-modal" class="ai-tutor-modal chat-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ai-tutor-title">
     <div class="ai-tutor-modal__backdrop" data-dismiss-ai-tutor></div>
-    <div class="ai-tutor-modal__panel">
+    <div class="ai-tutor-modal__panel chat-modal__panel">
         <div class="ai-tutor-modal__header">
             <h2 id="ai-tutor-title" class="ai-tutor-modal__title">ExamiQ+ AI Tutor</h2>
             <button type="button" class="ai-tutor-modal__close" data-dismiss-ai-tutor aria-label="Close">&times;</button>
@@ -16,23 +16,27 @@
             </span>
         </div>
 
-        <div class="ai-tutor-modal__tabs" role="tablist">
+        <div class="ai-tutor-modal__tabs chat-modal__tabs" role="tablist">
             <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-tutor-screen="ai" role="tab" aria-selected="true">AI message</button>
-            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="faculty" role="tab" aria-selected="false">Faculty note</button>
+            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="solution" role="tab" aria-selected="false">Solution</button>
+            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="faculty" role="tab" aria-selected="false">Faculty</button>
         </div>
 
-        <div class="ai-tutor-modal__body">
+        <div class="ai-tutor-modal__body chat-modal__body">
             <div id="ai-tutor-loading" class="ai-tutor-modal__loading">
                 <div class="feedback-modal__spinner" aria-hidden="true"></div>
                 <p class="text-sm text-examiq-slate">Loading your exam feedback…</p>
             </div>
 
-            <div id="ai-tutor-content" class="ai-tutor-modal__content hidden">
-                <div class="ai-tutor-feedback-panel" id="ai-tutor-feedback-panel">
-                    <p class="ai-tutor-feedback-panel__eyebrow">Worked solution</p>
-                    <h3 class="ai-tutor-feedback-panel__stem" id="ai-tutor-stem"></h3>
+            <div id="ai-tutor-content" class="ai-tutor-modal__content hidden chat-modal__content">
+                <div id="ai-tutor-screen-ai" class="ai-tutor-screen chat-screen">
+                    <div class="chat-thread chat-thread--ai" id="ai-tutor-messages" role="log" aria-live="polite"></div>
+                </div>
 
-                    <div id="ai-tutor-screen-ai" class="ai-tutor-screen">
+                <div id="ai-tutor-screen-solution" class="ai-tutor-screen chat-screen hidden">
+                    <div class="ai-tutor-feedback-panel" id="ai-tutor-feedback-panel">
+                        <p class="ai-tutor-feedback-panel__eyebrow">Worked solution</p>
+                        <h3 class="ai-tutor-feedback-panel__stem" id="ai-tutor-stem"></h3>
                         <div class="ai-tutor-feedback-panel__section" id="ai-tutor-why-section">
                             <h4 class="ai-tutor-feedback-panel__label">Why this is wrong</h4>
                             <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-why"></div>
@@ -47,27 +51,35 @@
                         </div>
                         <p class="ai-tutor-feedback-panel__meta" id="ai-tutor-meta"></p>
                     </div>
-
-                    <div id="ai-tutor-screen-faculty" class="ai-tutor-screen hidden">
-                        <div class="ai-tutor-feedback-panel__section">
-                            <h4 class="ai-tutor-feedback-panel__label">Faculty notes</h4>
-                            <div class="ai-tutor-feedback-panel__text whitespace-pre-line" id="ai-tutor-faculty-notes"></div>
-                        </div>
-                    </div>
                 </div>
 
-                <div class="ai-tutor-chat" id="ai-tutor-chat">
-                    <p class="ai-tutor-chat__hint">Ask a follow-up — request another approach, a simpler analogy, or check a step.</p>
-                    <div class="ai-tutor-chat__messages" id="ai-tutor-messages" role="log" aria-live="polite"></div>
-                    <form class="ai-tutor-chat__form" id="ai-tutor-chat-form">
-                        <input type="text"
-                               id="ai-tutor-chat-input"
-                               class="ai-tutor-chat__input"
-                               placeholder="Ask how to solve this step by step…"
-                               autocomplete="off"
-                               maxlength="2000">
-                        <button type="submit" class="btn-primary ai-tutor-chat__send" id="ai-tutor-send-btn">Send</button>
+                <div id="ai-tutor-screen-faculty" class="ai-tutor-screen chat-screen hidden">
+                    <div id="ai-tutor-faculty-thread" class="chat-thread" role="log" aria-live="polite"></div>
+                </div>
+
+                <div class="chat-composer-wrap" id="ai-tutor-chat">
+                    <form class="chat-composer" id="ai-tutor-chat-form" enctype="multipart/form-data">
+                        <label id="ai-tutor-image-label" class="chat-composer__attach hidden" for="ai-tutor-chat-image" title="Attach image (max 5 MB)">
+                            <input type="file"
+                                   id="ai-tutor-chat-image"
+                                   accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                                   class="sr-only">
+                            <span aria-hidden="true">+</span>
+                            <span class="sr-only">Attach photo</span>
+                        </label>
+                        <textarea id="ai-tutor-chat-input"
+                                  class="chat-composer__input"
+                                  rows="1"
+                                  placeholder="Ask how to solve this step by step…"
+                                  maxlength="2000"></textarea>
+                        <button type="submit" class="chat-composer__send" id="ai-tutor-send-btn" aria-label="Send">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
                     </form>
+                    <p id="ai-tutor-image-name" class="chat-composer__file-name hidden"></p>
                 </div>
             </div>
 

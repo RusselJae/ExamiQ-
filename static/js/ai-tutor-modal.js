@@ -1,6 +1,13 @@
 (function () {
     "use strict";
 
+    var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+    var ALLOWED_IMAGE_TYPES = {
+        "image/jpeg": true,
+        "image/png": true,
+        "image/webp": true,
+    };
+
     var state = {
         items: [],
         messages: [],
@@ -9,6 +16,7 @@
         loaded: false,
         enriching: {},
         screen: "ai",
+        preferredScreen: "ai",
     };
 
     function escapeHtml(text) {
@@ -32,6 +40,20 @@
         return window.ExamiQTutor || {};
     }
 
+    function markAnswerNotificationsRead(answerId) {
+        var config = getConfig();
+        var url = config.markNotificationsUrl;
+        if (!url || !answerId) return;
+        var fd = new FormData();
+        fd.append("answer_id", String(answerId));
+        fetch(url, {
+            method: "POST",
+            headers: { "X-CSRFToken": config.csrfToken || "" },
+            body: fd,
+            credentials: "same-origin",
+        }).catch(function () {});
+    }
+
     function historyUrlForAnswer(answerId) {
         var config = getConfig();
         if (!config.historyUrl) return "";
@@ -45,6 +67,27 @@
         if (!config.feedbackUrl) return "";
         var sep = config.feedbackUrl.indexOf("?") >= 0 ? "&" : "?";
         return config.feedbackUrl + sep + "answer_id=" + encodeURIComponent(answerId);
+    }
+
+    function concernUrlForAnswer(answerId) {
+        var config = getConfig();
+        if (config.concernUrlTemplate && answerId) {
+            return config.concernUrlTemplate.replace("{pk}", String(answerId));
+        }
+        if (config.concernUrl) return config.concernUrl;
+        return "";
+    }
+
+    function applySessionUrls(sessionId) {
+        var config = getConfig();
+        var templates = config.urlTemplates || {};
+        if (!sessionId || !templates.history) return;
+        config.historyUrl = templates.history.replace("{pk}", String(sessionId));
+        config.chatUrl = templates.chat.replace("{pk}", String(sessionId));
+        config.feedbackUrl = templates.feedback.replace("{pk}", String(sessionId));
+        if (templates.concern) {
+            config.concernUrlTemplate = templates.concern;
+        }
     }
 
     function openModal() {
@@ -76,6 +119,15 @@
     function truncateStem(stem) {
         if (!stem) return "Question";
         return stem.length > 72 ? stem.slice(0, 69) + "…" : stem;
+    }
+
+    function formatTimestamp(iso) {
+        if (!iso) return "";
+        try {
+            return new Date(iso).toLocaleString();
+        } catch (e) {
+            return iso;
+        }
     }
 
     async function loadHistoryForAnswer(answerId) {
@@ -152,7 +204,6 @@
         var queue = state.items.filter(function (item) {
             return item.needs_ai;
         });
-        // Active first, then remaining — one at a time to avoid host timeouts.
         queue.sort(function (a, b) {
             if (a.answer_id === state.activeAnswerId) return -1;
             if (b.answer_id === state.activeAnswerId) return 1;
@@ -222,32 +273,120 @@
             .join("");
     }
 
+    function attachmentChip(msg) {
+        if (!msg.image_url) return "";
+        var label = msg.image_name || "Attached image";
+        return (
+            '<a href="' +
+            escapeHtml(msg.image_url) +
+            '" target="_blank" rel="noopener" class="chat-attach chat-attach--preview">' +
+            '<img src="' +
+            escapeHtml(msg.image_url) +
+            '" alt="' +
+            escapeHtml(label) +
+            '" class="chat-attach__thumb">' +
+            '<span class="chat-attach__meta"><span class="chat-attach__label">Attached image</span>' +
+            '<span class="chat-attach__name">' +
+            escapeHtml(label) +
+            "</span></span></a>"
+        );
+    }
+
+    function updateComposeUi() {
+        var input = document.getElementById("ai-tutor-chat-input");
+        var attach = document.getElementById("ai-tutor-image-label");
+        var composer = document.getElementById("ai-tutor-chat");
+        var isFaculty = state.screen === "faculty";
+        var isSolution = state.screen === "solution";
+
+        if (composer) composer.classList.toggle("hidden", isSolution);
+        if (input) {
+            input.placeholder = isFaculty
+                ? "Ask your professor about this question…"
+                : "Ask how to solve this step by step…";
+        }
+        if (attach) attach.classList.toggle("hidden", !isFaculty);
+        if (!isFaculty) clearImageSelection();
+    }
+
     function setTutorScreen(screen) {
-        state.screen = screen === "faculty" ? "faculty" : "ai";
+        if (screen === "faculty") state.screen = "faculty";
+        else if (screen === "solution") state.screen = "solution";
+        else state.screen = "ai";
+
         var ai = document.getElementById("ai-tutor-screen-ai");
+        var solution = document.getElementById("ai-tutor-screen-solution");
         var faculty = document.getElementById("ai-tutor-screen-faculty");
         if (ai) ai.classList.toggle("hidden", state.screen !== "ai");
+        if (solution) solution.classList.toggle("hidden", state.screen !== "solution");
         if (faculty) faculty.classList.toggle("hidden", state.screen !== "faculty");
         document.querySelectorAll("[data-tutor-screen]").forEach(function (btn) {
             var active = btn.getAttribute("data-tutor-screen") === state.screen;
             btn.classList.toggle("ai-tutor-modal__tab--active", active);
             btn.setAttribute("aria-selected", active ? "true" : "false");
         });
+        updateComposeUi();
+    }
+
+    function renderFacultyThread(item) {
+        var container = document.getElementById("ai-tutor-faculty-thread");
+        if (!container) return;
+        var messages = (item && item.concern_messages) || [];
+        if (!messages.length) {
+            container.innerHTML =
+                '<p class="chat-thread__empty">No messages yet. Start the conversation below.</p>';
+            return;
+        }
+        container.innerHTML = messages
+            .map(function (msg) {
+                var isSelf = msg.author_role === "student";
+                var side = isSelf ? "out" : "in";
+                var initials = msg.author_initials || (isSelf ? "YOU" : "FA");
+                var header = isSelf
+                    ? "You"
+                    : escapeHtml(msg.author_name || "Faculty") +
+                      (item && item.topic ? " · " + escapeHtml(item.topic) : "");
+                var bodyHtml = msg.body
+                    ? '<p class="chat-bubble__text">' +
+                      escapeHtml(msg.body).replace(/\n/g, "<br>") +
+                      "</p>"
+                    : "";
+                return (
+                    '<div class="chat-row chat-row--' +
+                    side +
+                    '">' +
+                    (isSelf
+                        ? ""
+                        : '<div class="chat-avatar chat-avatar--sm" aria-hidden="true">' +
+                          escapeHtml(initials) +
+                          "</div>") +
+                    '<div class="chat-row__body">' +
+                    '<p class="chat-row__header">' +
+                    header +
+                    "</p>" +
+                    '<div class="chat-bubble chat-bubble--' +
+                    side +
+                    '">' +
+                    bodyHtml +
+                    attachmentChip(msg) +
+                    "</div>" +
+                    '<p class="chat-row__time">' +
+                    escapeHtml(formatTimestamp(msg.created_at)) +
+                    "</p></div>" +
+                    (isSelf
+                        ? '<div class="chat-avatar chat-avatar--sm chat-avatar--self" aria-hidden="true">' +
+                          escapeHtml(initials) +
+                          "</div>"
+                        : "") +
+                    "</div>"
+                );
+            })
+            .join("");
+        container.scrollTop = container.scrollHeight;
     }
 
     function renderFacultyNotes(item) {
-        var el = document.getElementById("ai-tutor-faculty-notes");
-        if (!el) return;
-        var notes = (item && item.faculty_notes) || [];
-        if (!notes.length) {
-            el.textContent = "No faculty note for this question yet.";
-            return;
-        }
-        el.innerHTML = notes
-            .map(function (note) {
-                return '<p class="mb-3">' + escapeHtml(note).replace(/\n/g, "<br>") + "</p>";
-            })
-            .join("");
+        renderFacultyThread(item);
     }
 
     function activeItem() {
@@ -348,14 +487,39 @@
     function renderMessages() {
         var container = document.getElementById("ai-tutor-messages");
         if (!container) return;
+        if (!state.messages.length) {
+            container.innerHTML = "";
+            return;
+        }
         container.innerHTML = state.messages
             .map(function (msg) {
-                var cls = msg.role === "user" ? "ai-tutor-chat__bubble--user" : "ai-tutor-chat__bubble--assistant";
+                var isUser = msg.role === "user";
+                var side = isUser ? "out" : "in";
+                var initials = isUser ? "YOU" : "AI";
+                var header = isUser ? "You" : "AI Tutor";
                 return (
-                    '<div class="ai-tutor-chat__bubble ' +
-                    cls +
-                    ' examiq-math-block">' +
+                    '<div class="chat-row chat-row--' +
+                    side +
+                    '">' +
+                    (isUser
+                        ? ""
+                        : '<div class="chat-avatar chat-avatar--sm chat-avatar--ai" aria-hidden="true">' +
+                          initials +
+                          "</div>") +
+                    '<div class="chat-row__body">' +
+                    '<p class="chat-row__header">' +
+                    header +
+                    "</p>" +
+                    '<div class="chat-bubble chat-bubble--' +
+                    side +
+                    ' examiq-math-block"><p class="chat-bubble__text">' +
                     escapeHtml(msg.content).replace(/\n/g, "<br>") +
+                    "</p></div></div>" +
+                    (isUser
+                        ? '<div class="chat-avatar chat-avatar--sm chat-avatar--self" aria-hidden="true">' +
+                          initials +
+                          "</div>"
+                        : "") +
                     "</div>"
                 );
             })
@@ -383,10 +547,98 @@
         if (errorEl) errorEl.classList.add("hidden");
         if (content) content.classList.remove("hidden");
         pickDefaultAnswer();
-        setTutorScreen("ai");
+        setTutorScreen(state.preferredScreen || "ai");
         renderQuestionSelect();
         renderFeedbackPanel();
         renderMessages();
+    }
+
+    function clearImageSelection() {
+        var input = document.getElementById("ai-tutor-chat-image");
+        var nameEl = document.getElementById("ai-tutor-image-name");
+        if (input) input.value = "";
+        if (nameEl) {
+            nameEl.textContent = "";
+            nameEl.classList.add("hidden");
+        }
+    }
+
+    function validateImageFile(file) {
+        if (!file) return null;
+        if (file.size > MAX_IMAGE_BYTES) {
+            return "Image must be 5 MB or smaller.";
+        }
+        var type = (file.type || "").toLowerCase();
+        var name = (file.name || "").toLowerCase();
+        var okType = ALLOWED_IMAGE_TYPES[type];
+        var okExt = /\.(jpe?g|png|webp)$/.test(name);
+        if (!okType && !okExt) {
+            return "Use a JPEG, PNG, or WebP image.";
+        }
+        return null;
+    }
+
+    async function sendFacultyMessage(message, imageFile) {
+        if (state.sending) return;
+        var item = activeItem();
+        if (!item) return;
+        var url = concernUrlForAnswer(item.answer_id);
+        if (!url) {
+            if (typeof showToast === "function") {
+                showToast("Could not find concern endpoint for this question.", "error");
+            }
+            return;
+        }
+        if (!message.trim() && !imageFile) {
+            if (typeof showToast === "function") {
+                showToast("Add a message or photo.", "warning");
+            }
+            return;
+        }
+        var imageError = validateImageFile(imageFile);
+        if (imageError) {
+            if (typeof showToast === "function") showToast(imageError, "error");
+            return;
+        }
+
+        state.sending = true;
+        var btn = document.getElementById("ai-tutor-send-btn");
+        if (btn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(btn, true, "Sending…");
+        }
+        try {
+            var fd = new FormData();
+            fd.append("csrfmiddlewaretoken", getConfig().csrfToken || "");
+            fd.append("body", message.trim());
+            if (imageFile) fd.append("image", imageFile);
+            var resp = await fetch(url, {
+                method: "POST",
+                body: fd,
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRFToken": getConfig().csrfToken || "",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                credentials: "same-origin",
+            });
+            var data = await resp.json().catch(function () {
+                return {};
+            });
+            if (!resp.ok) throw new Error(data.error || "Could not send message.");
+            item.concern_messages = data.messages || [];
+            renderFacultyThread(item);
+            clearImageSelection();
+            if (typeof showToast === "function") showToast("Message sent to faculty.", "success");
+        } catch (err) {
+            if (typeof showToast === "function") {
+                showToast(err.message || "Could not send message.", "error");
+            }
+        } finally {
+            state.sending = false;
+            if (btn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+                window.ExamiQUI.setButtonLoading(btn, false);
+            }
+        }
     }
 
     async function sendMessage(message) {
@@ -437,7 +689,25 @@
         }
     }
 
-    async function openTutorModal() {
+    async function openTutorModal(options) {
+        options = options || {};
+        if (options.sessionId) {
+            applySessionUrls(options.sessionId);
+        }
+        if (options.answerId) {
+            state.activeAnswerId = options.answerId;
+        }
+        state.preferredScreen =
+            options.screen === "faculty"
+                ? "faculty"
+                : options.screen === "solution"
+                  ? "solution"
+                  : "ai";
+
+        if (options.answerId) {
+            markAnswerNotificationsRead(options.answerId);
+        }
+
         openModal();
         var loading = document.getElementById("ai-tutor-loading");
         var content = document.getElementById("ai-tutor-content");
@@ -447,13 +717,12 @@
         if (errorEl) errorEl.classList.add("hidden");
 
         try {
-            await loadHistoryForAnswer(null);
+            await loadHistoryForAnswer(state.activeAnswerId || null);
             if (state.activeAnswerId) {
                 await loadHistoryForAnswer(state.activeAnswerId);
             }
             showContent();
             state.loaded = true;
-            // Enrich in background after UI is usable — do not block open.
             enrichPendingFeedback();
         } catch (err) {
             showError("Could not load tutor feedback. Try again from your session summary.");
@@ -476,6 +745,20 @@
             });
         }
 
+        document.querySelectorAll(".open-tutor-btn").forEach(function (btn) {
+            btn.addEventListener("click", function (event) {
+                event.preventDefault();
+                var sessionId = parseInt(btn.getAttribute("data-session-id"), 10);
+                var answerId = parseInt(btn.getAttribute("data-answer-id"), 10);
+                var screen = btn.getAttribute("data-tutor-screen") || "faculty";
+                openTutorModal({
+                    sessionId: sessionId,
+                    answerId: answerId,
+                    screen: screen,
+                });
+            });
+        });
+
         var select = document.getElementById("ai-tutor-question-select");
         if (select) {
             select.addEventListener("change", function () {
@@ -492,20 +775,68 @@
             });
         });
 
+        var imageInput = document.getElementById("ai-tutor-chat-image");
+        var imageName = document.getElementById("ai-tutor-image-name");
+        if (imageInput) {
+            imageInput.addEventListener("change", function () {
+                var file = imageInput.files && imageInput.files[0];
+                if (!file) {
+                    clearImageSelection();
+                    return;
+                }
+                var err = validateImageFile(file);
+                if (err) {
+                    if (typeof showToast === "function") showToast(err, "error");
+                    clearImageSelection();
+                    return;
+                }
+                if (imageName) {
+                    imageName.textContent = file.name + " (" + Math.round(file.size / 1024) + " KB)";
+                    imageName.classList.remove("hidden");
+                }
+            });
+        }
+
         var form = document.getElementById("ai-tutor-chat-form");
         var input = document.getElementById("ai-tutor-chat-input");
         if (form && input) {
             form.addEventListener("submit", function (event) {
                 event.preventDefault();
                 var text = input.value;
-                input.value = "";
-                sendMessage(text);
+                if (state.screen === "faculty") {
+                    var file = imageInput && imageInput.files ? imageInput.files[0] : null;
+                    input.value = "";
+                    sendFacultyMessage(text, file);
+                } else {
+                    input.value = "";
+                    sendMessage(text);
+                }
+            });
+            input.addEventListener("keydown", function (event) {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+                }
             });
         }
 
         var config = getConfig();
-        if (config.openOnLoad) {
-            openTutorModal();
+        var params = new URLSearchParams(window.location.search);
+        var openAnswer = params.get("answer_id");
+        var openTutor = params.get("open_tutor") === "1";
+        if (config.openOnLoad || openTutor) {
+            var answerId = config.openAnswerId || (openAnswer ? parseInt(openAnswer, 10) : null);
+            var openBtn = document.querySelector(
+                '.open-tutor-btn[data-answer-id="' + answerId + '"]'
+            );
+            var sessionId = openBtn
+                ? parseInt(openBtn.getAttribute("data-session-id"), 10)
+                : null;
+            openTutorModal({
+                sessionId: sessionId || undefined,
+                answerId: answerId || null,
+                screen: openTutor ? "faculty" : config.openScreen || "ai",
+            });
         }
     });
 })();

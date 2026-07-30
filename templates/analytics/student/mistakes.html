@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load examiq_tags %}
+{% load static examiq_tags %}
 
 {% block title %}Mistakes - EXAMIQ+{% endblock %}
 
@@ -38,7 +38,13 @@
                         </td>
                         <td class="px-4 py-3 text-examiq-slate">{{ mistake.occurred_at|date:"M d, Y H:i" }}</td>
                         <td class="px-4 py-3">
-                            <a href="{% url 'analytics_student:answer_detail' mistake.answer_id %}" class="btn-primary btn-primary-sm">View</a>
+                            <button type="button"
+                                    class="btn-primary btn-primary-sm open-tutor-btn"
+                                    data-session-id="{{ mistake.answer.session_id }}"
+                                    data-answer-id="{{ mistake.answer_id }}"
+                                    data-tutor-screen="faculty">
+                                View
+                            </button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -60,4 +66,23 @@
     </div>
     {% endif %}
 </div>
+
+{% include "reviews/partials/ai_tutor_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/ai-tutor-modal.js' %}"></script>
+<script>
+window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
+    csrfToken: "{{ csrf_token }}",
+    urlTemplates: {
+        history: "{{ tutor_url_templates.history }}",
+        chat: "{{ tutor_url_templates.chat }}",
+        feedback: "{{ tutor_url_templates.feedback }}",
+        concern: "{{ tutor_url_templates.concern }}"
+    },
+    concernUrlTemplate: "{{ tutor_url_templates.concern }}",
+    markNotificationsUrl: "{% url 'users:notifications_mark_link' %}"
+});
+</script>
 {% endblock %}

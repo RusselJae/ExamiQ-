@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.db.models import Q
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -57,7 +57,7 @@ class MistakeListView(StudentRequiredMixin, ListView):
     def get_queryset(self):
         queryset = (
             MistakeRecord.objects.filter(student=self.request.user)
-            .select_related("question", "topic", "answer")
+            .select_related("question", "topic", "answer", "answer__session")
         )
         queryset = apply_date_range(queryset, self.request, "occurred_at")
         queryset = apply_sort(
@@ -112,6 +112,20 @@ class MistakeListView(StudentRequiredMixin, ListView):
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
+        context["tutor_url_templates"] = {
+            "history": reverse("reviews:tutor_history", kwargs={"pk": 0}).replace(
+                "/0/", "/{pk}/"
+            ),
+            "chat": reverse("reviews:tutor_chat", kwargs={"pk": 0}).replace(
+                "/0/", "/{pk}/"
+            ),
+            "feedback": reverse(
+                "reviews:session_generate_feedback", kwargs={"pk": 0}
+            ).replace("/0/", "/{pk}/"),
+            "concern": reverse(
+                "analytics_student:upload_mistake_concern", kwargs={"answer_pk": 0}
+            ).replace("/0/", "/{pk}/"),
+        }
         return context
 
 
@@ -254,7 +268,7 @@ class AnswerDetailView(StudentRequiredMixin, DetailView):
 
 
 class UploadMistakeConcernView(StudentRequiredMixin, View):
-    """Save student note/image attached to a mistake record."""
+    """Append a student message (+ optional image) to a mistake concern thread."""
 
     def post(self, request, answer_pk):
         answer = get_object_or_404(
@@ -266,10 +280,12 @@ class UploadMistakeConcernView(StudentRequiredMixin, View):
         if answer.is_correct or not mistake_record:
             raise Http404
 
-        form = MistakeConcernForm(
-            request.POST,
-            request.FILES,
+        wants_json = (
+            "application/json" in (request.headers.get("Accept") or "")
+            or request.headers.get("X-Requested-With") == "XMLHttpRequest"
         )
+
+        form = MistakeConcernForm(request.POST, request.FILES)
         if form.is_valid():
             post_concern_message(
                 mistake_record,
@@ -277,12 +293,19 @@ class UploadMistakeConcernView(StudentRequiredMixin, View):
                 body=form.cleaned_data["body"],
                 image=form.cleaned_data.get("image"),
             )
+            if wants_json:
+                return JsonResponse(
+                    {
+                        "ok": True,
+                        "messages": serialize_concern_thread(mistake_record),
+                    }
+                )
             messages.success(request, "Your message was sent.")
         else:
-            messages.error(
-                request,
-                form.errors.as_text() or "Could not save your note or image.",
-            )
+            error_text = form.errors.as_text() or "Could not save your note or image."
+            if wants_json:
+                return JsonResponse({"ok": False, "error": error_text}, status=400)
+            messages.error(request, error_text)
         return redirect(
             reverse("analytics_student:answer_detail", kwargs={"answer_pk": answer.pk})
         )

@@ -21,7 +21,6 @@
                 <th class="pb-3 pr-4 font-medium">Topic</th>
                 <th class="pb-3 pr-4 font-medium w-28">Submitted</th>
                 <th class="pb-3 pr-4 font-medium w-24">Image</th>
-                <th class="pb-3 pr-4 font-medium w-28">Your note</th>
                 <th class="pb-3 font-medium w-28"></th>
             </tr>
         </thead>
@@ -42,13 +41,6 @@
                     </a>
                     {% else %}
                     <span class="text-examiq-slate">—</span>
-                    {% endif %}
-                </td>
-                <td class="py-3 pr-4" data-concern-status>
-                    {% if concern.needs_faculty_reply %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Pending</span>
-                    {% else %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Replied</span>
                     {% endif %}
                 </td>
                 <td class="py-3 text-right">
@@ -74,7 +66,7 @@
 <script>
 window.ExamiQFacultyFeedback = {
     concernsUrl: "{% url 'analytics_professor:feedback_concerns_api' course.pk %}",
-    noteUrlBase: "{% url 'analytics_professor:feedback_faculty_note' course.pk 0 %}".replace("/0/", "/"),
+    noteUrlBase: "{% url 'analytics_professor:feedback_faculty_note' course.pk 0 %}",
     csrfToken: "{{ csrf_token }}"
 };
 </script>

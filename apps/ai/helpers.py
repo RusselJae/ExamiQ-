@@ -8,7 +8,7 @@ from apps.analytics.confidence import (
 
 
 def calibration_narrative_from_matrix(matrix: dict, weak_topics: list | None = None) -> str:
-    """Build a short calibration summary without calling an LLM."""
+    """Build a short confidence/score summary without calling an LLM."""
     parts = []
     misconception = matrix.get(CLASSIFICATION_MISCONCEPTION, 0)
     lucky = matrix.get(CLASSIFICATION_LUCKY_GUESS, 0)
@@ -23,7 +23,7 @@ def calibration_narrative_from_matrix(matrix: dict, weak_topics: list | None = N
             f"Anxiety pattern: {lucky} low-confidence correct answers."
         )
     if mastery >= 3 and not parts:
-        parts.append("Strong calibration — most high-confidence answers are correct.")
+        parts.append("Strong match — most high-confidence answers are correct.")
 
     if weak_topics:
         names = ", ".join(
@@ -32,7 +32,7 @@ def calibration_narrative_from_matrix(matrix: dict, weak_topics: list | None = N
         if names:
             parts.append(f"Top mistake topics: {names}.")
 
-    return " ".join(parts) if parts else "Not enough answer data for calibration insights yet."
+    return " ".join(parts) if parts else "Not enough answer data for confidence insights yet."
 
 
 def course_review_narrative(summary: dict) -> str:

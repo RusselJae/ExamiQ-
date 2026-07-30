@@ -1,5 +1,13 @@
 """In-app notification views."""
 
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.views import View
+from django.views.generic import ListView
+
+from apps.analytics.concern_services import mark_concern_notifications_read
 from apps.core.filtering import (
     STANDARD_DATE_SORT_FILTER_SPECS,
     apply_date_range,
@@ -7,14 +15,15 @@ from apps.core.filtering import (
     build_filter_fields,
     has_active_filters,
 )
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
-from django.shortcuts import redirect
-from django.views import View
-from django.views.generic import ListView
-
 from apps.users.models import Notification
 from apps.users.notification_services import mark_notifications_read, unread_notification_count
+
+
+def _safe_relative_link(link: str) -> str:
+    """Allow only same-origin relative paths (no scheme-relative URLs)."""
+    if not link or not link.startswith("/") or link.startswith("//"):
+        return reverse("users:notifications")
+    return link
 
 
 class NotificationListView(LoginRequiredMixin, ListView):
@@ -53,6 +62,28 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
         if next_url:
             return redirect(next_url)
         return redirect("users:notifications")
+
+
+class NotificationOpenView(LoginRequiredMixin, View):
+    """Mark one notification read, then redirect to its relative link."""
+
+    def get(self, request, pk):
+        notification = get_object_or_404(Notification, pk=pk, user=request.user)
+        notification.mark_read()
+        return redirect(_safe_relative_link(notification.link or ""))
+
+
+class NotificationMarkLinkView(LoginRequiredMixin, View):
+    """Mark unread notifications whose link matches answer_id or mistake_id."""
+
+    def post(self, request):
+        answer_id = request.POST.get("answer_id")
+        mistake_id = request.POST.get("mistake_id")
+        if answer_id and str(answer_id).isdigit():
+            mark_concern_notifications_read(request.user, answer_id=int(answer_id))
+        elif mistake_id and str(mistake_id).isdigit():
+            mark_concern_notifications_read(request.user, int(mistake_id))
+        return JsonResponse({"ok": True})
 
 
 class NotificationUnreadCountAPIView(LoginRequiredMixin, View):

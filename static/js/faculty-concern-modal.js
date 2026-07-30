@@ -1,14 +1,22 @@
 /**
- * Faculty Feedback — student concern modal (AI message vs conversation thread).
+ * Faculty Feedback — student concern modal with chat-style conversation.
  */
 (function () {
     "use strict";
 
+    var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+    var ALLOWED_IMAGE_TYPES = {
+        "image/jpeg": true,
+        "image/png": true,
+        "image/webp": true,
+    };
+
     var state = {
         items: [],
         activeMistakeId: null,
-        screen: "ai",
+        screen: "conversation",
         loaded: false,
+        sending: false,
     };
 
     function config() {
@@ -27,13 +35,21 @@
     }
 
     function noteUrl(mistakeId) {
-        return config().noteUrlBase + mistakeId + "/";
+        return (config().noteUrlBase || "").replace("/0/", "/" + mistakeId + "/");
     }
 
     function activeItem() {
         return state.items.find(function (item) {
             return item.mistake_id === state.activeMistakeId;
         });
+    }
+
+    function initialsFor(item) {
+        if (item && item.student_initials) return item.student_initials;
+        var name = (item && item.student_name) || "?";
+        var parts = name.trim().split(/\s+/);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return name.slice(0, 2).toUpperCase();
     }
 
     function openModal() {
@@ -51,7 +67,7 @@
     }
 
     function setScreen(screen) {
-        state.screen = screen === "conversation" ? "conversation" : "ai";
+        state.screen = screen === "ai" ? "ai" : "conversation";
         var ai = document.getElementById("faculty-screen-ai");
         var conversation = document.getElementById("faculty-screen-conversation");
         if (ai) ai.classList.toggle("hidden", state.screen !== "ai");
@@ -72,42 +88,79 @@
         }
     }
 
-    function renderThread(messages) {
+    function attachmentHtml(msg) {
+        if (!msg.image_url) return "";
+        var label = msg.image_name || "Attached image";
+        return (
+            '<a href="' +
+            escapeHtml(msg.image_url) +
+            '" target="_blank" rel="noopener" class="chat-attach chat-attach--preview">' +
+            '<img src="' +
+            escapeHtml(msg.image_url) +
+            '" alt="' +
+            escapeHtml(label) +
+            '" class="chat-attach__thumb">' +
+            '<span class="chat-attach__meta">' +
+            '<span class="chat-attach__label">Attached image</span>' +
+            '<span class="chat-attach__name">' +
+            escapeHtml(label) +
+            "</span></span></a>"
+        );
+    }
+
+    function renderThread(messages, item) {
         var container = document.getElementById("faculty-concern-thread");
         if (!container) return;
         if (!messages || !messages.length) {
             container.innerHTML =
-                '<p class="text-sm text-examiq-slate">No messages yet.</p>';
+                '<p class="chat-thread__empty">No messages yet. Send the first reply below.</p>';
             return;
         }
+        var studentInitials = initialsFor(item);
+        var topic = (item && item.topic) || "";
         container.innerHTML = messages
             .map(function (msg) {
+                var isFaculty = msg.author_role === "faculty";
+                var side = isFaculty ? "out" : "in";
+                var initials = isFaculty
+                    ? msg.author_initials || "YOU"
+                    : msg.author_initials || studentInitials;
+                var header = isFaculty
+                    ? "You"
+                    : escapeHtml(msg.author_name || "Student") +
+                      (topic ? " · " + escapeHtml(topic) : "");
                 var bodyHtml = msg.body
-                    ? '<p class="concern-thread__body whitespace-pre-line">' +
-                      escapeHtml(msg.body) +
+                    ? '<p class="chat-bubble__text">' +
+                      escapeHtml(msg.body).replace(/\n/g, "<br>") +
                       "</p>"
                     : "";
-                var imageHtml = msg.image_url
-                    ? '<a href="' +
-                      escapeHtml(msg.image_url) +
-                      '" target="_blank" rel="noopener" class="concern-thread__image-link">' +
-                      '<img src="' +
-                      escapeHtml(msg.image_url) +
-                      '" alt="Attachment" class="concern-thread__image">' +
-                      "</a>"
-                    : "";
                 return (
-                    '<div class="concern-thread__message concern-thread__message--' +
-                    escapeHtml(msg.author_role) +
+                    '<div class="chat-row chat-row--' +
+                    side +
                     '">' +
-                    '<div class="concern-thread__bubble">' +
-                    bodyHtml +
-                    imageHtml +
-                    "</div>" +
-                    '<p class="concern-thread__meta">' +
-                    escapeHtml(msg.author_name) +
-                    (msg.created_at ? " · " + escapeHtml(formatTimestamp(msg.created_at)) : "") +
+                    (isFaculty
+                        ? ""
+                        : '<div class="chat-avatar chat-avatar--sm" aria-hidden="true">' +
+                          escapeHtml(initials) +
+                          "</div>") +
+                    '<div class="chat-row__body">' +
+                    '<p class="chat-row__header">' +
+                    header +
                     "</p>" +
+                    '<div class="chat-bubble chat-bubble--' +
+                    side +
+                    '">' +
+                    bodyHtml +
+                    attachmentHtml(msg) +
+                    "</div>" +
+                    '<p class="chat-row__time">' +
+                    escapeHtml(formatTimestamp(msg.created_at)) +
+                    "</p></div>" +
+                    (isFaculty
+                        ? '<div class="chat-avatar chat-avatar--sm chat-avatar--self" aria-hidden="true">' +
+                          escapeHtml(initials) +
+                          "</div>"
+                        : "") +
                     "</div>"
                 );
             })
@@ -115,34 +168,13 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    function renderSelect() {
-        var select = document.getElementById("faculty-concern-select");
-        if (!select) return;
-        select.innerHTML = state.items
-            .map(function (item) {
-                var label =
-                    item.student_name +
-                    " — Q: " +
-                    truncateStem(item.stem) +
-                    (item.needs_faculty_reply ? " (pending)" : " (replied)");
-                var selected = item.mistake_id === state.activeMistakeId ? " selected" : "";
-                return (
-                    '<option value="' +
-                    item.mistake_id +
-                    '"' +
-                    selected +
-                    ">" +
-                    escapeHtml(label) +
-                    "</option>"
-                );
-            })
-            .join("");
-    }
-
     function renderActive() {
         var item = activeItem();
         if (!item) return;
 
+        var avatar = document.getElementById("faculty-concern-avatar");
+        var nameEl = document.getElementById("faculty-concern-student-name");
+        var previewEl = document.getElementById("faculty-concern-q-preview");
         var studentEl = document.getElementById("faculty-concern-student");
         var stemEl = document.getElementById("faculty-concern-stem");
         var userEl = document.getElementById("faculty-concern-user-answer");
@@ -150,26 +182,33 @@
         var aiEl = document.getElementById("faculty-concern-ai-feedback");
         var input = document.getElementById("faculty-concern-note-input");
 
+        if (avatar) avatar.textContent = initialsFor(item);
+        if (nameEl) nameEl.textContent = item.student_name;
+        if (previewEl) previewEl.textContent = "Q: " + truncateStem(item.stem);
         if (studentEl) {
-            studentEl.textContent = item.student_name + " · " + item.student_email + " · " + item.topic;
+            studentEl.textContent =
+                item.student_name + " · " + item.student_email + " · " + item.topic;
         }
         if (stemEl) stemEl.textContent = item.stem;
         if (userEl) userEl.textContent = item.user_answer || "—";
         if (correctEl) correctEl.textContent = item.correct_answer || "—";
         if (aiEl) {
-            aiEl.innerHTML = escapeHtml(item.ai_feedback || "No AI feedback generated yet.").replace(
-                /\n/g,
-                "<br>"
-            );
+            aiEl.innerHTML = escapeHtml(
+                item.ai_feedback || "No AI feedback generated yet."
+            ).replace(/\n/g, "<br>");
         }
         if (input) input.value = "";
-        renderThread(item.messages || []);
+        clearImageSelection();
+        renderThread(item.messages || [], item);
     }
 
     async function loadConcerns(preferredId) {
         var url = config().concernsUrl || "";
         if (preferredId) {
-            url += (url.indexOf("?") >= 0 ? "&" : "?") + "mistake_id=" + encodeURIComponent(preferredId);
+            url +=
+                (url.indexOf("?") >= 0 ? "&" : "?") +
+                "mistake_id=" +
+                encodeURIComponent(preferredId);
         }
         var resp = await fetch(url, {
             headers: { Accept: "application/json" },
@@ -178,12 +217,15 @@
         if (!resp.ok) throw new Error("Could not load concerns.");
         var data = await resp.json();
         state.items = data.items || [];
-        state.activeMistakeId = preferredId || data.active_mistake_id || (state.items[0] && state.items[0].mistake_id);
+        state.activeMistakeId =
+            preferredId ||
+            data.active_mistake_id ||
+            (state.items[0] && state.items[0].mistake_id);
     }
 
     async function openConcern(mistakeId, screen) {
         openModal();
-        setScreen(screen || "ai");
+        setScreen(screen || "conversation");
         var loading = document.getElementById("faculty-concern-loading");
         var content = document.getElementById("faculty-concern-content");
         var errorEl = document.getElementById("faculty-concern-error");
@@ -196,11 +238,12 @@
             if (!state.items.length) {
                 throw new Error("No student concerns found.");
             }
-            renderSelect();
             renderActive();
             if (loading) loading.classList.add("hidden");
             if (content) content.classList.remove("hidden");
             state.loaded = true;
+            var input = document.getElementById("faculty-concern-note-input");
+            if (input && state.screen === "conversation") input.focus();
         } catch (err) {
             if (loading) loading.classList.add("hidden");
             if (errorEl) {
@@ -210,23 +253,54 @@
         }
     }
 
+    function clearImageSelection() {
+        var input = document.getElementById("faculty-concern-image");
+        var nameEl = document.getElementById("faculty-concern-image-name");
+        if (input) input.value = "";
+        if (nameEl) {
+            nameEl.textContent = "";
+            nameEl.classList.add("hidden");
+        }
+    }
+
+    function validateImageFile(file) {
+        if (!file) return null;
+        if (file.size > MAX_IMAGE_BYTES) return "Image must be 5 MB or smaller.";
+        var type = (file.type || "").toLowerCase();
+        var name = (file.name || "").toLowerCase();
+        var okType = ALLOWED_IMAGE_TYPES[type];
+        var okExt = /\.(jpe?g|png|webp)$/.test(name);
+        if (!okType && !okExt) return "Use a JPEG, PNG, or WebP image.";
+        return null;
+    }
+
     async function saveNote() {
         var item = activeItem();
         var input = document.getElementById("faculty-concern-note-input");
+        var imageInput = document.getElementById("faculty-concern-image");
         var btn = document.getElementById("faculty-concern-save-btn");
-        if (!item || !input) return;
+        if (!item || !input || state.sending) return;
         var body = (input.value || "").trim();
-        if (!body) {
-            if (typeof showToast === "function") showToast("Enter a reply first.", "warning");
+        var imageFile = imageInput && imageInput.files ? imageInput.files[0] : null;
+        if (!body && !imageFile) {
+            if (typeof showToast === "function") {
+                showToast("Add a reply or photo.", "warning");
+            }
             return;
         }
-        if (btn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-            window.ExamiQUI.setButtonLoading(btn, true, "Sending…");
+        var imageError = validateImageFile(imageFile);
+        if (imageError) {
+            if (typeof showToast === "function") showToast(imageError, "error");
+            return;
         }
+        state.sending = true;
+        if (btn) btn.disabled = true;
         try {
             var fd = new FormData();
             fd.append("csrfmiddlewaretoken", config().csrfToken || "");
             fd.append("faculty_note", body);
+            fd.append("body", body);
+            if (imageFile) fd.append("image", imageFile);
             var resp = await fetch(noteUrl(item.mistake_id), {
                 method: "POST",
                 body: fd,
@@ -245,34 +319,15 @@
                 return entry.mistake_id === updated.mistake_id;
             });
             if (idx >= 0) state.items[idx] = updated;
-            renderSelect();
             renderActive();
-            updateListRowStatus(updated);
             if (typeof showToast === "function") showToast("Reply sent.", "success");
         } catch (err) {
             if (typeof showToast === "function") {
                 showToast(err.message || "Could not send reply.", "error");
             }
         } finally {
-            if (btn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-                window.ExamiQUI.setButtonLoading(btn, false);
-            }
-        }
-    }
-
-    function updateListRowStatus(item) {
-        var btn = document.querySelector('.open-concern-btn[data-mistake-id="' + item.mistake_id + '"]');
-        if (!btn) return;
-        var row = btn.closest("tr");
-        if (!row) return;
-        var statusCell = row.querySelector("[data-concern-status]");
-        if (!statusCell) return;
-        if (item.needs_faculty_reply) {
-            statusCell.innerHTML =
-                '<span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Pending</span>';
-        } else {
-            statusCell.innerHTML =
-                '<span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Replied</span>';
+            state.sending = false;
+            if (btn) btn.disabled = false;
         }
     }
 
@@ -291,15 +346,41 @@
                 setScreen(btn.getAttribute("data-faculty-screen"));
             });
         });
-        var select = document.getElementById("faculty-concern-select");
-        if (select) {
-            select.addEventListener("change", function () {
-                state.activeMistakeId = parseInt(select.value, 10);
-                renderActive();
-            });
-        }
         var saveBtn = document.getElementById("faculty-concern-save-btn");
         if (saveBtn) saveBtn.addEventListener("click", saveNote);
+
+        var input = document.getElementById("faculty-concern-note-input");
+        if (input) {
+            input.addEventListener("keydown", function (event) {
+                if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    saveNote();
+                }
+            });
+        }
+
+        var imageInput = document.getElementById("faculty-concern-image");
+        var imageName = document.getElementById("faculty-concern-image-name");
+        if (imageInput) {
+            imageInput.addEventListener("change", function () {
+                var file = imageInput.files && imageInput.files[0];
+                if (!file) {
+                    clearImageSelection();
+                    return;
+                }
+                var err = validateImageFile(file);
+                if (err) {
+                    if (typeof showToast === "function") showToast(err, "error");
+                    clearImageSelection();
+                    return;
+                }
+                if (imageName) {
+                    imageName.textContent =
+                        file.name + " (" + Math.round(file.size / 1024) + " KB)";
+                    imageName.classList.remove("hidden");
+                }
+            });
+        }
 
         var params = new URLSearchParams(window.location.search);
         var mid = params.get("mistake_id");

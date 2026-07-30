@@ -22,7 +22,7 @@
             <p class="text-sm text-examiq-navy">{{ notification.message }}</p>
             <p class="text-xs text-examiq-slate mt-1">{{ notification.created_at|date:"M d, Y g:i A" }}</p>
             {% if notification.link %}
-            <a href="{{ notification.link }}" class="text-sm text-examiq-green hover:underline mt-1 inline-block">View</a>
+            <a href="{% url 'users:notification_open' notification.pk %}" class="text-sm text-examiq-green hover:underline mt-1 inline-block">View</a>
             {% endif %}
         </li>
         {% endfor %}

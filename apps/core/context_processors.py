@@ -106,6 +106,9 @@ def navigation_context(request):
                 context["sidebar_section_label"] = (
                     (course.section or "").strip() or course.code
                 )
+            from apps.analytics.concern_services import pending_concern_count_for_course
+
+            context["pending_concern_count"] = pending_concern_count_for_course(course)
         except Course.DoesNotExist:
             pass
 

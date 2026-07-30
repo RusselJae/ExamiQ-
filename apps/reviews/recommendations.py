@@ -96,7 +96,7 @@ def get_review_recommendations(student: User, limit: int = 5) -> list[dict]:
             _upsert_recommendation(
                 recommendations,
                 row["question__topic_id"],
-                reason="High-confidence wrong answers — calibration gap",
+                reason="High-confidence wrong answers — confidence gap",
                 priority="high",
                 suggested_date=today + timedelta(days=1),
                 score=12,

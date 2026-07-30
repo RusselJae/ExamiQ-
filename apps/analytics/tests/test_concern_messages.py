@@ -138,6 +138,79 @@ def test_faculty_note_api_appends_reply(client, professor, mistake_record, subje
 
 
 @pytest.mark.django_db
+def test_faculty_note_api_accepts_image(client, professor, mistake_record, subject):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    course = Course.objects.create(
+        professor=professor,
+        program=subject.program,
+        code=subject.code,
+        name=subject.name,
+        section="Catalog",
+        term="Catalog",
+        academic_year="2025-2026",
+    )
+    post_concern_message(mistake_record, mistake_record.student, body="Need help")
+    client.force_login(professor)
+    url = reverse(
+        "analytics_professor:feedback_faculty_note",
+        kwargs={"course_pk": course.pk, "mistake_pk": mistake_record.pk},
+    )
+    image = SimpleUploadedFile(
+        "reply.png",
+        b"\x89PNG\r\n\x1a\n" + b"\x00" * 64,
+        content_type="image/png",
+    )
+    response = client.post(url, {"faculty_note": "See diagram", "image": image})
+    assert response.status_code == 200
+    msg = MistakeConcernMessage.objects.filter(
+        mistake_record=mistake_record,
+        author=professor,
+        body="See diagram",
+    ).latest("pk")
+    assert msg.image
+    assert Notification.objects.filter(
+        user=mistake_record.student,
+        message__icontains="Faculty replied",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_notification_open_marks_read_and_redirects(client, professor, mistake_record):
+    note = Notification.objects.create(
+        user=professor,
+        message="Student asked a question",
+        link=f"/feedback/?mistake_id={mistake_record.pk}",
+    )
+    client.force_login(professor)
+    url = reverse("users:notification_open", kwargs={"pk": note.pk})
+    response = client.get(url)
+    assert response.status_code == 302
+    assert response["Location"] == note.link
+    note.refresh_from_db()
+    assert note.is_read
+
+
+@pytest.mark.django_db
+def test_mark_link_clears_student_answer_notifications(client, student, mistake_record):
+    link = (
+        reverse("analytics_student:mistakes")
+        + f"?answer_id={mistake_record.answer_id}&open_tutor=1"
+    )
+    note = Notification.objects.create(
+        user=student,
+        message="Faculty replied to your question",
+        link=link,
+    )
+    client.force_login(student)
+    url = reverse("users:notifications_mark_link")
+    response = client.post(url, {"answer_id": mistake_record.answer_id})
+    assert response.status_code == 200
+    note.refresh_from_db()
+    assert note.is_read
+
+
+@pytest.mark.django_db
 def test_question_list_renders_simplified_filters(client, professor, course):
     client.force_login(professor)
     url = reverse("analytics_professor:question_list", kwargs={"course_pk": course.pk})
