@@ -383,7 +383,12 @@ class TutorMessage(TimeStampedModel):
         related_name="messages",
     )
     role = models.CharField(max_length=10, choices=Role.choices)
-    content = models.TextField()
+    content = models.TextField(blank=True, default="")
+    image = models.ImageField(
+        upload_to="tutor_messages/%Y/%m/",
+        blank=True,
+        null=True,
+    )
     answer = models.ForeignKey(
         Answer,
         on_delete=models.SET_NULL,

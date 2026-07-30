@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load static %}
 
 {% block title %}Overview - EXAMIQ+{% endblock %}
 
@@ -33,62 +33,44 @@
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.sessions_this_week label="Sessions this week" subtext=overview.sessions_subtext icon="clock" variant="warning" %}</div>
 </div>
 
-{% if course_cards %}
-<p class="overview-section-label">Your courses</p>
-<div class="overview-course-grid">
-    {% for card in course_cards %}
-    {% with course=card.course %}
-    <article class="overview-course-card {% if card.exam_setup_enabled or card.sessions_this_week %}overview-course-card--active{% endif %}">
-        <div class="overview-course-card__header">
-            <div>
-                <h2 class="overview-course-card__title">{{ course.name }}</h2>
-                <p class="overview-course-card__subtitle">
-                    {{ course.program.name }} · {{ course.term }} {{ course.academic_year }} · Sec {{ course.section }}
-                </p>
-            </div>
-            {% if card.exam_setup_enabled %}
-            <span class="overview-course-badge overview-course-badge--open">Exam open</span>
-            {% elif card.sessions_this_week or card.last_session_at %}
-            <span class="overview-course-badge overview-course-badge--open">{{ card.sessions_this_week }} this week</span>
-            {% else %}
-            <span class="overview-course-badge overview-course-badge--muted">No activity</span>
-            {% endif %}
+<div class="bento-card p-6 overview-trends-card">
+    <div class="overview-trends-filters" id="overview-trends-filters">
+        <div class="overview-trends-filter">
+            <label for="overview-trend-metric" class="overview-trends-filter__label">Metric</label>
+            <select id="overview-trend-metric" class="overview-trends-filter__select">
+                <option value="students">Students participating</option>
+                <option value="scores">Average scores</option>
+                <option value="confidence">Confidence level</option>
+            </select>
         </div>
-        <div class="overview-course-card__stats">
-            <div>
-                <span class="overview-course-stat-label">Students</span>
-                <span class="overview-course-stat-value">{{ card.enrolled_count }}</span>
-            </div>
-            <div>
-                <span class="overview-course-stat-label">Average Score</span>
-                <span class="overview-course-stat-value overview-course-stat-value--good">{{ card.accuracy }}%</span>
-            </div>
-            <div>
-                <span class="overview-course-stat-label">This week</span>
-                <span class="overview-course-stat-value">{{ card.sessions_this_week }}</span>
-            </div>
-            <div>
-                <span class="overview-course-stat-label">Last session</span>
-                <span class="overview-course-stat-value {% if card.last_session_at %}overview-course-stat-value--recent{% endif %}">
-                    {% if card.last_session_at %}{{ card.last_session_at|naturaltime }}{% else %}—{% endif %}
-                </span>
-            </div>
+        <div class="overview-trends-filter">
+            <label for="overview-trend-range" class="overview-trends-filter__label">Range</label>
+            <select id="overview-trend-range" class="overview-trends-filter__select">
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+            </select>
         </div>
-        <div class="overview-course-card__actions">
-            <a href="{% url 'analytics_professor:course_detail' course.pk %}" class="overview-course-action">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                Analytics
-            </a>
-            <a href="{% url 'analytics_professor:course_roster' course.pk %}" class="overview-course-action">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                Masterlist
-            </a>
-        </div>
-    </article>
-    {% endwith %}
-    {% endfor %}
+    </div>
+    <div class="overview-trends-chart-wrap" id="overviewTrendsChartWrap">
+        <canvas id="overviewTrendsChart" aria-label="Overview trend chart"></canvas>
+    </div>
 </div>
-{% else %}
-{% include "components/empty_state.html" with title="No courses yet" body="Create a course offering to start tracking student performance." cta_url="/professor/courses/create/" cta_label="Create course offering" %}
-{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ overview_trends|json_script:"overview-trends-data" }}
+<script src="{% static 'js/overview-trends-chart.js' %}"></script>
+<script>
+(function () {
+    var el = document.getElementById("overview-trends-data");
+    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
+    window.ExamiQUI.renderOverviewTrendsChart({
+        canvas: "overviewTrendsChart",
+        metricSelect: "overview-trend-metric",
+        rangeSelect: "overview-trend-range",
+        data: JSON.parse(el.textContent),
+    });
+})();
+</script>
 {% endblock %}

@@ -518,18 +518,39 @@ class SessionTutorChatView(StudentRequiredMixin, View):
     def post(self, request, pk):
         import json
 
+        from apps.analytics.forms import MistakeConcernForm
+
         session = get_object_or_404(
             ReviewSession,
             pk=pk,
             student=request.user,
             status=ReviewSession.Status.COMPLETED,
         )
-        try:
-            payload = json.loads(request.body.decode() or "{}")
-        except json.JSONDecodeError:
-            payload = {}
-        message = (payload.get("message") or request.POST.get("message") or "").strip()
-        answer_id = payload.get("answer_id") or request.POST.get("answer_id")
+        content_type = (request.content_type or "").lower()
+        image = None
+        if "multipart/form-data" in content_type:
+            message = (request.POST.get("message") or "").strip()
+            answer_id = request.POST.get("answer_id")
+            form = MistakeConcernForm(
+                {"body": message},
+                request.FILES,
+            )
+            if form.is_valid():
+                message = form.cleaned_data.get("body") or ""
+                image = form.cleaned_data.get("image")
+            elif request.FILES.get("image"):
+                return JsonResponse(
+                    {"error": form.errors.as_text() or "Invalid image."},
+                    status=400,
+                )
+        else:
+            try:
+                payload = json.loads(request.body.decode() or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            message = (payload.get("message") or request.POST.get("message") or "").strip()
+            answer_id = payload.get("answer_id") or request.POST.get("answer_id")
+
         if answer_id is not None:
             try:
                 answer_id = int(answer_id)
@@ -538,7 +559,12 @@ class SessionTutorChatView(StudentRequiredMixin, View):
 
         from apps.reviews.tutor_services import process_tutor_chat
 
-        result = process_tutor_chat(session, message, answer_id=answer_id)
+        result = process_tutor_chat(
+            session,
+            message,
+            answer_id=answer_id,
+            image=image,
+        )
         if result.get("error"):
             return JsonResponse(result, status=400)
         return JsonResponse(result)

@@ -1,123 +1,133 @@
-{% extends "base.html" %}
-{% load static %}
-
-{% block title %}Heatmap - {{ section.display_label }}{% endblock %}
-
-{% block content %}
-{% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="Confidence patterns by subject for this section." %}
-
-{% if heatmap.callouts.low_confidence %}
-<div class="bento-card p-4 mb-4 border-l-4 border-amber-400">
-    <p class="text-sm font-semibold text-examiq-navy">Low confidence alert</p>
-    <p class="text-sm text-examiq-slate">Students reporting No or Low confidence on:
-        {% for q in heatmap.callouts.low_confidence %}Q{{ q.question_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
-    </p>
-</div>
-{% endif %}
-
-<div class="bento-card p-6 mb-6">
-    <div class="heatmap-card-header mb-4">
-        <div>
-            <h2 class="text-lg font-semibold text-examiq-navy mb-1">Question breakdown</h2>
-            {% if selected_subject %}
-            <p class="text-sm text-examiq-slate">{{ selected_subject.code }} · {{ selected_subject.name }}</p>
-            {% else %}
-            <p class="text-sm text-examiq-slate">No subject selected</p>
-            {% endif %}
-        </div>
-        {% if heatmap_subjects %}
-        <form method="get" class="heatmap-card-header__filter" id="heatmap-subject-filter">
-            <label for="heatmap-subject" class="heatmap-card-header__filter-label">Subject</label>
-            <select
-                id="heatmap-subject"
-                name="subject"
-                class="heatmap-card-header__select"
-                onchange="this.form.submit()"
-            >
-                {% for subject in heatmap_subjects %}
-                <option value="{{ subject.pk }}" {% if selected_subject and selected_subject.pk == subject.pk %}selected{% endif %}>
-                    {{ subject.code }} — {{ subject.name }}
-                </option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-    </div>
-    <p class="text-xs text-examiq-slate mb-2 text-center" id="heatmapChartStatus"></p>
-    {% if heatmap.questions %}
-    <div class="heatmap-chart-wrap mb-3" id="heatmapChartWrap">
-        <canvas id="heatmapChart" aria-label="Confidence by question, lowest first"></canvas>
-    </div>
-    <div class="heatmap-chart-pager mb-6" id="heatmapChartPager" aria-label="Chart pagination">
-        <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapPrevPage">Previous</button>
-        <span class="heatmap-chart-page-label" id="heatmapPageLabel">Page 1 of 1</span>
-        <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapNextPage">Next</button>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm min-w-[640px]">
-            <thead>
-                <tr class="text-left text-examiq-slate border-b border-slate-100">
-                    <th class="pb-2 font-medium">Question</th>
-                    <th class="pb-2 font-medium">Topic</th>
-                    <th class="pb-2 font-medium text-center">No</th>
-                    <th class="pb-2 font-medium text-center">Low</th>
-                    <th class="pb-2 font-medium text-center">Average</th>
-                    <th class="pb-2 font-medium text-center">High</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for question in heatmap.questions %}
-                <tr class="border-b border-slate-50">
-                    <td class="py-2 text-examiq-navy max-w-xs">{{ question.question_stem }}</td>
-                    <td class="py-2 text-examiq-slate">{{ question.topic_name }}</td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    {% include "components/empty_state.html" with compact=True title="No answers yet" body="When students in this section sit exams for this subject, the heatmap fills in." %}
-    {% endif %}
-</div>
-
-{% if heatmap.student_rows %}
-<div class="bento-card p-6">
-    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Students</h2>
-    <ul class="space-y-2">
-        {% for row in heatmap.student_rows %}
-        <li class="flex justify-between py-2 border-b border-slate-50 text-sm">
-            <span class="text-examiq-navy font-medium">{{ row.student_name }}</span>
-            <span class="text-examiq-slate">{{ row.dominant }} · {{ row.total }} answers</span>
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-{% endblock %}
-
-{% block extra_js %}
-{{ heatmap.questions|json_script:"heatmap-questions-data" }}
-<script src="{% static 'js/heatmap-priority-chart.js' %}"></script>
-<script>
-(function () {
-    const el = document.getElementById("heatmap-questions-data");
-    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderHeatmapPriorityChart) return;
-    const questionsData = JSON.parse(el.textContent);
-    window.ExamiQUI.renderHeatmapPriorityChart({
-        canvas: "heatmapChart",
-        wrapEl: "heatmapChartWrap",
-        prevBtn: "heatmapPrevPage",
-        nextBtn: "heatmapNextPage",
-        pageLabel: "heatmapPageLabel",
-        statusEl: "heatmapChartStatus",
-        pagerEl: "heatmapChartPager",
-        questions: questionsData,
-        pageSize: 10,
-    });
-})();
-</script>
-{% endblock %}
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Heatmap - {{ section.display_label }}{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="Confidence patterns by subject for this section." %}
+
+{% if heatmap.callouts.low_confidence %}
+<div class="bento-card p-4 mb-4 border-l-4 border-amber-400">
+    <p class="text-sm font-semibold text-examiq-navy">Low confidence alert</p>
+    <p class="text-sm text-examiq-slate">Students reporting No or Low confidence on:
+        {% for q in heatmap.callouts.low_confidence %}Q{{ q.question_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </p>
+</div>
+{% endif %}
+
+<div class="bento-card p-6 mb-6">
+    <div class="heatmap-card-header mb-4">
+        <div>
+            <h2 class="text-lg font-semibold text-examiq-navy mb-1">Question breakdown</h2>
+            {% if selected_subject %}
+            <p class="text-sm text-examiq-slate">{{ selected_subject.code }} · {{ selected_subject.name }}</p>
+            {% else %}
+            <p class="text-sm text-examiq-slate">No subject selected</p>
+            {% endif %}
+        </div>
+        <div class="heatmap-card-header__filters">
+            {% if heatmap_subjects %}
+            <form method="get" class="heatmap-card-header__filter" id="heatmap-subject-filter">
+                <label for="heatmap-subject" class="heatmap-card-header__filter-label">Subject</label>
+                <select
+                    id="heatmap-subject"
+                    name="subject"
+                    class="heatmap-card-header__select"
+                    onchange="this.form.submit()"
+                >
+                    {% for subject in heatmap_subjects %}
+                    <option value="{{ subject.pk }}" {% if selected_subject and selected_subject.pk == subject.pk %}selected{% endif %}>
+                        {{ subject.code }} — {{ subject.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+            <div class="heatmap-card-header__filter">
+                <label for="heatmap-metric" class="heatmap-card-header__filter-label">Chart metric</label>
+                <select id="heatmap-metric" class="heatmap-card-header__select">
+                    <option value="confidence">Confidence levels</option>
+                    <option value="mistakes">Mistakes per question</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <p class="text-xs text-examiq-slate mb-2 text-center" id="heatmapChartStatus"></p>
+    {% if heatmap.questions %}
+    <div class="heatmap-chart-wrap mb-3" id="heatmapChartWrap">
+        <canvas id="heatmapChart" aria-label="Confidence by question, lowest first"></canvas>
+    </div>
+    <div class="heatmap-chart-pager mb-6" id="heatmapChartPager" aria-label="Chart pagination">
+        <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapPrevPage">Previous</button>
+        <span class="heatmap-chart-page-label" id="heatmapPageLabel">Page 1 of 1</span>
+        <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapNextPage">Next</button>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[640px]">
+            <thead>
+                <tr class="text-left text-examiq-slate border-b border-slate-100">
+                    <th class="pb-2 font-medium">Question</th>
+                    <th class="pb-2 font-medium">Topic</th>
+                    <th class="pb-2 font-medium text-center">No</th>
+                    <th class="pb-2 font-medium text-center">Low</th>
+                    <th class="pb-2 font-medium text-center">Average</th>
+                    <th class="pb-2 font-medium text-center">High</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for question in heatmap.questions %}
+                <tr class="border-b border-slate-50">
+                    <td class="py-2 text-examiq-navy max-w-xs">{{ question.question_stem }}</td>
+                    <td class="py-2 text-examiq-slate">{{ question.topic_name }}</td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
+                    <td class="py-2"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    {% include "components/empty_state.html" with compact=True title="No answers yet" body="When students in this section sit exams for this subject, the heatmap fills in." %}
+    {% endif %}
+</div>
+
+{% if heatmap.student_rows %}
+<div class="bento-card p-6">
+    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Students</h2>
+    <ul class="space-y-2">
+        {% for row in heatmap.student_rows %}
+        <li class="flex justify-between py-2 border-b border-slate-50 text-sm">
+            <span class="text-examiq-navy font-medium">{{ row.student_name }}</span>
+            <span class="text-examiq-slate">{{ row.dominant }} · {{ row.total }} answers</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ heatmap.questions|json_script:"heatmap-questions-data" }}
+<script src="{% static 'js/heatmap-priority-chart.js' %}"></script>
+<script>
+(function () {
+    const el = document.getElementById("heatmap-questions-data");
+    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderHeatmapPriorityChart) return;
+    const questionsData = JSON.parse(el.textContent);
+    window.ExamiQUI.renderHeatmapPriorityChart({
+        canvas: "heatmapChart",
+        wrapEl: "heatmapChartWrap",
+        prevBtn: "heatmapPrevPage",
+        nextBtn: "heatmapNextPage",
+        pageLabel: "heatmapPageLabel",
+        statusEl: "heatmapChartStatus",
+        pagerEl: "heatmapChartPager",
+        metricSelect: "heatmap-metric",
+        questions: questionsData,
+        pageSize: 10,
+    });
+})();
+</script>
+{% endblock %}

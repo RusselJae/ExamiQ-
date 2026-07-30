@@ -29,23 +29,20 @@ when the student can read them; otherwise explain the symbol in plain English.
 
 TUTOR_RESPONSE_STYLE = """\
 ### RESPONSE STYLE
-- Keep explanations simple unless the user asks for detailed steps.
-- If a problem needs more than three main steps, break work into numbered chunks.
-- If calculation is requested: show clean step-by-step work.
-- If conceptual: give a short definition plus one simple example.
-- Friendly, supportive tone. If the user is confused, rephrase or use an analogy."""
+- Keep replies short: 2-6 sentences or a few numbered steps. No filler.
+- Math notation only when needed for the problem. No decorative symbols, emojis, or flourish.
+- If calculation: show clean numbered work, then the final answer once.
+- If conceptual: one short definition and at most one example.
+- Do not add long practice-recommendation essays unless the student asks."""
 
 TUTOR_CHAT_RULES = """\
 RULES:
-- Do NOT greet the user (no 'Hi', no 'Hello').
-- Do NOT introduce yourself.
-- Respond directly to the topic.
-- When explaining how to solve a problem, always use a numbered step-by-step process
-  (Step 1, Step 2, ...) that shows the proper solving method, then state the final answer.
-- Keep explanations simple unless the user asks for detailed steps.
-- If the message is vague, connect it to the topic or the exam they just took.
-- If it is about a calculation, show clean steps using plain text and KaTeX-friendly $...$ math.
-- If it is conceptual, explain with 1 example and numbered reasoning steps."""
+- Do NOT greet the user or introduce yourself.
+- Respond directly. Prefer brevity.
+- For solve-how questions: numbered steps only (short instruction + expression per step), then final answer.
+- No decorative symbols unrelated to the math.
+- If the message is vague, tie it to the active question in one sentence, then help.
+- Plain text / simple $...$ math only."""
 
 ADAPTIVE_TOPIC_RESTRICTION = """\
 ### TOPIC RESTRICTION (IMPORTANT)
@@ -105,8 +102,12 @@ QUESTION_JSON_SCHEMA = (
     '{"label":"B","text":"the one correct answer","is_correct":true},'
     '{"label":"C","text":"plausible distractor","is_correct":false},'
     '{"label":"D","text":"plausible distractor","is_correct":false}],'
-    '"explanation_steps":["Step 1: ...","Step 2: ..."],'
-    '"solution_summary":"Final answer: B because ..."}]'
+    '"explanation_steps":['
+    '"Align like terms.",'
+    '"x^2 + 2x^2 = 3x^2",'
+    '"Write the final answer: 3x^2 + x + 7"'
+    '],'
+    '"solution_summary":"Final answer: B"}]'
 )
 
 DIFFICULTY_GUIDANCE: dict[str, str] = {
@@ -257,8 +258,10 @@ QUESTION_GENERATION_SYSTEM = (
     "- Stems ≤50 words; choice text ≤120 characters; difficulty must match requested level.\n"
     "- Distractors plausible but definitively wrong to a subject expert.\n"
     "- Solve each problem yourself before marking the answer; verify correctness.\n"
-    "- For computation or multi-step problems: include ≥2 explanation_steps showing work.\n"
-    "- solution_summary states the correct choice letter and why.\n"
+    "- For computation or multi-step problems: include ≥3 explanation_steps as a computational breakdown.\n"
+    "- Each explanation_step is ONE short instruction OR ONE math line (not a paragraph).\n"
+    "- Prefer: setup/align → operate on like terms or factors → write final answer.\n"
+    "- solution_summary is one short line stating the final answer only.\n"
     "- Match the subject field exactly (theory, math, programming, statistics, etc.).\n"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
@@ -300,7 +303,9 @@ def build_question_generation_prompt(
         "Keep stems and choice text short. Escape quotes inside JSON strings.\n"
         "Pick a different correct_label for each question when possible (mix A, B, C, D).\n"
         "Do NOT place the correct answer on the same letter for every question.\n"
-        "Each question must include explanation_steps (≥1) and solution_summary.\n"
+        "Each question must include explanation_steps (≥2 for multi-step work) and a one-line solution_summary.\n"
+        "explanation_steps must be a computational breakdown: short instruction lines alternating with math lines. "
+        "No long prose paragraphs.\n"
         f"JSON array schema (example shows B correct — use any letter per question):\n"
         f"{QUESTION_JSON_SCHEMA}"
     )
@@ -466,20 +471,16 @@ def build_adaptive_feedback_prompt(
     user_prompt = f"""\
 ### DYNAMIC FEEDBACK RULES
 When the student is incorrect:
-- Give numbered step-by-step solutions and explain their mistake clearly.
-- If confidence is LOW, use simpler explanations.
-- If confidence is HIGH, include deeper reasoning.
+- In 1-2 short sentences, name the mistake (no essays).
+- Point them to the Solution tab steps; do not paste a full lecture here.
+- If confidence is LOW, use simpler wording.
 
 Use plain language. Avoid decorative symbols unless the question uses math notation.
-
-### SKILL & PRACTICE RECOMMENDATION RULES
-Include what to practice next, ideal difficulty, concepts needing attention, \
-and a suggested number of practice questions.
 
 ### PERFORMANCE PATTERNS
 {pattern_text}
 
-Provide insights on repeated mistakes, confused concepts, and strengths/weaknesses.
+Keep the whole reply under ~120 words. No long practice-recommendation blocks.
 
 ---
 
@@ -492,7 +493,7 @@ Confidence Level: {confidence}
 
 ---
 
-Now generate adaptive, personalized feedback based on all rules above."""
+Generate brief adaptive feedback based on the rules above."""
     return ADAPTIVE_FEEDBACK_SYSTEM, user_prompt
 
 

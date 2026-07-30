@@ -171,7 +171,7 @@ class SectionExamSetupForm(forms.ModelForm):
             }
         ),
         label="Courses available for exams",
-        help_text="Students in this section pick at least 3 from this list.",
+        help_text="Students in this section pick at least 1 from this list.",
     )
     allowed_difficulties = forms.MultipleChoiceField(
         choices=Question.Difficulty.choices,

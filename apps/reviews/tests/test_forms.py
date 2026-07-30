@@ -61,21 +61,46 @@ class TestReviewSetupForm:
         assert subject.pk in subject_ids
         assert form.fields["subjects"].queryset.filter(code="IT-101").count() == 0
 
-    def test_rejects_setup_when_fewer_than_min_subjects(
+    def test_rejects_setup_when_no_subjects_selected(
         self, student, subject, topic, mcq_question, bsed_program, year_level
     ):
         make_bsed_student(student, subject=subject, bsed_program=bsed_program)
-        other = _make_subject_with_questions(bsed_program, year_level, "MIN-2")
 
         form = ReviewSetupForm(
             data={
-                "subjects": [subject.pk, other.pk],
+                "subjects": [],
                 "difficulty": Question.Difficulty.EASY,
             },
             student=student,
         )
         assert not form.is_valid()
-        assert f"at least {MIN_EXAM_SUBJECTS}" in str(form.errors).lower()
+        err = str(form.errors).lower()
+        assert "subjects" in form.errors or f"at least {MIN_EXAM_SUBJECTS}" in err
+
+    def test_accepts_setup_with_one_subject(
+        self, student, subject, topic, mcq_question, bsed_program, year_level
+    ):
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        # Ensure enough questions for one subject
+        for i in range(QUESTIONS_PER_SUBJECT - 1):
+            q = Question.objects.create(
+                topic=topic,
+                difficulty=Question.Difficulty.EASY,
+                question_type=Question.QuestionType.MCQ,
+                stem=f"Extra {i}",
+                status=Question.Status.APPROVED,
+            )
+            QuestionChoice.objects.create(question=q, label="A", text="ok", is_correct=True)
+            QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+
+        form = ReviewSetupForm(
+            data={
+                "subjects": [subject.pk],
+                "difficulty": Question.Difficulty.EASY,
+            },
+            student=student,
+        )
+        assert form.is_valid(), form.errors
 
     def test_rejects_setup_when_no_questions_available(
         self, student, subject, topic, bsed_program, year_level

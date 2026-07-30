@@ -11,7 +11,7 @@ from apps.reviews.models import DEFAULT_EXAM_DIFFICULTIES, ExamSetup, SectionExa
 from apps.users.models import Course, User
 
 QUESTIONS_PER_SUBJECT = 10
-MIN_EXAM_SUBJECTS = 3
+MIN_EXAM_SUBJECTS = 1
 
 
 def get_or_create_exam_setup(course) -> ExamSetup:

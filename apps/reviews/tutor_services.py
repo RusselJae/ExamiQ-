@@ -15,12 +15,25 @@ def get_or_create_conversation(student: User, question: Question) -> TutorConver
     return conversation
 
 
+def _tutor_message_image_url(msg: TutorMessage) -> str:
+    if not msg.image:
+        return ""
+    try:
+        return msg.image.url
+    except ValueError:
+        return ""
+
+
 def conversation_messages_payload(conversation: TutorConversation) -> list[dict]:
     return [
         {
             "id": msg.pk,
             "role": msg.role,
             "content": msg.content,
+            "image_url": _tutor_message_image_url(msg),
+            "image_name": (
+                (msg.image.name.rsplit("/", 1)[-1] if msg.image else "") or ""
+            ),
             "created_at": msg.created.isoformat(),
         }
         for msg in conversation.messages.order_by("created")
@@ -180,10 +193,11 @@ def process_tutor_chat(
     user_message: str,
     *,
     answer_id: int | None = None,
+    image=None,
 ) -> dict:
     user_message = (user_message or "").strip()
-    if not user_message:
-        return {"error": "Message cannot be empty."}
+    if not user_message and not image:
+        return {"error": "Add a message or photo."}
 
     answer = None
     if answer_id:
@@ -193,11 +207,18 @@ def process_tutor_chat(
 
     conversation = get_or_create_conversation(session.student, answer.question)
 
-    TutorMessage.objects.create(
+    prompt_message = user_message
+    if image and not prompt_message:
+        prompt_message = "I attached a photo of my work. Please help with this question."
+    elif image:
+        prompt_message = f"{user_message}\n\n[Student attached an image of their work.]"
+
+    user_msg = TutorMessage.objects.create(
         conversation=conversation,
         role=TutorMessage.Role.USER,
         content=user_message,
         answer=answer,
+        image=image,
     )
 
     history = conversation_history(conversation)
@@ -206,7 +227,7 @@ def process_tutor_chat(
 
     reply = get_tutor_engine().chat(
         topic=session.topic.name,
-        message=user_message,
+        message=prompt_message,
         history=history[:-1],
         exam_context=exam_context,
         question_context=question_context,
@@ -222,6 +243,15 @@ def process_tutor_chat(
     return {
         "reply": reply,
         "message_id": assistant_msg.pk,
+        "user_message": {
+            "id": user_msg.pk,
+            "role": user_msg.role,
+            "content": user_msg.content or "",
+            "image_url": _tutor_message_image_url(user_msg),
+            "image_name": (
+                (user_msg.image.name.rsplit("/", 1)[-1] if user_msg.image else "") or ""
+            ),
+        },
         "active_answer_id": answer.pk,
         "question_id": answer.question_id,
     }

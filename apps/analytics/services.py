@@ -2,7 +2,7 @@
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Avg, Count, Prefetch, Q, Sum
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncMonth, TruncWeek, TruncYear
 
 from apps.analytics.confidence import (
     CLASSIFICATION_LABELS,
@@ -422,6 +422,160 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
             }
         )
     return cards
+
+
+def professor_overview_trends(professor: User) -> dict:
+    """Bucketed trend series for the professor overview line chart.
+
+    Returns all metrics × ranges so the client can switch without refetching.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+
+    now = timezone.now()
+    course_filter = Q(course__professor=professor, course__is_archived=False)
+    answer_filter = Q(
+        session__course__professor=professor,
+        session__course__is_archived=False,
+    )
+
+    ranges = {
+        "weekly": {
+            "trunc": TruncWeek,
+            "count": 12,
+            "delta": timedelta(weeks=1),
+            "label": lambda d: d.strftime("%b %d"),
+            "key": lambda d: d.date().isoformat() if hasattr(d, "date") else str(d),
+        },
+        "monthly": {
+            "trunc": TruncMonth,
+            "count": 12,
+            "delta": timedelta(days=31),
+            "label": lambda d: d.strftime("%b %Y"),
+            "key": lambda d: d.strftime("%Y-%m"),
+        },
+        "yearly": {
+            "trunc": TruncYear,
+            "count": 5,
+            "delta": timedelta(days=366),
+            "label": lambda d: d.strftime("%Y"),
+            "key": lambda d: d.strftime("%Y"),
+        },
+    }
+
+    def _bucket_starts(cfg):
+        starts = []
+        if cfg["trunc"] is TruncWeek:
+            d = (now - timedelta(days=now.weekday())).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            for i in range(cfg["count"] - 1, -1, -1):
+                starts.append(d - timedelta(weeks=i))
+        elif cfg["trunc"] is TruncMonth:
+            y, m = now.year, now.month
+            for i in range(cfg["count"] - 1, -1, -1):
+                mm = m - i
+                yy = y
+                while mm <= 0:
+                    mm += 12
+                    yy -= 1
+                starts.append(
+                    now.replace(
+                        year=yy,
+                        month=mm,
+                        day=1,
+                        hour=0,
+                        minute=0,
+                        second=0,
+                        microsecond=0,
+                    )
+                )
+        else:
+            for i in range(cfg["count"] - 1, -1, -1):
+                starts.append(
+                    now.replace(
+                        year=now.year - i,
+                        month=1,
+                        day=1,
+                        hour=0,
+                        minute=0,
+                        second=0,
+                        microsecond=0,
+                    )
+                )
+        return starts
+
+    def _fill(series_map, cfg):
+        points = []
+        for start in _bucket_starts(cfg):
+            k = cfg["key"](start)
+            points.append(
+                {
+                    "label": cfg["label"](start),
+                    "value": series_map.get(k, 0),
+                }
+            )
+        return points
+
+    result = {}
+    for range_key, cfg in ranges.items():
+        trunc_fn = cfg["trunc"]
+        earliest = _bucket_starts(cfg)[0]
+
+        session_rows = (
+            ReviewSession.objects.filter(course_filter, started_at__gte=earliest)
+            .annotate(bucket=trunc_fn("started_at"))
+            .values("bucket")
+            .annotate(value=Count("student_id", distinct=True))
+            .order_by("bucket")
+        )
+        students_map = {
+            cfg["key"](row["bucket"]): row["value"]
+            for row in session_rows
+            if row["bucket"]
+        }
+
+        answer_rows = (
+            Answer.objects.filter(answer_filter, answered_at__gte=earliest)
+            .annotate(bucket=trunc_fn("answered_at"))
+            .values("bucket")
+            .annotate(
+                total=Count("id"),
+                correct=Count("id", filter=Q(is_correct=True)),
+            )
+            .order_by("bucket")
+        )
+        scores_map = {}
+        for row in answer_rows:
+            if not row["bucket"]:
+                continue
+            k = cfg["key"](row["bucket"])
+            total = row["total"] or 0
+            scores_map[k] = (
+                round((row["correct"] or 0) / total * 100, 1) if total else 0
+            )
+
+        conf_rows = (
+            Answer.objects.filter(answer_filter, answered_at__gte=earliest)
+            .annotate(bucket=trunc_fn("answered_at"))
+            .values("bucket")
+            .annotate(value=Avg("confidence"))
+            .order_by("bucket")
+        )
+        confidence_map = {}
+        for row in conf_rows:
+            if not row["bucket"]:
+                continue
+            k = cfg["key"](row["bucket"])
+            confidence_map[k] = round(float(row["value"] or 0), 2)
+
+        result[range_key] = {
+            "students": _fill(students_map, cfg),
+            "scores": _fill(scores_map, cfg),
+            "confidence": _fill(confidence_map, cfg),
+        }
+
+    return result
 
 
 def _course_student_ids(course: Course):
@@ -871,11 +1025,14 @@ def _heatmap_from_answers(answers, student_ids) -> dict:
                 "low": 0,
                 "average": 0,
                 "high": 0,
+                "mistakes": 0,
                 "total": 0,
             }
         tier = confidence_tier_key(answer.confidence)
         question_map[question.id][tier] += 1
         question_map[question.id]["total"] += 1
+        if not answer.is_correct:
+            question_map[question.id]["mistakes"] += 1
 
     questions = sorted(
         question_map.values(),

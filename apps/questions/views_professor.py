@@ -647,24 +647,31 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
         from apps.ai.ingest import ingest_learning_upload
         from apps.ai.job_services import start_question_generation_job
-        from apps.ai.retrieval import retrieve_material_for_topic
+        from apps.ai.retrieval import retrieve_material_for_topic, sample_material_for_detection
         from apps.ai.source_extract import SourceMaterialError
+        from apps.ai.subject_relevance import assess_subject_relevance
 
-        topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
         try:
             count = int(request.POST.get("count") or 3)
         except (TypeError, ValueError):
             count = 3
         count = max(1, min(count, 10))
-        topic = (
-            topics_for_course_section(self.course, request.user)
-            .filter(pk=topic_id)
-            .select_related("subject")
-            .first()
+
+        subject = _subject_for_course(self.course)
+        if not subject:
+            return JsonResponse(
+                {"error": "Link a subject to this course before generating."},
+                status=400,
+            )
+        topics = list(
+            topics_for_course_section(self.course, request.user).select_related("subject")
         )
-        if not topic:
-            return JsonResponse({"error": "Select a topic first."}, status=400)
+        if not topics:
+            return JsonResponse(
+                {"error": "Create at least one topic under this course subject first."},
+                status=400,
+            )
 
         uploaded = request.FILES.get("source_file")
         if not uploaded:
@@ -681,10 +688,32 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         except SourceMaterialError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
+        sample = sample_material_for_detection(document)
+        relevance = assess_subject_relevance(sample, subject, topics)
+        if not relevance["related"]:
+            return JsonResponse(
+                {
+                    "error": relevance.get("reason")
+                    or "Uploaded module is not related to this course subject.",
+                },
+                status=400,
+            )
+
+        topic_id = relevance.get("matched_topic_id") or request.POST.get("topic")
+        try:
+            topic_id = int(topic_id) if topic_id is not None else None
+        except (TypeError, ValueError):
+            topic_id = None
+        topic = next((t for t in topics if t.pk == topic_id), None) if topic_id else None
+        if topic is None:
+            topic = topics[0]
+
         source_material = retrieve_material_for_topic(document=document, topic=topic)
         if not source_material:
+            source_material = sample
+        if not source_material:
             return JsonResponse(
-                {"error": "Could not retrieve enough module text for this topic."},
+                {"error": "Could not read enough text from the uploaded module."},
                 status=400,
             )
 
@@ -701,6 +730,7 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             {
                 "job_id": job.pk,
                 "status": job.status,
+                "topic_id": topic.pk,
                 "status_url": reverse(
                     "analytics_professor:question_ai_generate_status",
                     kwargs={"course_pk": self.course.pk, "job_id": job.pk},

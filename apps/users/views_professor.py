@@ -1,12 +1,13 @@
 """Professor course catalog management views."""
 
 from django.contrib import messages
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import ListView
 
 from apps.core.mixins import ProfessorRequiredMixin
-from apps.questions.models import Subject
+from apps.questions.models import Subject, YearLevel
 from apps.users.assignment_services import (
     create_catalog_subject,
     get_or_create_catalog_course,
@@ -16,7 +17,7 @@ from apps.users.models import Course, User
 
 
 class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
-    """Grid of all BSED Math curriculum subjects (catalog)."""
+    """Table of all BSED Math curriculum subjects (catalog)."""
 
     model = Subject
     template_name = "professor/courses/list.html"
@@ -26,6 +27,7 @@ class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
         return (
             Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
             .select_related("program", "year_level")
+            .annotate(question_count=Count("topics__questions", distinct=True))
             .order_by("year_level__order", "semester", "code")
         )
 
@@ -34,8 +36,16 @@ class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
         cards = []
         for subject in context["course_cards"]:
             catalog_course = get_or_create_catalog_course(self.request.user, subject)
-            cards.append({"subject": subject, "catalog_course": catalog_course})
+            cards.append(
+                {
+                    "subject": subject,
+                    "catalog_course": catalog_course,
+                    "question_count": getattr(subject, "question_count", 0),
+                }
+            )
         context["course_cards"] = cards
+        context["year_levels"] = YearLevel.objects.order_by("order")
+        context["semester_choices"] = Subject.Semester.choices
         context["assignments_managed"] = False
         return context
 

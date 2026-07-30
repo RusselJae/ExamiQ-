@@ -13,20 +13,6 @@
     <div class="bento-card bento-card--elevated p-6 shadow-sm">
         <div class="batch-settings-grid">
             <div>
-                <label for="settings-topic" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Topic</label>
-                <select id="settings-topic" name="topic" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
-                    <option value="">---------</option>
-                    {% for topic in topics %}
-                    <option value="{{ topic.pk }}">{{ topic.name }}</option>
-                    {% endfor %}
-                </select>
-                {% if not course_subject %}
-                <p class="text-xs text-amber-700 mt-1">Link a subject to this course before adding topics.</p>
-                {% elif not topics %}
-                <p class="text-xs text-amber-700 mt-1">No topics yet. Create one under Topics first.</p>
-                {% endif %}
-            </div>
-            <div>
                 <label for="settings-difficulty" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Difficulty</label>
                 <select id="settings-difficulty" name="difficulty" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
                     {% for value, label in difficulty_choices %}
@@ -62,12 +48,12 @@
                 </button>
             </div>
         </div>
-
-        <div id="ai-topic-detect-panel" class="mt-4 hidden">
-            <p class="text-xs font-semibold uppercase text-examiq-slate mb-2">Detected from module</p>
-            <div id="ai-detected-chips" class="flex flex-wrap gap-2 mb-2"></div>
-            <div id="ai-suggested-topics" class="flex flex-wrap gap-2"></div>
-        </div>
+        {% if not course_subject %}
+        <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
+        {% elif not topics %}
+        <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
+        {% endif %}
+        <input type="hidden" id="settings-topic" name="topic" value="{% if topics %}{{ topics.0.pk }}{% endif %}">
     </div>
 
     <div id="generate-modal-container"></div>
@@ -78,6 +64,9 @@
             <h2 class="text-lg font-semibold text-examiq-navy">Questions</h2>
             <div class="batch-questions-toolbar__actions">
                 <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1">0 questions</span>
+                <button type="button" id="validate-all-btn" class="btn-secondary btn-primary-sm inline-flex items-center gap-1">
+                    Validate All
+                </button>
                 <button type="submit" class="btn-primary btn-primary-sm inline-flex items-center gap-1">
                     Submit all
                 </button>
@@ -132,8 +121,6 @@
 (function() {
     const coursePk = "{{ course.pk }}";
     const generateUrl = "{% url 'analytics_professor:question_ai_generate' course.pk %}";
-    const detectTopicsUrl = "{% url 'analytics_professor:question_ai_detect_topics' course.pk %}";
-    const createTopicUrl = "{% url 'analytics_professor:topic_create' course.pk %}";
     const validateUrl = "{% url 'analytics_professor:question_ai_validate' course.pk %}";
     const editUrlBase = "{% url 'analytics_professor:question_batch_edit' course.pk 0 %}".replace("/0/", "/");
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -150,12 +137,10 @@
     const addQuestionBtn = document.getElementById("add-question-btn");
     const addQuestionInlineBtn = document.getElementById("add-question-inline-btn");
     const emptyAddManualBtn = document.getElementById("empty-add-manual-btn");
+    const validateAllBtn = document.getElementById("validate-all-btn");
     const batchForm = document.getElementById("batch-question-form");
     const sourceInput = document.getElementById("ai-source-file");
     const generateCountInput = document.getElementById("ai-generate-count");
-    const detectPanel = document.getElementById("ai-topic-detect-panel");
-    const detectedChips = document.getElementById("ai-detected-chips");
-    const suggestedTopics = document.getElementById("ai-suggested-topics");
 
     function getGenerateCount() {
         let n = parseInt(generateCountInput && generateCountInput.value, 10);
@@ -401,90 +386,9 @@
         return questionIndex;
     }
 
-    function ensureTopicOption(id, name) {
-        if (!id) return;
-        let opt = topicSelect.querySelector('option[value="' + id + '"]');
-        if (!opt) {
-            opt = document.createElement("option");
-            opt.value = String(id);
-            opt.textContent = name || ("Topic " + id);
-            topicSelect.appendChild(opt);
-        }
+    function setTopicId(id) {
+        if (!topicSelect || !id) return;
         topicSelect.value = String(id);
-    }
-
-    function renderDetectionResult(data) {
-        detectPanel.classList.remove("hidden");
-        detectedChips.innerHTML = "";
-        (data.detected_topics || []).forEach(function(name) {
-            const chip = document.createElement("span");
-            chip.className = "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-50 text-violet-800 border border-violet-200";
-            chip.textContent = name;
-            detectedChips.appendChild(chip);
-        });
-        suggestedTopics.innerHTML = "";
-        (data.suggested_new_topics || []).forEach(function(name) {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "create-suggested-topic inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100";
-            btn.dataset.name = name;
-            btn.textContent = "Create topic: " + name;
-            suggestedTopics.appendChild(btn);
-        });
-        if (data.matched_topic_id) {
-            ensureTopicOption(data.matched_topic_id, data.matched_topic_name);
-            onSettingsChange();
-            if (window.showToast) {
-                window.showToast(
-                    "Matched topic: " + (data.matched_topic_name || data.matched_topic_id),
-                    "success"
-                );
-            }
-        }
-    }
-
-    async function detectTopicsFromFile(file) {
-        if (!file) return;
-        const fd = new FormData();
-        fd.append("csrfmiddlewaretoken", csrfToken);
-        fd.append("source_file", file);
-        try {
-            const resp = await fetch(detectTopicsUrl, {
-                method: "POST",
-                body: fd,
-                headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
-                credentials: "same-origin",
-            });
-            const data = await resp.json().catch(function () { return {}; });
-            if (!resp.ok) {
-                throw new Error(data.error || "Could not detect topics.");
-            }
-            renderDetectionResult(data);
-        } catch (err) {
-            if (window.showToast) window.showToast(err.message || "Topic detection failed.", "error");
-        }
-    }
-
-    async function createSuggestedTopic(name) {
-        const fd = new FormData();
-        fd.append("csrfmiddlewaretoken", csrfToken);
-        fd.append("name", name);
-        const resp = await fetch(createTopicUrl, {
-            method: "POST",
-            body: fd,
-            headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
-            credentials: "same-origin",
-        });
-        const data = await resp.json().catch(function () { return {}; });
-        if (!resp.ok) {
-            throw new Error(data.error || "Could not create topic.");
-        }
-        ensureTopicOption(data.id, data.name);
-        onSettingsChange();
-        Array.from(suggestedTopics.querySelectorAll(".create-suggested-topic")).forEach(function(btn) {
-            if (btn.dataset.name === name) btn.remove();
-        });
-        if (window.showToast) window.showToast('Topic "' + data.name + '" created.', "success");
     }
 
     function restoreDraft() {
@@ -623,27 +527,54 @@
         window.ExamiQBatch.persist(batchConfig);
     }
 
-    topicSelect.addEventListener("change", onSettingsChange);
+    if (topicSelect) topicSelect.addEventListener("change", onSettingsChange);
     difficultySelect.addEventListener("change", onSettingsChange);
 
-    sourceInput.addEventListener("change", function() {
-        if (sourceInput.files && sourceInput.files[0]) {
-            detectTopicsFromFile(sourceInput.files[0]);
+    async function validateAllPending() {
+        const pending = [];
+        for (let i = 0; i < questionIndex; i++) {
+            const data = getQuestionData(i);
+            if (!data.stem.trim()) continue;
+            if (data.ai_generated) continue;
+            if (validationState[i] && validationState[i].is_valid === true) continue;
+            pending.push(i);
         }
-    });
+        if (!pending.length) {
+            if (window.showToast) {
+                window.showToast("Nothing left to validate.", "info");
+            }
+            return;
+        }
+        if (validateAllBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(validateAllBtn, true, "Validating…");
+        }
+        let failed = 0;
+        for (let j = 0; j < pending.length; j++) {
+            const result = await runValidate(pending[j], null, false);
+            if (!result || !result.is_valid) failed += 1;
+        }
+        if (validateAllBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(validateAllBtn, false);
+        }
+        if (window.showToast) {
+            if (failed) {
+                window.showToast(failed + " question(s) still need fixes.", "warning");
+            } else {
+                window.showToast("All pending questions validated.", "success");
+            }
+        }
+    }
 
-    suggestedTopics.addEventListener("click", function(e) {
-        const btn = e.target.closest(".create-suggested-topic");
-        if (!btn) return;
-        createSuggestedTopic(btn.dataset.name).catch(function(err) {
-            if (window.showToast) window.showToast(err.message || "Could not create topic.", "error");
+    if (validateAllBtn) {
+        validateAllBtn.addEventListener("click", function () {
+            validateAllPending();
         });
-    });
+    }
 
     batchForm.addEventListener("submit", async function(e) {
-        if (!topicSelect.value) {
+        if (!topicSelect || !topicSelect.value) {
             e.preventDefault();
-            if (window.showToast) window.showToast("Select a topic before submitting.", "warning");
+            if (window.showToast) window.showToast("No topic available for this course subject.", "warning");
             return;
         }
         const dupes = findDuplicateStemsInQueue();
@@ -743,10 +674,6 @@
     }
 
     generateBtn.addEventListener("click", async function() {
-        if (!topicSelect.value) {
-            if (window.showToast) window.showToast("Select a topic before generating questions.", "warning");
-            return;
-        }
         if (!sourceInput || !sourceInput.files || !sourceInput.files[0]) {
             if (window.showToast) window.showToast("Upload a learning material file first.", "warning");
             return;
@@ -768,6 +695,10 @@
             const data = await resp.json().catch(function () { return {}; });
             if (!resp.ok || !data.status_url) {
                 throw new Error(data.error || "Generation failed. Please try again.");
+            }
+            if (data.topic_id) {
+                setTopicId(data.topic_id);
+                onSettingsChange();
             }
             await pollGenerateJob(data.status_url);
         } catch (err) {

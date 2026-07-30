@@ -364,6 +364,51 @@ class TestTutorChat:
         conversation = TutorConversation.objects.get(student=student, question=question)
         assert TutorMessage.objects.filter(conversation=conversation).count() == 2
 
+    def test_tutor_chat_accepts_image(self, client, student, topic, mcq_question):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.reviews.models import TutorMessage
+
+        question, correct = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        answer = submit_answer(
+            session=session,
+            question=question,
+            confidence=4,
+            selected_choice=correct,
+            time_spent_seconds=8,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        client.force_login(student)
+        chat_url = reverse("reviews:tutor_chat", kwargs={"pk": session.pk})
+        image = SimpleUploadedFile(
+            "work.png",
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 64,
+            content_type="image/png",
+        )
+        response = client.post(
+            chat_url,
+            {
+                "message": "Here is my work",
+                "answer_id": str(answer.pk),
+                "image": image,
+            },
+        )
+        assert response.status_code == 200
+        msg = TutorMessage.objects.filter(
+            conversation__student=student,
+            conversation__question=question,
+            role=TutorMessage.Role.USER,
+        ).latest("pk")
+        assert msg.image
+
     def test_tutor_history_filters_by_answer_id(self, client, student, topic, mcq_question):
         question, correct = mcq_question
         wrong_choice = question.choices.filter(is_correct=False).first()

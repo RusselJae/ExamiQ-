@@ -22,11 +22,22 @@
 </div>
 
 <div id="class-view" class="bento-card p-6 mb-6">
-    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Question breakdown</h2>
+    <div class="heatmap-card-header mb-4">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-0">Question breakdown</h2>
+        <div class="heatmap-card-header__filters">
+            <div class="heatmap-card-header__filter">
+                <label for="heatmap-metric" class="heatmap-card-header__filter-label">Chart metric</label>
+                <select id="heatmap-metric" class="heatmap-card-header__select">
+                    <option value="confidence">Confidence levels</option>
+                    <option value="mistakes">Mistakes per question</option>
+                </select>
+            </div>
+        </div>
+    </div>
     {% if heatmap.questions %}
     <p class="text-xs text-examiq-slate mb-2 text-center" id="heatmapChartStatus"></p>
     <div class="heatmap-chart-wrap mb-3" id="heatmapChartWrap">
-        <canvas id="heatmapChart" aria-label="Confidence by question, lowest first"></canvas>
+        <canvas id="heatmapChart" aria-label="Confidence or mistakes by question"></canvas>
     </div>
     <div class="heatmap-chart-pager mb-6" id="heatmapChartPager" aria-label="Chart pagination">
         <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapPrevPage">Previous</button>
@@ -112,6 +123,7 @@
         pageLabel: "heatmapPageLabel",
         statusEl: "heatmapChartStatus",
         pagerEl: "heatmapChartPager",
+        metricSelect: "heatmap-metric",
         questions: questionsData,
         pageSize: 10,
     });

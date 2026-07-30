@@ -85,7 +85,9 @@ class TestSectionAndSubjectAnalytics:
         content = response.content.decode()
         assert "CAT-1" in content
         assert "Clone to 2nd Sem" not in content
-        assert "Courses" in content
+        assert "Course subjects" in content
+        assert "course-subjects-table" in content
+        assert "Questions" in content
 
     def test_section_nav_links_to_section_detail(
         self, client, professor, bsed_program, year_level, academic_year

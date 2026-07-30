@@ -1,12 +1,14 @@
 /**
- * Horizontal stacked bar chart for heatmap questions.
- * Sorted lowest-confidence-first; paginated (10 per page), controls centered.
+ * Vertical bar chart for heatmap questions.
+ * Confidence mode: stacked tiers. Mistakes mode: mistake counts.
+ * Paginated (10 per page), questions on X, metric on Y.
  */
 (function () {
     const PAGE_SIZE = 10;
-    const ROW_PX = 32;
-    const CHART_CHROME_PX = 96;
-    const MIN_HEIGHT_PX = 260;
+    const COL_PX = 56;
+    const CHART_CHROME_PX = 120;
+    const MIN_HEIGHT_PX = 320;
+    const MISTAKE_COLOR = "#D32F2F";
 
     const TIER_COLORS = {
         none: "#D32F2F",
@@ -33,8 +35,21 @@
         });
     }
 
+    function sortByMostMistakes(questions) {
+        return (questions || []).slice().sort(function (a, b) {
+            const ma = a.mistakes || 0;
+            const mb = b.mistakes || 0;
+            if (mb !== ma) return mb - ma;
+            return (a.question_id || 0) - (b.question_id || 0);
+        });
+    }
+
     function chartHeight(visibleCount) {
-        return Math.max(MIN_HEIGHT_PX, visibleCount * ROW_PX + CHART_CHROME_PX);
+        return Math.max(MIN_HEIGHT_PX, Math.min(420, visibleCount * 8 + CHART_CHROME_PX));
+    }
+
+    function chartMinWidth(visibleCount) {
+        return Math.max(480, visibleCount * COL_PX + 80);
     }
 
     function truncateStem(stem, max) {
@@ -57,8 +72,10 @@
      * @param {HTMLElement|string} [options.pageLabel]
      * @param {HTMLElement|string} [options.statusEl]
      * @param {HTMLElement|string} [options.pagerEl]
+     * @param {HTMLSelectElement|string} [options.metricSelect]
      * @param {Array} options.questions
      * @param {number} [options.pageSize]
+     * @param {string} [options.metric] confidence | mistakes
      */
     function renderHeatmapPriorityChart(options) {
         options = options || {};
@@ -73,26 +90,42 @@
         const pageLabel = resolveEl(options.pageLabel);
         const statusEl = resolveEl(options.statusEl);
         const pagerEl = resolveEl(options.pagerEl);
-
-        // Back-compat with Show more / Show less markup
+        const metricSelect = resolveEl(options.metricSelect);
         const moreBtn = resolveEl(options.moreBtn);
         const lessBtn = resolveEl(options.lessBtn);
 
         const pageSize = Math.max(10, options.pageSize || PAGE_SIZE);
-        const sorted = sortByLowestConfidence(options.questions);
+        let metric =
+            (metricSelect && metricSelect.value) ||
+            options.metric ||
+            "confidence";
+        if (metric !== "mistakes") metric = "confidence";
+
+        function sortedQuestions() {
+            if (metric === "mistakes") {
+                return sortByMostMistakes(options.questions);
+            }
+            return sortByLowestConfidence(options.questions);
+        }
+
+        let sorted = sortedQuestions();
         if (!sorted.length) {
             if (wrapEl) wrapEl.classList.add("hidden");
             if (pagerEl) pagerEl.classList.add("hidden");
             return null;
         }
 
-        const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+        let totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
         let page = 1;
         let chart = null;
 
         function updateChrome() {
             const start = (page - 1) * pageSize + 1;
             const end = Math.min(page * pageSize, sorted.length);
+            const orderNote =
+                metric === "mistakes"
+                    ? "most mistakes first"
+                    : "lowest confidence first";
 
             if (statusEl) {
                 statusEl.textContent =
@@ -102,7 +135,9 @@
                     end +
                     " of " +
                     sorted.length +
-                    " questions (lowest confidence first)";
+                    " questions (" +
+                    orderNote +
+                    ")";
             }
             if (pageLabel) {
                 pageLabel.textContent = "Page " + page + " of " + totalPages;
@@ -129,76 +164,120 @@
             }
         }
 
+        function confidenceDatasets(slice) {
+            return [
+                {
+                    label: "No Confidence",
+                    data: slice.map(function (q) {
+                        return q.none || 0;
+                    }),
+                    backgroundColor: TIER_COLORS.none,
+                    borderRadius: 2,
+                },
+                {
+                    label: "Low Confidence",
+                    data: slice.map(function (q) {
+                        return q.low || 0;
+                    }),
+                    backgroundColor: TIER_COLORS.low,
+                    borderRadius: 2,
+                },
+                {
+                    label: "Average Confidence",
+                    data: slice.map(function (q) {
+                        return q.average || 0;
+                    }),
+                    backgroundColor: TIER_COLORS.average,
+                    borderRadius: 2,
+                },
+                {
+                    label: "High Confidence",
+                    data: slice.map(function (q) {
+                        return q.high || 0;
+                    }),
+                    backgroundColor: TIER_COLORS.high,
+                    borderRadius: 2,
+                },
+            ];
+        }
+
+        function mistakesDatasets(slice) {
+            return [
+                {
+                    label: "Mistakes",
+                    data: slice.map(function (q) {
+                        return q.mistakes || 0;
+                    }),
+                    backgroundColor: MISTAKE_COLOR,
+                    borderRadius: 4,
+                },
+            ];
+        }
+
         function buildChart() {
             const startIdx = (page - 1) * pageSize;
             const slice = sorted.slice(startIdx, startIdx + pageSize);
             if (wrapEl) {
                 wrapEl.style.height = chartHeight(slice.length) + "px";
+                wrapEl.style.minWidth = chartMinWidth(slice.length) + "px";
                 wrapEl.classList.remove("hidden");
             }
 
             const labels = slice.map(function (q) {
                 return "Q" + q.question_id;
             });
+            const isMistakes = metric === "mistakes";
             const config = {
                 type: "bar",
                 data: {
                     labels: labels,
-                    datasets: [
-                        {
-                            label: "No Confidence",
-                            data: slice.map(function (q) {
-                                return q.none || 0;
-                            }),
-                            backgroundColor: TIER_COLORS.none,
-                            borderRadius: 2,
-                        },
-                        {
-                            label: "Low Confidence",
-                            data: slice.map(function (q) {
-                                return q.low || 0;
-                            }),
-                            backgroundColor: TIER_COLORS.low,
-                            borderRadius: 2,
-                        },
-                        {
-                            label: "Average Confidence",
-                            data: slice.map(function (q) {
-                                return q.average || 0;
-                            }),
-                            backgroundColor: TIER_COLORS.average,
-                            borderRadius: 2,
-                        },
-                        {
-                            label: "High Confidence",
-                            data: slice.map(function (q) {
-                                return q.high || 0;
-                            }),
-                            backgroundColor: TIER_COLORS.high,
-                            borderRadius: 2,
-                        },
-                    ],
+                    datasets: isMistakes
+                        ? mistakesDatasets(slice)
+                        : confidenceDatasets(slice),
                 },
                 options: {
-                    indexAxis: "y",
+                    indexAxis: "x",
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            stacked: true,
-                            beginAtZero: true,
-                            ticks: { precision: 0 },
-                            grid: { color: "#f1f5f9" },
+                            stacked: !isMistakes,
+                            grid: { display: false },
+                            title: {
+                                display: true,
+                                text: "Questions",
+                            },
                         },
                         y: {
-                            stacked: true,
-                            grid: { display: false },
+                            stacked: !isMistakes,
+                            beginAtZero: true,
+                            suggestedMax: isMistakes ? 100 : undefined,
+                            ticks: isMistakes
+                                ? {
+                                      precision: 0,
+                                      stepSize: 50,
+                                      callback: function (value) {
+                                          if (value === 0 || value === 50 || value === 100) {
+                                              return value;
+                                          }
+                                          return "";
+                                      },
+                                  }
+                                : { precision: 0 },
+                            grid: { color: "#f1f5f9" },
+                            title: {
+                                display: true,
+                                text: isMistakes
+                                    ? "Number of mistakes"
+                                    : "Confidence level (students)",
+                            },
                         },
                     },
                     plugins: {
                         legend: {
                             position: "bottom",
                             align: "center",
+                            display: !isMistakes,
                         },
                         tooltip: {
                             callbacks: {
@@ -232,6 +311,14 @@
             buildChart();
         }
 
+        function setMetric(nextMetric) {
+            metric = nextMetric === "mistakes" ? "mistakes" : "confidence";
+            sorted = sortedQuestions();
+            totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+            page = 1;
+            buildChart();
+        }
+
         if (prevBtn) {
             prevBtn.addEventListener("click", function () {
                 goTo(page - 1);
@@ -250,6 +337,11 @@
         if (lessBtn) {
             lessBtn.addEventListener("click", function () {
                 goTo(page - 1);
+            });
+        }
+        if (metricSelect) {
+            metricSelect.addEventListener("change", function () {
+                setMetric(metricSelect.value);
             });
         }
 

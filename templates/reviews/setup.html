@@ -6,7 +6,7 @@
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 3 courses and a difficulty. Up to 10 questions per course — shuffled and timed." %}
+{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 1 course and a difficulty. Up to 10 questions per course — shuffled and timed." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
 <div class="bento-card p-6 mb-6">
@@ -36,7 +36,7 @@
             <div class="student-setup-callout" role="note">
                 <p class="student-setup-callout__title">How it works</p>
                 <ul class="student-setup-callout__list">
-                    <li>Select at least 3 BSED Math courses — year and section stay on your profile.</li>
+                    <li>Select at least 1 BSED Math course — year and section stay on your profile.</li>
                     <li>Up to 10 questions per course at your difficulty, shuffled across courses.</li>
                     <li>Each question is timed — explanations appear after you finish.</li>
                 </ul>

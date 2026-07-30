@@ -265,6 +265,7 @@ class TestHeatmap:
             q for q in heatmap["questions"] if q["question_id"] == question.pk
         )
         assert question_row["high"] >= 1
+        assert question_row["mistakes"] >= 1
 
     def test_student_rows_include_practicing_student(self, student, mcq_question, program, professor):
         question, _ = mcq_question
@@ -564,8 +565,10 @@ class TestProfessorOverviewUX:
         content = response.content.decode()
         assert "Data as of" in content
         assert "Week of" in content
-        assert "Your courses" in content
-        assert course.name in content
+        assert "overviewTrendsChart" in content
+        assert "overview-trend-metric" in content
+        assert "Jump to offering" not in content
+        assert "Your courses" not in content
         assert "Active courses" in content
         assert "Average Score" in content
         assert "Cross-course snapshot" not in content
@@ -616,6 +619,28 @@ class TestProfessorOverviewUX:
         assert response.status_code == 200
         content = response.content.decode()
         assert 'id="summary-fab"' not in content
+
+
+@pytest.mark.django_db
+class TestProfessorOverviewTrends:
+    def test_trends_payload_has_metrics_and_ranges(self, professor, program):
+        from apps.analytics.services import professor_overview_trends
+
+        Course.objects.create(
+            program=program,
+            code="TR101",
+            name="Trend Course",
+            professor=professor,
+        )
+        trends = professor_overview_trends(professor)
+        for range_key in ("weekly", "monthly", "yearly"):
+            assert range_key in trends
+            for metric in ("students", "scores", "confidence"):
+                assert metric in trends[range_key]
+                assert isinstance(trends[range_key][metric], list)
+                assert len(trends[range_key][metric]) >= 1
+                assert "label" in trends[range_key][metric][0]
+                assert "value" in trends[range_key][metric][0]
 
 
 @pytest.mark.django_db
