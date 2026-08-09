@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Chat" subtitle="Messages with your professors about questions." %}
+
+<div class="bento-card p-6 overflow-x-auto shadow-sm">
+    {% if concern_rows %}
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-left text-examiq-slate border-b border-slate-200">
+                <th class="pb-3 pr-4 font-medium">Question</th>
+                <th class="pb-3 pr-4 font-medium">Subject</th>
+                <th class="pb-3 pr-4 font-medium w-28">Updated</th>
+                <th class="pb-3 font-medium w-32"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in concern_rows %}
+            <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                <td class="py-3 pr-4 text-examiq-navy max-w-md">
+                    {% if row.needs_attention %}
+                    <span class="inline-block w-2 h-2 rounded-full bg-examiq-coral mr-1" title="New faculty reply"></span>
+                    {% endif %}
+                    {{ row.record.question.stem|truncatechars:80 }}
+                </td>
+                <td class="py-3 pr-4 text-examiq-slate">{{ row.subject_code|default:row.record.topic.name }}</td>
+                <td class="py-3 pr-4 text-examiq-slate">{{ row.record.occurred_at|date:"M d, Y" }}</td>
+                <td class="py-3 text-right whitespace-nowrap">
+                    {% if row.answer_id %}
+                    <a href="{% url 'analytics_student:answer_detail' row.answer_id %}"
+                       class="text-link text-sm font-medium">Open conversation</a>
+                    {% else %}
+                    <span class="text-examiq-slate">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% include "components/empty_state.html" with title="No conversations yet" body="Ask your professor about a mistake from Mistakes or the AI Tutor Faculty Conversation tab." %}
+    {% endif %}
+</div>
+{% endblock %}

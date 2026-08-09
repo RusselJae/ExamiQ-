@@ -29,20 +29,46 @@ when the student can read them; otherwise explain the symbol in plain English.
 
 TUTOR_RESPONSE_STYLE = """\
 ### RESPONSE STYLE
-- Keep replies short: 2-6 sentences or a few numbered steps. No filler.
-- Math notation only when needed for the problem. No decorative symbols, emojis, or flourish.
-- If calculation: show clean numbered work, then the final answer once.
-- If conceptual: one short definition and at most one example.
+- Prefer structured JSON (see output schema). Keep reasoning tight.
+- Math with KaTeX-friendly $...$ / $$...$$ when equations help.
 - Do not add long practice-recommendation essays unless the student asks."""
+
+TUTOR_CHAT_JSON_SCHEMA = """\
+Return ONLY a JSON object (no markdown fences) with this shape:
+{
+  "steps": [
+    {
+      "title": "short step title",
+      "operation": "what rule you applied (e.g. divide both sides by 3)",
+      "equations": ["$3x = 12$", "$x = 4$"],
+      "highlight": "optional term that changed"
+    }
+  ],
+  "answer": "$x = 4$",
+  "chart": null
+}
+
+Optional chart (ONLY when a diagram clarifies optimization, geometry, or motion — otherwise null):
+{
+  "type": "line",
+  "title": "short chart title",
+  "points": [[0, 10], [5, 2], [10, 10]],
+  "markers": [{"x": 5, "label": "x = 5 (minimum)"}]
+}
+
+Rules for steps:
+- Stack equations aligned conceptually (each transformation on its own line).
+- Annotate the operation; do not dump paragraph prose.
+- Put the final result in "answer" separately from scratch work."""
 
 TUTOR_CHAT_RULES = """\
 RULES:
 - Do NOT greet the user or introduce yourself.
-- Respond directly. Prefer brevity.
-- For solve-how questions: numbered steps only (short instruction + expression per step), then final answer.
-- No decorative symbols unrelated to the math.
-- If the message is vague, tie it to the active question in one sentence, then help.
-- Plain text / simple $...$ math only."""
+- Respond with the JSON schema only.
+- For solve-how questions: fill steps + answer.
+- For short conceptual questions: 1-3 steps or a single answer string is fine.
+- If the message is vague, tie it to the active question in step 1, then help.
+- Use $...$ / $$...$$ for math (KaTeX)."""
 
 ADAPTIVE_TOPIC_RESTRICTION = """\
 ### TOPIC RESTRICTION (IMPORTANT)
@@ -204,10 +230,10 @@ def question_generation_max_tokens(count: int, difficulty: str = "") -> int:
     from django.conf import settings
 
     cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
-    base = min(cap, max(800, 280 * count))
+    base = max(1200, 300 * count)
     if difficulty == Question.Difficulty.HARD:
-        base = min(cap, int(base * 1.35))
-    return base
+        base = int(base * 1.5)
+    return min(cap, base)
 
 
 def exam_feedback_max_tokens(item_count: int) -> int:
@@ -352,7 +378,8 @@ def build_question_validation_prompt(
 
 TUTOR_CHAT_SYSTEM = (
     f"You are {EXAMIQ_PERSONA}, a clear and friendly tutor for math and computer science.\n"
-    f"{MATH_NOTATION_RULES}\n{TUTOR_RESPONSE_STYLE}"
+    "Use KaTeX-friendly math with $...$ or $$...$$ when equations help.\n"
+    f"{TUTOR_RESPONSE_STYLE}\n{TUTOR_CHAT_JSON_SCHEMA}"
 )
 
 
@@ -393,9 +420,11 @@ def build_tutor_chat_prompt(
         f"{format_conversation_history(history)}"
         f"User: {user_message}\n\n"
         f"{TUTOR_CHAT_RULES}\n\n"
+        f"{TUTOR_CHAT_JSON_SCHEMA}\n\n"
         "Only answer questions related to this topic, the current exam, or the active question. "
-        "If the student asks something unrelated to math or this topic, politely redirect them.\n\n"
-        "Now answer clearly and continue the conversation, using prior context where helpful."
+        "If the student asks something unrelated to math or this topic, politely redirect them "
+        "using a JSON object with a single step explaining the redirect.\n\n"
+        "Now answer using the JSON schema only."
     )
     return TUTOR_CHAT_SYSTEM, user_prompt
 
@@ -680,3 +709,50 @@ def build_topic_detection_prompt(
         f"Return JSON only matching:\n{TOPIC_DETECTION_JSON_SCHEMA}"
     )
     return TOPIC_DETECTION_SYSTEM, user
+
+
+# ---------------------------------------------------------------------------
+# Subject relevance for uploaded learning material
+# ---------------------------------------------------------------------------
+
+SUBJECT_RELEVANCE_SYSTEM = (
+    f"You are {EXAMIQ_PERSONA} curriculum analyst for secondary mathematics education. "
+    "Return valid JSON only. No markdown fences."
+)
+
+SUBJECT_RELEVANCE_JSON_SCHEMA = (
+    '{"related": true, '
+    '"matched_topic_id": 12, '
+    '"reason": "Covers right-triangle trigonometry."}'
+)
+
+
+def build_subject_relevance_prompt(
+    source_material: str,
+    subject_code: str,
+    subject_name: str,
+    topics: list[dict[str, Any]],
+) -> tuple[str, str]:
+    """Return (system, user) prompts for judging module-to-subject relevance.
+
+    The model decides whether the module belongs to the course subject and which
+    existing topic it best matches, so relevance works even when the subject
+    code never literally appears in the extracted text.
+    """
+    topics_payload = json.dumps([{"id": t.get("id"), "name": t.get("name")} for t in topics])
+    excerpt = (source_material or "").strip()
+    if len(excerpt) > 12000:
+        excerpt = excerpt[:12000] + "\n…[truncated]"
+    user = (
+        "A faculty member uploaded a learning module to generate exam questions for "
+        f"the course subject {subject_code or '—'} — {subject_name or 'unknown'}.\n"
+        "Decide whether the module is actually related to this subject.\n"
+        "Be tolerant of long scanned documents: a single relevant section is enough.\n"
+        "If related, set matched_topic_id to the best matching existing topic id "
+        "(or null if none fit).\n"
+        "Keep reason to one short sentence.\n\n"
+        f"Existing topics JSON:\n{topics_payload}\n\n"
+        f"Module text excerpt:\n{excerpt}\n\n"
+        f"Return JSON only matching:\n{SUBJECT_RELEVANCE_JSON_SCHEMA}"
+    )
+    return SUBJECT_RELEVANCE_SYSTEM, user

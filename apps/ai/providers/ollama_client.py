@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -10,6 +11,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.core.cache import cache
 
 from apps.ai.exceptions import AIServiceUnavailableError
 
@@ -17,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES_PER_MODEL = 2
 CHAT_TIMEOUT_SECONDS = 120
+CACHE_TTL_SECONDS = 3600
 
 
 @dataclass
@@ -59,10 +62,26 @@ def _is_not_found(exc: Exception) -> bool:
     return "404" in text or "not found" in text
 
 
+def _is_rate_limit(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(token in text for token in ("429", "quota", "rate limit", "too many"))
+
+
+def _cache_key() -> str:
+    key_hash = hashlib.md5((settings.OLLAMA_API_KEY or "").encode()).hexdigest()[:12]
+    return f"ollama_models_{key_hash}"
+
+
 def list_available_models(*, force_refresh: bool = False) -> list[str]:
-    """List models from Ollama /api/tags (best-effort)."""
+    """List models from Ollama /api/tags (cached 1 hour)."""
     if is_cloud_host() and not settings.OLLAMA_API_KEY:
         return []
+
+    cache_key = _cache_key()
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
 
     request = urllib.request.Request(
         _api_url("/api/tags"),
@@ -81,6 +100,9 @@ def list_available_models(*, force_refresh: bool = False) -> list[str]:
         name = item.get("name") or item.get("model")
         if name:
             models.append(str(name))
+    if models:
+        cache.set(cache_key, models, CACHE_TTL_SECONDS)
+        logger.info("Discovered Ollama models: %s", ", ".join(models))
     return models
 
 
@@ -198,13 +220,21 @@ def chat_with_fallback(
                 )
                 if _is_not_found(exc):
                     break
+                if _is_rate_limit(exc):
+                    break
                 if attempt < MAX_RETRIES_PER_MODEL and _is_retriable(exc):
                     time.sleep(min(2**attempt, 8))
                     continue
                 break
+        if _is_rate_limit(last_error):
+            break
 
     detail = str(last_error) if last_error else "unknown error"
-    raise AIServiceUnavailableError(_user_facing_message(last_error), detail=detail)
+    raise AIServiceUnavailableError(
+        _user_facing_message(last_error),
+        detail=detail,
+        retryable=_is_retriable(last_error),
+    )
 
 
 def _user_facing_message(exc: Exception | None) -> str:

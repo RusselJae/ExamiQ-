@@ -25,8 +25,13 @@
                     {% for row in roster %}
                     <tr class="border-b border-slate-50 masterlist-row">
                         <td class="p-4">
-                            <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
-                            <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                            <div class="flex items-center gap-3">
+                                {% include "components/student_avatar.html" with user=row.student size="sm" %}
+                                <div>
+                                    <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
+                                    <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                                </div>
+                            </div>
                         </td>
                         <td class="p-4 text-center text-examiq-slate">{{ row.sessions_completed }}</td>
                         <td class="p-4 text-center font-medium {% if row.accuracy >= 75 %}stat-value-good{% elif row.accuracy < 60 %}stat-value-warning{% endif %}">{{ row.accuracy }}%</td>

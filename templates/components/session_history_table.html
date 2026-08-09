@@ -4,7 +4,7 @@
         <thead>
             <tr>
                 <th>Date</th>
-                <th>Topic</th>
+                <th>Subjects taken</th>
                 {% if show_confidence_column|default:True %}
                 <th>Confidence</th>
                 {% endif %}
@@ -21,7 +21,7 @@
             {% for row in session_history_rows %}
             <tr>
                 <td class="text-examiq-slate">{{ row.date|date:"Y-m-d" }}</td>
-                <td class="text-examiq-navy font-medium">{{ row.topic_name }}</td>
+                <td class="text-examiq-navy font-medium">{{ row.subjects_taken_display|default:row.topic_name }}</td>
                 {% if show_confidence_column|default:True %}
                 <td class="text-examiq-slate">{{ row.confidence_label }}</td>
                 {% endif %}

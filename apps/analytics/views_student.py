@@ -10,10 +10,12 @@ from django.views import View
 from django.views.generic import DetailView, ListView, RedirectView, TemplateView
 
 from apps.analytics.concern_services import (
+    concern_needs_student_attention,
     concern_thread_for,
     post_concern_message,
     serialize_concern_message,
     serialize_concern_thread,
+    student_concern_queryset,
 )
 from apps.analytics.forms import MistakeConcernForm
 from apps.analytics.models import MistakeRecord
@@ -21,6 +23,7 @@ from apps.analytics.services import (
     annotate_session_metrics,
     build_session_history_rows,
     generate_mistake_feedback,
+    student_dashboard_trends,
     student_performance_summary,
     topic_progress_summary,
 )
@@ -43,8 +46,11 @@ class StudentDashboardView(StudentRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["dashboard_trends"] = student_dashboard_trends(self.request.user)
         context["summary"] = student_performance_summary(self.request.user)
-        context["recommendations"] = get_review_recommendations(self.request.user, limit=5)
+        context["recommendations"] = get_review_recommendations(
+            self.request.user, limit=5
+        )
         return context
 
 
@@ -342,4 +348,39 @@ class GenerateAnswerFeedbackView(StudentRequiredMixin, View):
             request,
             "components/answer_review_card.html",
             {"answer": answer},
+        )
+
+
+class StudentChatInboxView(StudentRequiredMixin, View):
+    """Legacy chat page — open AI Tutor modal on the dashboard."""
+
+    def get(self, request):
+        url = reverse("analytics_student:dashboard")
+        answer_id = request.GET.get("answer_id") or ""
+        qs = "open_tutor=1"
+        if answer_id:
+            qs += f"&answer_id={answer_id}"
+        return redirect(f"{url}?{qs}")
+
+
+class StudentChatConcernsApiView(StudentRequiredMixin, View):
+    """JSON list of the student's concern threads for the Chat modal."""
+
+    def get(self, request):
+        from apps.reviews.views_professor_feedback import _concern_item_payload
+
+        records = list(student_concern_queryset(request.user)[:100])
+        items = [_concern_item_payload(record) for record in records]
+        # For students, peer label is still the student (self) in list — rename in UI via role
+        active_id = request.GET.get("mistake_id")
+        active_mistake_id = None
+        if active_id and str(active_id).isdigit():
+            active_mistake_id = int(active_id)
+        elif items:
+            active_mistake_id = items[0]["mistake_id"]
+        return JsonResponse(
+            {
+                "items": items,
+                "active_mistake_id": active_mistake_id,
+            }
         )

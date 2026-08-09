@@ -1,10 +1,18 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.cache import cache
 from django.test import override_settings
 
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.providers import ollama_client
+
+
+@pytest.fixture(autouse=True)
+def clear_model_cache():
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.mark.django_db
@@ -92,6 +100,46 @@ class TestOllamaClient:
 
         models = ollama_client.list_available_models()
         assert models == ["gpt-oss:120b", "gpt-oss:20b"]
+
+    @override_settings(
+        OLLAMA_API_KEY="cache-key",
+        OLLAMA_BASE_URL="https://ollama.com",
+    )
+    @patch("apps.ai.providers.ollama_client.urllib.request.urlopen")
+    def test_list_available_models_caches(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = (
+            b'{"models": [{"name": "gpt-oss:120b"}, {"name": "gpt-oss:20b"}]}'
+        )
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        models = ollama_client.list_available_models(force_refresh=True)
+        assert models == ["gpt-oss:120b", "gpt-oss:20b"]
+
+        cached = ollama_client.list_available_models()
+        assert cached == ["gpt-oss:120b", "gpt-oss:20b"]
+        assert mock_urlopen.call_count == 1
+
+    @override_settings(
+        OLLAMA_API_KEY="test-key",
+        OLLAMA_BASE_URL="https://ollama.com",
+        OLLAMA_MODEL="gpt-oss:120b",
+        OLLAMA_FALLBACK_MODELS=["gpt-oss:20b"],
+    )
+    @patch("apps.ai.providers.ollama_client.list_available_models", return_value=[])
+    @patch(
+        "apps.ai.providers.ollama_client._chat_with_model",
+        side_effect=RuntimeError("HTTP 429: rate limit reached"),
+    )
+    @patch("apps.ai.providers.ollama_client.time.sleep")
+    def test_rate_limit_does_not_try_fallback_models(self, _mock_sleep, mock_chat, _mock_list):
+        with pytest.raises(AIServiceUnavailableError) as exc_info:
+            ollama_client.chat_with_fallback("prompt")
+        assert "rate limit" in exc_info.value.message.lower()
+        assert exc_info.value.retryable is True
+        assert mock_chat.call_count == 1
 
     def test_is_cloud_host(self):
         with override_settings(OLLAMA_BASE_URL="https://ollama.com"):

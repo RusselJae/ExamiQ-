@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import io
+import logging
 import re
 import zipfile
 from xml.etree import ElementTree
 
+logger = logging.getLogger(__name__)
 
 MAX_PROMPT_CHARS = 12000
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 120
+
+MIN_PAGE_TEXT_CHARS = 40
+OCR_DPI = 200
+MAX_OCR_PAGES = 60
 
 
 class SourceMaterialError(ValueError):
@@ -128,15 +134,90 @@ def _extract_docx(raw: bytes) -> str:
 
 
 def _extract_pdf_pages(raw: bytes) -> list[dict]:
-    try:
-        from pypdf import PdfReader
-    except ImportError:
+    """Return list of {page, text} for the full PDF document.
+
+    Prefers the embedded text layer (pypdf, falling back to PyMuPDF). Pages
+    that yield little or no text are OCR'd when PyMuPDF + pytesseract + the
+    Tesseract binary are available. Every failure mode degrades gracefully:
+    image-only pages simply keep their (possibly empty) text.
+    """
+    page_texts = _extract_pdf_text_pages(raw)
+    if page_texts is None:
         chunks = re.findall(rb"[\x20-\x7E]{6,}", raw)
         text = " ".join(c.decode("latin-1", errors="ignore") for c in chunks)
         return [{"page": 1, "text": text}]
 
-    reader = PdfReader(io.BytesIO(raw))
+    ocr_page = _build_ocr_function()
+    ocr_used = 0
     pages = []
-    for index, page in enumerate(reader.pages, start=1):
-        pages.append({"page": index, "text": page.extract_text() or ""})
+    for index, text in enumerate(page_texts, start=1):
+        text = (text or "").strip()
+        if (
+            ocr_page is not None
+            and len(text) < MIN_PAGE_TEXT_CHARS
+            and ocr_used < MAX_OCR_PAGES
+        ):
+            try:
+                ocr_text = ocr_page(raw, index)
+                if ocr_text and len(ocr_text) >= len(text):
+                    text = ocr_text
+                ocr_used += 1
+            except Exception as exc:
+                logger.warning("OCR failed for PDF page %s: %s", index, exc)
+        pages.append({"page": index, "text": text})
     return pages
+
+
+def _extract_pdf_text_pages(raw: bytes) -> list[str] | None:
+    """Extract the embedded text layer page-by-page; None when no reader works."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(raw))
+        return [page.extract_text() or "" for page in reader.pages]
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.warning("pypdf text extraction failed (%s); trying PyMuPDF.", exc)
+
+    try:
+        import fitz
+
+        doc = fitz.open(stream=raw, filetype="pdf")
+        try:
+            return [page.get_text() or "" for page in doc]
+        finally:
+            doc.close()
+    except ImportError:
+        return None
+    except Exception as exc:
+        logger.warning("PyMuPDF text extraction failed (%s); using raw scan.", exc)
+        return None
+
+
+def _build_ocr_function():
+    """Return an (raw_bytes, page_number) -> text callable, or None when
+    the OCR stack (PyMuPDF + pytesseract + PIL) is not available."""
+    try:
+        import fitz
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        logger.warning(
+            "OCR stack unavailable (need PyMuPDF + pytesseract); "
+            "image-only PDF pages will not be transcribed."
+        )
+        return None
+
+    def _ocr_page(raw: bytes, page_number: int) -> str:
+        doc = fitz.open(stream=raw, filetype="pdf")
+        try:
+            if page_number > len(doc):
+                return ""
+            pix = doc[page_number - 1].get_pixmap(dpi=OCR_DPI)
+            image = Image.open(io.BytesIO(pix.tobytes("png")))
+            return (pytesseract.image_to_string(image) or "").strip()
+        finally:
+            doc.close()
+
+    return _ocr_page

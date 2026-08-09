@@ -1,20 +1,29 @@
 /**
  * Multi-select dropdown: "N Selected" + checkboxes + selected title chips.
  * Bind via data-multi-select on a wrapper containing a <select multiple>.
+ * Add data-select-all to include a "Select all" toggle row.
  */
 (function () {
     function optionLabel(opt) {
         return (opt.textContent || opt.label || "").trim();
     }
 
-    function syncFromSelect(root, select, triggerLabel, menu, chips) {
-        const selected = Array.from(select.selectedOptions);
-        const count = selected.length;
-        triggerLabel.textContent = count === 0 ? "Select courses" : count + " Selected";
+    function syncFromSelect(root, select, triggerLabel, menu, chips, selectAllCb, chipsWrap) {
+        var selected = Array.from(select.selectedOptions);
+        var count = selected.length;
+        var totalOptions = Array.from(select.options).filter(function (o) { return o.value; }).length;
+        var allSelected = totalOptions > 0 && count === totalOptions;
+
+        if (allSelected && count > 0) {
+            triggerLabel.textContent = "All Selected (" + count + ")";
+        } else {
+            triggerLabel.textContent =
+                count === 0 ? "Select course subjects" : count + " Selected";
+        }
 
         menu.querySelectorAll("[data-option-value]").forEach(function (row) {
-            const value = row.getAttribute("data-option-value");
-            const cb = row.querySelector('input[type="checkbox"]');
+            var value = row.getAttribute("data-option-value");
+            var cb = row.querySelector('input[type="checkbox"]');
             if (cb) {
                 cb.checked = Array.from(select.options).some(function (o) {
                     return o.value === value && o.selected;
@@ -22,19 +31,27 @@
             }
         });
 
+        if (selectAllCb) {
+            selectAllCb.checked = allSelected;
+        }
+
         if (!chips) return;
         chips.innerHTML = "";
         selected.forEach(function (opt) {
-            const chip = document.createElement("span");
+            var chip = document.createElement("span");
             chip.className = "multi-select-chip";
             chip.textContent = optionLabel(opt);
             chips.appendChild(chip);
         });
         chips.classList.toggle("hidden", selected.length === 0);
+        if (chipsWrap) {
+            chipsWrap.classList.toggle("hidden", selected.length === 0);
+            chipsWrap.setAttribute("aria-hidden", selected.length === 0 ? "true" : "false");
+        }
     }
 
     function initRoot(root) {
-        const select = root.querySelector("select[multiple]");
+        var select = root.querySelector("select[multiple]");
         if (!select || root.dataset.multiSelectReady === "1") return;
         root.dataset.multiSelectReady = "1";
 
@@ -42,13 +59,13 @@
         select.setAttribute("tabindex", "-1");
         select.setAttribute("aria-hidden", "true");
 
-        const trigger = document.createElement("button");
+        var trigger = document.createElement("button");
         trigger.type = "button";
         trigger.className = "multi-select-trigger";
         trigger.setAttribute("aria-expanded", "false");
-        const triggerLabel = document.createElement("span");
+        var triggerLabel = document.createElement("span");
         triggerLabel.className = "multi-select-trigger__label";
-        const chevron = document.createElement("span");
+        var chevron = document.createElement("span");
         chevron.className = "multi-select-trigger__chevron";
         chevron.setAttribute("aria-hidden", "true");
         chevron.innerHTML =
@@ -56,20 +73,59 @@
         trigger.appendChild(triggerLabel);
         trigger.appendChild(chevron);
 
-        const menu = document.createElement("div");
+        var menu = document.createElement("div");
         menu.className = "multi-select-menu hidden";
         menu.setAttribute("role", "listbox");
 
+        var chips = document.createElement("div");
+        chips.className = "multi-select-chips hidden";
+        chips.setAttribute("aria-live", "polite");
+
+        var selectedTitle = root.getAttribute("data-selected-heading") || "Selected course subjects";
+        var chipsWrap = document.createElement("div");
+        chipsWrap.className = "multi-select-chips-wrap hidden";
+        var chipsHeading = document.createElement("p");
+        chipsHeading.className = "multi-select-chips-heading";
+        chipsHeading.textContent = selectedTitle;
+        chipsWrap.appendChild(chipsHeading);
+        chipsWrap.appendChild(chips);
+
+        var selectAllCb = null;
+        if (root.dataset.selectAll !== undefined) {
+            var selectAllRow = document.createElement("label");
+            selectAllRow.className = "multi-select-option multi-select-select-all";
+            selectAllCb = document.createElement("input");
+            selectAllCb.type = "checkbox";
+            var selectAllText = document.createElement("span");
+            selectAllText.textContent = "Select all";
+            selectAllRow.appendChild(selectAllCb);
+            selectAllRow.appendChild(selectAllText);
+            menu.appendChild(selectAllRow);
+
+            selectAllCb.addEventListener("change", function () {
+                var isChecked = selectAllCb.checked;
+                Array.from(select.options).forEach(function (opt) {
+                    if (!opt.value) return;
+                    opt.selected = isChecked;
+                });
+                Array.from(menu.querySelectorAll('[data-option-value] input[type="checkbox"]')).forEach(function (cb) {
+                    cb.checked = isChecked;
+                });
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+                syncFromSelect(root, select, triggerLabel, menu, chips, selectAllCb, chipsWrap);
+            });
+        }
+
         Array.from(select.options).forEach(function (opt) {
             if (!opt.value) return;
-            const row = document.createElement("label");
+            var row = document.createElement("label");
             row.className = "multi-select-option";
             row.setAttribute("data-option-value", opt.value);
-            const cb = document.createElement("input");
+            var cb = document.createElement("input");
             cb.type = "checkbox";
             cb.value = opt.value;
             cb.checked = opt.selected;
-            const text = document.createElement("span");
+            var text = document.createElement("span");
             text.textContent = optionLabel(opt);
             row.appendChild(cb);
             row.appendChild(text);
@@ -78,22 +134,9 @@
             cb.addEventListener("change", function () {
                 opt.selected = cb.checked;
                 select.dispatchEvent(new Event("change", { bubbles: true }));
-                syncFromSelect(root, select, triggerLabel, menu, chips);
+                syncFromSelect(root, select, triggerLabel, menu, chips, selectAllCb, chipsWrap);
             });
         });
-
-        const chips = document.createElement("div");
-        chips.className = "multi-select-chips hidden";
-        chips.setAttribute("aria-live", "polite");
-
-        const selectedTitle = root.getAttribute("data-selected-heading") || "Selected courses";
-        const chipsWrap = document.createElement("div");
-        chipsWrap.className = "multi-select-chips-wrap";
-        const chipsHeading = document.createElement("p");
-        chipsHeading.className = "multi-select-chips-heading";
-        chipsHeading.textContent = selectedTitle;
-        chipsWrap.appendChild(chipsHeading);
-        chipsWrap.appendChild(chips);
 
         root.appendChild(trigger);
         root.appendChild(menu);
@@ -121,7 +164,7 @@
             if (!root.contains(e.target)) closeMenu();
         });
 
-        syncFromSelect(root, select, triggerLabel, menu, chips);
+        syncFromSelect(root, select, triggerLabel, menu, chips, selectAllCb, chipsWrap);
     }
 
     function initAll(scope) {

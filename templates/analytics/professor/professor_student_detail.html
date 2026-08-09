@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}{{ student.get_full_name|default:student.email }} - Students{% endblock %}
+
+{% block main_class %}professor-student-detail{% endblock %}
+
+{% block content %}
+{% include "analytics/professor/partials/student_detail_dashboard.html" with detail_scope="professor" scope_label=scope_label back_url=back_url back_label="Back to students" empty_body="No answers yet across your courses. Metrics appear once the student completes an exam." %}
+{% endblock %}
+
+{% block extra_js %}
+{% if summary.total_answers %}
+{% load static %}
+{{ summary.dashboard_trends|json_script:"student-detail-trends-data" }}
+<script src="{% static 'js/overview-trends-chart.js' %}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var el = document.getElementById("student-detail-trends-data");
+    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
+    window.ExamiQUI.renderOverviewTrendsChart({
+        canvas: "studentDetailTrendsChart",
+        metricSelect: "student-detail-trend-metric",
+        data: JSON.parse(el.textContent),
+        flatMode: true,
+        pageSize: 10,
+        defaultMetric: "confidence",
+        metricLabels: {
+            confidence: "Average confidence (0–3)",
+            mistakes: "Mistakes per session",
+        },
+        pageLabel: "student-detail-trends-page-label",
+        prevBtn: "student-detail-trends-prev",
+        nextBtn: "student-detail-trends-next",
+        emptyEl: "student-detail-trends-empty",
+        wrapEl: "student-detail-trends-wrap",
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

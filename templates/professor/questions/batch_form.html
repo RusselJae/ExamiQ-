@@ -4,11 +4,31 @@
 {% block title %}{{ form_title }} - {{ course.section|default:course.code }}{% endblock %}
 
 {% block content %}
+{% if hub_mode %}
+{% include "components/page_header.html" with title="Add Questions" subtitle="Pick a course subject, then build or generate questions for it." %}
+{% else %}
 {% include "components/professor_section_header.html" with course=course page_label=form_title %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+{% endif %}
 
-<form method="post" id="batch-question-form" class="space-y-6" enctype="multipart/form-data">
+<form method="post" id="batch-question-form" class="space-y-6" enctype="multipart/form-data"{% if form_action %} action="{{ form_action }}"{% endif %}>
     {% csrf_token %}
+
+    {% if hub_mode %}
+    <div class="bento-card bento-card--elevated p-4 shadow-sm">
+        <label for="hub-course-filter" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course subject</label>
+        <select id="hub-course-filter" class="w-full max-w-xl rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+                onchange="if (this.value) { window.location = '{% url 'analytics_professor:question_add' %}?course=' + this.value; } else { window.location = '{% url 'analytics_professor:question_add' %}'; }">
+            <option value="">Select a course subject…</option>
+            {% for opt in course_options %}
+            <option value="{{ opt.course.pk }}" {% if selected_course_pk == opt.course.pk %}selected{% endif %}>
+                {{ opt.label }}
+            </option>
+            {% endfor %}
+        </select>
+        <p class="text-xs text-examiq-slate mt-2">Questions you add are saved under the selected subject.</p>
+    </div>
+    {% endif %}
 
     <div class="bento-card bento-card--elevated p-6 shadow-sm">
         <div class="batch-settings-grid">
@@ -158,6 +178,7 @@
     let questionIndex = 0;
     let restoring = false;
     let formDirty = false;
+    let ignoreRelevance = false;
     const validationState = {};
 
     function markDirty() {
@@ -410,6 +431,7 @@
         fd.append("csrfmiddlewaretoken", csrfToken);
         fd.append("topic", topicSelect.value);
         fd.append("difficulty", difficultySelect.value);
+        if (ignoreRelevance) fd.append("ignore_relevance", "1");
         return fd;
     }
 
@@ -673,6 +695,20 @@
         document.getElementById("generate-modal-container").innerHTML = "";
     }
 
+    async function postGenerate() {
+        const fd = getSettingsFormData();
+        fd.append("count", String(getGenerateCount()));
+        fd.append("source_file", sourceInput.files[0]);
+        const resp = await fetch(generateUrl, {
+            method: "POST",
+            body: fd,
+            headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+            credentials: "same-origin",
+        });
+        const data = await resp.json().catch(function () { return {}; });
+        return { resp: resp, data: data };
+    }
+
     generateBtn.addEventListener("click", async function() {
         if (!sourceInput || !sourceInput.files || !sourceInput.files[0]) {
             if (window.showToast) window.showToast("Upload a learning material file first.", "warning");
@@ -683,24 +719,29 @@
         }
         showGenerateLoading("Queued…");
         try {
-            const fd = getSettingsFormData();
-            fd.append("count", String(getGenerateCount()));
-            fd.append("source_file", sourceInput.files[0]);
-            const resp = await fetch(generateUrl, {
-                method: "POST",
-                body: fd,
-                headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
-                credentials: "same-origin",
-            });
-            const data = await resp.json().catch(function () { return {}; });
-            if (!resp.ok || !data.status_url) {
-                throw new Error(data.error || "Generation failed. Please try again.");
+            let result = await postGenerate();
+            if (!result.resp.ok && result.data.relevance_blocked && !ignoreRelevance) {
+                document.getElementById("generate-modal-container").innerHTML = "";
+                const proceed = await showConfirm({
+                    message: (result.data.reason || "This module does not look related to the selected subject.") +
+                        " Continue anyway?",
+                    type: "warning",
+                    confirmLabel: "Continue anyway",
+                    cancelLabel: "Cancel",
+                });
+                if (!proceed) return;
+                ignoreRelevance = true;
+                showGenerateLoading("Queued…");
+                result = await postGenerate();
             }
-            if (data.topic_id) {
-                setTopicId(data.topic_id);
+            if (!result.resp.ok || !result.data.status_url) {
+                throw new Error(result.data.error || "Generation failed. Please try again.");
+            }
+            if (result.data.topic_id) {
+                setTopicId(result.data.topic_id);
                 onSettingsChange();
             }
-            await pollGenerateJob(data.status_url);
+            await pollGenerateJob(result.data.status_url);
         } catch (err) {
             document.getElementById("generate-modal-container").innerHTML = "";
             if (window.showToast) window.showToast(err.message || "Generation failed. Please try again.", "error");

@@ -21,11 +21,6 @@ from apps.users.models import (
 )
 from apps.users.section_services import (
     get_current_academic_year,
-    get_or_create_student_section,
-    parse_section_label,
-    section_matches_student,
-    sections_for_student,
-    validate_section_capacity,
 )
 
 INPUT_CLASS = (
@@ -147,26 +142,6 @@ class ExamiQSignupForm(SignupForm):
             }
         ),
     )
-    year_level = forms.ModelChoiceField(
-        queryset=YearLevel.objects.all().order_by("name"),
-        required=False,
-        empty_label="— Select —",
-        label="Year level",
-        widget=forms.Select(attrs={"class": AUTH_SELECT_CLASS, "id": "id_year_level"}),
-    )
-    section = forms.CharField(
-        required=False,
-        max_length=20,
-        label="Section",
-        widget=forms.TextInput(
-            attrs={
-                "class": "auth-field__input",
-                "id": "id_section",
-                "placeholder": "1M or BSE 2-1M",
-                "autocomplete": "off",
-            }
-        ),
-    )
     department = forms.ModelChoiceField(
         queryset=Department.objects.all().order_by("name"),
         required=False,
@@ -226,25 +201,6 @@ class ExamiQSignupForm(SignupForm):
             raise forms.ValidationError("Phone number is required.")
         raise forms.ValidationError("Enter a valid 10-digit mobile number (9XX XXX XXXX).")
 
-    def clean_year_level(self):
-        role = self.data.get("role", User.Role.STUDENT)
-        value = self.cleaned_data.get("year_level")
-        if role == User.Role.STUDENT and not value:
-            raise forms.ValidationError("Year level is required.")
-        return value
-
-    def clean_section(self):
-        role = self.data.get("role", User.Role.STUDENT)
-        value = self.cleaned_data.get("section", "").strip()
-        if role != User.Role.STUDENT:
-            return ""
-        if not value:
-            raise forms.ValidationError("Section is required.")
-        try:
-            return parse_section_label(value)
-        except ValidationError as exc:
-            raise forms.ValidationError(exc.messages[0] if exc.messages else str(exc)) from exc
-
     def clean_department(self):
         return self.cleaned_data.get("department")
 
@@ -262,18 +218,6 @@ class ExamiQSignupForm(SignupForm):
             student_number = cleaned.get("student_number")
             if student_number and User.objects.filter(student_number=student_number).exists():
                 self.add_error("student_number", "This student number is already registered.")
-            year_level = cleaned.get("year_level")
-            section_label = cleaned.get("section")
-            if year_level and section_label and "section" not in self.errors:
-                try:
-                    cleaned["section_obj"] = get_or_create_student_section(
-                        year_level, section_label
-                    )
-                except ValidationError as exc:
-                    self.add_error(
-                        "section",
-                        exc.messages[0] if exc.messages else str(exc),
-                    )
         return cleaned
 
     def save(self, request):
@@ -289,8 +233,6 @@ class ExamiQSignupForm(SignupForm):
         if role == User.Role.STUDENT:
             user.student_number = self.cleaned_data["student_number"]
             user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
-            user.year_level = self.cleaned_data["year_level"]
-            user.section = self.cleaned_data["section_obj"]
             user.employee_id = ""
         else:
             edu, _ = Department.objects.get_or_create(name=EDUCATION_DEPARTMENT_NAME)
@@ -316,18 +258,6 @@ class ProfileUpdateForm(forms.Form):
     last_name = forms.CharField(max_length=150, required=False, label="Last name")
     suffix = forms.CharField(max_length=20, required=False, label="Suffix")
     profile_photo = forms.ImageField(required=False, label="Profile photo")
-    year_level = forms.ModelChoiceField(
-        queryset=YearLevel.objects.all(),
-        required=False,
-        empty_label="— Select year level —",
-        label="Year level",
-    )
-    section = forms.CharField(
-        required=False,
-        max_length=20,
-        label="Section",
-        widget=forms.TextInput(attrs={"placeholder": "1M or BSE 2-1M"}),
-    )
 
     def __init__(self, user, *args, **kwargs):
         self.user = user
@@ -336,48 +266,11 @@ class ProfileUpdateForm(forms.Form):
         self.fields["middle_name"].initial = user.middle_name
         self.fields["last_name"].initial = user.last_name
         self.fields["suffix"].initial = user.suffix
-        if user.role != User.Role.STUDENT:
-            del self.fields["year_level"]
-            del self.fields["section"]
-        else:
-            self.fields["year_level"].initial = user.year_level
-            if user.section_id:
-                self.fields["section"].initial = user.section.display_label
         _style_fields(self)
         self.fields["profile_photo"].widget.attrs["accept"] = "image/jpeg,image/png,image/webp"
 
-    def clean_section(self):
-        if self.user.role != User.Role.STUDENT:
-            return ""
-        value = (self.cleaned_data.get("section") or "").strip()
-        if not value:
-            raise forms.ValidationError("Section is required.")
-        try:
-            return parse_section_label(value)
-        except ValidationError as exc:
-            raise forms.ValidationError(exc.messages[0] if exc.messages else str(exc)) from exc
-
     def clean(self):
-        cleaned = super().clean()
-        if self.user.role != User.Role.STUDENT:
-            return cleaned
-        year_level = cleaned.get("year_level")
-        section_label = cleaned.get("section")
-        if not year_level:
-            self.add_error("year_level", "Year level is required.")
-        elif section_label and "section" not in self.errors:
-            try:
-                cleaned["section_obj"] = get_or_create_student_section(
-                    year_level,
-                    section_label,
-                    exclude_user=self.user,
-                )
-            except ValidationError as exc:
-                self.add_error(
-                    "section",
-                    exc.messages[0] if exc.messages else str(exc),
-                )
-        return cleaned
+        return super().clean()
 
     def clean_profile_photo(self):
         photo = self.cleaned_data.get("profile_photo")
@@ -404,9 +297,7 @@ class ProfileUpdateForm(forms.Form):
             update_fields.append("profile_photo")
         if self.user.role == User.Role.STUDENT:
             self.user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
-            self.user.year_level = self.cleaned_data.get("year_level")
-            self.user.section = self.cleaned_data.get("section_obj")
-            update_fields.extend(["home_degree_program", "year_level", "section"])
+            update_fields.append("home_degree_program")
         self.user.save(update_fields=update_fields)
 
 

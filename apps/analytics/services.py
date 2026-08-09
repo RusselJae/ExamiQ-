@@ -291,6 +291,106 @@ def student_performance_summary(student: User) -> dict:
     }
 
 
+def _ordinal_label(n: int) -> str:
+    """Return 1st, 2nd, 3rd, 4th, …"""
+    if 10 <= (n % 100) <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def student_dashboard_trends(student: User) -> dict:
+    """Flat trend series for the student dashboard line chart.
+
+    - confidence: average mapped 0–3 confidence per completed session
+    - mistakes: mistake count per completed session
+    Labels use ordinal session order with date, e.g. 1st (10-09-2026).
+    """
+    from django.utils import timezone
+
+    sessions = list(
+        annotate_session_metrics(
+            ReviewSession.objects.filter(
+                student=student,
+                status=ReviewSession.Status.COMPLETED,
+            )
+            .select_related("topic")
+            .order_by("started_at", "id")
+        )
+    )
+    session_ids = [s.pk for s in sessions]
+    answers_by_session: dict[int, list] = {sid: [] for sid in session_ids}
+    if session_ids:
+        for answer in Answer.objects.filter(session_id__in=session_ids).only(
+            "session_id", "confidence"
+        ):
+            answers_by_session.setdefault(answer.session_id, []).append(answer)
+
+    confidence_points = []
+    mistake_points = []
+    for index, session in enumerate(sessions, start=1):
+        ordinal = _ordinal_label(index)
+        if session.started_at:
+            date_part = timezone.localtime(session.started_at).strftime("%m-%d-%Y")
+            label = f"{ordinal} ({date_part})"
+        else:
+            label = ordinal
+        session_answers = answers_by_session.get(session.pk, [])
+        if session_answers:
+            mapped = [
+                confidence_to_scale_0_3(a.confidence) for a in session_answers
+            ]
+            avg_conf = round(sum(mapped) / len(mapped), 2)
+        else:
+            avg_conf = 0.0
+        confidence_points.append({"label": label, "value": avg_conf})
+
+        total = getattr(session, "session_answer_count", None)
+        if total is None:
+            total = session.total_questions
+        correct = getattr(session, "session_correct_count", None)
+        if correct is None:
+            correct = session.correct_count
+        mistakes = max(0, int(total or 0) - int(correct or 0))
+        mistake_points.append({"label": label, "value": mistakes})
+
+    return {
+        "confidence": confidence_points,
+        "mistakes": mistake_points,
+    }
+
+
+def session_question_trends(session: ReviewSession) -> dict:
+    """Per-question series for session summary heatmap strips."""
+    answers = (
+        session.answers.select_related("question")
+        .order_by("answered_at", "id")
+    )
+    confidence_points = []
+    mistake_points = []
+    for index, answer in enumerate(answers, start=1):
+        label = str(index)
+        confidence_points.append(
+            {
+                "label": label,
+                "value": confidence_to_scale_0_3(answer.confidence),
+                "answer_id": answer.pk,
+            }
+        )
+        mistake_points.append(
+            {
+                "label": label,
+                "value": 0 if answer.is_correct else 1,
+                "answer_id": answer.pk,
+            }
+        )
+    return {
+        "confidence": confidence_points,
+        "mistakes": mistake_points,
+    }
+
+
 def topic_progress_summary(student: User) -> list[dict]:
     """Return per-topic accuracy stats for a student."""
     rows = (
@@ -422,6 +522,40 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
             }
         )
     return cards
+
+
+def confidence_to_scale_0_3(value) -> int:
+    """Map stored 1–5 / null confidence onto chart scale 0–3.
+
+    null → 0 (none), 1–2 → 1 (low), 3–4 → 2 (average), 5 → 3 (high).
+    """
+    if value is None:
+        return 0
+    try:
+        c = int(value)
+    except (TypeError, ValueError):
+        return 0
+    if c <= 0:
+        return 0
+    if c <= 2:
+        return 1
+    if c <= 4:
+        return 2
+    return 3
+
+
+def _confidence_scale_0_3_annotation():
+    """ORM Case expression mapping Answer.confidence to 0–3 (null → 0)."""
+    from django.db.models import Case, IntegerField, Value, When
+
+    return Case(
+        When(confidence__isnull=True, then=Value(0)),
+        When(confidence__lte=2, then=Value(1)),
+        When(confidence__lte=4, then=Value(2)),
+        When(confidence__gte=5, then=Value(3)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
 
 
 def professor_overview_trends(professor: User) -> dict:
@@ -557,9 +691,12 @@ def professor_overview_trends(professor: User) -> dict:
 
         conf_rows = (
             Answer.objects.filter(answer_filter, answered_at__gte=earliest)
-            .annotate(bucket=trunc_fn("answered_at"))
+            .annotate(
+                mapped_conf=_confidence_scale_0_3_annotation(),
+                bucket=trunc_fn("answered_at"),
+            )
             .values("bucket")
-            .annotate(value=Avg("confidence"))
+            .annotate(value=Avg("mapped_conf"))
             .order_by("bucket")
         )
         confidence_map = {}
@@ -844,6 +981,7 @@ def build_session_history_rows(sessions) -> list[dict]:
         duration_seconds = 0
         subject_name = ""
         subject_code = ""
+        subject_ids: set[int] = set()
         if total:
             prefetched = getattr(session, "_prefetched_objects_cache", {}).get("answers")
             if prefetched is not None:
@@ -853,14 +991,29 @@ def build_session_history_rows(sessions) -> list[dict]:
             for answer in answer_rows:
                 segments[confidence_tier_key(answer.confidence)] += 1
                 duration_seconds += answer.time_spent_seconds or 0
-                if not subject_code and getattr(answer.question, "topic_id", None):
-                    subj = answer.question.topic.subject
-                    subject_name = subj.name
-                    subject_code = subj.code
+                topic = getattr(answer.question, "topic", None)
+                if topic and getattr(topic, "subject_id", None):
+                    subject_ids.add(topic.subject_id)
+                    if not subject_code:
+                        subj = topic.subject
+                        subject_name = subj.name
+                        subject_code = subj.code
         if not subject_code and getattr(session, "topic_id", None):
             subj = session.topic.subject
             subject_name = subj.name
             subject_code = subj.code
+            subject_ids.add(subj.pk)
+
+        # Include M2M subjects selected for the session when present.
+        m2m_cache = getattr(session, "_prefetched_objects_cache", {}).get("subjects")
+        if m2m_cache is not None:
+            for subj in m2m_cache:
+                subject_ids.add(subj.pk)
+        elif hasattr(session, "subjects"):
+            for sid in session.subjects.values_list("pk", flat=True):
+                subject_ids.add(sid)
+
+        subjects_taken_count = len(subject_ids)
 
         duration_min = (
             max(1, round(duration_seconds / 60))
@@ -879,6 +1032,10 @@ def build_session_history_rows(sessions) -> list[dict]:
                 "topic_name": session.topic.name if session.topic_id else "—",
                 "subject_name": subject_name,
                 "subject_code": subject_code,
+                "subjects_taken_count": subjects_taken_count,
+                "subjects_taken_display": (
+                    str(subjects_taken_count) if subjects_taken_count else "—"
+                ),
                 "avg_confidence": avg_conf,
                 "confidence_label": _confidence_label_short(avg_conf),
                 "confidence_segments": segments,
@@ -954,6 +1111,82 @@ def get_roster_summaries(course: Course) -> list[dict]:
     return roster
 
 
+def get_professor_students_with_exams(professor: User) -> list[dict]:
+    """Students who completed at least one exam on this professor's courses."""
+    completed = (
+        ReviewSession.objects.filter(
+            course__professor=professor,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .select_related("student", "course")
+        .order_by("-ended_at", "-started_at")
+    )
+
+    by_student: dict[int, dict] = {}
+    for session in completed:
+        student = session.student
+        if student is None:
+            continue
+        if student.pk not in by_student:
+            by_student[student.pk] = {
+                "student": student,
+                "sessions_completed": 0,
+                "last_activity": session.ended_at or session.started_at,
+                "primary_course": session.course,
+            }
+        by_student[student.pk]["sessions_completed"] += 1
+        activity = session.ended_at or session.started_at
+        if activity and (
+            by_student[student.pk]["last_activity"] is None
+            or activity > by_student[student.pk]["last_activity"]
+        ):
+            by_student[student.pk]["last_activity"] = activity
+
+    # Distinct subjects answered under this professor (from answers).
+    subject_counts = {
+        row["session__student_id"]: row["n"]
+        for row in Answer.objects.filter(
+            session__course__professor=professor,
+            session__student_id__in=by_student.keys(),
+            question__topic__subject_id__isnull=False,
+        )
+        .values("session__student_id")
+        .annotate(n=Count("question__topic__subject_id", distinct=True))
+    }
+
+    rows = list(by_student.values())
+    for row in rows:
+        row["subjects_taken_count"] = subject_counts.get(row["student"].pk, 0)
+        row["courses_label"] = str(row["subjects_taken_count"])
+    rows.sort(
+        key=lambda r: (
+            (r["student"].last_name or "").lower(),
+            (r["student"].email or "").lower(),
+        )
+    )
+    return rows
+
+
+def student_professor_summary(student: User, professor: User) -> dict:
+    """Performance summary for a student across a professor's courses."""
+    sessions = ReviewSession.objects.filter(
+        student=student,
+        course__professor=professor,
+        status=ReviewSession.Status.COMPLETED,
+    ).select_related("topic", "topic__subject", "course")
+    answers = Answer.objects.filter(
+        session__student=student,
+        session__course__professor=professor,
+    )
+    return _build_student_activity_summary(
+        student,
+        sessions,
+        answers,
+        weak_topics_filter=Q(answer__session__course__professor=professor),
+        confidence_group_by="subject",
+    )
+
+
 def get_topic_mastery_heatmap(course: Course) -> dict:
     """Build question×confidence-tier heatmap for a course offering.
 
@@ -967,6 +1200,7 @@ def get_topic_mastery_heatmap(course: Course) -> dict:
     return _heatmap_from_answers(
         _course_answers(course).select_related("question__topic"),
         student_ids=_course_student_ids(course),
+        subject=subject,
     )
 
 
@@ -995,7 +1229,7 @@ def get_section_heatmap(section, subject=None) -> dict:
     if subject is not None:
         answers = answers.filter(question__topic__subject=subject)
     student_ids = answers.values_list("session__student_id", flat=True).distinct()
-    return _heatmap_from_answers(answers, student_ids=student_ids)
+    return _heatmap_from_answers(answers, student_ids=student_ids, subject=subject)
 
 
 def get_subject_heatmap(subject) -> dict:
@@ -1004,10 +1238,10 @@ def get_subject_heatmap(subject) -> dict:
         question__topic__subject=subject
     ).select_related("question__topic", "session__student")
     student_ids = answers.values_list("session__student_id", flat=True).distinct()
-    return _heatmap_from_answers(answers, student_ids=student_ids)
+    return _heatmap_from_answers(answers, student_ids=student_ids, subject=subject)
 
 
-def _heatmap_from_answers(answers, student_ids) -> dict:
+def _heatmap_from_answers(answers, student_ids, *, subject=None) -> dict:
     from apps.analytics.confidence import CONFIDENCE_TIER_LABELS, confidence_tier_key
 
     question_map: dict[int, dict] = {}
@@ -1034,14 +1268,19 @@ def _heatmap_from_answers(answers, student_ids) -> dict:
         if not answer.is_correct:
             question_map[question.id]["mistakes"] += 1
 
-    questions = sorted(
-        question_map.values(),
-        key=lambda q: (
-            -((q["none"] + q["low"]) / max(q["total"], 1)),
-            -(q["none"] + q["low"]),
-            q["question_id"],
-        ),
-    )
+    # Q1…Qn among questions in this heatmap (creation order), not DB pk.
+    ordered_ids = sorted(question_map.keys())
+    label_by_id: dict[int, tuple[int, str]] = {
+        qid: (index, f"Q{index}") for index, qid in enumerate(ordered_ids, start=1)
+    }
+
+    for qid, row in question_map.items():
+        number, label = label_by_id[qid]
+        row["q_number"] = number
+        row["q_label"] = label
+
+    # Table / chart order: Q1 → Qn
+    questions = sorted(question_map.values(), key=lambda q: q["q_number"])
     callouts = {
         "low_confidence": [q for q in questions if (q["none"] + q["low"]) >= 2],
     }
@@ -1309,6 +1548,7 @@ def get_section_roster_summaries(section) -> list[dict]:
                 "accuracy": accuracy,
                 "avg_confidence": round(avg_conf, 1),
                 "subjects_taken": subjects_taken,
+                "subjects_taken_count": len(subjects_taken),
                 "year_level": student.year_level.name if student.year_level_id else "",
             }
         )
@@ -1445,15 +1685,34 @@ def _build_student_activity_summary(
         if row["avg_high_pct"] < 50
     ][:5]
 
-    score_trend = []
-    for session in reversed(session_list):
-        total = getattr(session, "session_answer_count", 0) or 0
-        correct = getattr(session, "session_correct_count", 0) or 0
-        score_trend.append(
-            {
-                "date": session.started_at.strftime("%b %d") if session.started_at else "",
-                "accuracy": round(correct / total * 100, 1) if total else 0,
-            }
+    session_ids = [s.pk for s in session_list]
+    mistake_counts_by_session = {}
+    if session_ids:
+        for row in (
+            MistakeRecord.objects.filter(
+                answer__session_id__in=session_ids, student=student
+            )
+            .values("answer__session_id")
+            .annotate(mistake_count=Count("id"))
+        ):
+            mistake_counts_by_session[row["answer__session_id"]] = row["mistake_count"]
+
+    from django.utils import timezone
+
+    dashboard_trends = {"confidence": [], "mistakes": []}
+    for index, session in enumerate(reversed(session_list), start=1):
+        ordinal = _ordinal_label(index)
+        if session.started_at:
+            date_part = timezone.localtime(session.started_at).strftime("%m-%d-%Y")
+            label = f"{ordinal} ({date_part})"
+        else:
+            label = ordinal
+        session_answers = session.answers.all()
+        mapped = [confidence_to_scale_0_3(a.confidence) for a in session_answers]
+        avg_conf = round(sum(mapped) / len(mapped), 2) if mapped else 0.0
+        dashboard_trends["confidence"].append({"label": label, "value": avg_conf})
+        dashboard_trends["mistakes"].append(
+            {"label": label, "value": mistake_counts_by_session.get(session.pk, 0)}
         )
 
     return {
@@ -1463,7 +1722,7 @@ def _build_student_activity_summary(
         "avg_confidence": round(avg_confidence, 1),
         "review_hours": review_hours,
         "accuracy_trend": accuracy_trend,
-        "score_trend": score_trend,
+        "dashboard_trends": dashboard_trends,
         "weak_topics": weak_topics,
         "follow_ups": follow_ups,
         "calibration_matrix": matrix,
@@ -1475,7 +1734,12 @@ def _build_student_activity_summary(
         "confidence_stacks": confidence_stacks,
         "confidence_group_by": confidence_group_by,
         "subjects_taken": subjects_taken,
-        "subjects_label": ", ".join(subjects_taken) if subjects_taken else "—",
+        "subjects_taken_count": len(subjects_taken),
+        "subjects_label": (
+            f"{len(subjects_taken)} subject{'s' if len(subjects_taken) != 1 else ''} taken"
+            if subjects_taken
+            else "—"
+        ),
         "high_avg_confidence_rate": high_avg_rate,
         "last_session_date": last_session.started_at if last_session else None,
         "calibration_max": max(matrix.values()) if total_answers else 1,

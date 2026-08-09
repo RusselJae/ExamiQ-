@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Add Questions - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Add Questions" subtitle="Pick a course subject, then build or generate questions for it." %}
+
+<div class="bento-card bento-card--elevated p-4 shadow-sm mb-6">
+    <label for="hub-course-filter" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course subject</label>
+    {% if course_options %}
+    <select id="hub-course-filter" class="w-full max-w-xl rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
+            onchange="if (this.value) { window.location = '{% url 'analytics_professor:question_add' %}?course=' + this.value; } else { window.location = '{% url 'analytics_professor:question_add' %}'; }">
+        <option value="">Select a course subject…</option>
+        {% for opt in course_options %}
+        <option value="{{ opt.course.pk }}" {% if selected_course_pk == opt.course.pk %}selected{% endif %}>
+            {{ opt.label }}
+        </option>
+        {% endfor %}
+    </select>
+    {% else %}
+    <p class="text-sm text-amber-700">No course subjects available yet. Add one under Course subjects.</p>
+    {% endif %}
+    <p class="text-xs text-examiq-slate mt-2">Questions you add are saved under the selected subject.</p>
+</div>
+{% endblock %}

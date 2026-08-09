@@ -11,10 +11,32 @@ app_name = "analytics_professor"
 urlpatterns = [
     path("overview/", views_professor.ProfessorOverviewView.as_view(), name="overview"),
     path("dashboard/", views_professor.ProfessorDashboardView.as_view(), name="dashboard"),
+    path("students/", views_professor.ProfessorStudentsView.as_view(), name="students"),
+    path(
+        "students/<int:student_pk>/",
+        views_professor.ProfessorStudentDetailView.as_view(),
+        name="professor_student_detail",
+    ),
+    path("chat/", views_professor_feedback.GlobalChatInboxView.as_view(), name="chat_inbox"),
+    path(
+        "chat/concerns/",
+        views_professor_feedback.GlobalChatConcernsApiView.as_view(),
+        name="chat_concerns_api",
+    ),
+    path(
+        "chat/<int:mistake_pk>/note/",
+        views_professor_feedback.GlobalChatFacultyNoteView.as_view(),
+        name="chat_faculty_note",
+    ),
     path("courses/", course_views.ProfessorCourseListView.as_view(), name="course_list"),
     path("courses/create/", course_views.ProfessorCourseCreateView.as_view(), name="course_create"),
     path("courses/<int:pk>/clone/", course_views.ProfessorCourseCloneView.as_view(), name="course_clone"),
     path("courses/<int:pk>/archive/", course_views.ProfessorCourseArchiveView.as_view(), name="course_archive"),
+    path(
+        "questions/add/",
+        question_views.QuestionAddHubView.as_view(),
+        name="question_add",
+    ),
     path(
         "sections/<int:pk>/",
         views_professor.SectionDetailView.as_view(),

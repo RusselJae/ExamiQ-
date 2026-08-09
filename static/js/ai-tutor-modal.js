@@ -15,8 +15,10 @@
         sending: false,
         loaded: false,
         enriching: {},
-        screen: "ai",
-        preferredScreen: "ai",
+        screen: "solution",
+        preferredScreen: "solution",
+        reviewMode: false,
+        includeAll: false,
     };
 
     function escapeHtml(text) {
@@ -219,6 +221,9 @@
     }
 
     function reviewItems() {
+        if (state.includeAll || state.reviewMode) {
+            return state.items.slice();
+        }
         var items = state.items.filter(function (item) {
             return !item.is_correct;
         });
@@ -232,7 +237,9 @@
             renderQuestionSelect();
             renderFeedbackPanel();
             renderMessages();
-            enrichAnswerFeedback(answerId);
+            if (!state.reviewMode) {
+                enrichAnswerFeedback(answerId);
+            }
         } catch (err) {
             if (typeof showToast === "function") {
                 showToast("Could not load saved conversation for this question.", "error");
@@ -251,8 +258,16 @@
         }
 
         select.innerHTML = items
-            .map(function (item, index) {
-                var pending = item.needs_ai || state.enriching[item.answer_id] ? " …" : "";
+            .map(function (item) {
+                var absoluteIndex = state.items.findIndex(function (entry) {
+                    return entry.answer_id === item.answer_id;
+                });
+                var qNum = absoluteIndex >= 0 ? absoluteIndex + 1 : 1;
+                var pending =
+                    !state.reviewMode &&
+                    (item.needs_ai || state.enriching[item.answer_id])
+                        ? " …"
+                        : "";
                 var saved = item.message_count > 0 ? " ●" : "";
                 var selected = item.answer_id === state.activeAnswerId ? " selected" : "";
                 return (
@@ -262,7 +277,7 @@
                     selected +
                     ">" +
                     "Q" +
-                    (index + 1) +
+                    qNum +
                     ": " +
                     escapeHtml(truncateStem(item.stem)) +
                     saved +
@@ -435,69 +450,84 @@
         return cut.trim() + "…";
     }
 
+    function studentIdentity() {
+        var config = getConfig();
+        var name = config.studentName || "You";
+        var initials = (config.studentInitials || "").trim();
+        if (!initials) {
+            var parts = String(name).trim().split(/\s+/);
+            initials =
+                parts.length >= 2
+                    ? (parts[0][0] + parts[1][0]).toUpperCase()
+                    : String(name).slice(0, 2).toUpperCase();
+        }
+        return {
+            name: name,
+            initials: initials || "YOU",
+            avatarUrl: config.studentAvatarUrl || "",
+        };
+    }
+
+    function avatarHtml(side, identity) {
+        if (side === "out" && identity.avatarUrl) {
+            return (
+                '<div class="chat-avatar chat-avatar--sm chat-avatar--photo" aria-hidden="true">' +
+                '<img src="' +
+                escapeHtml(identity.avatarUrl) +
+                '" alt="">' +
+                "</div>"
+            );
+        }
+        var label = side === "out" ? identity.initials : "AI";
+        var cls =
+            side === "out"
+                ? "chat-avatar chat-avatar--sm chat-avatar--self"
+                : "chat-avatar chat-avatar--sm chat-avatar--ai";
+        return (
+            '<div class="' + cls + '" aria-hidden="true">' + escapeHtml(label) + "</div>"
+        );
+    }
+
     function renderFeedbackPanel() {
         var item = activeItem();
         var stemEl = document.getElementById("ai-tutor-stem");
-        var whyEl = document.getElementById("ai-tutor-why");
-        var stepsEl = document.getElementById("ai-tutor-steps");
         var metaEl = document.getElementById("ai-tutor-meta");
-        var finalEl = document.getElementById("ai-tutor-final");
-        var finalSection = document.getElementById("ai-tutor-final-section");
-        var whySection = document.getElementById("ai-tutor-why-section");
-        var stepsSection = document.getElementById("ai-tutor-steps-section");
+        var userAnswerEl = document.getElementById("ai-tutor-user-answer");
+        var correctAnswerEl = document.getElementById("ai-tutor-correct-answer");
+        var visualHost = document.getElementById("ai-tutor-solution-visual");
         if (!item || !stemEl) return;
 
         stemEl.textContent = item.stem;
         renderFacultyNotes(item);
 
-        if (state.enriching[item.answer_id]) {
-            if (whySection) whySection.classList.remove("hidden");
-            if (whyEl) {
-                whyEl.innerHTML = escapeHtml(
-                    truncateFeedback(item.feedback || "Loading…", 180)
-                ).replace(/\n/g, "<br>");
-            }
-            if (stepsSection) {
-                if (item.correction_steps && item.correction_steps.length) {
-                    stepsSection.classList.remove("hidden");
-                    renderSolutionSteps(stepsEl, item.correction_steps);
-                } else {
-                    stepsSection.classList.add("hidden");
-                }
-            }
-        } else if (item.is_correct) {
-            if (whySection) whySection.classList.add("hidden");
-            if (stepsSection) stepsSection.classList.remove("hidden");
-            if (item.correction_steps && item.correction_steps.length) {
-                renderSolutionSteps(stepsEl, item.correction_steps);
-            } else if (stepsEl) {
-                renderSolutionSteps(stepsEl, ["You already have the correct answer."]);
-            }
-        } else {
-            var shortWhy = truncateFeedback(item.feedback || "", 160);
-            if (whySection) {
-                whySection.classList.toggle("hidden", !shortWhy);
-            }
-            if (whyEl && shortWhy) {
-                whyEl.innerHTML = escapeHtml(shortWhy).replace(/\n/g, "<br>");
-            }
-            if (stepsSection) {
-                if (item.correction_steps && item.correction_steps.length) {
-                    stepsSection.classList.remove("hidden");
-                    renderSolutionSteps(stepsEl, item.correction_steps);
-                } else {
-                    stepsSection.classList.add("hidden");
-                }
-            }
+        if (userAnswerEl) {
+            userAnswerEl.textContent = item.user_answer || "No answer";
+        }
+        if (correctAnswerEl) {
+            correctAnswerEl.textContent =
+                item.correct_answer || item.final_answer || "Unknown";
         }
 
-        if (finalSection && finalEl) {
-            if (item.final_answer && item.final_answer !== "Unknown") {
-                finalSection.classList.remove("hidden");
-                finalEl.textContent = item.final_answer;
-            } else {
-                finalSection.classList.add("hidden");
+        if (visualHost && window.ExamiQUI && window.ExamiQUI.renderTutorVisualResponse) {
+            var why = "";
+            if (!item.is_correct) {
+                why = truncateFeedback(item.feedback || "", 220);
             }
+            var structured = null;
+            for (var i = state.messages.length - 1; i >= 0; i -= 1) {
+                var msg = state.messages[i];
+                if (msg && msg.role === "assistant" && msg.structured) {
+                    structured = msg.structured;
+                    break;
+                }
+            }
+            window.ExamiQUI.renderTutorVisualResponse(visualHost, {
+                structured: structured,
+                correctionSteps: item.correction_steps || [],
+                finalAnswer: item.final_answer || item.correct_answer || "",
+                why: why,
+                progressive: false,
+            });
         }
 
         if (metaEl) {
@@ -511,52 +541,63 @@
     function renderMessages() {
         var container = document.getElementById("ai-tutor-messages");
         if (!container) return;
+        var identity = studentIdentity();
         if (!state.messages.length) {
             container.innerHTML =
                 '<p class="chat-thread__empty">Ask a short question about this problem.</p>';
             return;
         }
-        container.innerHTML = state.messages
-            .map(function (msg) {
-                var isUser = msg.role === "user";
-                var side = isUser ? "out" : "in";
-                var initials = isUser ? "YOU" : "AI";
-                var header = isUser ? "You" : "AI Tutor";
+        container.innerHTML = "";
+        state.messages.forEach(function (msg) {
+            var isUser = msg.role === "user";
+            var side = isUser ? "out" : "in";
+            var header = isUser ? identity.name : "AI Tutor";
+            var row = document.createElement("div");
+            row.className = "chat-row chat-row--" + side;
+
+            var body = document.createElement("div");
+            body.className = "chat-row__body";
+            body.innerHTML = '<p class="chat-row__header">' + escapeHtml(header) + "</p>";
+
+            var bubble = document.createElement("div");
+            bubble.className =
+                "chat-bubble chat-bubble--" + side + " examiq-math-block";
+
+            if (isUser) {
                 var bodyHtml = msg.content
                     ? '<p class="chat-bubble__text">' +
                       escapeHtml(msg.content).replace(/\n/g, "<br>") +
                       "</p>"
                     : "";
-                return (
-                    '<div class="chat-row chat-row--' +
-                    side +
-                    '">' +
-                    (isUser
-                        ? ""
-                        : '<div class="chat-avatar chat-avatar--sm chat-avatar--ai" aria-hidden="true">' +
-                          initials +
-                          "</div>") +
-                    '<div class="chat-row__body">' +
-                    '<p class="chat-row__header">' +
-                    header +
-                    "</p>" +
-                    '<div class="chat-bubble chat-bubble--' +
-                    side +
-                    ' examiq-math-block">' +
-                    bodyHtml +
-                    attachmentChip(msg) +
-                    "</div></div>" +
-                    (isUser
-                        ? '<div class="chat-avatar chat-avatar--sm chat-avatar--self" aria-hidden="true">' +
-                          initials +
-                          "</div>"
-                        : "") +
-                    "</div>"
-                );
-            })
-            .join("");
-        container.scrollTop = container.scrollHeight;
+                bubble.innerHTML = bodyHtml + attachmentChip(msg);
+            } else if (window.ExamiQUI && window.ExamiQUI.renderTutorVisualResponse) {
+                var host = document.createElement("div");
+                host.className = "tutor-visual-host tutor-visual-host--chat";
+                bubble.appendChild(host);
+                window.ExamiQUI.renderTutorVisualResponse(host, {
+                    structured: msg.structured || null,
+                    raw: msg.content || "",
+                    progressive: false,
+                });
+            } else {
+                bubble.innerHTML =
+                    '<p class="chat-bubble__text">' +
+                    escapeHtml(msg.content || "").replace(/\n/g, "<br>") +
+                    "</p>";
+            }
+
+            body.appendChild(bubble);
+            if (isUser) {
+                row.appendChild(body);
+                row.insertAdjacentHTML("beforeend", avatarHtml("out", identity));
+            } else {
+                row.insertAdjacentHTML("afterbegin", avatarHtml("in", identity));
+                row.appendChild(body);
+            }
+            container.appendChild(row);
+        });
         katexRender(container);
+        container.scrollTop = container.scrollHeight;
     }
 
     function pickDefaultAnswer() {
@@ -578,7 +619,7 @@
         if (errorEl) errorEl.classList.add("hidden");
         if (content) content.classList.remove("hidden");
         pickDefaultAnswer();
-        setTutorScreen(state.preferredScreen || "ai");
+        setTutorScreen(state.preferredScreen || "solution");
         renderQuestionSelect();
         renderFeedbackPanel();
         renderMessages();
@@ -733,7 +774,7 @@
             if (data.user_message) {
                 state.messages[state.messages.length - 1] = data.user_message;
             }
-            state.messages.push({ role: "assistant", content: data.reply });
+            state.messages.push({ role: "assistant", content: data.reply, structured: data.structured || null });
             if (data.active_answer_id) {
                 state.activeAnswerId = data.active_answer_id;
             }
@@ -743,6 +784,7 @@
             }
             renderQuestionSelect();
             renderMessages();
+            renderFeedbackPanel();
         } catch (err) {
             state.messages.pop();
             renderMessages();
@@ -757,18 +799,22 @@
 
     async function openTutorModal(options) {
         options = options || {};
-        if (options.sessionId) {
-            applySessionUrls(options.sessionId);
+        var cfg = getConfig();
+        var sessionId = options.sessionId || cfg.defaultSessionId || null;
+        if (sessionId) {
+            applySessionUrls(sessionId);
         }
         if (options.answerId) {
             state.activeAnswerId = options.answerId;
         }
+        state.reviewMode = !!options.reviewMode;
+        state.includeAll = !!options.includeAll || !!options.reviewMode;
         state.preferredScreen =
             options.screen === "faculty"
                 ? "faculty"
-                : options.screen === "solution"
-                  ? "solution"
-                  : "ai";
+                : options.screen === "ai"
+                  ? "ai"
+                  : "solution";
 
         if (options.answerId) {
             markAnswerNotificationsRead(options.answerId);
@@ -783,15 +829,24 @@
         if (errorEl) errorEl.classList.add("hidden");
 
         try {
+            if (!getConfig().historyUrl) {
+                throw new Error("no session");
+            }
             await loadHistoryForAnswer(state.activeAnswerId || null);
             if (state.activeAnswerId) {
                 await loadHistoryForAnswer(state.activeAnswerId);
             }
             showContent();
             state.loaded = true;
-            enrichPendingFeedback();
+            if (!state.reviewMode) {
+                enrichPendingFeedback();
+            }
         } catch (err) {
-            showError("Could not load tutor feedback. Try again from your session summary.");
+            showError(
+                getConfig().historyUrl
+                    ? "Could not load tutor feedback. Try again from your session summary."
+                    : "Complete a review session first, then open AI Tutor to discuss your answers."
+            );
         }
     }
 
@@ -803,11 +858,18 @@
             el.addEventListener("click", closeModal);
         });
 
+        document.querySelectorAll("[data-open-ai-tutor]").forEach(function (el) {
+            el.addEventListener("click", function (event) {
+                event.preventDefault();
+                openTutorModal({ includeAll: true, screen: "ai" });
+            });
+        });
+
         var openBtn = document.getElementById("open-ai-tutor-btn");
         if (openBtn) {
             openBtn.addEventListener("click", function (event) {
                 event.preventDefault();
-                openTutorModal();
+                openTutorModal({ includeAll: true });
             });
         }
 
@@ -892,16 +954,19 @@
         var openTutor = params.get("open_tutor") === "1";
         if (config.openOnLoad || openTutor) {
             var answerId = config.openAnswerId || (openAnswer ? parseInt(openAnswer, 10) : null);
-            var openBtn = document.querySelector(
-                '.open-tutor-btn[data-answer-id="' + answerId + '"]'
-            );
+            var openBtn = answerId
+                ? document.querySelector(
+                      '.open-tutor-btn[data-answer-id="' + answerId + '"]'
+                  )
+                : null;
             var sessionId = openBtn
                 ? parseInt(openBtn.getAttribute("data-session-id"), 10)
-                : null;
+                : config.defaultSessionId || null;
             openTutorModal({
                 sessionId: sessionId || undefined,
                 answerId: answerId || null,
-                screen: openTutor ? "faculty" : config.openScreen || "ai",
+                includeAll: true,
+                screen: openTutor ? "ai" : config.openScreen || "ai",
             });
         }
     });

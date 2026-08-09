@@ -34,6 +34,8 @@ def build_session_summary(session: ReviewSession) -> dict:
         .order_by("-mistake_count")[:3]
     )
 
+    from apps.analytics.services import session_question_trends
+
     return {
         "total_questions": total,
         "correct_count": session.correct_count,
@@ -45,6 +47,7 @@ def build_session_summary(session: ReviewSession) -> dict:
         "calibration_tier_max": tier_max,
         "narrative": calibration_narrative_from_matrix(matrix, session_mistakes),
         "weak_topics": session_mistakes,
+        "question_trends": session_question_trends(session),
     }
 
 

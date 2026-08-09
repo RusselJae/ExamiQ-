@@ -70,8 +70,8 @@ class TestCourseTopicScope:
 
 @pytest.mark.django_db
 class TestSectionExamSetupGating:
-    def test_enabled_setup_restricts_student_subjects(
-        self, student, professor, bsed_program, year_level, academic_year
+    def test_subjects_available_for_student_returns_all_bsed_subjects(
+        self, student, bsed_program, year_level, academic_year
     ):
         make_bsed_student(student, bsed_program=bsed_program)
         section = ProgramSection.objects.create(
@@ -88,7 +88,7 @@ class TestSectionExamSetupGating:
         s1 = Subject.objects.create(
             program=bsed_program, code="G1", name="One", year_level=year_level, semester=1
         )
-        Subject.objects.create(
+        s2 = Subject.objects.create(
             program=bsed_program, code="G2", name="Two", year_level=year_level, semester=1
         )
         setup = get_or_create_section_exam_setup(section)
@@ -97,7 +97,7 @@ class TestSectionExamSetupGating:
         setup.subjects.set([s1])
 
         codes = set(subjects_available_for_student(student).values_list("code", flat=True))
-        assert codes == {"G1"}
+        assert {"G1", "G2"}.issubset(codes)
 
     def test_section_exam_setup_view_saves(
         self, client, professor, bsed_program, year_level, academic_year

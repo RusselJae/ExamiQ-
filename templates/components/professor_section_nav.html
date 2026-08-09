@@ -10,9 +10,4 @@
        class="course-nav-link {% if active_tab == 'exam_setup' %}course-nav-link-active{% endif %}">Exam Setup</a>
     <a href="{% url 'analytics_professor:section_heatmap' section.pk %}"
        class="course-nav-link {% if active_tab == 'heatmap' %}course-nav-link-active{% endif %}">Heatmap</a>
-    <a href="{% url 'analytics_professor:section_feedback' section.pk %}"
-       class="course-nav-link {% if active_tab == 'feedback' %}course-nav-link-active{% endif %}">
-        Feedback
-        {% if pending_concern_count %}<span class="course-nav-badge">{{ pending_concern_count }}</span>{% endif %}
-    </a>
 </nav>

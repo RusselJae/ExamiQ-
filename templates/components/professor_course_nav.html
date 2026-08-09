@@ -1,15 +1,8 @@
 {% if course %}
 <nav class="flex flex-wrap gap-2 mb-6" aria-label="Course navigation">
-    <a href="{% url 'analytics_professor:topic_list' course.pk %}"
-       class="course-nav-link {% if active_tab == 'topics' %}course-nav-link-active{% endif %}">Topics</a>
     <a href="{% url 'analytics_professor:question_list' course.pk %}"
        class="course-nav-link {% if active_tab == 'questions' %}course-nav-link-active{% endif %}">Saved Questions</a>
     <a href="{% url 'analytics_professor:course_heatmap' course.pk %}"
-       class="course-nav-link {% if active_tab == 'heatmap' %}course-nav-link-active{% endif %}">Heatmap</a>
-    <a href="{% url 'analytics_professor:feedback_list' course.pk %}"
-       class="course-nav-link {% if active_tab == 'feedback' %}course-nav-link-active{% endif %}">
-        Feedback
-        {% if pending_concern_count %}<span class="course-nav-badge">{{ pending_concern_count }}</span>{% endif %}
-    </a>
+       class="course-nav-link {% if active_tab == 'heatmap' or active_tab == 'overview' %}course-nav-link-active{% endif %}">Overview</a>
 </nav>
 {% endif %}

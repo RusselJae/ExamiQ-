@@ -6,6 +6,7 @@ import re
 
 from django.conf import settings
 
+from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
 from apps.ai.prompts import (
     build_adaptive_feedback_prompt,
@@ -30,7 +31,7 @@ from apps.ai.stubs import (
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
-    StubQuestionGenerator,
+    StubQuestionValidator,
 )
 from apps.analytics.confidence import confidence_accuracy_matrix
 from apps.analytics.models import ErrorType
@@ -48,7 +49,11 @@ def _get_client():
     return OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def _chat(prompt: str, system: str = "You are a concise educational analytics assistant.") -> str | None:
+def _chat(
+    prompt: str,
+    system: str = "You are a concise educational analytics assistant.",
+    max_output_tokens: int = 500,
+) -> str | None:
     try:
         client = _get_client()
         response = client.chat.completions.create(
@@ -58,7 +63,7 @@ def _chat(prompt: str, system: str = "You are a concise educational analytics as
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=500,
+            max_tokens=max_output_tokens,
         )
         return response.choices[0].message.content.strip()
     except Exception as exc:
@@ -100,30 +105,45 @@ class OpenAIDifficultyTagger(DifficultyTagger):
 class OpenAIQuestionGenerator(QuestionGenerator):
     def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
         if topic is None:
-            return StubQuestionGenerator().generate(
-                topic, difficulty, count, reference_stem, source_material=source_material
-            )
-        system, user_prompt, _max_tokens = build_question_generation_prompt(
+            return []
+        system, user_prompt, max_tokens = build_question_generation_prompt(
             topic, difficulty, count, reference_stem, source_material=source_material
         )
-        raw = _chat(user_prompt, system=system)
-        if not raw:
-            return StubQuestionGenerator().generate(
-                topic, difficulty, count, reference_stem, source_material=source_material
-            )
-        try:
-            cleaned = raw
-            match = re.search(r"\[.*\]", raw, re.DOTALL)
-            if match:
-                cleaned = match.group(0)
-            data = json.loads(cleaned)
-            if isinstance(data, list):
-                from apps.ai.normalize import normalize_generated_questions
+        token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
+        last_raw = ""
+        last_exc: json.JSONDecodeError | TypeError | None = None
 
-                return normalize_generated_questions(data[:count])
-        except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning("Failed to parse question generation JSON: %s", exc)
-        return []
+        for budget in token_budgets:
+            raw = _chat(user_prompt, system=system, max_output_tokens=budget)
+            if not raw:
+                raise AIServiceUnavailableError(
+                    "AI service is temporarily unavailable. Please try again later.",
+                    retryable=True,
+                )
+            last_raw = raw
+            try:
+                cleaned = raw
+                match = re.search(r"\[.*\]", raw, re.DOTALL)
+                if match:
+                    cleaned = match.group(0)
+                data = json.loads(cleaned)
+                if isinstance(data, list):
+                    from apps.ai.normalize import normalize_generated_questions
+
+                    return normalize_generated_questions(data[:count])
+            except (json.JSONDecodeError, TypeError) as exc:
+                last_exc = exc
+                logger.warning(
+                    "Failed to parse OpenAI question JSON (budget=%s): %s",
+                    budget,
+                    exc,
+                )
+
+        raise AIServiceUnavailableError(
+            "AI returned incomplete or invalid JSON. Try again with fewer questions.",
+            detail=str(last_exc) if last_exc else last_raw[:500],
+            retryable=True,
+        )
 
 
 class OpenAIQuestionValidator(QuestionValidator):

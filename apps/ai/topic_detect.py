@@ -7,8 +7,7 @@ import logging
 import re
 from typing import Any
 
-from django.conf import settings
-
+from apps.ai.chat import ai_available, chat
 from apps.ai.prompts import build_topic_detection_prompt
 
 logger = logging.getLogger(__name__)
@@ -25,51 +24,17 @@ def detect_topics_from_material(
         if t.get("id") is not None and t.get("name")
     ]
     stub = _stub_detect(source_material, existing)
-    if not _ai_available():
+    if not ai_available():
         return stub
 
     system, user = build_topic_detection_prompt(source_material, existing)
-    raw = _chat(user, system=system)
+    raw = chat(user, system=system, max_output_tokens=800)
     if not raw:
         return stub
     parsed = _parse_detection_json(raw)
     if not parsed:
         return stub
     return _normalize_result(parsed, existing, stub)
-
-
-def _ai_available() -> bool:
-    if not settings.AI_ENABLED:
-        return False
-    provider = settings.LLM_PROVIDER
-    if provider == "gemini":
-        return bool(settings.GEMINI_API_KEY)
-    if provider == "ollama":
-        from apps.ai.providers.ollama_client import is_cloud_host
-
-        if is_cloud_host():
-            return bool(getattr(settings, "OLLAMA_API_KEY", ""))
-        return True
-    return bool(settings.OPENAI_API_KEY)
-
-
-def _chat(prompt: str, system: str) -> str | None:
-    provider = settings.LLM_PROVIDER
-    try:
-        if provider == "gemini":
-            from apps.ai.providers import gemini_client
-
-            return gemini_client.chat(prompt, system=system, max_output_tokens=800)
-        if provider == "ollama":
-            from apps.ai.providers import ollama_client
-
-            return ollama_client.chat(prompt, system=system, max_output_tokens=800)
-        from apps.ai.providers.openai_provider import _chat as openai_chat
-
-        return openai_chat(prompt, system=system)
-    except Exception as exc:
-        logger.warning("Topic detection chat failed: %s", exc)
-        return None
 
 
 def _parse_detection_json(raw: str) -> dict[str, Any] | None:

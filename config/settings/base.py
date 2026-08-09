@@ -165,6 +165,8 @@ GEMINI_FALLBACK_MODELS = env.list(
     default=["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"],
 )
 GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=2048)
+AI_GENERATION_BATCH_SIZE = env.int("AI_GENERATION_BATCH_SIZE", default=5)
+AI_GENERATION_MAX_ATTEMPTS = env.int("AI_GENERATION_MAX_ATTEMPTS", default=3)
 OLLAMA_API_KEY = env("OLLAMA_API_KEY", default="")
 OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="https://ollama.com")
 OLLAMA_MODEL = env("OLLAMA_MODEL", default="gpt-oss:120b")

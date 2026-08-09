@@ -6,6 +6,8 @@ from apps.ai.prompts import (
     build_exam_feedback_batch_prompt,
     build_exam_feedback_single_prompt,
     build_question_generation_prompt,
+    build_subject_relevance_prompt,
+    build_topic_detection_prompt,
     build_tutor_chat_prompt,
     build_tutor_intro_prompt,
     format_exam_feedback_item,
@@ -20,8 +22,8 @@ class TestQuestionGenerationPrompt:
     def test_token_budget_scales_with_count(self, topic):
         _, _, tokens_five = build_question_generation_prompt(topic, "easy", 5)
         _, _, tokens_three = build_question_generation_prompt(topic, "easy", 3)
-        assert tokens_five == 1400
-        assert tokens_three == 840
+        assert tokens_five == 1500
+        assert tokens_three == 1200
         assert tokens_five > tokens_three
 
     @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
@@ -66,6 +68,8 @@ class TestLegacyTutorPrompts:
         assert "TOPIC RESTRICTION" in user
         assert "Factor x^2 + 5x + 6" in user
         assert "unrelated to math" in user.lower() or "outside this topic" in user.lower()
+        assert '"steps"' in system or '"steps"' in user
+        assert "$...$" in system or "KaTeX" in system
 
     def test_tutor_intro_format(self):
         _, user = build_tutor_intro_prompt("Calculus")
@@ -123,7 +127,41 @@ class TestOffTopicRedirect:
         assert off_topic_redirect("calculus", "What is the limit as h approaches 0?") is None
 
 
+class TestSubjectRelevancePrompt:
+    def test_includes_subject_and_topics_and_json_schema(self):
+        system, user = build_subject_relevance_prompt(
+            "Cover page missing… quadratic factoring later in the module.",
+            "TRIG",
+            "Trigonometry",
+            [{"id": 3, "name": "Right Triangles"}],
+        )
+        assert "ExamiQ+" in system
+        assert "TRIG" in user
+        assert "Trigonometry" in user
+        assert "Right Triangles" in user
+        assert "related" in user
+        assert "matched_topic_id" in user
+        assert "JSON" in system or "JSON" in user
+
+    def test_truncates_long_excerpts(self):
+        long_text = "word " * 13000
+        _, user = build_subject_relevance_prompt(long_text, "ALG", "Algebra", [])
+        assert "[truncated]" in user
+
+
+class TestTopicDetectionPrompt:
+    def test_includes_existing_topics_and_schema(self):
+        system, user = build_topic_detection_prompt(
+            "Linear equations module text.",
+            [{"id": 1, "name": "Algebra"}],
+        )
+        assert "ExamiQ+" in system
+        assert "Algebra" in user
+        assert "detected_topics" in user
+        assert "suggested_new_topics" in user
+
+
 class TestTokenHelpers:
     @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
     def test_question_generation_max_tokens_floor(self):
-        assert question_generation_max_tokens(1) == 800
+        assert question_generation_max_tokens(1) == 1200

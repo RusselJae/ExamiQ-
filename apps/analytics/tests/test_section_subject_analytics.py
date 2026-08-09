@@ -228,4 +228,5 @@ class TestSectionRosterAndStudentDetail:
         roster = get_section_roster_summaries(section)
         row = next(r for r in roster if r["student"].pk == student.pk)
         assert row["subjects_taken"] == ["GNED 03"]
+        assert row["subjects_taken_count"] == 1
         assert row["questions_answered"] == 3

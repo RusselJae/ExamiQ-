@@ -183,12 +183,19 @@ class TestSessionSummaryView:
         response = client.get(reverse("reviews:summary", kwargs={"pk": session.pk}))
         content = response.content.decode()
         assert response.status_code == 200
-        assert "calibration-row" in content or "calibration_tier" in content
-        assert "Weak Topics This Session" in content
+        assert "session-summary-score" in content or "exam-score-ring" in content
+        assert "session-insight-inline" in content
+        assert "Confidence gap" not in content
+        assert "session-strip-grid" in content
         assert "ai-tutor-modal" in content
         assert "ai-tutor-modal.js" in content
+        assert "tutor-visual-response.js" in content
         assert "open-ai-tutor-btn" in content
+        assert "Solution" in content
+        assert "AI Conversation" in content
+        assert "Faculty Conversation" in content
         assert "openOnLoad: false" in content
+        assert "studentName:" in content
 
         tutor_response = client.get(
             reverse("reviews:summary", kwargs={"pk": session.pk}) + "?open_tutor=1"

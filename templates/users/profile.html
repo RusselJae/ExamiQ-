@@ -35,12 +35,6 @@
                     {% if user.role == "student" and user.get_home_degree_program_display %}
                     <span class="profile-pill">{{ user.get_home_degree_program_display }}</span>
                     {% endif %}
-                    {% if user.role == "student" and user.year_level %}
-                    <span class="profile-pill">{{ user.year_level.name }}</span>
-                    {% endif %}
-                    {% if user.role == "student" and user.section %}
-                    <span class="profile-pill">{{ user.section.display_label }}</span>
-                    {% endif %}
                     <span class="profile-pill">Member since {{ user.date_joined|date:"M Y" }}</span>
                 </div>
             </div>
@@ -63,16 +57,6 @@
                     {{ profile_form.middle_name|as_crispy_field }}
                     {{ profile_form.suffix|as_crispy_field }}
                 </div>
-                {% if profile_form.year_level or profile_form.section %}
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {% if profile_form.year_level %}
-                    {{ profile_form.year_level|as_crispy_field }}
-                    {% endif %}
-                    {% if profile_form.section %}
-                    {{ profile_form.section|as_crispy_field }}
-                    {% endif %}
-                </div>
-                {% endif %}
             </div>
             <div class="profile-card-footer">
                 <button type="submit" class="btn-primary btn-primary-sm">Save profile</button>
@@ -245,37 +229,6 @@
             btn.setAttribute("aria-expanded", "false");
         });
     });
-
-    const programSelect = document.getElementById("id_home_degree_program");
-    const yearSelect = document.getElementById("id_year_level");
-    const sectionSelect = document.getElementById("id_section");
-    if (programSelect && yearSelect && sectionSelect) {
-        async function loadProfileSections() {
-            const program = programSelect.value;
-            const yearLevel = yearSelect.value;
-            const currentValue = sectionSelect.value;
-            sectionSelect.innerHTML = '<option value="">— Select section —</option>';
-            if (!program || !yearLevel) return;
-            try {
-                const resp = await fetch(
-                    "{% url 'users:api_sections' %}?program=" + encodeURIComponent(program) + "&year_level=" + yearLevel
-                );
-                const data = await resp.json();
-                data.sections.forEach(function(section) {
-                    const opt = document.createElement("option");
-                    opt.value = section.id;
-                    opt.textContent = section.is_full
-                        ? section.display + " (Full)"
-                        : section.display + " (" + section.remaining_slots + " slots)";
-                    opt.disabled = section.is_full && String(section.id) !== currentValue;
-                    if (String(section.id) === currentValue) opt.selected = true;
-                    sectionSelect.appendChild(opt);
-                });
-            } catch (err) { /* ignore */ }
-        }
-        programSelect.addEventListener("change", loadProfileSections);
-        yearSelect.addEventListener("change", loadProfileSections);
-    }
 })();
 </script>
 {% endblock %}

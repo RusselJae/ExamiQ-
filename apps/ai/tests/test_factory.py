@@ -58,6 +58,25 @@ class TestAIFactory:
         assert len(results) == 1
         assert results[0]["stem"] == "New Q?"
 
+    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @patch("apps.ai.providers.openai_provider._chat")
+    def test_openai_generator_raises_on_api_failure(self, mock_chat, topic):
+        from apps.ai.exceptions import AIServiceUnavailableError
+
+        mock_chat.return_value = None
+        with pytest.raises(AIServiceUnavailableError) as exc_info:
+            get_question_generator().generate(topic, "easy", 2)
+        assert exc_info.value.retryable is True
+
+    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @patch("apps.ai.providers.openai_provider._chat")
+    def test_openai_generator_raises_on_invalid_json(self, mock_chat, topic):
+        from apps.ai.exceptions import AIServiceUnavailableError
+
+        mock_chat.return_value = "not json at all"
+        with pytest.raises(AIServiceUnavailableError):
+            get_question_generator().generate(topic, "easy", 2)
+
     @override_settings(AI_ENABLED=False)
     def test_spaced_repetition_uses_rule_based_scheduler(self):
         assert isinstance(get_spaced_repetition_scheduler(), RuleBasedSpacedRepetitionScheduler)

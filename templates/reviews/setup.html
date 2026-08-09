@@ -6,14 +6,11 @@
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 1 course and a difficulty. Up to 10 questions per course — shuffled and timed." %}
+{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 1 course subject and a difficulty. At least 3 questions per course subject, up to 70 total — shuffled and timed." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
 <div class="bento-card p-6 mb-6">
     <p class="text-examiq-slate">{{ setup_eligibility.message }}</p>
-    {% if setup_eligibility.reason == "section" or setup_eligibility.reason == "year_level" or setup_eligibility.reason == "year_mismatch" %}
-    <a href="{% url 'users:profile' %}" class="btn-primary inline-block mt-4">Update Profile</a>
-    {% endif %}
 </div>
 {% endif %}
 
@@ -21,7 +18,7 @@
     <div class="student-setup-card bento-card">
         {% if no_exams_available %}
         <div class="student-setup-empty">
-            No approved questions are available yet. Check back once faculty has published questions for a course.
+            No approved questions are available yet. Check back once faculty has published questions for a course subject.
         </div>
         {% elif setup_eligibility.eligible %}
         <form method="post" id="review-setup-form" class="student-setup-form">
@@ -36,15 +33,15 @@
             <div class="student-setup-callout" role="note">
                 <p class="student-setup-callout__title">How it works</p>
                 <ul class="student-setup-callout__list">
-                    <li>Select at least 1 BSED Math course — year and section stay on your profile.</li>
-                    <li>Up to 10 questions per course at your difficulty, shuffled across courses.</li>
+                    <li>Select at least 1 BSED Math course subject.</li>
+                    <li>Each selected course subject contributes at least 3 questions (randomized per course subject). Max 70 total.</li>
                     <li>Each question is timed — explanations appear after you finish.</li>
                 </ul>
             </div>
 
             <div class="student-setup-field">
                 <span class="student-setup-field__label">{{ form.subjects.label }}</span>
-                <div class="multi-select" data-multi-select data-selected-heading="Selected courses">
+                <div class="multi-select" data-multi-select data-selected-heading="Selected course subjects" data-select-all>
                     {{ form.subjects }}
                 </div>
                 {% if form.subjects.errors %}

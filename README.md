@@ -21,6 +21,18 @@ python manage.py seed_examiq
 python manage.py runserver
 ```
 
+### OCR (scanned learning materials)
+
+Faculty-uploaded PDFs with image-only (scanned) pages are transcribed with
+Tesseract OCR when available. Install the Tesseract binary on the host:
+
+- Windows: download from https://github.com/UB-Mannheim/tesseract/wiki and add to PATH
+- macOS: `brew install tesseract`
+- Debian/Ubuntu: `sudo apt install tesseract-ocr`
+
+When Tesseract is missing, the app degrades gracefully (text-layer pages still
+work; scanned pages fall back to a "proceed anyway" option in the UI).
+
 Visit http://127.0.0.1:8000 and sign in with demo credentials.
 
 ## Demo Credentials

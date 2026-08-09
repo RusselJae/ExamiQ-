@@ -7,6 +7,12 @@ app_name = "analytics_student"
 urlpatterns = [
     path("dashboard/", views_student.StudentDashboardView.as_view(), name="dashboard"),
     path("sessions/", views_student.SessionHistoryView.as_view(), name="session_history"),
+    path("chat/", views_student.StudentChatInboxView.as_view(), name="chat_inbox"),
+    path(
+        "chat/concerns/",
+        views_student.StudentChatConcernsApiView.as_view(),
+        name="chat_concerns_api",
+    ),
     path("topics/", views_student.TopicProgressView.as_view(), name="topic_progress"),
     path("mistakes/", views_student.MistakeListView.as_view(), name="mistakes"),
     path(

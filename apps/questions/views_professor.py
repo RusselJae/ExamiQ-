@@ -28,7 +28,7 @@ from apps.core.filtering import (
     has_active_filters,
     redirect_preserving_filters,
 )
-from apps.core.mixins import ProfessorCourseMixin
+from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
 
 from apps.questions.forms import (
     QuestionEditForm,
@@ -50,10 +50,11 @@ from apps.questions.services import (
 )
 from apps.users.assignment_services import (
     get_assigned_subjects_queryset,
+    get_or_create_catalog_course,
     get_professor_course_queryset,
     professor_can_access_subject,
 )
-from apps.users.models import Course
+from apps.users.models import Course, User
 from apps.questions.validation import validate_question_for_submit
 
 
@@ -126,6 +127,10 @@ class QuestionListView(ProfessorCourseMixin, ListView):
 
         context["active_tab"] = "questions"
         context["ai_provider_label"] = get_ai_provider_label()
+        course_subject = _subject_for_course(self.course)
+        q_labels = _question_q_labels_for_subject(course_subject)
+        for question in context["questions"]:
+            question.q_label = q_labels.get(question.pk, "")
         topics = topics_for_course_subject(self.course, self.request.user)
         filter_names = ["q", "topic", "difficulty", "active", "sort"]
         context["filter_form_fields"] = build_filter_fields(
@@ -641,13 +646,74 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
         return render(request, self.template_name, self.get_context_data())
 
 
+def _hub_course_options(professor):
+    """Course subject options for the top-level Add Questions filter."""
+    subjects = (
+        Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
+        .select_related("program", "year_level")
+        .order_by("year_level__order", "semester", "code")
+    )
+    options = []
+    for subject in subjects:
+        course = get_or_create_catalog_course(professor, subject)
+        options.append(
+            {
+                "course": course,
+                "subject": subject,
+                "label": f"{subject.code} — {subject.name}",
+            }
+        )
+    return options
+
+
+class QuestionAddHubView(ProfessorRequiredMixin, View):
+    """Top-level Add Questions entry with course-subject filter."""
+
+    template_name = "professor/questions/batch_form.html"
+    empty_template_name = "professor/questions/add_hub.html"
+
+    def get(self, request):
+        course_options = _hub_course_options(request.user)
+        course_pk = request.GET.get("course", "")
+        if course_pk.isdigit():
+            course = get_object_or_404(
+                Course, pk=int(course_pk), professor=request.user
+            )
+            batch_view = QuestionBatchCreateView()
+            batch_view.request = request
+            batch_view.course = course
+            batch_view.kwargs = {"course_pk": course.pk}
+            context = batch_view.get_context_data()
+            context.update(
+                {
+                    "hub_mode": True,
+                    "form_action": reverse(
+                        "analytics_professor:question_create",
+                        kwargs={"course_pk": course.pk},
+                    ),
+                    "course_options": course_options,
+                    "selected_course_pk": course.pk,
+                }
+            )
+            return render(request, self.template_name, context)
+
+        return render(
+            request,
+            self.empty_template_name,
+            {"course_options": course_options},
+        )
+
+
 class QuestionAIGenerateView(ProfessorCourseMixin, View):
     """Enqueue AI question generation and return a job id for polling."""
 
     def post(self, request, course_pk):
         from apps.ai.ingest import ingest_learning_upload
         from apps.ai.job_services import start_question_generation_job
-        from apps.ai.retrieval import retrieve_material_for_topic, sample_material_for_detection
+        from apps.ai.retrieval import (
+            retrieve_material_for_topic,
+            sample_material_for_relevance,
+        )
         from apps.ai.source_extract import SourceMaterialError
         from apps.ai.subject_relevance import assess_subject_relevance
 
@@ -688,16 +754,20 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         except SourceMaterialError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
-        sample = sample_material_for_detection(document)
+        sample = sample_material_for_relevance(document)
         relevance = assess_subject_relevance(sample, subject, topics)
         if not relevance["related"]:
-            return JsonResponse(
-                {
-                    "error": relevance.get("reason")
-                    or "Uploaded module is not related to this course subject.",
-                },
-                status=400,
-            )
+            payload = {
+                "error": relevance.get("reason")
+                or "Uploaded module is not related to this course subject.",
+                "relevance_blocked": True,
+                "reason": relevance.get("reason")
+                or "Uploaded module is not related to this course subject.",
+                "subject_score": relevance.get("subject_score", 0),
+                "topic_score": relevance.get("topic_score", 0),
+            }
+            if request.POST.get("ignore_relevance") != "1":
+                return JsonResponse(payload, status=400)
 
         topic_id = relevance.get("matched_topic_id") or request.POST.get("topic")
         try:
@@ -908,6 +978,21 @@ def _subject_for_course(course):
         code=course.code,
         program=course.program,
     ).first()
+
+
+def _question_q_labels_for_subject(subject) -> dict[int, str]:
+    """Map question pk → Q1…Qn by creation order within a subject."""
+    if subject is None:
+        return {}
+    return {
+        qid: f"Q{index}"
+        for index, qid in enumerate(
+            Question.objects.filter(topic__subject=subject)
+            .order_by("pk")
+            .values_list("pk", flat=True),
+            start=1,
+        )
+    }
 
 
 def subjects_for_course_section(course, professor=None):

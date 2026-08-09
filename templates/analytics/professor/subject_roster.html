@@ -10,8 +10,6 @@
        class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
     <a href="{% url 'analytics_professor:subject_roster' subject.pk %}"
        class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Masterlist</a>
-    <a href="{% url 'analytics_professor:topic_list' catalog_course.pk %}"
-       class="course-nav-link">Topics</a>
     <a href="{% url 'analytics_professor:question_list' catalog_course.pk %}"
        class="course-nav-link">Saved Questions</a>
 </nav>
@@ -35,8 +33,13 @@
             {% for row in roster %}
             <tr class="border-b border-slate-50 masterlist-row">
                 <td class="p-4">
-                    <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
-                    <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                    <div class="flex items-center gap-3">
+                        {% include "components/student_avatar.html" with user=row.student size="sm" %}
+                        <div>
+                            <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
+                            <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                        </div>
+                    </div>
                 </td>
                 <td class="p-4 text-examiq-slate">{{ row.year_level|default:"—" }}</td>
                 <td class="p-4 text-examiq-slate">{{ row.section_label|default:"—" }}</td>

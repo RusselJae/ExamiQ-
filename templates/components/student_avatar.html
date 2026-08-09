@@ -1,0 +1,5 @@
+{% if user.profile_photo %}
+<img src="{{ user.profile_photo.url }}" alt="" class="student-avatar{% if size == 'md' %} student-avatar--md{% endif %}">
+{% else %}
+<span class="student-avatar student-avatar--initials{% if size == 'md' %} student-avatar--md{% endif %}{{ user.role|default:'student'|slugify|cut:'-' }}" aria-hidden="true">{{ user.initials }}</span>
+{% endif %}

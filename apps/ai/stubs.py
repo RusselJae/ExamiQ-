@@ -109,16 +109,43 @@ class StubTutorEngine(TutorEngine):
         exam_context: dict | None = None,
         question_context: dict | None = None,
     ) -> str:
+        import json
+
         stem = (question_context or {}).get("stem", "")
         if stem:
-            return (
-                f"Regarding this question: let's work through {topic} step by step. "
-                f"You asked: \"{message[:120]}\". "
-                "Review the correction steps above, then try a similar problem."
+            return json.dumps(
+                {
+                    "steps": [
+                        {
+                            "title": f"Focus on {topic}",
+                            "operation": "start from the active question",
+                            "equations": [],
+                            "highlight": "",
+                        },
+                        {
+                            "title": "Check the Solution tab",
+                            "operation": "compare your work to the worked steps",
+                            "equations": [],
+                            "highlight": "",
+                        },
+                    ],
+                    "answer": (question_context or {}).get("correct_answer") or "",
+                    "chart": None,
+                }
             )
-        return (
-            f"Let's stay focused on {topic}. "
-            f"Pick a question from your exam to discuss, or ask about a specific step."
+        return json.dumps(
+            {
+                "steps": [
+                    {
+                        "title": f"Stay on {topic}",
+                        "operation": "pick an exam question to discuss",
+                        "equations": [],
+                        "highlight": "",
+                    }
+                ],
+                "answer": "",
+                "chart": None,
+            }
         )
 
 

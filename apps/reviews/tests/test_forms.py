@@ -2,8 +2,10 @@ import pytest
 
 from apps.questions.models import Question, QuestionChoice, Subject, Topic
 from apps.reviews.exam_setup_services import (
+    MAX_QUESTIONS_SINGLE_SUBJECT,
+    MAX_TOTAL_QUESTIONS,
     MIN_EXAM_SUBJECTS,
-    QUESTIONS_PER_SUBJECT,
+    MIN_QUESTIONS_PER_SUBJECT,
     build_multi_subject_exam_target,
 )
 from apps.reviews.forms import ReviewSetupForm
@@ -82,7 +84,7 @@ class TestReviewSetupForm:
     ):
         make_bsed_student(student, subject=subject, bsed_program=bsed_program)
         # Ensure enough questions for one subject
-        for i in range(QUESTIONS_PER_SUBJECT - 1):
+        for i in range(MIN_QUESTIONS_PER_SUBJECT - 1):
             q = Question.objects.create(
                 topic=topic,
                 difficulty=Question.Difficulty.EASY,
@@ -160,7 +162,7 @@ class TestReviewSetupForm:
 
 @pytest.mark.django_db
 class TestMultiSubjectQueue:
-    def test_caps_questions_per_subject(self, student, bsed_program, year_level):
+    def test_each_subject_gets_minimum_questions(self, student, bsed_program, year_level):
         make_bsed_student(student, bsed_program=bsed_program)
         subjects = [
             _make_subject_with_questions(
@@ -171,7 +173,40 @@ class TestMultiSubjectQueue:
         target = build_multi_subject_exam_target(
             student, subjects, Question.Difficulty.EASY
         )
-        assert len(target["question_queue"]) == QUESTIONS_PER_SUBJECT * 3
+        queue = target["question_queue"]
+        assert len(queue) >= MIN_QUESTIONS_PER_SUBJECT * len(subjects)
+        assert target["question_count"] == len(queue)
+
+    def test_single_subject_capped_at_20(self, student, bsed_program, year_level):
+        make_bsed_student(student, bsed_program=bsed_program)
+        subject = _make_subject_with_questions(
+            bsed_program, year_level, "SINGLE-25", count=25
+        )
+        target = build_multi_subject_exam_target(
+            student, [subject], Question.Difficulty.EASY
+        )
+        count = target["question_count"]
+        assert MIN_QUESTIONS_PER_SUBJECT <= count <= MAX_QUESTIONS_SINGLE_SUBJECT
+        assert len(target["question_queue"]) == count
+
+    def test_many_subjects_capped_at_70(self, student, bsed_program, year_level):
+        make_bsed_student(student, bsed_program=bsed_program)
+        subjects = [
+            _make_subject_with_questions(
+                bsed_program, year_level, f"MANY-{i}", count=15
+            )
+            for i in range(13)
+        ]
+        target = build_multi_subject_exam_target(
+            student, subjects, Question.Difficulty.EASY
+        )
+        assert target["question_count"] == MAX_TOTAL_QUESTIONS
+        codes = set(
+            Question.objects.filter(pk__in=target["question_queue"]).values_list(
+                "topic__subject__code", flat=True
+            )
+        )
+        assert len(codes) == 13
 
     def test_queue_includes_ids_from_each_subject(
         self, student, bsed_program, year_level

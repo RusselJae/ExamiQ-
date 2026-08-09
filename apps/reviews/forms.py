@@ -40,11 +40,11 @@ SESSION_GOAL_CHOICES = [
 
 
 class ReviewSetupForm(forms.Form):
-    """Student picks 3+ courses (subjects) + difficulty, then pre-exam wizard."""
+    """Student picks course subjects + difficulty, then pre-exam wizard."""
 
     subjects = forms.ModelMultipleChoiceField(
         queryset=Subject.objects.none(),
-        label="Courses",
+        label="Course subject",
         widget=forms.SelectMultiple(
             attrs={
                 "class": FORM_MULTISELECT_CLASS,
@@ -52,7 +52,7 @@ class ReviewSetupForm(forms.Form):
                 "size": "8",
             }
         ),
-        help_text=f"Hold Ctrl/Cmd to select at least {MIN_EXAM_SUBJECTS} courses.",
+        help_text=f"Hold Ctrl/Cmd to select at least {MIN_EXAM_SUBJECTS} course subjects.",
     )
     difficulty = forms.ChoiceField(
         choices=PILOT_DIFFICULTY_CHOICES,
@@ -96,7 +96,7 @@ class ReviewSetupForm(forms.Form):
 
         if subjects.count() < MIN_EXAM_SUBJECTS:
             raise forms.ValidationError(
-                f"Select at least {MIN_EXAM_SUBJECTS} courses before starting."
+                f"Select at least {MIN_EXAM_SUBJECTS} course subjects before starting."
             )
 
         try:

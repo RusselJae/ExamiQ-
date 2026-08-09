@@ -46,6 +46,14 @@ def concern_needs_faculty_reply(record: MistakeRecord) -> bool:
     return bool((record.student_note or "").strip() or record.student_image)
 
 
+def concern_needs_student_attention(record: MistakeRecord) -> bool:
+    """True when the latest message is from faculty (student should check Chat)."""
+    latest = latest_concern_message(record)
+    if latest:
+        return latest.author_id != record.student_id
+    return bool((record.faculty_note or "").strip())
+
+
 def concern_has_faculty_reply(record: MistakeRecord) -> bool:
     latest = latest_concern_message(record)
     if latest:
@@ -148,6 +156,15 @@ def _message_image_url(message: MistakeConcernMessage) -> str:
         return ""
 
 
+def user_avatar_url(user: User | None) -> str:
+    if not user or not getattr(user, "profile_photo", None):
+        return ""
+    try:
+        return user.profile_photo.url
+    except ValueError:
+        return ""
+
+
 def serialize_concern_message(message: MistakeConcernMessage) -> dict:
     author = message.author
     role = "student" if author.role == User.Role.STUDENT else "faculty"
@@ -162,6 +179,7 @@ def serialize_concern_message(message: MistakeConcernMessage) -> dict:
         "author_role": role,
         "author_name": name,
         "author_initials": initials,
+        "author_avatar_url": user_avatar_url(author),
         "body": message.body or "",
         "image_url": _message_image_url(message),
         "image_name": (
@@ -196,6 +214,7 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
                     ).upper()
                     or (record.student.email or "?")[:2].upper()
                 ),
+                "author_avatar_url": user_avatar_url(record.student),
                 "body": record.student_note or "",
                 "image_url": image_url,
                 "image_name": "",
@@ -209,6 +228,7 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
                 "author_role": "faculty",
                 "author_name": "Faculty",
                 "author_initials": "FA",
+                "author_avatar_url": "",
                 "body": record.faculty_note or "",
                 "image_url": "",
                 "image_name": "",
@@ -273,38 +293,17 @@ def _professors_for_mistake(record: MistakeRecord) -> list[User]:
 
 
 def _feedback_link_for_professor(record: MistakeRecord, professor: User) -> str:
-    """Prefer section feedback when the professor teaches that section."""
-    section = getattr(record.student, "section", None)
-    subject = record.question.topic.subject
-    if section and TeachingAssignment.objects.filter(
-        professor=professor,
-        program_section=section,
-        subject=subject,
-    ).exists():
-        return (
-            reverse(
-                "analytics_professor:section_feedback",
-                kwargs={"section_pk": section.pk},
-            )
-            + f"?mistake_id={record.pk}"
-        )
-    course = get_or_create_catalog_course(professor, subject)
+    """Deep-link into overview with Chat modal open."""
     return (
-        reverse("analytics_professor:feedback_list", kwargs={"course_pk": course.pk})
-        + f"?mistake_id={record.pk}"
+        reverse("analytics_professor:overview")
+        + f"?open_chat=1&mistake_id={record.pk}"
     )
 
 
 def _section_feedback_link(record: MistakeRecord) -> str:
-    section = record.student.section
-    if not section:
-        return ""
     return (
-        reverse(
-            "analytics_professor:section_feedback",
-            kwargs={"section_pk": section.pk},
-        )
-        + f"?mistake_id={record.pk}"
+        reverse("analytics_professor:overview")
+        + f"?open_chat=1&mistake_id={record.pk}"
     )
 
 
@@ -340,8 +339,8 @@ def _notify_student_of_faculty_reply(
 ) -> None:
     topic_name = record.topic.name
     link = (
-        reverse("analytics_student:mistakes")
-        + f"?answer_id={record.answer_id}&open_tutor=1"
+        reverse("analytics_student:dashboard")
+        + f"?open_chat=1&mistake_id={record.pk}"
     )
     create_notification(
         record.student,
@@ -364,6 +363,61 @@ def pending_concern_count_for_course(course: Course) -> int:
 def pending_concern_count_for_section(section) -> int:
     qs = MistakeRecord.objects.filter(student__section=section)
     return _pending_concern_count(qs)
+
+
+def professor_concern_queryset(professor: User):
+    """Active concern threads for students who sat exams with this professor."""
+    from apps.reviews.models import ReviewSession
+
+    student_ids = (
+        ReviewSession.objects.filter(course__professor=professor)
+        .values_list("student_id", flat=True)
+        .distinct()
+    )
+    return concern_queryset_with_messages(
+        MistakeRecord.objects.filter(
+            student_id__in=student_ids,
+            question__topic__subject__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        )
+        .filter(_concern_activity_filter())
+        .select_related(
+            "student",
+            "question",
+            "topic",
+            "answer",
+            "answer__selected_choice",
+            "question__topic",
+            "question__topic__subject",
+        )
+        .prefetch_related("question__choices")
+        .order_by("-occurred_at")
+    )
+
+
+def pending_concern_count_for_professor(professor: User) -> int:
+    return _pending_concern_count(professor_concern_queryset(professor))
+
+
+def student_concern_queryset(student: User):
+    """Active concern threads for a student."""
+    return concern_queryset_with_messages(
+        MistakeRecord.objects.filter(student=student)
+        .filter(_concern_activity_filter())
+        .select_related(
+            "question",
+            "topic",
+            "answer",
+            "question__topic",
+            "question__topic__subject",
+        )
+        .prefetch_related("question__choices")
+        .order_by("-occurred_at")
+    )
+
+
+def pending_concern_count_for_student(student: User) -> int:
+    qs = student_concern_queryset(student).select_related("student")
+    return sum(1 for record in qs if concern_needs_student_attention(record))
 
 
 def _pending_concern_count(queryset):

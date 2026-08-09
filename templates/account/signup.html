@@ -51,22 +51,6 @@
 
     <div id="signup-student-fields" class="signup-role-fields">
         {% include "components/auth_field.html" with field=form.student_number %}
-        <div class="auth-form-row auth-form-row--2">
-            <label class="auth-field{% if form.year_level.errors %} auth-field--error{% endif %}" for="{{ form.year_level.id_for_label }}">
-                <span class="auth-field__label">{{ form.year_level.label }}</span>
-                {{ form.year_level }}
-                {% if form.year_level.errors %}
-                <p class="auth-field__error">{{ form.year_level.errors.0 }}</p>
-                {% endif %}
-            </label>
-            <label class="auth-field{% if form.section.errors %} auth-field--error{% endif %}" for="{{ form.section.id_for_label }}">
-                <span class="auth-field__label">{{ form.section.label }}</span>
-                {{ form.section }}
-                {% if form.section.errors %}
-                <p class="auth-field__error">{{ form.section.errors.0 }}</p>
-                {% endif %}
-            </label>
-        </div>
     </div>
 
     <div id="signup-staff-fields" class="signup-role-fields is-hidden">

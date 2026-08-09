@@ -17,7 +17,7 @@ def _run_thread_inline(target, args=(), kwargs=None, **_ignored):
 
 def _sample_module_file():
     content = (
-        b"Module 1: Linear Equations\n"
+        b"T101 Test Subject - Algebra: Linear Equations\n"
         b"Solve for x in equations of the form ax + b = c.\n"
         b"Example: 2x + 3 = 11 implies x = 4.\n"
         b"Practice applying inverse operations carefully."
@@ -25,22 +25,42 @@ def _sample_module_file():
     return SimpleUploadedFile("module.txt", content, content_type="text/plain")
 
 
+@pytest.fixture
+def course_with_subject(course, subject):
+    """Align subject code with course code so the generate view finds the subject."""
+    subject.code = course.code
+    subject.save(update_fields=["code"])
+    return course
+
+
 @pytest.mark.django_db(transaction=True)
 class TestQuestionAIGenerateView:
+    @pytest.fixture(autouse=True)
+    def _disable_ai(self, settings):
+        """Keep keyword relevance path deterministic and avoid real API calls in tests."""
+        settings.AI_ENABLED = False
+
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     def test_enqueues_job_and_surfaces_ai_error(
-        self, mock_get_generator, _mock_thread, client, professor, course, topic
+        self, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
     ):
         generator = mock_get_generator.return_value
         generator.generate.side_effect = AIServiceUnavailableError(
             "AI unavailable: API quota exceeded."
         )
         client.force_login(professor)
-        url = reverse("analytics_professor:question_ai_generate", kwargs={"course_pk": course.pk})
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
         response = client.post(
             url,
-            {"topic": topic.pk, "difficulty": "easy", "source_file": _sample_module_file()},
+            {
+                "topic": topic.pk,
+                "difficulty": "easy",
+                "source_file": _sample_module_file(),
+            },
         )
         assert response.status_code == 202
         data = response.json()
@@ -52,16 +72,19 @@ class TestQuestionAIGenerateView:
 
         status_url = reverse(
             "analytics_professor:question_ai_generate_status",
-            kwargs={"course_pk": course.pk, "job_id": job.pk},
+            kwargs={"course_pk": course_with_subject.pk, "job_id": job.pk},
         )
         status_response = client.get(status_url, HTTP_ACCEPT="text/html")
         assert status_response.status_code == 200
         content = status_response.content.decode()
         assert "AI unavailable: API quota exceeded." in content
 
-    def test_requires_source_file(self, client, professor, course, topic):
+    def test_requires_source_file(self, client, professor, course_with_subject, topic):
         client.force_login(professor)
-        url = reverse("analytics_professor:question_ai_generate", kwargs={"course_pk": course.pk})
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
         response = client.post(url, {"topic": topic.pk, "difficulty": "easy"})
         assert response.status_code == 400
         assert "Upload" in response.json()["error"]
@@ -69,7 +92,7 @@ class TestQuestionAIGenerateView:
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     def test_status_returns_modal_on_success(
-        self, mock_get_generator, _mock_thread, client, professor, course, topic
+        self, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
     ):
         generator = mock_get_generator.return_value
         generator.generate.return_value = [
@@ -88,7 +111,8 @@ class TestQuestionAIGenerateView:
         ]
         client.force_login(professor)
         start_url = reverse(
-            "analytics_professor:question_ai_generate", kwargs={"course_pk": course.pk}
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
         )
         response = client.post(
             start_url,
@@ -108,8 +132,57 @@ class TestQuestionAIGenerateView:
 
         status_url = reverse(
             "analytics_professor:question_ai_generate_status",
-            kwargs={"course_pk": course.pk, "job_id": job_id},
+            kwargs={"course_pk": course_with_subject.pk, "job_id": job_id},
         )
         status_response = client.get(status_url, HTTP_ACCEPT="text/html")
         assert status_response.status_code == 200
         assert "What is 2+2?" in status_response.content.decode()
+
+    @patch("apps.ai.subject_relevance.assess_subject_relevance")
+    def test_unrelated_module_returns_relevance_blocked(
+        self, mock_relevance, client, professor, course_with_subject, topic
+    ):
+        mock_relevance.return_value = {
+            "related": False,
+            "matched_topic_id": None,
+            "subject_score": 0,
+            "topic_score": 0,
+            "reason": "Not related to this course.",
+        }
+        client.force_login(professor)
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
+        response = client.post(url, {"topic": topic.pk, "difficulty": "easy", "source_file": _sample_module_file()})
+        assert response.status_code == 400
+        data = response.json()
+        assert data["relevance_blocked"] is True
+        assert "Not related" in data["error"]
+
+    @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
+    @patch("apps.ai.job_services.get_question_generator")
+    @patch("apps.ai.subject_relevance.assess_subject_relevance")
+    def test_unrelated_module_proceeds_with_ignore_relevance(
+        self, mock_relevance, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
+    ):
+        mock_get_generator.return_value.generate.return_value = []
+        mock_relevance.return_value = {
+            "related": False,
+            "matched_topic_id": None,
+            "subject_score": 0,
+            "topic_score": 0,
+            "reason": "Looks unrelated.",
+        }
+        client.force_login(professor)
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
+        response = client.post(
+            url,
+            {"topic": topic.pk, "difficulty": "easy", "source_file": _sample_module_file(), "ignore_relevance": "1"},
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert data["job_id"]

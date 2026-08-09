@@ -11,8 +11,8 @@
 
     {% if mistakes %}
     <div class="span-full">
-        <div class="bento-card bento-card-inner overflow-hidden">
-            <table class="w-full text-sm">
+        <div class="bento-card bento-card-inner overflow-x-auto w-full">
+            <table class="w-full text-sm min-w-[640px]">
                 <thead class="bg-examiq-bg">
                     <tr class="text-left text-examiq-slate">
                         <th class="px-4 py-3 font-medium">Topic</th>
@@ -66,12 +66,9 @@
     </div>
     {% endif %}
 </div>
-
-{% include "reviews/partials/ai_tutor_modal.html" %}
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/ai-tutor-modal.js' %}"></script>
 <script>
 window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
     csrfToken: "{{ csrf_token }}",
@@ -82,7 +79,10 @@ window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
         concern: "{{ tutor_url_templates.concern }}"
     },
     concernUrlTemplate: "{{ tutor_url_templates.concern }}",
-    markNotificationsUrl: "{% url 'users:notifications_mark_link' %}"
+    markNotificationsUrl: "{% url 'users:notifications_mark_link' %}",
+    studentName: "{{ request.user.get_full_name|default:request.user.email|escapejs }}",
+    studentAvatarUrl: "{% if request.user.profile_photo %}{{ request.user.profile_photo.url }}{% endif %}",
+    studentInitials: "{{ request.user.first_name|slice:':1'|upper }}{{ request.user.last_name|slice:':1'|upper }}",
 });
 </script>
 {% endblock %}

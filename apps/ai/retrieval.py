@@ -97,3 +97,42 @@ def sample_material_for_detection(
         parts.append(piece)
         total += len(piece) + 1
     return "\n\n".join(parts)
+
+
+def sample_material_for_relevance(
+    document: LearningDocument | None,
+    *,
+    max_chars: int = MAX_PROMPT_CHARS,
+) -> str:
+    """Front-loaded + stratified sample for subject relevance checks.
+
+    The first chunks usually carry the title/subject identity, while a
+    stratified sweep covers the rest of a long document where the subject
+    signal may live. This matters for scanned or image-first modules whose
+    cover page never produced text.
+    """
+    if document is None:
+        return ""
+    chunks = list(LearningChunk.objects.filter(document=document).order_by("order"))
+    if not chunks:
+        return ""
+
+    head_count = min(6, len(chunks))
+    head = chunks[:head_count]
+    tail = chunks[head_count:]
+    if len(tail) > 12:
+        step = max(1, len(tail) // 12)
+        tail = tail[::step][:12]
+    selected = head + tail
+
+    parts: list[str] = []
+    total = 0
+    for chunk in selected:
+        piece = chunk.text.strip()
+        if not piece:
+            continue
+        if total + len(piece) + 1 > max_chars:
+            break
+        parts.append(piece)
+        total += len(piece) + 1
+    return "\n\n".join(parts)

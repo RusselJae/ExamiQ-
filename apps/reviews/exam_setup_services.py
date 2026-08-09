@@ -12,6 +12,9 @@ from apps.users.models import Course, User
 
 QUESTIONS_PER_SUBJECT = 10
 MIN_EXAM_SUBJECTS = 1
+MIN_QUESTIONS_PER_SUBJECT = 3
+MAX_QUESTIONS_SINGLE_SUBJECT = 20
+MAX_TOTAL_QUESTIONS = 70
 
 
 def get_or_create_exam_setup(course) -> ExamSetup:
@@ -34,8 +37,7 @@ def get_or_create_exam_setup(course) -> ExamSetup:
 def student_setup_eligibility(student: User) -> dict:
     """Return eligibility flags and messages for the exam setup page.
 
-    Year/section are identity-only: students must have them set, but exams are
-    open across all BSED Math subjects with approved questions.
+    Eligibility checks only the program and available questions.
     """
     if student.home_degree_program != User.HomeDegreeProgram.BSED_MATH:
         return {
@@ -43,48 +45,13 @@ def student_setup_eligibility(student: User) -> dict:
             "reason": "program",
             "message": "Exam practice is available for BSEd Mathematics students.",
         }
-    if not student.section_id:
-        return {
-            "eligible": False,
-            "reason": "section",
-            "message": "Set your section in Profile before starting an exam.",
-        }
-    if not student.year_level_id:
-        return {
-            "eligible": False,
-            "reason": "year_level",
-            "message": "Set your year level in Profile before starting an exam.",
-        }
-    if student.section.year_level_id != student.year_level_id:
-        return {
-            "eligible": False,
-            "reason": "year_mismatch",
-            "message": "Your year level does not match your section. Update your Profile.",
-        }
     if not program_has_approved_questions():
         return {
             "eligible": False,
             "reason": "no_questions",
             "message": "No approved questions are available yet. Check back later.",
         }
-    setup = section_exam_setup_for_student(student)
-    if setup is not None and not setup.is_enabled:
-        return {
-            "eligible": False,
-            "reason": "section_disabled",
-            "message": "Exams are disabled for your section right now. Check back later.",
-        }
     return {"eligible": True}
-
-
-def section_exam_setup_for_student(student: User) -> SectionExamSetup | None:
-    if not student.section_id:
-        return None
-    return (
-        SectionExamSetup.objects.filter(section_id=student.section_id)
-        .prefetch_related("subjects")
-        .first()
-    )
 
 
 def get_or_create_section_exam_setup(section) -> SectionExamSetup:
@@ -104,23 +71,12 @@ def get_or_create_section_exam_setup(section) -> SectionExamSetup:
 
 
 def subjects_available_for_student(student: User | None = None):
-    """BSED Math subjects; restricted when section exam setup exists and is enabled."""
-    qs = (
+    """All BSED Math subjects open to the student."""
+    return (
         Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
         .select_related("year_level", "program")
         .order_by("year_level__order", "semester", "code")
     )
-    if student is None or not student.section_id:
-        return qs
-    setup = section_exam_setup_for_student(student)
-    if setup is None:
-        return qs
-    if not setup.is_enabled:
-        return Subject.objects.none()
-    selected_ids = list(setup.subjects.values_list("pk", flat=True))
-    if not selected_ids:
-        return qs
-    return qs.filter(pk__in=selected_ids)
 
 
 def program_has_approved_questions() -> bool:
@@ -200,6 +156,11 @@ def build_multi_subject_exam_target(
 ) -> dict:
     """Build a shuffled question queue across multiple subjects.
 
+    Each selected subject contributes a randomized number of questions:
+    - at least MIN_QUESTIONS_PER_SUBJECT (or all available if fewer)
+    - at most MAX_QUESTIONS_SINGLE_SUBJECT for a single subject
+    - total across all subjects capped at MAX_TOTAL_QUESTIONS
+
     Raises ValueError with a user-facing message when validation fails.
     """
     from apps.questions.services import (
@@ -222,12 +183,35 @@ def build_multi_subject_exam_target(
             "Pick other courses or another difficulty."
         )
 
+    avail = [count_available_questions_for_subject(s, difficulty) for s in subject_list]
+    floors = [min(MIN_QUESTIONS_PER_SUBJECT, a) for a in avail]
+
+    if len(subject_list) == 1:
+        cap = min(avail[0], MAX_QUESTIONS_SINGLE_SUBJECT)
+        per_subject = [random.randint(floors[0], cap)]
+    else:
+        caps = [min(a, MAX_QUESTIONS_SINGLE_SUBJECT) for a in avail]
+        if sum(caps) <= MAX_TOTAL_QUESTIONS:
+            per_subject = [random.randint(floors[i], caps[i]) for i in range(len(subject_list))]
+        else:
+            per_subject = list(floors)
+            budget = MAX_TOTAL_QUESTIONS - sum(floors)
+            order = list(range(len(subject_list)))
+            random.shuffle(order)
+            idx = 0
+            while budget > 0:
+                i = order[idx % len(order)]
+                if per_subject[i] < caps[i]:
+                    per_subject[i] += 1
+                    budget -= 1
+                if all(per_subject[j] >= caps[j] for j in range(len(subject_list))):
+                    break
+                idx += 1
+
     queue: list[int] = []
     primary_topic = None
-    for subject in subject_list:
-        ids = question_ids_for_subject(
-            subject, difficulty, limit=QUESTIONS_PER_SUBJECT
-        )
+    for i, subject in enumerate(subject_list):
+        ids = question_ids_for_subject(subject, difficulty, limit=per_subject[i])
         queue.extend(ids)
         if primary_topic is None:
             target = resolve_exam_target(student, subject, difficulty)

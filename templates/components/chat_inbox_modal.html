@@ -1,0 +1,42 @@
+{# Global two-pane Chat modal (faculty + student). Opened from navbar icon. #}
+<div id="examiq-chat-modal" class="examiq-chat-modal hidden" role="dialog" aria-modal="true" aria-labelledby="examiq-chat-title">
+    <div class="examiq-chat-modal__backdrop" data-dismiss-chat-modal></div>
+    <div class="examiq-chat-modal__panel">
+        <aside class="examiq-chat-modal__sidebar">
+            <h2 id="examiq-chat-title" class="examiq-chat-modal__title">Chat</h2>
+            <label class="examiq-chat-modal__search">
+                <span class="sr-only">Search</span>
+                <svg class="examiq-chat-modal__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <input type="search" id="examiq-chat-search" placeholder="Search students..." autocomplete="off">
+            </label>
+            <div id="examiq-chat-list" class="examiq-chat-modal__list" role="listbox" aria-label="Conversations"></div>
+            <p id="examiq-chat-list-empty" class="examiq-chat-modal__empty hidden">No conversations yet.</p>
+        </aside>
+
+        <section class="examiq-chat-modal__main">
+            <header class="examiq-chat-modal__header">
+                <div class="examiq-chat-modal__peer">
+                    <div class="examiq-chat-modal__avatar" id="examiq-chat-peer-avatar" aria-hidden="true">?</div>
+                    <div>
+                        <p class="examiq-chat-modal__peer-name" id="examiq-chat-peer-name">Select a conversation</p>
+                        <p class="examiq-chat-modal__peer-meta" id="examiq-chat-peer-meta"></p>
+                    </div>
+                </div>
+                <button type="button" class="examiq-chat-modal__close" data-dismiss-chat-modal aria-label="Close">&times;</button>
+            </header>
+
+            <div id="examiq-chat-thread" class="examiq-chat-modal__thread" role="log" aria-live="polite"></div>
+
+            <form id="examiq-chat-form" class="examiq-chat-modal__composer" enctype="multipart/form-data">
+                <textarea id="examiq-chat-input"
+                          rows="1"
+                          placeholder="Explain the concept or point to the relevant lesson..."
+                          maxlength="2000"
+                          disabled></textarea>
+                <button type="submit" id="examiq-chat-send" class="examiq-chat-modal__send" disabled>Send</button>
+            </form>
+        </section>
+    </div>
+</div>

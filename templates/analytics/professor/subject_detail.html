@@ -13,8 +13,6 @@
        class="course-nav-link {% if active_tab == 'analytics' %}course-nav-link-active{% endif %}">Analytics</a>
     <a href="{% url 'analytics_professor:subject_roster' subject.pk %}"
        class="course-nav-link {% if active_tab == 'roster' %}course-nav-link-active{% endif %}">Masterlist</a>
-    <a href="{% url 'analytics_professor:topic_list' catalog_course.pk %}"
-       class="course-nav-link">Topics</a>
     <a href="{% url 'analytics_professor:question_list' catalog_course.pk %}"
        class="course-nav-link">Question Bank</a>
     <a href="{% url 'analytics_professor:exam_setup' catalog_course.pk %}"

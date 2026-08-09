@@ -16,29 +16,7 @@
             {% endif %}
         </div>
     </div>
-    <a href="{{ back_url }}" class="btn-secondary text-sm">← Back to masterlist</a>
-</div>
-
-<div class="overview-kpi-grid mb-8">
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Exam sessions" icon="clock" variant="neutral" subtext=last_session_subtext %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% if summary.total_answers and summary.accuracy >= 70 %}
-        {% include "components/overview_stat_card.html" with value=summary.accuracy label="Avg score" suffix="%" icon="target" variant="accent" subtext=accuracy_subtext %}
-        {% else %}
-        {% include "components/overview_stat_card.html" with value=summary.accuracy label="Avg score" suffix="%" icon="target" variant="warning" subtext=accuracy_subtext %}
-        {% endif %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.total_answers label="Questions answered" icon="target" variant="neutral" subtext="" %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.high_avg_confidence_rate label="Avg/High confidence" suffix="%" icon="clock" variant="neutral" subtext=confidence_subtext %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.weak_topics|length label="Weak topics flagged" icon="clock" variant="warning" subtext="" %}
-    </div>
+    <a href="{{ back_url }}" class="btn-secondary text-sm">← {{ back_label|default:"Back to masterlist" }}</a>
 </div>
 
 {% if not summary.total_answers %}
@@ -46,141 +24,91 @@
     {% include "components/empty_state.html" with compact=True title="No exam activity yet" body=empty_body %}
 </div>
 {% else %}
-<div class="student-detail-grid mb-8">
-    <div class="student-detail-grid__main space-y-6">
-        <div class="bento-card bento-card--chart bento-card-inner">
-            <div class="px-6 pt-6 mb-2">
-                <h2 class="text-lg font-semibold text-examiq-navy">Score trend</h2>
-                <p class="text-xs text-examiq-slate">Last {{ summary.score_trend|length }} exam session{{ summary.score_trend|length|pluralize }}</p>
-            </div>
-            <div id="score-trend-wrap" class="confidence-performance-wrap px-6 pb-6">
-                <canvas id="scoreTrendChart" height="140" aria-label="Score trend"></canvas>
-            </div>
-            <div id="score-trend-empty" class="chart-empty-state hidden px-6 pb-6">
-                <p class="empty-state-title">Not enough sessions yet</p>
-                <p class="empty-state-body">Score trend appears after a couple of completed exams.</p>
-            </div>
-            <div class="student-detail-score-legend px-6 pb-4">
-                <span><i class="score-dot score-dot--low"></i> Below 60%</span>
-                <span><i class="score-dot score-dot--mid"></i> 60–75%</span>
-                <span><i class="score-dot score-dot--high"></i> 75%+</span>
-            </div>
-        </div>
 
-        <div class="bento-card bento-card-inner p-6">
-            <div class="flex items-center justify-between mb-4">
-                <div>
-                    <h2 class="text-lg font-semibold text-examiq-navy">Exam session history</h2>
-                    <p class="text-xs text-examiq-slate">{{ summary.sessions_completed }} session{{ summary.sessions_completed|pluralize }}</p>
-                </div>
-            </div>
-            {% if summary.session_history_rows %}
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm student-session-table">
-                    <thead>
-                        <tr class="text-left text-examiq-slate border-b border-slate-100">
-                            <th class="pb-2 font-medium">Session</th>
-                            <th class="pb-2 font-medium">Score</th>
-                            <th class="pb-2 font-medium">Confidence</th>
-                            <th class="pb-2 font-medium"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in summary.session_history_rows %}
-                        <tr class="border-b border-slate-50">
-                            <td class="py-3 pr-4">
-                                <div class="font-medium text-examiq-navy">{{ row.date|date:"M j, Y" }}</div>
-                                <div class="text-xs text-examiq-slate">
-                                    {% if detail_scope == "section" and row.subject_code %}{{ row.subject_code }} · {% endif %}{{ row.topic_name }}
-                                    · {{ row.total_questions }} question{{ row.total_questions|pluralize }}
-                                    {% if row.duration_minutes %} · {{ row.duration_minutes }} min{% endif %}
-                                </div>
-                            </td>
-                            <td class="py-3 pr-4">
-                                <span class="font-semibold {% if row.accuracy < 60 %}stat-value-warning{% elif row.accuracy < 75 %}text-sky-700{% else %}stat-value-good{% endif %}">{{ row.accuracy }}%</span>
-                            </td>
-                            <td class="py-3 pr-4 min-w-[140px]">
-                                <div class="confidence-mini-bar" title="{{ row.confidence_label }}">
-                                    <span class="confidence-mini-bar__seg confidence-mini-bar__seg--none" style="width: {{ row.confidence_segment_pcts.none }}%"></span>
-                                    <span class="confidence-mini-bar__seg confidence-mini-bar__seg--low" style="width: {{ row.confidence_segment_pcts.low }}%"></span>
-                                    <span class="confidence-mini-bar__seg confidence-mini-bar__seg--average" style="width: {{ row.confidence_segment_pcts.average }}%"></span>
-                                    <span class="confidence-mini-bar__seg confidence-mini-bar__seg--high" style="width: {{ row.confidence_segment_pcts.high }}%"></span>
-                                </div>
-                            </td>
-                            <td class="py-3 text-right">
-                                {% if row.session %}
-                                <a href="{% url 'reviews:summary' row.session.pk %}" class="text-link text-sm">Review</a>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="text-examiq-slate text-sm">No completed sessions yet.</p>
-            {% endif %}
+<div class="bento-card bento-card-inner p-6 mb-8">
+    <div class="overview-trends-filters" id="student-detail-trends-filters">
+        <div class="overview-trends-filter">
+            <label for="student-detail-trend-metric" class="overview-trends-filter__label">Metric</label>
+            <select id="student-detail-trend-metric" class="overview-trends-filter__select">
+                <option value="confidence">Average confidence per session</option>
+                <option value="mistakes">Mistakes per session</option>
+            </select>
         </div>
     </div>
+    <div class="overview-trends-chart-wrap" id="student-detail-trends-wrap">
+        <canvas id="studentDetailTrendsChart" aria-label="Student trend chart"></canvas>
+    </div>
+    <div id="student-detail-trends-empty" class="chart-empty-state hidden">
+        <p class="empty-state-title">Not enough data yet</p>
+        <p class="empty-state-body">Complete an exam to see confidence and mistake trends.</p>
+    </div>
+    <div class="overview-trends-pager overview-trends-pager--center">
+        <button type="button" id="student-detail-trends-prev" class="overview-trends-pager__btn">Previous</button>
+        <span id="student-detail-trends-page-label" class="overview-trends-pager__label">—</span>
+        <button type="button" id="student-detail-trends-next" class="overview-trends-pager__btn">Next</button>
+    </div>
+</div>
 
-    <div class="student-detail-grid__side space-y-6">
-        <div class="bento-card bento-card-inner p-6">
-            <h2 class="text-lg font-semibold text-examiq-navy">
-                {% if detail_scope == "section" %}Confidence by subject{% else %}Confidence by topic{% endif %}
-            </h2>
-            <p class="text-xs text-examiq-slate mb-4">Share of Average/High answers</p>
-            {% if summary.confidence_stacks %}
-            <ul class="space-y-4">
-                {% for row in summary.confidence_stacks %}
-                <li>
-                    <div class="flex justify-between gap-2 text-sm mb-1">
-                        <span class="text-examiq-navy font-medium truncate">{{ row.name }}</span>
-                        <span class="text-examiq-slate shrink-0">{{ row.avg_high_pct }}%</span>
-                    </div>
-                    <div class="confidence-stack-bar">
-                        <span class="confidence-stack-bar__seg confidence-stack-bar__seg--none" style="width: {{ row.none_pct }}%"></span>
-                        <span class="confidence-stack-bar__seg confidence-stack-bar__seg--low" style="width: {{ row.low_pct }}%"></span>
-                        <span class="confidence-stack-bar__seg confidence-stack-bar__seg--average" style="width: {{ row.average_pct }}%"></span>
-                        <span class="confidence-stack-bar__seg confidence-stack-bar__seg--high" style="width: {{ row.high_pct }}%"></span>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="text-examiq-slate text-sm">No confidence data yet.</p>
-            {% endif %}
+<div class="bento-card bento-card-inner p-6 mb-8">
+    <div class="flex items-center justify-between mb-2 gap-4 flex-wrap">
+        <div>
+            <h2 class="text-lg font-semibold text-examiq-navy">Exam session history</h2>
+            <p class="text-xs text-examiq-slate">{{ summary.sessions_completed }} session{{ summary.sessions_completed|pluralize }}</p>
         </div>
-
-        <div class="bento-card bento-card-inner p-6">
-            <h2 class="text-lg font-semibold text-examiq-navy">Flagged for follow-up</h2>
-            <p class="text-xs text-examiq-slate mb-4">
-                {% if detail_scope == "section" %}Subjects with low Average/High confidence{% else %}Topics with low Average/High confidence{% endif %}
-            </p>
-            {% if summary.follow_ups %}
-            <ul class="space-y-3">
-                {% for item in summary.follow_ups %}
-                <li class="flex gap-3 py-2 border-b border-slate-50 last:border-0">
-                    <span class="student-followup-icon" aria-hidden="true">!</span>
-                    <div>
-                        <p class="text-sm font-semibold text-examiq-navy">{{ item.name }}</p>
-                        <p class="text-xs text-examiq-slate">{{ item.detail }}</p>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-            {% elif summary.weak_topics %}
-            <ul class="space-y-3">
-                {% for topic in summary.weak_topics %}
-                <li class="flex justify-between py-2 border-b border-slate-50">
-                    <span class="text-examiq-navy font-medium text-sm">{{ topic.topic__name }}</span>
-                    <span class="mistake-count-badge mistake-count-badge--medium">{{ topic.mistake_count }}</span>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p class="text-examiq-slate text-sm">Nothing flagged — confidence looks steady.</p>
-            {% endif %}
+        <div class="confidence-legend" aria-label="Confidence colors">
+            <span class="confidence-legend__item"><i class="confidence-legend__swatch confidence-legend__swatch--none"></i> None</span>
+            <span class="confidence-legend__item"><i class="confidence-legend__swatch confidence-legend__swatch--low"></i> Low</span>
+            <span class="confidence-legend__item"><i class="confidence-legend__swatch confidence-legend__swatch--average"></i> Average</span>
+            <span class="confidence-legend__item"><i class="confidence-legend__swatch confidence-legend__swatch--high"></i> High</span>
         </div>
     </div>
+    {% if summary.session_history_rows %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm student-session-table">
+            <thead>
+                <tr class="text-left text-examiq-slate border-b border-slate-100">
+                    <th class="pb-2 font-medium">Session</th>
+                    <th class="pb-2 font-medium">Score</th>
+                    <th class="pb-2 font-medium">Confidence</th>
+                    <th class="pb-2 font-medium"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in summary.session_history_rows %}
+                <tr class="border-b border-slate-50">
+                    <td class="py-3 pr-4">
+                        <div class="font-medium text-examiq-navy">{{ row.date|date:"M j, Y" }}</div>
+                        <div class="text-xs text-examiq-slate">
+                            {{ row.subjects_taken_display|default:row.topic_name }}
+                            {% if row.duration_minutes %} · {{ row.duration_minutes }} min{% endif %}
+                        </div>
+                    </td>
+                    <td class="py-3 pr-4">
+                        <div class="flex flex-col gap-0.5">
+                            <span class="text-sm font-semibold text-examiq-navy">{{ row.score_display }}</span>
+                            <span class="font-semibold {% if row.accuracy < 60 %}stat-value-warning{% elif row.accuracy < 75 %}text-sky-700{% else %}stat-value-good{% endif %}">{{ row.accuracy }}%</span>
+                        </div>
+                    </td>
+                    <td class="py-3 pr-4 min-w-[140px]">
+                        <div class="confidence-mini-bar" title="{{ row.confidence_label }}">
+                            <span class="confidence-mini-bar__seg confidence-mini-bar__seg--none" style="width: {{ row.confidence_segment_pcts.none }}%"></span>
+                            <span class="confidence-mini-bar__seg confidence-mini-bar__seg--low" style="width: {{ row.confidence_segment_pcts.low }}%"></span>
+                            <span class="confidence-mini-bar__seg confidence-mini-bar__seg--average" style="width: {{ row.confidence_segment_pcts.average }}%"></span>
+                            <span class="confidence-mini-bar__seg confidence-mini-bar__seg--high" style="width: {{ row.confidence_segment_pcts.high }}%"></span>
+                        </div>
+                    </td>
+                    <td class="py-3 text-right">
+                        {% if row.session %}
+                        <a href="{% url 'reviews:summary' row.session.pk %}" class="text-link text-sm">Review</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-examiq-slate text-sm">No completed sessions yet.</p>
+    {% endif %}
 </div>
 {% endif %}

@@ -1,27 +1,22 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Heatmap - {{ course.section|default:course.code }}{% endblock %}
+{% block title %}Overview - {{ course.section|default:course.code }}{% endblock %}
 
 {% block content %}
-{% include "components/professor_section_header.html" with course=course page_label="Confidence Heatmap" %}
+{% include "components/professor_section_header.html" with course=course page_label="Overview" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
 {% if heatmap.callouts.low_confidence %}
 <div class="bento-card p-4 mb-4 border-l-4 border-amber-400">
     <p class="text-sm font-semibold text-examiq-navy">Low confidence alert</p>
     <p class="text-sm text-examiq-slate">Students reporting No or Low confidence on:
-        {% for q in heatmap.callouts.low_confidence %}Q{{ q.question_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% for q in heatmap.callouts.low_confidence %}{{ q.q_label }}{% if not forloop.last %}, {% endif %}{% endfor %}
     </p>
 </div>
 {% endif %}
 
-<div class="heatmap-view-tabs">
-    <a href="#class-view" class="course-nav-link course-nav-link-active">Class view</a>
-    <a href="#student-view" class="course-nav-link">Student view</a>
-</div>
-
-<div id="class-view" class="bento-card p-6 mb-6">
+<div class="bento-card p-6 mb-6">
     <div class="heatmap-card-header mb-4">
         <h2 class="text-lg font-semibold text-examiq-navy mb-0">Question breakdown</h2>
         <div class="heatmap-card-header__filters">
@@ -45,64 +40,44 @@
         <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapNextPage">Next</button>
     </div>
     <div class="overflow-x-auto">
-        <table class="w-full text-sm min-w-[640px]">
+        <table class="w-full text-sm min-w-[640px] course-overview-table">
             <thead>
-                <tr class="text-left text-examiq-slate border-b border-slate-100">
-                    <th class="pb-2 font-medium">Question</th>
-                    <th class="pb-2 font-medium">Topic</th>
+                <tr class="text-examiq-slate border-b border-slate-100">
+                    <th class="pb-2 font-medium text-center">Question</th>
                     <th class="pb-2 font-medium text-center">No Confidence</th>
                     <th class="pb-2 font-medium text-center">Low Confidence</th>
                     <th class="pb-2 font-medium text-center">Average Confidence</th>
                     <th class="pb-2 font-medium text-center">High Confidence</th>
+                    <th class="pb-2 font-medium text-center">Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="course-overview-table-body">
                 {% for question in heatmap.questions %}
-                <tr class="border-b border-slate-50">
-                    <td class="py-2 text-examiq-navy font-medium max-w-xs">{{ question.question_stem }}</td>
-                    <td class="py-2 text-examiq-slate text-xs">{{ question.topic_name }}</td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
+                <tr class="border-b border-slate-50 course-overview-row" data-row-index="{{ forloop.counter0 }}">
+                    <td class="py-2 text-examiq-navy font-medium max-w-xs">
+                        <span class="text-examiq-slate font-semibold mr-1">{{ question.q_label }}</span>
+                        {{ question.question_stem }}
+                    </td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
+                    <td class="py-2 text-center whitespace-nowrap">
+                        <a href="{% url 'analytics_professor:question_edit' course.pk question.question_id %}"
+                           class="text-link text-sm font-medium">Edit</a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+    <div class="heatmap-chart-pager mt-4" id="overviewTablePager" aria-label="Table pagination">
+        <button type="button" class="btn-secondary heatmap-chart-btn" id="overviewTablePrev">Previous</button>
+        <span class="heatmap-chart-page-label" id="overviewTablePageLabel">Page 1 of 1</span>
+        <button type="button" class="btn-secondary heatmap-chart-btn" id="overviewTableNext">Next</button>
+    </div>
     {% else %}
     <p class="text-examiq-slate">No answer data yet for this course.</p>
-    {% endif %}
-</div>
-
-<div id="student-view" class="bento-card p-6">
-    <h2 class="text-lg font-semibold text-examiq-navy mb-4">Student confidence</h2>
-    {% if heatmap.student_rows %}
-    {% load examiq_tags %}
-    <table class="w-full text-sm">
-        <thead>
-            <tr class="text-left text-examiq-slate border-b border-slate-100">
-                <th class="pb-2 font-medium">Student</th>
-                <th class="pb-2 font-medium">Dominant tier</th>
-                <th class="pb-2 font-medium">Answers</th>
-                <th class="pb-2 font-medium"></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in heatmap.student_rows %}
-            <tr class="border-b border-slate-50" id="student-{{ row.student_id }}">
-                <td class="py-2 text-examiq-navy font-medium">{{ row.student_name }}</td>
-                <td class="py-2"><span class="heatmap-cell heatmap-{{ row.dominant }}">{{ row.dominant|confidence_tier_badge }}</span></td>
-                <td class="py-2 text-examiq-slate">{{ row.total }}</td>
-                <td class="py-2 text-right">
-                    <a href="{% url 'analytics_professor:student_detail' course.pk row.student_id %}" class="text-link">Details</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="text-examiq-slate">No enrolled students with answer data.</p>
     {% endif %}
 </div>
 {% endblock %}
@@ -112,21 +87,67 @@
 <script src="{% static 'js/heatmap-priority-chart.js' %}"></script>
 <script>
 (function () {
-    const el = document.getElementById("heatmap-questions-data");
-    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderHeatmapPriorityChart) return;
-    const questionsData = JSON.parse(el.textContent);
-    window.ExamiQUI.renderHeatmapPriorityChart({
-        canvas: "heatmapChart",
-        wrapEl: "heatmapChartWrap",
-        prevBtn: "heatmapPrevPage",
-        nextBtn: "heatmapNextPage",
-        pageLabel: "heatmapPageLabel",
-        statusEl: "heatmapChartStatus",
-        pagerEl: "heatmapChartPager",
-        metricSelect: "heatmap-metric",
-        questions: questionsData,
-        pageSize: 10,
-    });
+    var el = document.getElementById("heatmap-questions-data");
+    if (el && window.ExamiQUI && window.ExamiQUI.renderHeatmapPriorityChart) {
+        window.ExamiQUI.renderHeatmapPriorityChart({
+            canvas: "heatmapChart",
+            wrapEl: "heatmapChartWrap",
+            prevBtn: "heatmapPrevPage",
+            nextBtn: "heatmapNextPage",
+            pageLabel: "heatmapPageLabel",
+            statusEl: "heatmapChartStatus",
+            pagerEl: "heatmapChartPager",
+            metricSelect: "heatmap-metric",
+            questions: JSON.parse(el.textContent),
+            pageSize: 10,
+        });
+    }
+
+    var PAGE = 10;
+    var rows = Array.prototype.slice.call(
+        document.querySelectorAll(".course-overview-row")
+    );
+    var page = 1;
+    var prevBtn = document.getElementById("overviewTablePrev");
+    var nextBtn = document.getElementById("overviewTableNext");
+    var label = document.getElementById("overviewTablePageLabel");
+    var pager = document.getElementById("overviewTablePager");
+
+    function totalPages() {
+        return Math.max(1, Math.ceil(rows.length / PAGE));
+    }
+
+    function renderTablePage() {
+        var pages = totalPages();
+        if (page > pages) page = pages;
+        var start = (page - 1) * PAGE;
+        var end = start + PAGE;
+        rows.forEach(function (row, index) {
+            row.classList.toggle("hidden", index < start || index >= end);
+        });
+        if (label) label.textContent = "Page " + page + " of " + pages;
+        if (prevBtn) prevBtn.disabled = page <= 1;
+        if (nextBtn) nextBtn.disabled = page >= pages;
+        if (pager) pager.classList.toggle("hidden", rows.length <= PAGE);
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener("click", function () {
+            if (page > 1) {
+                page -= 1;
+                renderTablePage();
+            }
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener("click", function () {
+            if (page < totalPages()) {
+                page += 1;
+                renderTablePage();
+            }
+        });
+    }
+    renderTablePage();
 })();
 </script>
 {% endblock %}

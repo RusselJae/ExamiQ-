@@ -1,6 +1,7 @@
 from django.db.models import Q
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from django.views import View
 from django.views.generic import ListView
 
@@ -52,26 +53,51 @@ def _course_concern_queryset(course):
 
 
 def _concern_item_payload(record: MistakeRecord) -> dict:
+    from django.urls import reverse
+
     answer = record.answer
     messages = serialize_concern_thread(record)
     latest_student = next(
         (m for m in reversed(messages) if m["author_role"] == "student"),
         None,
     )
+    latest_msg = messages[-1] if messages else None
     student = record.student
     name = student.get_full_name() or student.email
     if student.first_name and student.last_name:
         initials = (student.first_name[0] + student.last_name[0]).upper()
     else:
         initials = (name[:2] or "?").upper()
+    subject = None
+    if record.question_id and getattr(record.question, "topic_id", None):
+        subject = getattr(record.question.topic, "subject", None)
+    subject_code = subject.code if subject else ""
+    from apps.analytics.concern_services import user_avatar_url
+
+    # Faculty inbox preview: latest student message under the student name.
+    preview = ""
+    if latest_student:
+        preview = (latest_student.get("body") or "").strip()
+        if not preview and latest_student.get("image_url"):
+            preview = "Sent an image"
+    if not preview:
+        preview = (record.question.stem or "")[:80]
     return {
         "mistake_id": record.pk,
         "answer_id": answer.pk if answer else None,
         "student_name": name,
         "student_email": student.email,
         "student_initials": initials,
+        "student_avatar_url": user_avatar_url(student),
         "stem": record.question.stem,
         "topic": record.topic.name,
+        "subject_code": subject_code,
+        "preview": preview,
+        "last_message_at": (
+            (latest_msg.get("created_at") if latest_msg else "")
+            or (record.occurred_at.isoformat() if record.occurred_at else "")
+        ),
+        "submitted_work_url": "",
         "occurred_at": record.occurred_at.isoformat() if record.occurred_at else "",
         "user_answer": _answer_user_response(answer) if answer else "—",
         "correct_answer": _answer_correct_response(answer) if answer else "—",
@@ -292,6 +318,91 @@ class SectionFeedbackFacultyNoteView(ProfessorRequiredMixin, View):
 
         record = get_object_or_404(
             _section_concern_queryset(self.section),
+            pk=mistake_pk,
+        )
+        form = MistakeConcernForm(
+            {
+                "body": (
+                    request.POST.get("faculty_note")
+                    or request.POST.get("body")
+                    or ""
+                ),
+            },
+            request.FILES,
+        )
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": form.errors.as_text() or "Reply cannot be empty.",
+                },
+                status=400,
+            )
+        post_concern_message(
+            record,
+            request.user,
+            body=form.cleaned_data["body"],
+            image=form.cleaned_data.get("image"),
+        )
+        record.refresh_from_db()
+        return JsonResponse(
+            {
+                "ok": True,
+                "item": _concern_item_payload(record),
+            }
+        )
+
+
+class GlobalChatInboxView(ProfessorRequiredMixin, View):
+    """Legacy chat page — open global Chat modal on overview."""
+
+    def get(self, request):
+        url = reverse("analytics_professor:overview")
+        mistake_id = request.GET.get("mistake_id") or ""
+        qs = "open_chat=1"
+        if mistake_id:
+            qs += f"&mistake_id={mistake_id}"
+        return redirect(f"{url}?{qs}")
+
+
+class GlobalChatConcernsApiView(ProfessorRequiredMixin, View):
+    """JSON list of concerns for the global faculty Chat modal."""
+
+    def get(self, request):
+        from apps.analytics.concern_services import professor_concern_queryset
+
+        records = list(professor_concern_queryset(request.user)[:100])
+        items = [_concern_item_payload(record) for record in records]
+        active_id = request.GET.get("mistake_id")
+        active_mistake_id = None
+        if active_id and str(active_id).isdigit():
+            active_mistake_id = int(active_id)
+        elif items:
+            active_mistake_id = items[0]["mistake_id"]
+
+        if active_mistake_id:
+            record = next((r for r in records if r.pk == active_mistake_id), None)
+            if record:
+                mark_faculty_viewed(record)
+                mark_concern_notifications_read(request.user, active_mistake_id)
+
+        return JsonResponse(
+            {
+                "items": items,
+                "active_mistake_id": active_mistake_id,
+            }
+        )
+
+
+class GlobalChatFacultyNoteView(ProfessorRequiredMixin, View):
+    """Post a faculty reply from the global Chat inbox."""
+
+    def post(self, request, mistake_pk):
+        from apps.analytics.concern_services import professor_concern_queryset
+        from apps.analytics.forms import MistakeConcernForm
+
+        record = get_object_or_404(
+            professor_concern_queryset(request.user),
             pk=mistake_pk,
         )
         form = MistakeConcernForm(

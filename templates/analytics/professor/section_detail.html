@@ -15,8 +15,11 @@
     </div>
     <div class="span-half">
         <div class="bento-card bento-card--list bento-card-inner h-full">
-            <h2 class="text-lg font-semibold text-examiq-navy mb-4">Courses practiced</h2>
+            <h2 class="text-lg font-semibold text-examiq-navy mb-4">Subjects taken</h2>
             {% if summary.subject_breakdown %}
+            <p class="text-sm text-examiq-slate mb-3">
+                {{ summary.subject_breakdown|length }} subject{{ summary.subject_breakdown|length|pluralize }} practiced in this section.
+            </p>
             <ul class="space-y-2 bento-card-scroll">
                 {% for item in summary.subject_breakdown %}
                 <li class="flex justify-between items-center py-2 border-b border-slate-100 gap-3">
@@ -34,7 +37,7 @@
                 {% endfor %}
             </ul>
             {% else %}
-            {% include "components/empty_state.html" with compact=True title="No exam activity yet" body="When students in this section sit exams, courses show up here." %}
+            {% include "components/empty_state.html" with compact=True title="No exam activity yet" body="When students in this section sit exams, subjects show up here." %}
             {% endif %}
         </div>
     </div>

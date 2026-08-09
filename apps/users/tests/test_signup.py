@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from apps.users.models import Department, Program, ProgramSection
+from apps.users.models import Department, Program
 
 User = get_user_model()
 
@@ -30,56 +30,33 @@ def bsed_program(db):
     return program
 
 
-def _student_data(year_level, section_text="1M", **extra):
-    return {
-        **STUDENT_SIGNUP_DATA,
-        "year_level": year_level.pk,
-        "section": section_text,
-        **extra,
-    }
+def _student_data(**extra):
+    return {**STUDENT_SIGNUP_DATA, **extra}
 
 
 @pytest.mark.django_db
 class TestSignupRoles:
     def test_student_signup_creates_active_student(
-        self, client, year_level, bsed_program, academic_year
+        self, client, bsed_program
     ):
-        data = _student_data(year_level, "BSE 2-1M")
-        response = client.post(reverse("account_signup"), data)
+        response = client.post(reverse("account_signup"), _student_data())
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
         assert user.role == User.Role.STUDENT
         assert user.student_number == "123456789"
         assert user.phone_number == "09123456789"
         assert user.home_degree_program == User.HomeDegreeProgram.BSED_MATH
-        assert user.year_level_id == year_level.pk
-        assert user.section is not None
-        assert user.section.label == "1M"
-        assert user.section.display_label == "BSE 2-1M"
+        assert user.year_level is None
+        assert user.section is None
         assert user.is_active is True
         assert user.approval_status == User.ApprovalStatus.APPROVED
         assert user.first_name == "Ana"
         assert user.last_name == "Santos"
-        assert ProgramSection.objects.filter(
-            program=bsed_program, year_level=year_level, label="1M"
-        ).exists()
-
-    def test_student_signup_creates_new_section_when_typed(
-        self, client, year_level, bsed_program, academic_year
-    ):
-        data = _student_data(year_level, "3M")
-        response = client.post(reverse("account_signup"), data)
-        assert response.status_code == 302
-        assert ProgramSection.objects.filter(
-            program=bsed_program, year_level=year_level, label="3M"
-        ).exists()
 
     def test_student_signup_accepts_optional_middle_name_and_suffix(
-        self, client, year_level, bsed_program, academic_year
+        self, client, bsed_program
     ):
         data = _student_data(
-            year_level,
-            "1M",
             email="namedstudent@test.edu",
             student_number="987654321",
             middle_name="Marie",
@@ -93,9 +70,9 @@ class TestSignupRoles:
         assert user.get_full_name() == "Ana Marie Santos Jr."
 
     def test_student_signup_requires_first_and_last_name(
-        self, client, year_level, bsed_program, academic_year
+        self, client, bsed_program
     ):
-        data = _student_data(year_level, "1M", first_name="", last_name="")
+        data = _student_data(first_name="", last_name="")
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
@@ -141,9 +118,9 @@ class TestSignupRoles:
         assert not User.objects.filter(email="noprof@test.edu").exists()
 
     def test_student_signup_does_not_require_employee_id(
-        self, client, year_level, bsed_program, academic_year
+        self, client, bsed_program
     ):
-        data = _student_data(year_level, "1M", employee_id="")
+        data = _student_data(employee_id="")
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
@@ -167,13 +144,8 @@ class TestSignupRoles:
         assert response.status_code == 200
         assert not User.objects.filter(email="newchair@test.edu").exists()
 
-    def test_student_number_must_be_nine_digits(self, client, year_level):
-        data = {
-            **STUDENT_SIGNUP_DATA,
-            "student_number": "12345",
-            "year_level": year_level.pk,
-            "section": "1M",
-        }
+    def test_student_number_must_be_nine_digits(self, client):
+        data = {**STUDENT_SIGNUP_DATA, "student_number": "12345"}
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
@@ -220,4 +192,3 @@ class TestAuthTemplates:
         assert "Employee ID" in content
         assert "Subjects (choose at least 3)" not in content
         assert "Program" not in content or "home_degree_program" not in content
-        assert "1M or BSE 2-1M" in content

@@ -10,7 +10,7 @@
 <div class="bento-card p-4 mb-4 border-l-4 border-amber-400">
     <p class="text-sm font-semibold text-examiq-navy">Low confidence alert</p>
     <p class="text-sm text-examiq-slate">Students reporting No or Low confidence on:
-        {% for q in heatmap.callouts.low_confidence %}Q{{ q.question_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% for q in heatmap.callouts.low_confidence %}{{ q.q_label|default:q.question_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
     </p>
 </div>
 {% endif %}
@@ -65,9 +65,8 @@
     <div class="overflow-x-auto">
         <table class="w-full text-sm min-w-[640px]">
             <thead>
-                <tr class="text-left text-examiq-slate border-b border-slate-100">
-                    <th class="pb-2 font-medium">Question</th>
-                    <th class="pb-2 font-medium">Topic</th>
+                <tr class="text-examiq-slate border-b border-slate-100">
+                    <th class="pb-2 font-medium text-center">Question</th>
                     <th class="pb-2 font-medium text-center">No</th>
                     <th class="pb-2 font-medium text-center">Low</th>
                     <th class="pb-2 font-medium text-center">Average</th>
@@ -77,12 +76,14 @@
             <tbody>
                 {% for question in heatmap.questions %}
                 <tr class="border-b border-slate-50">
-                    <td class="py-2 text-examiq-navy max-w-xs">{{ question.question_stem }}</td>
-                    <td class="py-2 text-examiq-slate">{{ question.topic_name }}</td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
-                    <td class="py-2"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
+                    <td class="py-2 text-examiq-navy max-w-xs">
+                        <span class="text-examiq-slate font-semibold mr-1">{{ question.q_label }}</span>
+                        {{ question.question_stem }}
+                    </td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
+                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
                 </tr>
                 {% endfor %}
             </tbody>

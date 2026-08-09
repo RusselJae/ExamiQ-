@@ -17,31 +17,19 @@
         high: "#388E3C",
     };
 
-    function priorityScore(q) {
-        const total = Math.max(q.total || 0, 1);
-        const weak = (q.none || 0) + (q.low || 0);
-        return weak / total;
-    }
-
-    function sortByLowestConfidence(questions) {
+    function sortByQuestionNumber(questions) {
         return (questions || []).slice().sort(function (a, b) {
-            const pa = priorityScore(a);
-            const pb = priorityScore(b);
-            if (pb !== pa) return pb - pa;
-            const wa = (a.none || 0) + (a.low || 0);
-            const wb = (b.none || 0) + (b.low || 0);
-            if (wb !== wa) return wb - wa;
+            var na = a.q_number || 0;
+            var nb = b.q_number || 0;
+            if (na !== nb) return na - nb;
             return (a.question_id || 0) - (b.question_id || 0);
         });
     }
 
-    function sortByMostMistakes(questions) {
-        return (questions || []).slice().sort(function (a, b) {
-            const ma = a.mistakes || 0;
-            const mb = b.mistakes || 0;
-            if (mb !== ma) return mb - ma;
-            return (a.question_id || 0) - (b.question_id || 0);
-        });
+    function questionLabel(q) {
+        if (q && q.q_label) return q.q_label;
+        if (q && q.q_number) return "Q" + q.q_number;
+        return "Q?";
     }
 
     function chartHeight(visibleCount) {
@@ -102,10 +90,7 @@
         if (metric !== "mistakes") metric = "confidence";
 
         function sortedQuestions() {
-            if (metric === "mistakes") {
-                return sortByMostMistakes(options.questions);
-            }
-            return sortByLowestConfidence(options.questions);
+            return sortByQuestionNumber(options.questions);
         }
 
         let sorted = sortedQuestions();
@@ -122,10 +107,6 @@
         function updateChrome() {
             const start = (page - 1) * pageSize + 1;
             const end = Math.min(page * pageSize, sorted.length);
-            const orderNote =
-                metric === "mistakes"
-                    ? "most mistakes first"
-                    : "lowest confidence first";
 
             if (statusEl) {
                 statusEl.textContent =
@@ -135,9 +116,7 @@
                     end +
                     " of " +
                     sorted.length +
-                    " questions (" +
-                    orderNote +
-                    ")";
+                    " questions (Q1 → Qn)";
             }
             if (pageLabel) {
                 pageLabel.textContent = "Page " + page + " of " + totalPages;
@@ -224,7 +203,7 @@
             }
 
             const labels = slice.map(function (q) {
-                return "Q" + q.question_id;
+                return questionLabel(q);
             });
             const isMistakes = metric === "mistakes";
             const config = {
@@ -286,8 +265,7 @@
                                     const q = slice[idx];
                                     if (!q) return "";
                                     return (
-                                        "Q" +
-                                        q.question_id +
+                                        questionLabel(q) +
                                         " · " +
                                         truncateStem(q.question_stem, 72)
                                     );
@@ -350,6 +328,6 @@
 
     window.ExamiQUI = window.ExamiQUI || {};
     window.ExamiQUI.HEATMAP_TIER_COLORS = TIER_COLORS;
-    window.ExamiQUI.sortHeatmapQuestions = sortByLowestConfidence;
+    window.ExamiQUI.sortHeatmapQuestions = sortByQuestionNumber;
     window.ExamiQUI.renderHeatmapPriorityChart = renderHeatmapPriorityChart;
 })();

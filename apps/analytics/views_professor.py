@@ -14,6 +14,7 @@ from apps.analytics.services import (
     _subject_answers,
     course_performance_summary,
     get_intervention_list,
+    get_professor_students_with_exams,
     get_roster_summaries,
     get_section_heatmap,
     get_section_roster_summaries,
@@ -25,6 +26,7 @@ from apps.analytics.services import (
     section_heatmap_subjects,
     section_performance_summary,
     student_course_summary,
+    student_professor_summary,
     student_section_summary,
     student_subject_summary,
     subject_performance_summary,
@@ -34,6 +36,7 @@ from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
 from apps.questions.models import Subject
 from apps.reviews.exam_setup_services import get_or_create_section_exam_setup
 from apps.reviews.forms_professor import SectionExamSetupForm
+from apps.reviews.models import Answer, ReviewSession
 from apps.users.assignment_services import get_or_create_catalog_course
 from apps.users.models import Course, ProgramSection, User
 
@@ -66,6 +69,127 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["overview"] = professor_overview_summary(self.request.user)
         context["overview_trends"] = professor_overview_trends(self.request.user)
+        return context
+
+
+class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
+    """Students who completed exams on this professor's courses."""
+
+    template_name = "analytics/professor/students.html"
+    context_object_name = "roster"
+
+    def get_queryset(self):
+        roster = get_professor_students_with_exams(self.request.user)
+
+        search = get_filter_param(self.request, "q").lower()
+        if search:
+            roster = [
+                row
+                for row in roster
+                if search in (row["student"].get_full_name() or "").lower()
+                or search in row["student"].email.lower()
+            ]
+
+        sort = get_filter_param(self.request, "sort", "name")
+        if sort == "sessions":
+            roster = sorted(
+                roster, key=lambda row: row["sessions_completed"], reverse=True
+            )
+        elif sort == "recent":
+            roster = sorted(
+                roster,
+                key=lambda row: row["last_activity"] or row["student"].date_joined,
+                reverse=True,
+            )
+
+        return roster
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        filter_names = ["q", "sort"]
+        context["filter_form_fields"] = build_filter_fields(
+            self.request,
+            [
+                {
+                    "type": "search",
+                    "name": "q",
+                    "label": "Search",
+                    "placeholder": "Student name or email",
+                },
+                {
+                    "type": "select",
+                    "name": "sort",
+                    "label": "Sort by",
+                    "all_label": "Name",
+                    "choices": [
+                        ("sessions", "Sessions"),
+                        ("recent", "Recent activity"),
+                    ],
+                },
+            ],
+        )
+        context["filter_has_active"] = has_active_filters(self.request, filter_names)
+        context["filter_bar_compact"] = True
+        return context
+
+
+class ProfessorStudentDetailView(ProfessorRequiredMixin, DetailView):
+    """Student detail across all of this professor's courses."""
+
+    template_name = "analytics/professor/professor_student_detail.html"
+    context_object_name = "student"
+    pk_url_kwarg = "student_pk"
+
+    def get_object(self):
+        student = get_object_or_404(
+            User, pk=self.kwargs["student_pk"], role=User.Role.STUDENT
+        )
+        # Only allow students who completed an exam for this professor.
+        allowed = ReviewSession.objects.filter(
+            student=student,
+            course__professor=self.request.user,
+            status=ReviewSession.Status.COMPLETED,
+        ).exists()
+        if not allowed:
+            from django.http import Http404
+
+            raise Http404("Student has no completed exams for your courses.")
+        return student
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        professor = self.request.user
+        summary = student_professor_summary(self.object, professor)
+        peer_answers = Answer.objects.filter(session__course__professor=professor)
+        peer_accuracy = _peer_accuracy_for_answers(peer_answers)
+
+        context["summary"] = summary
+        context["detail_scope"] = "professor"
+
+        if summary["accuracy"] < peer_accuracy and summary["total_answers"]:
+            context["accuracy_subtext"] = "Below class average"
+        elif summary["accuracy"] >= 70:
+            context["accuracy_subtext"] = "On track"
+        elif summary["total_answers"]:
+            context["accuracy_subtext"] = "Room to improve"
+        else:
+            context["accuracy_subtext"] = "No answers yet"
+
+        if summary["avg_confidence"] >= 4 and summary["accuracy"] < 70:
+            context["confidence_subtext"] = "High confidence, low accuracy"
+        else:
+            context["confidence_subtext"] = ""
+
+        last_date = summary.get("last_session_date")
+        context["last_session_subtext"] = (
+            f"Last session {last_date.strftime('%b %d')}" if last_date else "No sessions yet"
+        )
+        context["review_hours_subtext"] = (
+            "Logged practice time" if summary["review_hours"] else "No review logged yet"
+        )
+        context["student_initials"] = _student_initials(self.object)
+        context["back_url"] = reverse("analytics_professor:students")
+        context["scope_label"] = "Your courses"
         return context
 
 

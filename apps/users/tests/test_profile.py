@@ -112,8 +112,6 @@ class TestProfileView:
                 "first_name": "Alex",
                 "middle_name": "",
                 "last_name": "Student",
-                "home_degree_program": student.home_degree_program,
-                "year_level": student.year_level_id,
                 "profile_photo": photo,
             },
         )

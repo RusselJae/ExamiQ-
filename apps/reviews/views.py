@@ -389,11 +389,23 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
         )
 
     def get_context_data(self, **kwargs):
+        import math
+
         context = super().get_context_data(**kwargs)
         session_summary = build_session_summary(self.object)
+        incorrect = max(
+            0,
+            session_summary["total_questions"] - session_summary["correct_count"],
+        )
+        circumference = 2 * math.pi * 42
+        fraction = (session_summary["accuracy"] or 0) / 100
         context["session_summary"] = session_summary
-        context["calibration_tier_max"] = session_summary["calibration_tier_max"]
-        context["recommendations"] = get_review_recommendations(self.request.user, limit=5)
+        context["incorrect_count"] = incorrect
+        context["score_ring_dasharray"] = f"{circumference:.2f}"
+        context["score_ring_dashoffset"] = f"{circumference * (1 - fraction):.2f}"
+        context["recommendations"] = get_review_recommendations(
+            self.request.user, limit=5
+        )
         context["feedback_url"] = reverse("reviews:session_generate_feedback", kwargs={"pk": self.object.pk})
         context["tutor_history_url"] = reverse("reviews:tutor_history", kwargs={"pk": self.object.pk})
         context["tutor_chat_url"] = reverse("reviews:tutor_chat", kwargs={"pk": self.object.pk})

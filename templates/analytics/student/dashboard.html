@@ -1,42 +1,40 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Student Dashboard - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Your Performance" subtitle="Track progress. Spot weak spots. Crush the exam." cta_url="/student/review/setup/" cta_label="Start Review" %}
+{% include "components/page_header.html" with title="Your Performance" subtitle="Track confidence and mistakes across your practice." cta_url="/student/review/setup/" cta_label="Start Review" %}
 
 <div class="bento-grid mb-6">
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.total_answers label="Total Answers" variant="navy" %}</div>
-    <div class="span-kpi">
-        {% if summary.accuracy >= 70 %}
-        {% include "components/stat_card.html" with value=summary.accuracy label="Average Score" variant="good" suffix="%" %}
-        {% elif summary.accuracy >= 50 %}
-        {% include "components/stat_card.html" with value=summary.accuracy label="Average Score" variant="warning" suffix="%" %}
-        {% else %}
-        {% include "components/stat_card.html" with value=summary.accuracy label="Average Score" variant="good" suffix="%" %}
-        {% endif %}
-    </div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.avg_confidence label="Average Confidence" variant="accent" %}</div>
-
-    <div class="span-chart">
-        <div class="bento-card bento-card--chart bento-card--elevated bento-card-inner h-full">
-            {% include "components/section_header.html" with label="Performance" title="Average Score Over Time" %}
-            <div id="accuracy-chart-wrap">
-                <canvas id="accuracyChart" height="200"></canvas>
+    <div class="span-9">
+        <div class="bento-card p-6 overview-trends-card h-full">
+            <div class="overview-trends-filters" id="student-trends-filters">
+                <div class="overview-trends-filter">
+                    <label for="student-trend-metric" class="overview-trends-filter__label">Metric</label>
+                    <select id="student-trend-metric" class="overview-trends-filter__select">
+                        <option value="confidence">Average confidence per session</option>
+                        <option value="mistakes">Mistakes per session</option>
+                    </select>
+                </div>
             </div>
-            <div id="accuracy-chart-empty" class="chart-empty-state hidden">
-                <svg class="chart-sparkline-placeholder" viewBox="0 0 200 48" fill="none" aria-hidden="true">
-                    <path d="M0 36 L40 28 L80 32 L120 20 L160 24 L200 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+            <div class="overview-trends-chart-wrap" id="studentTrendsChartWrap">
+                <canvas id="studentTrendsChart" aria-label="Student trend chart"></canvas>
+            </div>
+            <div id="student-trends-empty" class="chart-empty-state hidden">
                 <p class="empty-state-title">Not enough data yet</p>
-                <p class="empty-state-body">Complete a few review sessions to see your average score trend.</p>
+                <p class="empty-state-body">Complete a review session to see confidence and mistake trends.</p>
+            </div>
+            <div class="overview-trends-pager overview-trends-pager--center">
+                <button type="button" id="student-trends-prev" class="overview-trends-pager__btn">Previous</button>
+                <span id="student-trends-page-label" class="overview-trends-pager__label">—</span>
+                <button type="button" id="student-trends-next" class="overview-trends-pager__btn">Next</button>
             </div>
         </div>
     </div>
 
-    <div class="span-list">
-        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col">
+    <div class="span-3">
+        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col study-plan-card">
             {% include "components/section_header.html" with label="Study plan" title="Recommended Reviews" %}
             {% if recommendations %}
             <div class="bento-card-scroll flex-1">
@@ -66,20 +64,29 @@
 {% endblock %}
 
 {% block extra_js %}
-{{ summary.accuracy_trend|json_script:"accuracy-trend-data" }}
+{{ dashboard_trends|json_script:"student-trends-data" }}
+<script src="{% static 'js/overview-trends-chart.js' %}"></script>
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    const trendData = JSON.parse(document.getElementById("accuracy-trend-data").textContent);
-    if (window.ExamiQUI && window.ExamiQUI.renderAccuracyChart) {
-        window.ExamiQUI.renderAccuracyChart(
-            document.getElementById("accuracyChart"),
-            trendData,
-            {
-                emptyEl: document.getElementById("accuracy-chart-empty"),
-                wrapEl: document.getElementById("accuracy-chart-wrap"),
-            }
-        );
-    }
-});
+(function () {
+    var el = document.getElementById("student-trends-data");
+    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
+    window.ExamiQUI.renderOverviewTrendsChart({
+        canvas: "studentTrendsChart",
+        metricSelect: "student-trend-metric",
+        data: JSON.parse(el.textContent),
+        flatMode: true,
+        pageSize: 10,
+        defaultMetric: "confidence",
+        metricLabels: {
+            confidence: "Average confidence (0–3)",
+            mistakes: "Mistakes per session",
+        },
+        pageLabel: "student-trends-page-label",
+        prevBtn: "student-trends-prev",
+        nextBtn: "student-trends-next",
+        emptyEl: "student-trends-empty",
+        wrapEl: "studentTrendsChartWrap",
+    });
+})();
 </script>
 {% endblock %}

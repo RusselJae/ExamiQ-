@@ -29,14 +29,33 @@ def professor_can_access_subject(professor: User, subject) -> bool:
 
 
 def get_professor_course_queryset(professor: User):
-    """Courses from teaching assignments, falling back to legacy self-created courses."""
-    assignment_courses = Course.objects.filter(
-        teaching_assignment__professor=professor,
-        is_archived=False,
+    """Courses from teaching assignments, falling back to legacy self-created courses.
+
+    Always scoped to BSED Math subjects that still exist in the curriculum.
+    """
+    from apps.users.models import Program
+
+    bsed = Program.objects.filter(slug=User.HomeDegreeProgram.BSED_MATH).first()
+    keep_codes = set()
+    if bsed:
+        keep_codes = set(
+            Subject.objects.filter(program=bsed).values_list("code", flat=True)
+        )
+
+    def _scoped(qs):
+        qs = qs.filter(is_archived=False)
+        if bsed:
+            qs = qs.filter(program=bsed)
+        if keep_codes:
+            qs = qs.filter(code__in=keep_codes)
+        return qs
+
+    assignment_courses = _scoped(
+        Course.objects.filter(teaching_assignment__professor=professor)
     )
     if assignment_courses.exists():
         return assignment_courses
-    return Course.objects.filter(professor=professor, is_archived=False)
+    return _scoped(Course.objects.filter(professor=professor))
 
 
 def get_professor_section_nav(professor: User) -> list[dict]:

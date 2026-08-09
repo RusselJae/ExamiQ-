@@ -17,9 +17,9 @@
         </div>
 
         <div class="ai-tutor-modal__tabs chat-modal__tabs" role="tablist">
-            <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-tutor-screen="ai" role="tab" aria-selected="true">AI message</button>
-            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="solution" role="tab" aria-selected="false">Solution</button>
-            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="faculty" role="tab" aria-selected="false">Faculty</button>
+            <button type="button" class="ai-tutor-modal__tab ai-tutor-modal__tab--active" data-tutor-screen="solution" role="tab" aria-selected="true">Solution</button>
+            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="ai" role="tab" aria-selected="false">AI Conversation</button>
+            <button type="button" class="ai-tutor-modal__tab" data-tutor-screen="faculty" role="tab" aria-selected="false">Faculty Conversation</button>
         </div>
 
         <div class="ai-tutor-modal__body chat-modal__body">
@@ -29,28 +29,29 @@
             </div>
 
             <div id="ai-tutor-content" class="ai-tutor-modal__content hidden chat-modal__content">
-                <div id="ai-tutor-screen-ai" class="ai-tutor-screen chat-screen">
-                    <div class="chat-thread chat-thread--ai" id="ai-tutor-messages" role="log" aria-live="polite"></div>
-                </div>
-
-                <div id="ai-tutor-screen-solution" class="ai-tutor-screen chat-screen hidden">
+                <div id="ai-tutor-screen-solution" class="ai-tutor-screen chat-screen">
                     <div class="ai-tutor-feedback-panel" id="ai-tutor-feedback-panel">
                         <p class="ai-tutor-feedback-panel__eyebrow">Worked solution</p>
                         <h3 class="ai-tutor-feedback-panel__stem" id="ai-tutor-stem"></h3>
-                        <div class="ai-tutor-feedback-panel__section ai-tutor-feedback-panel__section--tight hidden" id="ai-tutor-why-section">
-                            <h4 class="ai-tutor-feedback-panel__label">Why this is wrong</h4>
-                            <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-why"></div>
+
+                        <div class="ai-tutor-answer-compare" id="ai-tutor-answer-compare">
+                            <div class="ai-tutor-answer-compare__col">
+                                <h4 class="ai-tutor-feedback-panel__label">Your answer</h4>
+                                <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-user-answer"></div>
+                            </div>
+                            <div class="ai-tutor-answer-compare__col">
+                                <h4 class="ai-tutor-feedback-panel__label">Correct answer</h4>
+                                <div class="ai-tutor-feedback-panel__text examiq-math-block" id="ai-tutor-correct-answer"></div>
+                            </div>
                         </div>
-                        <div class="ai-tutor-feedback-panel__section ai-tutor-feedback-panel__section--steps" id="ai-tutor-steps-section">
-                            <h4 class="ai-tutor-feedback-panel__label">Step-by-step</h4>
-                            <ol class="ai-tutor-solution-timeline examiq-math-block" id="ai-tutor-steps"></ol>
-                        </div>
-                        <div class="ai-tutor-feedback-panel__section ai-tutor-feedback-panel__section--final hidden" id="ai-tutor-final-section">
-                            <h4 class="ai-tutor-feedback-panel__label">Final answer</h4>
-                            <div class="ai-tutor-feedback-panel__final examiq-math-block" id="ai-tutor-final"></div>
-                        </div>
+
+                        <div id="ai-tutor-solution-visual" class="tutor-visual-host"></div>
                         <p class="ai-tutor-feedback-panel__meta" id="ai-tutor-meta"></p>
                     </div>
+                </div>
+
+                <div id="ai-tutor-screen-ai" class="ai-tutor-screen chat-screen hidden">
+                    <div class="chat-thread chat-thread--ai" id="ai-tutor-messages" role="log" aria-live="polite"></div>
                 </div>
 
                 <div id="ai-tutor-screen-faculty" class="ai-tutor-screen chat-screen hidden">

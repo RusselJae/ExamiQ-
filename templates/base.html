@@ -77,6 +77,14 @@
     {% include "components/summary_fab.html" %}
     {% endif %}
 
+    {% if show_chat_modal %}
+    {% include "components/chat_inbox_modal.html" %}
+    {% endif %}
+
+    {% if show_ai_tutor_modal %}
+    {% include "reviews/partials/ai_tutor_modal.html" %}
+    {% endif %}
+
     <script src="{% static 'js/examiq-ui.js' %}"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
@@ -102,6 +110,42 @@
     </script>
     {% if user.is_authenticated and user.role == "professor" and professor_courses %}
     <script src="{% static 'js/analytics-summary.js' %}"></script>
+    {% endif %}
+    {% if show_chat_modal %}
+    <script>
+    window.ExamiQChat = Object.assign(window.ExamiQChat || {}, {
+        role: "{{ user.role }}",
+        csrfToken: "{{ csrf_token }}",
+        concernsUrl: "{{ chat_concerns_url }}",
+        noteUrlBase: "{{ chat_note_url_base }}",
+        concernUrlTemplate: "{{ chat_concern_url_template }}",
+        selfAvatarUrl: "{{ chat_self_avatar_url|escapejs }}",
+        selfInitials: "{{ chat_self_initials|escapejs }}",
+        selfName: "{{ chat_self_name|escapejs }}"
+    });
+    </script>
+    <script src="{% static 'js/chat-inbox-modal.js' %}"></script>
+    {% endif %}
+    {% if show_ai_tutor_modal %}
+    <script src="{% static 'js/tutor-visual-response.js' %}"></script>
+    <script src="{% static 'js/ai-tutor-modal.js' %}"></script>
+    <script>
+    window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
+        csrfToken: "{{ csrf_token }}",
+        urlTemplates: {
+            history: "{{ tutor_url_templates.history }}",
+            chat: "{{ tutor_url_templates.chat }}",
+            feedback: "{{ tutor_url_templates.feedback }}",
+            concern: "{{ tutor_url_templates.concern }}"
+        },
+        concernUrlTemplate: "{{ tutor_url_templates.concern }}",
+        defaultSessionId: {% if tutor_default_session_id %}{{ tutor_default_session_id }}{% else %}null{% endif %},
+        markNotificationsUrl: "{% url 'users:notifications_mark_link' %}",
+        studentName: "{{ chat_self_name|escapejs }}",
+        studentAvatarUrl: "{{ chat_self_avatar_url|escapejs }}",
+        studentInitials: "{{ chat_self_initials|escapejs }}"
+    });
+    </script>
     {% endif %}
     {% block extra_js %}{% endblock %}
 </body>

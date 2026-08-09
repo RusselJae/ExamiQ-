@@ -29,8 +29,6 @@
 <div class="overview-kpi-grid mb-8">
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.course_count label="Active courses" icon="book" variant="neutral" %}</div>
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students practicing" icon="users" variant="neutral" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.accuracy label="Average Score" suffix="%" subtext="Across all sessions" icon="target" variant="accent" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.sessions_this_week label="Sessions this week" subtext=overview.sessions_subtext icon="clock" variant="warning" %}</div>
 </div>
 
 <div class="bento-card p-6 overview-trends-card">

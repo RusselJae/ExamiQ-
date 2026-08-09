@@ -194,7 +194,7 @@ def chat_with_fallback(
 
     detail = str(last_error) if last_error else "unknown error"
     user_message = _user_facing_message(last_error)
-    raise AIServiceUnavailableError(user_message, detail=detail)
+    raise AIServiceUnavailableError(user_message, detail=detail, retryable=_is_retriable(last_error))
 
 
 def _user_facing_message(exc: Exception | None) -> str:

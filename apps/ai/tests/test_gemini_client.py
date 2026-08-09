@@ -73,9 +73,10 @@ class TestGeminiClient:
     @patch("apps.ai.providers.gemini_client.list_available_models", return_value=["gemini-2.0-flash"])
     @patch("apps.ai.providers.gemini_client._generate_with_model", side_effect=Exception("404 not found"))
     def test_chat_with_fallback_skips_404_without_retry(self, mock_generate, _mock_list):
-        with pytest.raises(AIServiceUnavailableError):
+        with pytest.raises(AIServiceUnavailableError) as exc_info:
             gemini_client.chat_with_fallback("prompt")
         assert mock_generate.call_count == 1
+        assert exc_info.value.retryable is False
 
     @override_settings(
         GEMINI_API_KEY="test-key",
@@ -104,3 +105,4 @@ class TestGeminiClient:
         with pytest.raises(AIServiceUnavailableError) as exc_info:
             gemini_client.chat_with_fallback("prompt")
         assert "quota" in exc_info.value.message.lower()
+        assert exc_info.value.retryable is True

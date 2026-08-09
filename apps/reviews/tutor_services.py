@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from apps.ai.factory import get_tutor_engine
 from apps.reviews.models import Answer, Question, ReviewSession, TutorConversation, TutorMessage
 from apps.users.models import User
@@ -25,8 +27,9 @@ def _tutor_message_image_url(msg: TutorMessage) -> str:
 
 
 def conversation_messages_payload(conversation: TutorConversation) -> list[dict]:
-    return [
-        {
+    payload = []
+    for msg in conversation.messages.order_by("created"):
+        entry = {
             "id": msg.pk,
             "role": msg.role,
             "content": msg.content,
@@ -36,8 +39,10 @@ def conversation_messages_payload(conversation: TutorConversation) -> list[dict]
             ),
             "created_at": msg.created.isoformat(),
         }
-        for msg in conversation.messages.order_by("created")
-    ]
+        if msg.role == TutorMessage.Role.ASSISTANT:
+            entry["structured"] = parse_tutor_structured_reply(msg.content)
+        payload.append(entry)
+    return payload
 
 
 def conversation_history(conversation: TutorConversation, limit: int = 40) -> list[dict[str, str]]:
@@ -153,6 +158,8 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "correction_steps": steps,
                 "faculty_notes": faculty_notes,
                 "concern_messages": concern_messages,
+                "user_answer": _answer_user_response(answer),
+                "correct_answer": correct_answer,
                 "final_answer": correct_answer,
                 "topic": answer.question.topic.name,
                 "difficulty": answer.question.get_difficulty_display(),
@@ -185,6 +192,38 @@ def tutor_history_payload(session: ReviewSession, *, answer_id: int | None = Non
         "messages": messages,
         "active_answer_id": active_answer_id,
         "items": items,
+    }
+
+
+def parse_tutor_structured_reply(reply: str) -> dict | None:
+    """Extract structured tutor JSON from a model reply, if present."""
+    import re
+
+    text = (reply or "").strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", text)
+        if not match:
+            return None
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(data, dict):
+        return None
+    steps = data.get("steps")
+    if steps is not None and not isinstance(steps, list):
+        return None
+    return {
+        "steps": steps or [],
+        "answer": data.get("answer") or "",
+        "chart": data.get("chart"),
     }
 
 
@@ -233,6 +272,7 @@ def process_tutor_chat(
         question_context=question_context,
     )
 
+    structured = parse_tutor_structured_reply(reply)
     assistant_msg = TutorMessage.objects.create(
         conversation=conversation,
         role=TutorMessage.Role.ASSISTANT,
@@ -242,6 +282,7 @@ def process_tutor_chat(
 
     return {
         "reply": reply,
+        "structured": structured,
         "message_id": assistant_msg.pk,
         "user_message": {
             "id": user_msg.pk,

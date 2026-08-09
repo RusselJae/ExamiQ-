@@ -135,6 +135,7 @@ class OllamaQuestionGenerator(QuestionGenerator):
         raise AIServiceUnavailableError(
             "AI returned incomplete or invalid JSON. Try again with fewer questions.",
             detail=str(last_exc) if last_exc else last_raw[:500],
+            retryable=True,
         )
 
 
