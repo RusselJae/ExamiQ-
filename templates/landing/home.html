@@ -1,7 +1,7 @@
 {% extends "landing/base.html" %}
 {% load static %}
 
-{% block title %}ExamiQ+ — Master Mathematics with Confidence{% endblock %}
+{% block title %}ExamiQ+ — BSEd Mathematics Exam Review{% endblock %}
 
 {% block body %}
 {% include "components/landing_navbar.html" %}
@@ -11,12 +11,12 @@
         <div class="landing-hero__inner">
             <span class="landing-badge">
                 <span class="landing-badge__dot"></span>
-                Adaptive Learning
+                Confidence-Based Review
             </span>
             <h1 class="landing-hero__title">Master Mathematics with Confidence</h1>
             <p class="landing-hero__lead">
-                An adaptive exam review platform that boosts performance through dynamic feedback
-                and confidence-based testing — built for CSU Bacoor students.
+                A self-regulated exam review system for BSEd Mathematics students and faculty
+                at Cavite State University — Bacoor Campus.
             </p>
             <div class="landing-hero__actions">
                 <a href="{% url 'account_signup' %}" class="landing-btn landing-btn--primary">Get Started</a>
@@ -31,10 +31,10 @@
                 <div class="landing-about__copy">
                     <h2 class="landing-section-title">About ExamiQ+</h2>
                     <p class="landing-about__text">
-                        ExamiQ+ is a self-regulated mathematics exam review system designed for students
-                        at Cavite State University — Bacoor Campus. We replace static review materials
-                        with a modern, adaptive approach that helps you identify gaps, track mistakes,
-                        and build real confidence before exam day.
+                        ExamiQ+ helps BSEd Mathematics students prepare with timed exams, explicit
+                        confidence ratings, mistake history, and post-session feedback. Faculty set up
+                        exams, manage the question bank, and use analytics and chat to support the
+                        sections and subjects they handle.
                     </p>
                 </div>
                 <div class="landing-about__highlights">
@@ -44,7 +44,7 @@
                         </span>
                         <div>
                             <p class="landing-highlight__title">Weakness identification</p>
-                            <p class="landing-highlight__desc">Pinpoints where you struggle most</p>
+                            <p class="landing-highlight__desc">Surfaces topics and questions that need work</p>
                         </div>
                     </div>
                     <div class="landing-highlight">
@@ -53,7 +53,7 @@
                         </span>
                         <div>
                             <p class="landing-highlight__title">Mistake history</p>
-                            <p class="landing-highlight__desc">Review and revisit past errors</p>
+                            <p class="landing-highlight__desc">Review wrong answers by topic and confidence</p>
                         </div>
                     </div>
                     <div class="landing-highlight">
@@ -61,8 +61,8 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16l4-8 4 4 4-10 4 14"/></svg>
                         </span>
                         <div>
-                            <p class="landing-highlight__title">Confidence building</p>
-                            <p class="landing-highlight__desc">Adaptive flow that grows with you</p>
+                            <p class="landing-highlight__title">Confidence tracking</p>
+                            <p class="landing-highlight__desc">Rate how sure you are on every answer</p>
                         </div>
                     </div>
                 </div>
@@ -106,8 +106,8 @@
                 <span class="landing-feature-card__icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
                 </span>
-                <h3 class="landing-feature-card__title">Dynamic Feedback</h3>
-                <p class="landing-feature-card__desc">Instant, question-by-question explanations after each response — not just at the end.</p>
+                <h3 class="landing-feature-card__title">Feedback &amp; Explanations</h3>
+                <p class="landing-feature-card__desc">Practice shows step-by-step feedback after each answer; timed exams unlock explanations when you finish.</p>
             </article>
             <article class="landing-feature-card">
                 <span class="landing-feature-card__icon" aria-hidden="true">
@@ -118,32 +118,31 @@
             </article>
             <article class="landing-feature-card">
                 <span class="landing-feature-card__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 5-7 13-7 13S5 14 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2"/></svg>
-                </span>
-                <h3 class="landing-feature-card__title">Confidence-Based Flow</h3>
-                <p class="landing-feature-card__desc">Response time signals confidence — fast but wrong flags overconfidence automatically.</p>
-            </article>
-            <article class="landing-feature-card landing-feature-card--planned">
-                <span class="landing-feature-card__badge">Planned</span>
-                <span class="landing-feature-card__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M9 21V9M15 21V3M20 21v-5"/></svg>
-                </span>
-                <h3 class="landing-feature-card__title">Adaptive Questioning</h3>
-                <p class="landing-feature-card__desc">Difficulty adjusts to your performance, ensuring you're always challenged appropriately.</p>
-            </article>
-            <article class="landing-feature-card">
-                <span class="landing-feature-card__icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
                 </span>
                 <h3 class="landing-feature-card__title">Performance Analytics</h3>
-                <p class="landing-feature-card__desc">Charts showing accuracy over time, topic performance, and confidence vs competence.</p>
+                <p class="landing-feature-card__desc">Dashboards and heatmaps for accuracy, confidence patterns, and course-level insights.</p>
             </article>
             <article class="landing-feature-card">
                 <span class="landing-feature-card__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v2a8 8 0 11-8 0V6a4 4 0 014-4z"/><circle cx="12" cy="14" r="2"/></svg>
                 </span>
-                <h3 class="landing-feature-card__title">Light and Dark Mode</h3>
-                <p class="landing-feature-card__desc">Study at any hour with a simple theme toggle, saved to your preferences.</p>
+                <h3 class="landing-feature-card__title">AI Tutor</h3>
+                <p class="landing-feature-card__desc">Ask for guided help on mistakes without giving away the full answer up front.</p>
+            </article>
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 10h8M8 14h5"/><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Faculty–Student Chat</h3>
+                <p class="landing-feature-card__desc">Students raise concerns on mistakes; faculty reply for the sections and subjects they handle.</p>
+            </article>
+            <article class="landing-feature-card">
+                <span class="landing-feature-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
+                </span>
+                <h3 class="landing-feature-card__title">Question Bank &amp; Exam Setup</h3>
+                <p class="landing-feature-card__desc">Faculty author questions (including AI-assisted drafts) and control which courses students can take.</p>
             </article>
         </div>
     </section>
@@ -152,7 +151,7 @@
 <footer class="landing-footer">
     <div class="landing-footer__inner">
         {% include "components/landing_logo.html" %}
-        <p class="landing-footer__copy">&copy; {% now "Y" %} ExamiQ+. Cavite State University — Bacoor Campus.</p>
+        <p class="landing-footer__copy">&copy; {% now "Y" %} ExamiQ+. Cavite State University — Bacoor Campus. BSEd Mathematics.</p>
     </div>
 </footer>
 {% endblock %}

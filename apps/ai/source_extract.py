@@ -23,6 +23,17 @@ class SourceMaterialError(ValueError):
     """Raised when an uploaded file cannot be read as learning material."""
 
 
+# Markers that appear in raw PDF object syntax but never in real prose.
+_PDF_SYNTAX_MARKERS = ("/Type", "/Pages", "/Catalog", "endobj", "0 R", "/MediaBox")
+
+
+def _is_pdf_syntax(text: str) -> bool:
+    """Return True if text looks like raw PDF object syntax, not readable content."""
+    sample = text[:3000]
+    hits = sum(1 for m in _PDF_SYNTAX_MARKERS if m in sample)
+    return hits >= 3
+
+
 def extract_text_from_upload(uploaded_file) -> str:
     """Return truncated plain text (legacy helper for short prompts)."""
     pages = extract_pages_from_upload(uploaded_file)
@@ -68,6 +79,14 @@ def extract_pages_from_upload(uploaded_file) -> list[dict]:
         raise SourceMaterialError(
             "Could not extract enough text from that file. Try a clearer document."
         )
+
+    combined_head = " ".join(p["text"] for p in cleaned[:3])
+    if _is_pdf_syntax(combined_head):
+        raise SourceMaterialError(
+            "This PDF appears to be image-based and its text could not be read. "
+            "Please upload a text-based PDF, DOCX, or TXT file instead."
+        )
+
     return cleaned
 
 
@@ -143,6 +162,27 @@ def _extract_pdf_pages(raw: bytes) -> list[dict]:
     """
     page_texts = _extract_pdf_text_pages(raw)
     if page_texts is None:
+        # If we can't extract any embedded text layer, we must avoid the
+        # "raw PDF syntax" fallback (e.g. "%PDF-1.4 ...") because the
+        # relevance gate and question generation prompts rely on real words.
+        #
+        # Prefer OCR when available; if OCR yields too little text, fall back
+        # to the raw printable-byte scan as a last resort.
+        ocr_page = _build_ocr_function()
+        if ocr_page is not None:
+            pages = []
+            extracted_chars = 0
+            for index in range(1, MAX_OCR_PAGES + 1):
+                try:
+                    text = (ocr_page(raw, index) or "").strip()
+                except Exception as exc:
+                    logger.warning("OCR failed for PDF page %s: %s", index, exc)
+                    text = ""
+                extracted_chars += len(text)
+                pages.append({"page": index, "text": text})
+            if extracted_chars >= 40:
+                return pages
+
         chunks = re.findall(rb"[\x20-\x7E]{6,}", raw)
         text = " ".join(c.decode("latin-1", errors="ignore") for c in chunks)
         return [{"page": 1, "text": text}]
@@ -181,7 +221,10 @@ def _extract_pdf_text_pages(raw: bytes) -> list[str] | None:
         logger.warning("pypdf text extraction failed (%s); trying PyMuPDF.", exc)
 
     try:
-        import fitz
+        try:
+            import pymupdf as fitz  # PyMuPDF >= 1.24 preferred import
+        except ImportError:
+            import fitz  # legacy alias still present in older versions
 
         doc = fitz.open(stream=raw, filetype="pdf")
         try:
@@ -199,7 +242,10 @@ def _build_ocr_function():
     """Return an (raw_bytes, page_number) -> text callable, or None when
     the OCR stack (PyMuPDF + pytesseract + PIL) is not available."""
     try:
-        import fitz
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz
         import pytesseract
         from PIL import Image
     except ImportError:
@@ -209,7 +255,7 @@ def _build_ocr_function():
         )
         return None
 
-    def _ocr_page(raw: bytes, page_number: int) -> str:
+    def _ocr_page(raw: bytes, page_number: int) -> str:  # fitz bound from outer scope
         doc = fitz.open(stream=raw, filetype="pdf")
         try:
             if page_number > len(doc):

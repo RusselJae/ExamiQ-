@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags humanize %}
+{% load crispy_forms_tags humanize static %}
 
 {% block title %}Profile - EXAMIQ+{% endblock %}
 
@@ -8,7 +8,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Profile" subtitle="Manage your account details, login email, and password." %}
 
-<div class="profile-bento">
+<div class="profile-bento{% if user.role == 'professor' %} profile-bento--faculty{% endif %}">
     {# Summary card #}
     <div class="profile-bento-hero bento-card profile-card profile-hero bento-card--elevated">
         <div class="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -35,13 +35,19 @@
                     {% if user.role == "student" and user.get_home_degree_program_display %}
                     <span class="profile-pill">{{ user.get_home_degree_program_display }}</span>
                     {% endif %}
+                    {% if user.role == "student" and user.year_level %}
+                    <span class="profile-pill">{{ user.year_level.name }}</span>
+                    {% endif %}
+                    {% if user.role == "student" and user.section %}
+                    <span class="profile-pill">{{ user.section.display_label }}</span>
+                    {% endif %}
                     <span class="profile-pill">Member since {{ user.date_joined|date:"M Y" }}</span>
                 </div>
             </div>
         </div>
     </div>
 
-    {# Row 2 — personal details | account activity #}
+    {# Personal details #}
     <div class="profile-bento-personal bento-card profile-card">
         <h2 class="profile-card-title">Personal details</h2>
         <form method="post" action="{% url 'users:profile' %}" enctype="multipart/form-data" class="profile-card-form" id="profile-update-form">
@@ -57,6 +63,19 @@
                     {{ profile_form.middle_name|as_crispy_field }}
                     {{ profile_form.suffix|as_crispy_field }}
                 </div>
+                {% if profile_form.year_level or profile_form.section %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <p class="text-sm font-semibold text-examiq-navy mb-3">Enrollment</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {% if profile_form.year_level %}
+                        {{ profile_form.year_level|as_crispy_field }}
+                        {% endif %}
+                        {% if profile_form.section %}
+                        {{ profile_form.section|as_crispy_field }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
             <div class="profile-card-footer">
                 <button type="submit" class="btn-primary btn-primary-sm">Save profile</button>
@@ -64,6 +83,7 @@
         </form>
     </div>
 
+    {# Account activity #}
     <div class="profile-bento-activity bento-card profile-card">
         <h2 class="profile-card-title">Account activity</h2>
         <ul class="profile-activity-list">
@@ -101,7 +121,61 @@
         </ul>
     </div>
 
-    {# Row 3 — login email | password #}
+    {% if user.role == "professor" %}
+    {# Teaching assignments — fields submit with profile-update-form via form= attr #}
+    <div class="profile-bento-teaching bento-card profile-card">
+        <div class="profile-teaching-header">
+            <div>
+                <h2 class="profile-card-title profile-card-title--flush">Teaching assignments</h2>
+                <p class="profile-teaching-hint">
+                    Chat only reaches you when the student’s section and course subject both match.
+                    Leave subjects empty to receive no messages.
+                </p>
+            </div>
+            <button type="submit" form="profile-update-form" class="btn-primary btn-primary-sm profile-teaching-save">
+                Save assignments
+            </button>
+        </div>
+        <div class="profile-teaching-grid">
+            <div class="profile-teaching-field">
+                <label class="profile-teaching-label" for="{{ profile_form.assigned_sections.id_for_label }}">
+                    {{ profile_form.assigned_sections.label }}
+                </label>
+                <div class="multi-select"
+                     data-multi-select
+                     data-search
+                     data-select-all
+                     data-empty-label="Select sections"
+                     data-search-placeholder="Search sections…"
+                     data-selected-heading="Selected sections">
+                    {{ profile_form.assigned_sections }}
+                </div>
+                {% if profile_form.assigned_sections.errors %}
+                <p class="profile-field-error">{{ profile_form.assigned_sections.errors.0 }}</p>
+                {% endif %}
+            </div>
+            <div class="profile-teaching-field">
+                <label class="profile-teaching-label" for="{{ profile_form.assigned_subjects.id_for_label }}">
+                    {{ profile_form.assigned_subjects.label }}
+                </label>
+                <div class="multi-select"
+                     data-multi-select
+                     data-search
+                     data-select-all
+                     data-empty-label="Select course subjects"
+                     data-search-placeholder="Search course subjects…"
+                     data-selected-heading="Selected course subjects">
+                    {{ profile_form.assigned_subjects }}
+                </div>
+                {% if profile_form.assigned_subjects.errors %}
+                <p class="profile-field-error">{{ profile_form.assigned_subjects.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Login email #}
     <div class="profile-bento-email bento-card profile-card">
         <h2 class="profile-card-title">Login email</h2>
         <div class="profile-card-body">
@@ -130,6 +204,7 @@
         </div>
     </div>
 
+    {# Password #}
     <div class="profile-bento-password bento-card profile-card">
         <h2 class="profile-card-title">Password</h2>
         <form method="post" action="{% url 'users:profile' %}" class="profile-card-form">
@@ -173,6 +248,9 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if user.role == "professor" %}
+<script src="{% static 'js/multi-select-dropdown.js' %}"></script>
+{% endif %}
 <script>
 (function() {
     const photoInput = document.getElementById("id_profile_photo");

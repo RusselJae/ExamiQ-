@@ -2,10 +2,61 @@
 
 from __future__ import annotations
 
+import json
 import random
+import re
+
+from apps.ai.prompts import coerce_generate_question_type
+from apps.questions.models import Question
 
 LABELS = ("A", "B", "C", "D")
 _BATCH_ROTATION = ("B", "C", "D", "A")
+_FEEDBACK_JSON_KEYS = ("feedback", "why_wrong", "message", "text")
+
+
+_LABEL_PREFIX_RE = re.compile(
+    r"^(query|focus|redirect|instruction|note|context|metadata|system|response type)\s*:\s*",
+    re.IGNORECASE,
+)
+
+
+def _strip_internal_meta_prefixes(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lines.append(_LABEL_PREFIX_RE.sub("", stripped).strip())
+    return "\n".join(lines).strip()
+
+
+def normalize_feedback_text(raw: str) -> str:
+    """Return plain feedback text, stripping JSON wrappers when present."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text).strip()
+
+    candidates = [text]
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        candidates.append(match.group(0))
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            for key in _FEEDBACK_JSON_KEYS:
+                value = data.get(key)
+                if value:
+                    return _strip_internal_meta_prefixes(str(value).strip())
+
+    return _strip_internal_meta_prefixes(text)
 
 
 def _normalize_label(label: str) -> str:
@@ -132,17 +183,86 @@ def _vary_batch_positions(questions: list[dict]) -> list[dict]:
     return questions
 
 
+def _coerce_text(value) -> str:
+    """Coerce model JSON values (bool/int/list) into a comparable string."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return "\n".join(_coerce_text(item) for item in value if _coerce_text(item))
+    return str(value).strip()
+
+
+def _normalize_true_false_answer(value) -> str:
+    text = _coerce_text(value).casefold()
+    if text in {"true", "t", "yes", "1"}:
+        return "True"
+    if text in {"false", "f", "no", "0"}:
+        return "False"
+    return _coerce_text(value)
+
+
+def _normalize_identification_answer(value) -> str:
+    return re.sub(r"\s+", " ", _coerce_text(value))
+
+
+def _normalize_enumeration_answer(value) -> str:
+    if isinstance(value, (list, tuple)):
+        items = [_coerce_text(part) for part in value]
+        items = [re.sub(r"\s+", " ", item) for item in items if item]
+        return "\n".join(items)
+    parts = re.split(r"[\n|;]+", _coerce_text(value))
+    items = [re.sub(r"\s+", " ", part.strip()) for part in parts if part.strip()]
+    return "\n".join(items)
+
+
+def _normalize_generated_item(raw: dict, rng: random.Random) -> dict:
+    item = dict(raw)
+    item.pop("explanation_steps", None)
+    item.pop("solution_summary", None)
+
+    qtype = coerce_generate_question_type(item.get("question_type"))
+    item["question_type"] = qtype
+    item["stem"] = _coerce_text(item.get("stem"))
+    item["concept_tag"] = _coerce_text(item.get("concept_tag"))
+
+    if qtype == Question.QuestionType.MCQ:
+        return randomize_choice_positions(item, rng)
+
+    item.pop("choices", None)
+    item.pop("correct_label", None)
+    expected = item.get("expected_answer")
+    if qtype == Question.QuestionType.TRUE_FALSE:
+        item["expected_answer"] = _normalize_true_false_answer(expected)
+    elif qtype == Question.QuestionType.IDENTIFICATION:
+        item["expected_answer"] = _normalize_identification_answer(expected)
+    elif qtype == Question.QuestionType.ENUMERATION:
+        item["expected_answer"] = _normalize_enumeration_answer(expected)
+    else:
+        item["expected_answer"] = _coerce_text(expected)
+    return item
+
+
 def normalize_generated_questions(
     questions: list[dict],
     rng: random.Random | None = None,
+    *,
+    question_type: str | None = None,
 ) -> list[dict]:
-    """Reconcile choices and randomize correct-answer positions."""
+    """Normalize AI question payloads for the requested type."""
     if not questions:
         return []
 
     randomizer = rng or random.Random()
-    result = [
-        randomize_choice_positions(dict(raw), randomizer)
-        for raw in questions
-    ]
-    return _vary_batch_positions(result)
+    default_type = coerce_generate_question_type(question_type) if question_type else None
+    result: list[dict] = []
+    for raw in questions:
+        payload = dict(raw)
+        if default_type and not payload.get("question_type"):
+            payload["question_type"] = default_type
+        result.append(_normalize_generated_item(payload, randomizer))
+
+    if result and result[0].get("question_type") == Question.QuestionType.MCQ:
+        return _vary_batch_positions(result)
+    return result

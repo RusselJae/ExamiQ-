@@ -17,20 +17,20 @@
     {% if not course_subject %}
     {% include "components/empty_state.html" with compact=True title="No subject linked" body="This course has no matching curriculum subject yet. Create or assign a subject with the same course code." %}
     {% elif topics %}
-    <table class="w-full text-sm">
+    <table class="data-table">
         <thead>
-            <tr class="text-left text-examiq-slate border-b border-slate-200">
-                <th class="pb-3 pr-4 font-medium">Topic name</th>
-                <th class="pb-3 pr-4 font-medium">Subject</th>
-                <th class="pb-3 font-medium w-32"></th>
+            <tr>
+                <th>Topic name</th>
+                <th>Subject</th>
+                <th class="w-32"></th>
             </tr>
         </thead>
         <tbody>
             {% for topic in topics %}
-            <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
-                <td class="py-3 pr-4 text-examiq-navy">{{ topic.name }}</td>
-                <td class="py-3 pr-4 text-examiq-slate">{{ topic.subject.code }}</td>
-                <td class="py-3 whitespace-nowrap text-right">
+            <tr>
+                <td>{{ topic.name }}</td>
+                <td class="text-examiq-slate">{{ topic.subject.code }}</td>
+                <td class="whitespace-nowrap text-right">
                     <button type="button"
                             class="edit-topic-btn text-link text-sm font-medium mr-3"
                             data-id="{{ topic.pk }}"

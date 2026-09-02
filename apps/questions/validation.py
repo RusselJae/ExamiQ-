@@ -94,6 +94,78 @@ def validate_numeric_structure(
     return {"is_valid": not errors, "errors": errors}
 
 
+def validate_text_answer_structure(
+    stem: str,
+    expected_answer: str | None,
+    *,
+    question_type: str,
+) -> dict:
+    """Return {is_valid, errors} for True/False, Identification, Enumeration."""
+    errors: list[str] = []
+    stem_clean = (stem or "").strip()
+    if len(stem_clean) < 5:
+        errors.append("Question stem is too short.")
+
+    expected = (expected_answer or "").strip()
+    if not expected:
+        errors.append("Expected answer is required for this question type.")
+        return {"is_valid": False, "errors": errors}
+
+    if question_type == "true_false":
+        normalized = expected.casefold()
+        if normalized not in {"true", "false", "t", "f", "yes", "no"}:
+            errors.append("True/False expected answer must be True or False.")
+    elif question_type == "enumeration":
+        items = [
+            part.strip()
+            for part in expected.replace("|", "\n").replace(";", "\n").splitlines()
+            if part.strip()
+        ]
+        if len(items) < 2:
+            errors.append("Enumeration needs at least two expected items (one per line).")
+
+    return {"is_valid": not errors, "errors": errors}
+
+
+def _subject_relevance_block(
+    stem: str,
+    topic,
+    *,
+    ai_enabled: bool,
+) -> dict | None:
+    """Return a validation failure dict when the stem is off-subject."""
+    stem_clean = (stem or "").strip()
+    if not ai_enabled or topic is None or len(stem_clean) < 5:
+        return None
+
+    from apps.ai.subject_relevance import assess_question_subject_relevance
+
+    subject = getattr(topic, "subject", None)
+    if subject is None:
+        return None
+
+    relevance = assess_question_subject_relevance(stem_clean, subject, topic)
+    if relevance.get("related"):
+        return None
+
+    code = getattr(subject, "code", "") or ""
+    name = getattr(subject, "name", "") or "this course subject"
+    feedback = (relevance.get("reason") or "").strip()
+    if not feedback:
+        feedback = (
+            f"This question does not look related to {code} — {name}. "
+            "Write a stem that matches this subject."
+        )
+    return {
+        "is_valid": False,
+        "topic_relevant": False,
+        "answer_correct": False,
+        "feedback": feedback,
+        "suggested_concept_tag": "",
+        "errors": [feedback],
+    }
+
+
 def validate_question_for_submit(
     stem: str,
     choices: list[dict],
@@ -106,10 +178,19 @@ def validate_question_for_submit(
     exclude_pk: int | None = None,
     question_type: str = "mcq",
     correct_answer: str | None = None,
+    expected_answer: str | None = None,
 ) -> dict:
     """Structural + duplicate + optional AI validation. Returns validator-shaped dict."""
+    subject_block = _subject_relevance_block(stem, topic, ai_enabled=ai_enabled)
+    if subject_block is not None:
+        return subject_block
+
     if question_type == "numeric":
         structure = validate_numeric_structure(stem, correct_answer)
+    elif question_type in {"true_false", "identification", "enumeration"}:
+        structure = validate_text_answer_structure(
+            stem, expected_answer, question_type=question_type
+        )
     else:
         structure = validate_question_structure(stem, choices, correct_label)
 
@@ -153,6 +234,17 @@ def validate_question_for_submit(
 
     result = get_question_validator().validate(stem, choices, topic, difficulty, correct_label)
     result["errors"] = structure["errors"]
+    if not result.get("topic_relevant", True) and topic is not None:
+        subject = getattr(topic, "subject", None)
+        code = getattr(subject, "code", "") if subject else ""
+        name = getattr(subject, "name", "") if subject else "this subject"
+        if not (result.get("feedback") or "").strip() or code.lower() not in (
+            result.get("feedback") or ""
+        ).lower():
+            result["feedback"] = (
+                f"This question does not fit {code} — {name}. "
+                f"{(result.get('feedback') or '').strip()}".strip()
+            )
     if not result.get("is_valid"):
         result["errors"] = structure["errors"] + [result.get("feedback") or "AI validation failed."]
     return result

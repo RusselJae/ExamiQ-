@@ -81,7 +81,9 @@
                 validation: null,
                 question_type: "mcq",
             };
-            data.question_type = "mcq";
+            if (!data.question_type) {
+                data.question_type = "mcq";
+            }
             config.ensureFieldsForIndex(i);
             config.setQuestionData(i, data);
             config.renderTableRow(i);

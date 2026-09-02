@@ -6,7 +6,7 @@
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 1 course subject and a difficulty. At least 3 questions per course subject, up to 70 total — shuffled and timed." %}
+{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick at least 1 course subject, one or more question types, and a difficulty. At least 3 questions per course subject, up to 70 total — shuffled and timed." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
 <div class="bento-card p-6 mb-6">
@@ -41,11 +41,28 @@
 
             <div class="student-setup-field">
                 <span class="student-setup-field__label">{{ form.subjects.label }}</span>
-                <div class="multi-select" data-multi-select data-selected-heading="Selected course subjects" data-select-all>
+                <div class="multi-select" data-multi-select data-search data-selected-heading="Selected course subjects" data-select-all>
                     {{ form.subjects }}
                 </div>
                 {% if form.subjects.errors %}
                 <p class="student-setup-field__error">{{ form.subjects.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <div class="student-setup-field">
+                <span class="student-setup-field__label">{{ form.question_type.label }}</span>
+                <div class="multi-select"
+                     data-multi-select
+                     data-search
+                     data-empty-label="Select question types"
+                     data-search-placeholder="Search question types…"
+                     data-selected-heading="Selected question types"
+                     data-locked-values="mcq"
+                     data-locked-badge="default">
+                    {{ form.question_type }}
+                </div>
+                {% if form.question_type.errors %}
+                <p class="student-setup-field__error">{{ form.question_type.errors.0 }}</p>
                 {% endif %}
             </div>
 
@@ -65,7 +82,6 @@
 
 {% if setup_eligibility.eligible and not no_exams_available %}
 {% include "reviews/partials/pre_exam_modals.html" %}
-<script id="pre-exam-warmup-data" type="application/json">{{ warmup_json|safe }}</script>
 {% endif %}
 {% endblock %}
 

@@ -21,7 +21,7 @@
 
     <div class="bento-card bento-card--elevated p-6 shadow-sm space-y-4">
         <h2 class="text-lg font-semibold text-examiq-navy">Question details</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label for="{{ form.topic.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Topic</label>
                 {{ form.topic }}
@@ -31,6 +31,11 @@
                 <label for="{{ form.difficulty.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Difficulty</label>
                 {{ form.difficulty }}
                 {% if form.difficulty.errors %}<p class="text-red-600 text-xs mt-1">{{ form.difficulty.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.question_type.id_for_label }}" class="block text-sm font-medium text-examiq-slate mb-1">Question type</label>
+                {{ form.question_type }}
+                {% if form.question_type.errors %}<p class="text-red-600 text-xs mt-1">{{ form.question_type.errors.0 }}</p>{% endif %}
             </div>
         </div>
         <div>
@@ -44,7 +49,7 @@
         </div>
     </div>
 
-    <div class="bento-card bento-card--elevated p-6 shadow-sm">
+    <div id="mcq-choices-card" class="bento-card bento-card--elevated p-6 shadow-sm">
         <h2 class="text-lg font-semibold text-examiq-navy mb-1">Answer choices</h2>
         <p class="text-xs text-examiq-slate mb-4">Mark exactly one choice as correct.</p>
         {{ choice_formset.management_form }}
@@ -69,6 +74,15 @@
         </div>
     </div>
 
+    <div id="expected-answer-card" class="bento-card bento-card--elevated p-6 shadow-sm hidden">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-1">Expected answer</h2>
+        <p class="text-xs text-examiq-slate mb-4" id="expected-answer-help">
+            Enter the correct answer students should match.
+        </p>
+        {{ form.expected_answer }}
+        {% if form.expected_answer.errors %}<p class="text-red-600 text-xs mt-1">{{ form.expected_answer.errors.0 }}</p>{% endif %}
+    </div>
+
     <div class="bento-card p-4 shadow-sm flex items-center justify-between">
         <label for="{{ form.is_active.id_for_label }}" class="inline-flex items-center gap-2 text-sm text-examiq-navy cursor-pointer">
             {{ form.is_active }}
@@ -83,7 +97,33 @@
 <script>
 (function() {
     const form = document.getElementById("question-edit-form");
-    if (!form) return;
+    const typeSelect = document.getElementById("id_question_type");
+    const mcqCard = document.getElementById("mcq-choices-card");
+    const expectedCard = document.getElementById("expected-answer-card");
+    const help = document.getElementById("expected-answer-help");
+    if (!form || !typeSelect) return;
+
+    function syncTypeUi() {
+        const type = typeSelect.value || "mcq";
+        const isMcq = type === "mcq";
+        if (mcqCard) mcqCard.classList.toggle("hidden", !isMcq);
+        if (expectedCard) expectedCard.classList.toggle("hidden", isMcq);
+        if (help) {
+            if (type === "true_false") {
+                help.textContent = "Enter True or False.";
+            } else if (type === "enumeration") {
+                help.textContent = "List each expected item on its own line. Students must include all items.";
+            } else if (type === "identification") {
+                help.textContent = "Enter the exact phrase or term students should identify.";
+            } else {
+                help.textContent = "Enter the correct answer students should match.";
+            }
+        }
+    }
+
+    typeSelect.addEventListener("change", syncTypeUi);
+    syncTypeUi();
+
     form.addEventListener("change", function(e) {
         if (e.target.classList.contains("correct-choice-cb") && e.target.checked) {
             form.querySelectorAll(".correct-choice-cb").forEach(function(cb) {

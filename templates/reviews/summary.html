@@ -82,7 +82,7 @@
                             {{ rec.priority|capfirst }} priority{% if rec.is_due %} — due now{% endif %}
                         </span>
                     </div>
-                    <a href="{% url 'reviews:setup' %}" class="btn-primary btn-primary-sm shrink-0">Review</a>
+                    <a href="{% url 'reviews:setup' %}?subject={{ rec.topic.subject_id }}" class="btn-primary btn-primary-sm shrink-0">Review</a>
                 </li>
                 {% endfor %}
             </ul>

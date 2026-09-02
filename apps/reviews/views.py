@@ -7,18 +7,18 @@ from django.views import View
 from django.views.generic import DetailView
 
 from apps.core.mixins import StudentRequiredMixin
-from apps.questions.models import Question, Topic
+from apps.questions.models import Question, Subject, Topic
 from apps.questions.services import count_available_questions, get_adaptive_questions_for_session
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
 from apps.reviews.exam_setup_services import (
     assignment_for_student_subject,
     exam_seconds_per_question,
     student_setup_eligibility,
+    subjects_available_for_student,
 )
 from apps.reviews.recommendations import build_session_summary, get_review_recommendations
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
 from apps.reviews.models import Answer, ReviewSession
-from apps.reviews.warmups import random_warmup
 from apps.analytics.confidence import confidence_from_time_spent
 from apps.reviews.services import (
     SessionExpiredError,
@@ -144,7 +144,7 @@ def _next_question_response(request, session):
             count=1,
             exclude_ids=answered_ids,
         )
-        question = questions.first()
+        question = questions.select_related("topic__subject").first()
 
     if not question:
         if session.mode == ReviewSession.Mode.TIMED_EXAM:
@@ -161,26 +161,43 @@ def _next_question_response(request, session):
     )
 
 
+def _setup_preselected_subject(request) -> Subject | None:
+    """Resolve ?subject= or ?topic= deep-link to an available course subject."""
+    raw_subject = (request.GET.get("subject") or "").strip()
+    raw_topic = (request.GET.get("topic") or "").strip()
+    subject_id: int | None = None
+    if raw_subject.isdigit():
+        subject_id = int(raw_subject)
+    elif raw_topic.isdigit():
+        topic = Topic.objects.filter(pk=int(raw_topic)).select_related("subject").first()
+        if topic is not None:
+            subject_id = topic.subject_id
+    if subject_id is None:
+        return None
+    return subjects_available_for_student(request.user).filter(pk=subject_id).first()
+
+
 class ReviewSetupView(StudentRequiredMixin, View):
     """Start a timed exam — multi-course + difficulty; wizard collects readiness."""
 
     template_name = "reviews/setup.html"
 
     def _setup_context(self, form, **extra):
-        import json
-
         eligibility = student_setup_eligibility(self.request.user)
         no_exams = eligibility.get("reason") == "no_questions"
         return {
             "form": form,
             "setup_eligibility": eligibility,
             "no_exams_available": no_exams,
-            "warmup_json": json.dumps(random_warmup()),
             **extra,
         }
 
     def get(self, request):
-        form = ReviewSetupForm(student=request.user)
+        subject = _setup_preselected_subject(request)
+        form = ReviewSetupForm(
+            student=request.user,
+            preselected_subject=subject,
+        )
         return render(request, self.template_name, self._setup_context(form))
 
     def post(self, request):

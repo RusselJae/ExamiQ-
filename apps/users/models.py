@@ -250,6 +250,18 @@ class User(AbstractUser):
         related_name="students",
         help_text="Student's cohort section for the current academic year.",
     )
+    assigned_sections = models.ManyToManyField(
+        ProgramSection,
+        blank=True,
+        related_name="assigned_faculty",
+        help_text="Program sections this faculty member handles.",
+    )
+    assigned_subjects = models.ManyToManyField(
+        "questions.Subject",
+        blank=True,
+        related_name="assigned_faculty",
+        help_text="Course subjects this faculty member handles for chat and roster.",
+    )
     password_changed_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -286,6 +298,10 @@ class User(AbstractUser):
         max_length=20,
         choices=ApprovalStatus.choices,
         default=ApprovalStatus.APPROVED,
+    )
+    is_archived = models.BooleanField(
+        default=False,
+        help_text="Archived students are hidden from faculty rosters and cannot log in.",
     )
 
     USERNAME_FIELD = "email"

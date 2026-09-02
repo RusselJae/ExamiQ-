@@ -1,13 +1,12 @@
 /**
- * Global Chat inbox modal — faculty concern threads.
- * Students use the AI Tutor modal from the navbar instead.
+ * Global Chat inbox modal — one thread per student with assigned faculty.
  */
 (function () {
     "use strict";
 
     var state = {
         items: [],
-        activeMistakeId: null,
+        activeConversationId: null,
         loaded: false,
         sending: false,
         filter: "",
@@ -21,29 +20,22 @@
         return config().role === "professor";
     }
 
-    function truncatePreview(text, max) {
-        var value = (text || "").trim();
-        if (value.length <= max) return value;
-        return value.slice(0, Math.max(0, max - 1)) + "…";
-    }
-
     function escapeHtml(text) {
         var div = document.createElement("div");
         div.textContent = text || "";
         return div.innerHTML;
     }
 
-    function noteUrl(mistakeId) {
-        return (config().noteUrlBase || "").replace("/0/", "/" + mistakeId + "/");
-    }
-
-    function concernUrl(answerId) {
-        return (config().concernUrlTemplate || "").replace("/0/", "/" + answerId + "/");
+    function messageUrl(conversationId) {
+        if (isFaculty()) {
+            return (config().noteUrlBase || "").replace("/0/", "/" + conversationId + "/");
+        }
+        return config().messageUrl || "";
     }
 
     function activeItem() {
         return state.items.find(function (item) {
-            return item.mistake_id === state.activeMistakeId;
+            return item.conversation_id === state.activeConversationId;
         });
     }
 
@@ -93,6 +85,26 @@
         document.documentElement.classList.remove("examiq-chat-open");
     }
 
+    function listItemName(item) {
+        if (isFaculty()) {
+            return item.student_name || "Student";
+        }
+        return item.peer_name || "Faculty";
+    }
+
+    function listItemAvatar(item) {
+        if (isFaculty()) {
+            return {
+                url: item.student_avatar_url,
+                initials: item.student_initials || "?",
+            };
+        }
+        return {
+            url: item.peer_avatar_url,
+            initials: item.peer_initials || "FA",
+        };
+    }
+
     function filteredItems() {
         var q = (state.filter || "").trim().toLowerCase();
         if (!q) return state.items.slice();
@@ -100,10 +112,8 @@
             var hay = [
                 item.student_name,
                 item.student_email,
-                item.subject_code,
+                item.peer_name,
                 item.preview,
-                item.stem,
-                item.topic,
             ]
                 .join(" ")
                 .toLowerCase();
@@ -125,33 +135,35 @@
         list.innerHTML = items
             .map(function (item) {
                 var active =
-                    item.mistake_id === state.activeMistakeId
+                    item.conversation_id === state.activeConversationId
                         ? " examiq-chat-item--active"
                         : "";
-                var badge = item.needs_faculty_reply
-                    ? '<span class="examiq-chat-item__dot" title="Needs reply"></span>'
-                    : "";
+                var badge = "";
+                if (isFaculty() && item.needs_faculty_reply) {
+                    badge = '<span class="examiq-chat-item__dot" title="Needs reply"></span>';
+                } else if (!isFaculty() && item.needs_student_attention) {
+                    badge = '<span class="examiq-chat-item__dot" title="New reply"></span>';
+                }
+                var av = listItemAvatar(item);
                 return (
                     '<button type="button" class="examiq-chat-item' +
                     active +
-                    '" data-mistake-id="' +
-                    item.mistake_id +
+                    '" data-conversation-id="' +
+                    item.conversation_id +
                     '" role="option" aria-selected="' +
-                    (item.mistake_id === state.activeMistakeId ? "true" : "false") +
+                    (item.conversation_id === state.activeConversationId
+                        ? "true"
+                        : "false") +
                     '">' +
-                    avatarHtml(
-                        item.student_avatar_url,
-                        item.student_initials || "?",
-                        "examiq-chat-item__avatar"
-                    ) +
+                    avatarHtml(av.url, av.initials, "examiq-chat-item__avatar") +
                     '<div class="examiq-chat-item__body">' +
                     '<div class="examiq-chat-item__row">' +
                     '<span class="examiq-chat-item__name">' +
-                    escapeHtml(item.student_name || "Student") +
+                    escapeHtml(listItemName(item)) +
                     badge +
                     "</span>" +
                     '<span class="examiq-chat-item__date">' +
-                    escapeHtml(formatListDate(item.last_message_at || item.occurred_at)) +
+                    escapeHtml(formatListDate(item.last_message_at)) +
                     "</span></div>" +
                     '<p class="examiq-chat-item__preview">' +
                     escapeHtml(item.preview || "") +
@@ -160,6 +172,45 @@
                 );
             })
             .join("");
+    }
+
+    function dedupeMessages(msgs) {
+        var seen = {};
+        return (msgs || []).filter(function (msg) {
+            var key = msg.id
+                ? "id:" + msg.id
+                : [
+                      msg.created_at || "",
+                      msg.author_role || "",
+                      msg.body || "",
+                      msg.image_url || "",
+                  ].join("|");
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
+    }
+
+    function messageSide(msg) {
+        var isStudentMsg = msg.author_role === "student";
+        var isOwnMessage = isFaculty() ? !isStudentMsg : isStudentMsg;
+        return isOwnMessage ? "out" : "in";
+    }
+
+    function messageAvatar(msg, item) {
+        var isStudent = msg.author_role === "student";
+        var url = msg.author_avatar_url || "";
+        var initials = msg.author_initials || "?";
+        if (isStudent) {
+            if (!url) url = item.student_avatar_url || "";
+            if (!initials || initials === "?") {
+                initials = item.student_initials || initials;
+            }
+        } else if (!url) {
+            url = item.peer_avatar_url || "";
+            initials = msg.author_initials || item.peer_initials || "FA";
+        }
+        return { url: url, initials: initials };
     }
 
     function setPeerAvatar(el, url, initials) {
@@ -188,54 +239,36 @@
             thread.innerHTML =
                 '<p class="examiq-chat-modal__thread-empty">Select a conversation to start messaging.</p>';
             setPeerAvatar(avatar, "", "?");
-            if (nameEl) nameEl.textContent = "Select a conversation";
+            if (nameEl) nameEl.textContent = isFaculty() ? "Select a conversation" : "Faculty";
             if (metaEl) metaEl.textContent = "";
             if (input) {
                 input.value = "";
-                input.disabled = true;
+                input.disabled = !isFaculty() ? false : true;
             }
-            if (send) send.disabled = true;
+            if (send) send.disabled = !isFaculty() ? false : true;
             return;
         }
 
-        setPeerAvatar(avatar, item.student_avatar_url, item.student_initials || "?");
-        if (nameEl) nameEl.textContent = item.student_name || "Student";
-        if (metaEl) metaEl.textContent = item.student_email || "";
+        var peerAv = listItemAvatar(item);
+        setPeerAvatar(avatar, peerAv.url, peerAv.initials);
+        if (nameEl) nameEl.textContent = listItemName(item);
+        if (metaEl) {
+            metaEl.textContent = isFaculty() ? item.student_email || "" : "";
+        }
         if (input) input.disabled = false;
         if (send) send.disabled = false;
 
-        var msgs = item.messages || [];
-        var parts = [];
-        if (item.stem) {
-            parts.push(
-                '<div class="examiq-chat-question">' +
-                    '<p class="examiq-chat-question__label">Question</p>' +
-                    '<p class="examiq-chat-question__stem">' +
-                    escapeHtml(item.stem) +
-                    "</p></div>"
-            );
-        }
-
+        var msgs = dedupeMessages(item.messages || []);
         if (!msgs.length) {
-            parts.push(
-                '<p class="examiq-chat-modal__thread-empty">No messages yet. Send the first reply.</p>'
-            );
-            thread.innerHTML = parts.join("");
+            thread.innerHTML =
+                '<p class="examiq-chat-modal__thread-empty">No messages yet. Send the first message.</p>';
             return;
         }
 
-        var selfCfg = config();
-        parts = parts.concat(
-            msgs.map(function (msg) {
-                var isStudent = msg.author_role === "student";
-                // Student bubbles left, faculty bubbles right.
-                var side = isStudent ? "in" : "out";
-                var avatarUrl = isStudent
-                    ? msg.author_avatar_url || item.student_avatar_url || ""
-                    : msg.author_avatar_url || selfCfg.selfAvatarUrl || "";
-                var initials = isStudent
-                    ? msg.author_initials || item.student_initials || "?"
-                    : msg.author_initials || selfCfg.selfInitials || "FA";
+        thread.innerHTML = msgs
+            .map(function (msg) {
+                var side = messageSide(msg);
+                var av = messageAvatar(msg, item);
                 var body = msg.body
                     ? '<p class="examiq-chat-bubble__text">' +
                       escapeHtml(msg.body).replace(/\n/g, "<br>") +
@@ -248,6 +281,7 @@
                       escapeHtml(msg.image_url) +
                       '" alt="Attachment"></a>'
                     : "";
+                var avatarLeft = side === "in";
                 return (
                     '<div class="examiq-chat-msg examiq-chat-msg--' +
                     side +
@@ -255,8 +289,8 @@
                     '<div class="examiq-chat-msg__row examiq-chat-msg__row--' +
                     side +
                     '">' +
-                    (isStudent
-                        ? avatarHtml(avatarUrl, initials, "examiq-chat-msg__avatar")
+                    (avatarLeft
+                        ? avatarHtml(av.url, av.initials, "examiq-chat-msg__avatar")
                         : "") +
                     '<div class="examiq-chat-bubble examiq-chat-bubble--' +
                     side +
@@ -264,8 +298,8 @@
                     body +
                     image +
                     "</div>" +
-                    (!isStudent
-                        ? avatarHtml(avatarUrl, initials, "examiq-chat-msg__avatar")
+                    (!avatarLeft
+                        ? avatarHtml(av.url, av.initials, "examiq-chat-msg__avatar")
                         : "") +
                     "</div>" +
                     '<span class="examiq-chat-msg__time">' +
@@ -273,16 +307,21 @@
                     "</span></div>"
                 );
             })
-        );
-        thread.innerHTML = parts.join("");
+            .join("");
         thread.scrollTop = thread.scrollHeight;
     }
 
-    async function loadItems(preferredId) {
-        var url = config().concernsUrl;
+    async function loadItems(preferredId, studentId) {
+        var url = config().concernsUrl || config().conversationsUrl;
         if (!url) return;
         var sep = url.indexOf("?") >= 0 ? "&" : "?";
-        if (preferredId) url += sep + "mistake_id=" + encodeURIComponent(preferredId);
+        if (preferredId) {
+            url += sep + "conversation_id=" + encodeURIComponent(preferredId);
+            sep = "&";
+        }
+        if (studentId) {
+            url += sep + "student_id=" + encodeURIComponent(studentId);
+        }
         var res = await fetch(url, {
             credentials: "same-origin",
             headers: { Accept: "application/json" },
@@ -290,10 +329,10 @@
         if (!res.ok) throw new Error("Could not load conversations");
         var data = await res.json();
         state.items = data.items || [];
-        state.activeMistakeId =
+        state.activeConversationId =
             preferredId ||
-            data.active_mistake_id ||
-            (state.items[0] && state.items[0].mistake_id) ||
+            data.active_conversation_id ||
+            (state.items[0] && state.items[0].conversation_id) ||
             null;
         state.loaded = true;
         renderList();
@@ -305,13 +344,18 @@
         if (state.sending) return;
         var item = activeItem();
         var input = document.getElementById("examiq-chat-input");
-        if (!item || !input) return;
+        var imageInput = document.getElementById("examiq-chat-image");
+        if (!input) return;
         var body = (input.value || "").trim();
-        if (!body) return;
+        var imageFile = imageInput && imageInput.files && imageInput.files[0];
+        if (!body && !imageFile) return;
+
+        var conversationId = item ? item.conversation_id : state.activeConversationId;
+        if (isFaculty() && !conversationId) return;
 
         var url = isFaculty()
-            ? noteUrl(item.mistake_id)
-            : concernUrl(item.answer_id);
+            ? messageUrl(conversationId)
+            : config().messageUrl;
         if (!url) return;
 
         state.sending = true;
@@ -320,12 +364,8 @@
 
         try {
             var fd = new FormData();
-            if (isFaculty()) {
-                fd.append("faculty_note", body);
-                fd.append("body", body);
-            } else {
-                fd.append("body", body);
-            }
+            fd.append("body", body);
+            if (imageFile) fd.append("image", imageFile);
             var res = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -343,7 +383,26 @@
                 throw new Error(data.error || "Could not send message");
             }
             input.value = "";
-            await loadItems(item.mistake_id);
+            if (imageInput) {
+                imageInput.value = "";
+                var imageName = document.getElementById("examiq-chat-image-name");
+                if (imageName) imageName.classList.add("hidden");
+            }
+            if (data.item) {
+                var idx = state.items.findIndex(function (i) {
+                    return i.conversation_id === data.item.conversation_id;
+                });
+                if (idx >= 0) {
+                    state.items[idx] = data.item;
+                } else {
+                    state.items = [data.item];
+                }
+                state.activeConversationId = data.item.conversation_id;
+                renderList();
+                renderThread();
+            } else {
+                await loadItems(conversationId);
+            }
         } catch (err) {
             if (typeof showToast === "function") {
                 showToast(err.message || "Could not send message", "error");
@@ -359,7 +418,10 @@
         options = options || {};
         openModal();
         try {
-            await loadItems(options.mistakeId || null);
+            await loadItems(
+                options.conversationId || null,
+                options.studentId || null
+            );
         } catch (err) {
             var thread = document.getElementById("examiq-chat-thread");
             if (thread) {
@@ -376,15 +438,25 @@
                 openChat();
             });
         });
+        document.querySelectorAll("[data-open-student-chat]").forEach(function (el) {
+            el.addEventListener("click", function (event) {
+                event.preventDefault();
+                var studentId = el.getAttribute("data-student-id");
+                openChat({ studentId: studentId });
+            });
+        });
         document.querySelectorAll("[data-dismiss-chat-modal]").forEach(function (el) {
             el.addEventListener("click", closeModal);
         });
         var list = document.getElementById("examiq-chat-list");
         if (list) {
             list.addEventListener("click", function (event) {
-                var btn = event.target.closest("[data-mistake-id]");
+                var btn = event.target.closest("[data-conversation-id]");
                 if (!btn) return;
-                state.activeMistakeId = parseInt(btn.getAttribute("data-mistake-id"), 10);
+                state.activeConversationId = parseInt(
+                    btn.getAttribute("data-conversation-id"),
+                    10
+                );
                 renderList();
                 renderThread();
             });
@@ -397,7 +469,22 @@
             });
         }
         var form = document.getElementById("examiq-chat-form");
-        if (form) form.addEventListener("submit", sendMessage);
+        if (form && !form.dataset.chatBound) {
+            form.dataset.chatBound = "1";
+            form.addEventListener("submit", sendMessage);
+        }
+        var imageInput = document.getElementById("examiq-chat-image");
+        var imageName = document.getElementById("examiq-chat-image-name");
+        if (imageInput && imageName) {
+            imageInput.addEventListener("change", function () {
+                if (imageInput.files && imageInput.files[0]) {
+                    imageName.textContent = imageInput.files[0].name;
+                    imageName.classList.remove("hidden");
+                } else {
+                    imageName.classList.add("hidden");
+                }
+            });
+        }
         document.addEventListener("keydown", function (event) {
             if (event.key === "Escape") closeModal();
         });
@@ -411,8 +498,15 @@
         window.ExamiQChat.close = closeModal;
 
         var params = new URLSearchParams(window.location.search);
-        if (params.get("open_chat") === "1" || params.get("mistake_id")) {
-            openChat({ mistakeId: params.get("mistake_id") });
+        if (
+            params.get("open_chat") === "1" ||
+            params.get("conversation_id") ||
+            params.get("student_id")
+        ) {
+            openChat({
+                conversationId: params.get("conversation_id"),
+                studentId: params.get("student_id"),
+            });
         }
     });
 })();

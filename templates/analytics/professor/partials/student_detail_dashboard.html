@@ -1,22 +1,25 @@
 {% load examiq_tags %}
 {# Shared student detail dashboard — section (all subjects) or course (one subject). #}
 
-<div class="student-detail-header mb-6">
-    <div class="student-detail-header__identity">
-        <div class="student-detail-avatar" aria-hidden="true">{{ student_initials }}</div>
-        <div>
-            <h1 class="text-3xl font-bold text-examiq-navy">{{ student.get_full_name|default:student.email }}</h1>
-            <p class="text-examiq-slate mt-1">
-                {{ scope_label }}{% if summary.subjects_label and summary.subjects_label != "—" %} · {{ summary.subjects_label }}{% endif %}
-            </p>
-            {% if summary.total_answers %}
-            <span class="confidence-tier-badge confidence-tier-badge--{{ summary.dominant_tier }} mt-2">
-                {{ summary.dominant_tier|confidence_tier_badge }}
-            </span>
-            {% endif %}
+<div class="overview-header mb-6">
+    <p class="overview-eyebrow">Student</p>
+    <a href="{{ back_url }}" class="overview-back-link">&larr; {{ back_label|default:"Back to students" }}</a>
+    <div class="overview-header__main">
+        <div class="overview-header__copy student-detail-header__identity">
+            <div class="student-detail-avatar" aria-hidden="true">{{ student_initials }}</div>
+            <div>
+                <h1 class="overview-title">{{ student.get_full_name|default:student.email }}</h1>
+                <p class="overview-as-of">
+                    {{ scope_label }}{% if summary.subjects_label and summary.subjects_label != "—" %} · {{ summary.subjects_label }}{% endif %}
+                </p>
+                {% if summary.total_answers %}
+                <span class="confidence-tier-badge confidence-tier-badge--{{ summary.dominant_tier }} mt-2">
+                    {{ summary.dominant_tier|confidence_tier_badge }}
+                </span>
+                {% endif %}
+            </div>
         </div>
     </div>
-    <a href="{{ back_url }}" class="btn-secondary text-sm">← {{ back_label|default:"Back to masterlist" }}</a>
 </div>
 
 {% if not summary.total_answers %}
@@ -99,7 +102,7 @@
                     </td>
                     <td class="py-3 text-right">
                         {% if row.session %}
-                        <a href="{% url 'reviews:summary' row.session.pk %}" class="text-link text-sm">Review</a>
+                        <a href="{% url 'analytics_professor:session_review' row.session.student.pk row.session.pk %}" class="text-link text-sm">Review</a>
                         {% endif %}
                     </td>
                 </tr>

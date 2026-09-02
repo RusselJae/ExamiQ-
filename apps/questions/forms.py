@@ -53,14 +53,23 @@ class QuestionForm(forms.ModelForm):
 
 
 class QuestionEditForm(forms.ModelForm):
-    """Streamlined professor question form — MCQ-focused."""
+    """Professor question form with Multiple Choice default and text-answer types."""
 
     class Meta:
         model = Question
-        fields = ["topic", "difficulty", "stem", "concept_tag", "is_active"]
+        fields = [
+            "topic",
+            "difficulty",
+            "question_type",
+            "stem",
+            "concept_tag",
+            "expected_answer",
+            "is_active",
+        ]
         widgets = {
             "topic": forms.Select(attrs={"class": INPUT_CLASS}),
             "difficulty": forms.Select(attrs={"class": INPUT_CLASS}),
+            "question_type": forms.Select(attrs={"class": INPUT_CLASS, "id": "id_question_type"}),
             "stem": forms.Textarea(
                 attrs={
                     "class": INPUT_CLASS,
@@ -71,6 +80,14 @@ class QuestionEditForm(forms.ModelForm):
             "concept_tag": forms.TextInput(
                 attrs={"class": INPUT_CLASS, "placeholder": "Short concept label"}
             ),
+            "expected_answer": forms.Textarea(
+                attrs={
+                    "class": INPUT_CLASS,
+                    "rows": 3,
+                    "id": "id_expected_answer",
+                    "placeholder": "Expected answer (one item per line for Enumeration)",
+                }
+            ),
             "is_active": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
         }
 
@@ -79,7 +96,47 @@ class QuestionEditForm(forms.ModelForm):
         if program:
             self.fields["topic"].queryset = Topic.objects.filter(
                 subject__program=program
-            ).select_related("subject")
+            )
+        # Faculty authoring: hide legacy numeric from the type picker.
+        self.fields["question_type"].choices = [
+            (Question.QuestionType.MCQ, "Multiple Choice"),
+            (Question.QuestionType.TRUE_FALSE, "True or False"),
+            (Question.QuestionType.IDENTIFICATION, "Identification"),
+            (Question.QuestionType.ENUMERATION, "Enumeration"),
+        ]
+        self.fields["expected_answer"].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        qtype = cleaned.get("question_type") or Question.QuestionType.MCQ
+        expected = (cleaned.get("expected_answer") or "").strip()
+        cleaned["expected_answer"] = expected
+        if qtype == Question.QuestionType.MCQ:
+            cleaned["expected_answer"] = ""
+        elif qtype == Question.QuestionType.TRUE_FALSE:
+            if expected.casefold() not in {"true", "false", "t", "f", "yes", "no"}:
+                self.add_error(
+                    "expected_answer",
+                    "Enter True or False as the expected answer.",
+                )
+            else:
+                cleaned["expected_answer"] = (
+                    "True" if expected.casefold() in {"true", "t", "yes"} else "False"
+                )
+        elif qtype in {
+            Question.QuestionType.IDENTIFICATION,
+            Question.QuestionType.ENUMERATION,
+        }:
+            if not expected:
+                self.add_error("expected_answer", "Expected answer is required.")
+            elif qtype == Question.QuestionType.ENUMERATION:
+                items = [p.strip() for p in expected.splitlines() if p.strip()]
+                if len(items) < 2:
+                    self.add_error(
+                        "expected_answer",
+                        "List at least two items, one per line.",
+                    )
+        return cleaned
 
 
 class TopicForm(forms.ModelForm):

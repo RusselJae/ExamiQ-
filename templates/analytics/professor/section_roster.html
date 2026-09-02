@@ -40,8 +40,30 @@
                 <td class="p-4 text-center {% if row.questions_answered and row.accuracy < 60 %}stat-value-warning{% elif row.accuracy >= 75 %}stat-value-good{% endif %}">{{ row.accuracy }}%</td>
                 <td class="p-4 text-center">{{ row.avg_confidence }}</td>
                 <td class="p-4 text-right">
+                    {% if row.student.is_archived %}
+                    <span class="text-xs font-medium text-examiq-slate mr-2">Archived</span>
+                    <form method="post"
+                          action="{% url 'analytics_professor:section_student_restore' section.pk row.student.pk %}"
+                          class="inline"
+                          data-confirm-message="Restore this student? They will appear on the roster and can log in again."
+                          data-confirm-type="warning"
+                          data-confirm-label="Restore">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-secondary masterlist-detail-btn">Restore</button>
+                    </form>
+                    {% else %}
                     <a href="{% url 'analytics_professor:section_student_detail' section.pk row.student.pk %}"
                        class="btn-secondary masterlist-detail-btn">Detail</a>
+                    <form method="post"
+                          action="{% url 'analytics_professor:section_student_archive' section.pk row.student.pk %}"
+                          class="inline ml-2"
+                          data-confirm-message="Archive this student? They will be hidden from the roster and cannot log in."
+                          data-confirm-type="warning"
+                          data-confirm-label="Archive">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
+                    </form>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}

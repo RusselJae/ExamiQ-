@@ -163,7 +163,7 @@ class TestQuestionAIGenerateView:
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     @patch("apps.ai.subject_relevance.assess_subject_relevance")
-    def test_unrelated_module_proceeds_with_ignore_relevance(
+    def test_unrelated_module_ignores_bypass_flag(
         self, mock_relevance, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
     ):
         mock_get_generator.return_value.generate.return_value = []
@@ -181,8 +181,14 @@ class TestQuestionAIGenerateView:
         )
         response = client.post(
             url,
-            {"topic": topic.pk, "difficulty": "easy", "source_file": _sample_module_file(), "ignore_relevance": "1"},
+            {
+                "topic": topic.pk,
+                "difficulty": "easy",
+                "source_file": _sample_module_file(),
+                "ignore_relevance": "1",
+            },
         )
-        assert response.status_code == 202
+        assert response.status_code == 400
         data = response.json()
-        assert data["job_id"]
+        assert data["relevance_blocked"] is True
+        mock_get_generator.assert_not_called()

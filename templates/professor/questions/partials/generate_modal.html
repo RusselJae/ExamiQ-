@@ -5,20 +5,22 @@
             <div>
                 <h2 id="generate-modal-title" class="text-lg font-semibold text-examiq-navy">AI Generated Questions</h2>
                 <p class="text-sm text-examiq-slate mt-1">
-                    Topic: <strong>{{ topic.name }}</strong> &middot; Difficulty: <strong>{{ difficulty|difficulty_label }}</strong>
+                    Topic: <strong>{{ topic.name }}</strong> &middot;
+                    Difficulty: <strong>{{ difficulty|difficulty_label }}</strong> &middot;
+                    Type: <strong>{{ question_type|default:"mcq"|title }}</strong>
                 </p>
             </div>
             <button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
         </div>
 
         {% if ai_error %}
-        <div class="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 mb-4">
+        <div class="bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 mb-4">
             {{ ai_error }}
         </div>
         {% elif variations %}
         <div class="space-y-3 mb-6">
             {% for variation in variations %}
-            <div class="border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white">
+            <div class="border border-slate-200 p-4 bg-white">
                 <label class="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox"
                            name="selected_variation"
@@ -27,7 +29,10 @@
                            class="mt-1 rounded border-slate-300"
                            data-stem="{{ variation.stem|escape }}"
                            data-concept="{{ variation.concept_tag|default:''|escape }}"
+                           data-question-type="{{ variation.question_type|default:'mcq' }}"
                            data-correct="{{ variation.correct_label|default:'A' }}"
+                           data-difficulty="{{ difficulty }}"
+                           data-expected="{{ variation.expected_answer|default:''|escape }}"
                            data-solution="{{ variation.solution_summary|default:''|escape }}"
                            {% if variation.explanation_steps %}data-steps="{% for step in variation.explanation_steps %}{{ step|escape }}{% if not forloop.last %}|||{% endif %}{% endfor %}"{% endif %}
                            {% for choice in variation.choices %}
@@ -44,6 +49,15 @@
                             <li><strong>{{ choice.label }}.</strong> {{ choice.text }}{% if choice.is_correct %} &#10003;{% endif %}</li>
                             {% endfor %}
                         </ul>
+                        {% elif variation.expected_answer %}
+                        <p class="text-sm text-examiq-slate mt-2">
+                            <strong>Answer:</strong>
+                            {% if variation.question_type == "enumeration" %}
+                            {{ variation.expected_answer|linebreaksbr }}
+                            {% else %}
+                            {{ variation.expected_answer }}
+                            {% endif %}
+                        </p>
                         {% endif %}
                     </span>
                 </label>

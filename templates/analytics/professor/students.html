@@ -8,42 +8,76 @@
 <div class="bento-grid">
     {% include "components/filter_bar.html" %}
     <div class="span-full">
-        <div class="bento-card bento-card-inner overflow-x-auto masterlist-card">
-            <table class="w-full text-sm masterlist-table">
+        <div class="data-table-wrap shadow-sm">
+            <table class="data-table">
                 <thead>
-                    <tr class="text-left text-examiq-slate border-b border-slate-100">
-                        <th class="p-4 font-medium">Student</th>
-                        <th class="p-4 font-medium text-center">Sessions</th>
-                        <th class="p-4 font-medium text-center">Subjects taken</th>
-                        <th class="p-4 font-medium text-center">Last activity</th>
-                        <th class="p-4 font-medium text-right">Actions</th>
+                    <tr>
+                        <th>Student</th>
+                        <th>Section</th>
+                        <th class="text-center">Sessions</th>
+                        <th class="text-center">Subjects</th>
+                        <th class="text-center">Mistakes</th>
+                        <th class="text-center">Last activity</th>
+                        <th class="text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in roster %}
-                    <tr class="border-b border-slate-50 masterlist-row">
-                        <td class="p-4">
+                    <tr>
+                        <td>
                             <div class="flex items-center gap-3">
                                 {% include "components/student_avatar.html" with user=row.student size="sm" %}
                                 <div>
-                                    <div class="font-medium text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</div>
+                                    <div class="font-medium">{{ row.student.get_full_name|default:row.student.email }}</div>
                                     <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="p-4 text-center text-examiq-slate">{{ row.sessions_completed }}</td>
-                        <td class="p-4 text-center text-examiq-slate">{{ row.subjects_taken_count|default:row.courses_label }}</td>
-                        <td class="p-4 text-center text-examiq-slate">
+                        <td class="text-examiq-slate whitespace-nowrap">{{ row.student.section.display_label|default:"—" }}</td>
+                        <td class="text-center text-examiq-slate">{{ row.sessions_completed }}</td>
+                        <td class="text-center text-examiq-slate">{{ row.subjects_taken_count|default:row.courses_label }}</td>
+                        <td class="text-center">
+                            {% if row.mistake_count %}
+                            <span class="font-semibold text-examiq-mistake">{{ row.mistake_count }}</span>
+                            {% else %}
+                            <span class="text-examiq-slate">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center text-examiq-slate whitespace-nowrap">
                             {% if row.last_activity %}{{ row.last_activity|date:"M j, Y" }}{% else %}—{% endif %}
                         </td>
-                        <td class="p-4 text-right whitespace-nowrap">
+                        <td class="text-right whitespace-nowrap">
                             <a href="{% url 'analytics_professor:professor_student_detail' row.student.pk %}"
-                               class="btn-secondary masterlist-detail-btn">View</a>
+                               class="btn-secondary btn-primary-sm">View</a>
+                            {% if row.can_manage and row.student.section %}
+                            {% if row.student.is_archived %}
+                            <span class="text-xs font-medium text-examiq-slate ml-2">Archived</span>
+                            <form method="post"
+                                  action="{% url 'analytics_professor:section_student_restore' row.student.section.pk row.student.pk %}"
+                                  class="inline ml-2"
+                                  data-confirm-message="Restore this student? They will appear on the roster and can log in again."
+                                  data-confirm-type="warning"
+                                  data-confirm-label="Restore">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-secondary btn-primary-sm">Restore</button>
+                            </form>
+                            {% else %}
+                            <form method="post"
+                                  action="{% url 'analytics_professor:section_student_archive' row.student.section.pk row.student.pk %}"
+                                  class="inline ml-2"
+                                  data-confirm-message="Archive this student? They will be hidden from the roster and cannot log in."
+                                  data-confirm-type="warning"
+                                  data-confirm-label="Archive">
+                                {% csrf_token %}
+                                <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="p-8 text-center text-examiq-slate">
+                        <td colspan="7" class="text-center text-examiq-slate py-8">
                             {% if filter_has_active %}No students match your filters.{% else %}No students have completed an exam in your courses yet.{% endif %}
                         </td>
                     </tr>

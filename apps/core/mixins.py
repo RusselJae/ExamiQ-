@@ -1,4 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 from apps.users.models import Course, Program, User
@@ -19,6 +20,13 @@ class StudentRequiredMixin(RoleRequiredMixin):
 
 class ProfessorRequiredMixin(RoleRequiredMixin):
     required_role = User.Role.PROFESSOR
+
+
+class FacultyLegacyRosterBlockedMixin:
+    """Raise 404 for retired section/masterlist analytics screens."""
+
+    def dispatch(self, request, *args, **kwargs):
+        raise Http404()
 
 
 class ChairpersonRequiredMixin(RoleRequiredMixin):
@@ -44,11 +52,12 @@ class ProfessorCourseMixin(ProfessorRequiredMixin):
         return self.kwargs.get("course_pk") or self.kwargs["pk"]
 
     def dispatch(self, request, *args, **kwargs):
-        self.course = get_object_or_404(
-            Course,
-            pk=self.get_course_pk(),
-            professor=request.user,
-        )
+        from apps.users.assignment_services import professor_can_access_course
+
+        course = get_object_or_404(Course, pk=self.get_course_pk())
+        if not professor_can_access_course(request.user, course):
+            raise Http404()
+        self.course = course
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):

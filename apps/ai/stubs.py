@@ -12,6 +12,7 @@ from apps.ai.interfaces import (
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
+    ExplanationGenerator,
     QuestionGenerator,
     SpacedRepetitionScheduler,
     TutorEngine,
@@ -24,33 +25,92 @@ _STUB_LABELS = ("B", "C", "D")
 
 
 class StubQuestionGenerator(QuestionGenerator):
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
+    def generate(
+        self,
+        topic,
+        difficulty: str,
+        count: int = 5,
+        reference_stem: str = "",
+        source_material: str = "",
+        question_type: str = "mcq",
+    ):
+        from apps.ai.prompts import coerce_generate_question_type
+
         logger.info("AI question generation stub called (AI_ENABLED=%s)", settings.AI_ENABLED)
         if topic is None:
             return []
         from apps.ai.normalize import normalize_generated_questions
 
+        qtype = coerce_generate_question_type(question_type)
         items = []
         prefix = "[From module] " if source_material else "[Stub] "
         for i in range(min(count, 3)):
-            label = _STUB_LABELS[i % len(_STUB_LABELS)]
-            items.append({
-                "stem": f"{prefix}Sample {difficulty} question about {topic.name}? ({i + 1})",
-                "concept_tag": f"Concept: {topic.name}",
-                "correct_label": label,
-                "choices": [
-                    {"label": "A", "text": "Distractor A", "is_correct": label == "A"},
-                    {"label": "B", "text": "Distractor B", "is_correct": label == "B"},
-                    {"label": "C", "text": "Distractor C", "is_correct": label == "C"},
-                    {"label": "D", "text": "Distractor D", "is_correct": label == "D"},
-                ],
+            if qtype == "true_false":
+                items.append({
+                    "question_type": qtype,
+                    "stem": f"{prefix}Sample {difficulty} statement about {topic.name}. ({i + 1})",
+                    "concept_tag": f"Concept: {topic.name}",
+                    "expected_answer": "True" if i % 2 == 0 else "False",
+                })
+            elif qtype == "identification":
+                items.append({
+                    "question_type": qtype,
+                    "stem": f"{prefix}Name the key term for {topic.name}. ({i + 1})",
+                    "concept_tag": f"Concept: {topic.name}",
+                    "expected_answer": f"Term {i + 1}",
+                })
+            elif qtype == "enumeration":
+                items.append({
+                    "question_type": qtype,
+                    "stem": f"{prefix}List sample items for {topic.name}. ({i + 1})",
+                    "concept_tag": f"Concept: {topic.name}",
+                    "expected_answer": f"Item {i + 1}\nItem {i + 2}",
+                })
+            else:
+                label = _STUB_LABELS[i % len(_STUB_LABELS)]
+                items.append({
+                    "question_type": "mcq",
+                    "stem": f"{prefix}Sample {difficulty} question about {topic.name}? ({i + 1})",
+                    "concept_tag": f"Concept: {topic.name}",
+                    "correct_label": label,
+                    "choices": [
+                        {"label": "A", "text": "Distractor A", "is_correct": label == "A"},
+                        {"label": "B", "text": "Distractor B", "is_correct": label == "B"},
+                        {"label": "C", "text": "Distractor C", "is_correct": label == "C"},
+                        {"label": "D", "text": "Distractor D", "is_correct": label == "D"},
+                    ],
+                })
+        return normalize_generated_questions(items, question_type=qtype)
+
+
+class StubExplanationGenerator(ExplanationGenerator):
+    def generate(self, question) -> dict:
+        from apps.questions.models import Question
+
+        if question.question_type == Question.QuestionType.MCQ:
+            label = ""
+            correct = question.choices.filter(is_correct=True).first()
+            if correct:
+                label = correct.label
+            topic_name = question.topic.name if question.topic_id else "this topic"
+            return {
                 "explanation_steps": [
-                    f"Step 1: Identify the concept related to {topic.name}.",
-                    f"Step 2: Apply the rule; the correct choice is {label}.",
+                    f"Identify the key idea for {topic_name}.",
+                    "Eliminate distractors that do not match the concept.",
+                    f"Select choice {label or 'the correct option'} as the answer.",
                 ],
-                "solution_summary": f"The correct answer is {label}.",
-            })
-        return normalize_generated_questions(items)
+                "solution_summary": f"The correct answer is {label}." if label else "Review the correct choice.",
+            }
+        topic_name = question.topic.name if question.topic_id else "this topic"
+        answer = (question.expected_answer or "").strip()
+        return {
+            "explanation_steps": [
+                f"Read the {topic_name} question carefully.",
+                "Recall the rule or definition that applies.",
+                f"The expected answer is: {answer or 'see solution'}.",
+            ],
+            "solution_summary": answer or "Review the expected answer.",
+        }
 
 
 class StubQuestionValidator:
@@ -61,9 +121,18 @@ class StubQuestionValidator:
 
 
 class StubAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
-    def generate(self, topic, question, user_answer, correct_answer, confidence="medium"):
+    def generate(
+        self,
+        topic,
+        question,
+        user_answer,
+        correct_answer,
+        confidence="medium",
+        question_type="",
+    ):
+        type_hint = f" ({question_type})" if question_type else ""
         return (
-            f"You answered '{user_answer}' but the correct answer is '{correct_answer}'. "
+            f"You answered '{user_answer}' but the correct answer is '{correct_answer}'{type_hint}. "
             f"Review the core concept for {topic} and try similar practice questions."
         )
 

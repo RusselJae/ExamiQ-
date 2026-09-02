@@ -9,9 +9,19 @@ urlpatterns = [
     path("sessions/", views_student.SessionHistoryView.as_view(), name="session_history"),
     path("chat/", views_student.StudentChatInboxView.as_view(), name="chat_inbox"),
     path(
+        "chat/conversations/",
+        views_student.StudentChatConversationsApiView.as_view(),
+        name="chat_conversations_api",
+    ),
+    path(
         "chat/concerns/",
-        views_student.StudentChatConcernsApiView.as_view(),
+        views_student.StudentChatConversationsApiView.as_view(),
         name="chat_concerns_api",
+    ),
+    path(
+        "chat/message/",
+        views_student.StudentChatMessageView.as_view(),
+        name="chat_message",
     ),
     path("topics/", views_student.TopicProgressView.as_view(), name="topic_progress"),
     path("mistakes/", views_student.MistakeListView.as_view(), name="mistakes"),

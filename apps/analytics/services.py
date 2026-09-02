@@ -11,9 +11,13 @@ from apps.analytics.confidence import (
     misconception_topics,
 )
 from apps.analytics.models import MistakeRecord
-from apps.questions.models import Question, Topic
+from apps.questions.models import Question, Subject, Topic
 from apps.reviews.models import Answer, FeedbackView, ReviewSession
 from apps.users.constants import home_programs_for_department, students_in_department
+from apps.reviews.tutor_services import (
+    format_answer_user_text,
+    format_question_correct_text,
+)
 from apps.users.models import Course, Program, User
 
 
@@ -64,22 +68,8 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
         if settings.AI_ENABLED:
             from apps.ai.factory import get_adaptive_feedback_generator
 
-            user_answer = ""
-            if answer.selected_choice_id:
-                choice = answer.selected_choice
-                user_answer = f"{choice.label}: {choice.text}"
-            elif answer.numeric_response is not None:
-                user_answer = str(answer.numeric_response)
-            elif answer.timed_out:
-                user_answer = "Timed out"
-
-            correct_answer = ""
-            if question.question_type == Question.QuestionType.MCQ:
-                correct = question.choices.filter(is_correct=True).first()
-                if correct:
-                    correct_answer = f"{correct.label}: {correct.text}"
-            elif question.correct_answer is not None:
-                correct_answer = str(question.correct_answer)
+            user_answer = format_answer_user_text(answer)
+            correct_answer = format_question_correct_text(question)
 
             confidence = "medium"
             if answer.confidence is not None:
@@ -94,11 +84,15 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
                 user_answer=user_answer or "No answer",
                 correct_answer=correct_answer or "Unknown",
                 confidence=confidence,
+                question_type=question.get_question_type_display(),
             )
     except Exception:
         ai_feedback = ""
 
     if ai_feedback:
+        from apps.ai.normalize import normalize_feedback_text
+
+        ai_feedback = normalize_feedback_text(ai_feedback)
         mistake_record.ai_feedback = ai_feedback
         mistake_record.save(update_fields=["ai_feedback"])
     return ai_feedback
@@ -108,6 +102,42 @@ def _explanation_steps_text(question) -> str:
     """Join approved explanation steps for display feedback."""
     lines = list(question.explanation_steps.order_by("order").values_list("content", flat=True))
     return "\n".join(lines) if lines else ""
+
+
+def _type_specific_incorrect_feedback(answer: Answer) -> str:
+    """Fallback explanation when no explanation steps exist."""
+    question = answer.question
+    user = format_answer_user_text(answer)
+    correct = format_question_correct_text(question)
+    qtype = question.question_type
+
+    if qtype == Question.QuestionType.MCQ:
+        return (
+            f"You chose {user}, but the correct answer is {correct}. "
+            "Review why the other options are incorrect."
+        )
+    if qtype == Question.QuestionType.TRUE_FALSE:
+        return (
+            f"This statement is {correct}. You answered {user}. "
+            "Re-read the claim and decide whether it is true or false."
+        )
+    if qtype == Question.QuestionType.IDENTIFICATION:
+        return (
+            f"The expected answer is {correct}. You wrote {user}. "
+            "Check spelling and the key term the question is asking for."
+        )
+    if qtype == Question.QuestionType.ENUMERATION:
+        return (
+            f"The complete answer should include:\n{correct}\n\n"
+            f"You submitted:\n{user}\n\n"
+            "List every required item — one per line."
+        )
+    if qtype == Question.QuestionType.NUMERIC:
+        return (
+            f"The correct value is {correct}. You entered {user}. "
+            "Review your calculation step by step."
+        )
+    return f"The correct answer is {correct}. You answered {user}."
 
 
 def _rule_based_answer_feedback(answer) -> str:
@@ -126,7 +156,7 @@ def _rule_based_answer_feedback(answer) -> str:
     if steps_text:
         return steps_text
 
-    return "Review this topic and practice similar questions."
+    return _type_specific_incorrect_feedback(answer)
 
 
 def _get_answer_mistake_record(answer):
@@ -144,9 +174,11 @@ def get_answer_feedback_quick(answer) -> tuple[str, bool]:
     """
     from django.conf import settings
 
+    from apps.ai.normalize import normalize_feedback_text
+
     mistake_record = _get_answer_mistake_record(answer)
     if mistake_record and mistake_record.ai_feedback:
-        return mistake_record.ai_feedback, False
+        return normalize_feedback_text(mistake_record.ai_feedback), False
 
     rule = _rule_based_answer_feedback(answer)
     if answer.is_correct:
@@ -157,15 +189,17 @@ def get_answer_feedback_quick(answer) -> tuple[str, bool]:
 
 def generate_answer_feedback(answer) -> str:
     """Generate and return feedback for a session answer."""
+    from apps.ai.normalize import normalize_feedback_text
+
     mistake_record = _get_answer_mistake_record(answer)
     if mistake_record and mistake_record.ai_feedback:
-        return mistake_record.ai_feedback
+        return normalize_feedback_text(mistake_record.ai_feedback)
 
     if mistake_record:
         try:
             ai_feedback = generate_mistake_feedback(mistake_record)
             if ai_feedback:
-                return ai_feedback
+                return normalize_feedback_text(ai_feedback)
         except Exception:
             pass
         return _rule_based_answer_feedback(answer)
@@ -179,22 +213,8 @@ def generate_answer_feedback(answer) -> str:
         from apps.ai.factory import get_adaptive_feedback_generator
 
         question = answer.question
-        user_answer = ""
-        if answer.selected_choice_id:
-            choice = answer.selected_choice
-            user_answer = f"{choice.label}: {choice.text}"
-        elif answer.numeric_response is not None:
-            user_answer = str(answer.numeric_response)
-        elif answer.timed_out:
-            user_answer = "Timed out"
-
-        correct_answer = ""
-        if question.question_type == Question.QuestionType.MCQ:
-            correct = question.choices.filter(is_correct=True).first()
-            if correct:
-                correct_answer = f"{correct.label}: {correct.text}"
-        elif question.correct_answer is not None:
-            correct_answer = str(question.correct_answer)
+        user_answer = format_answer_user_text(answer)
+        correct_answer = format_question_correct_text(question)
 
         if answer.is_correct:
             return _rule_based_answer_feedback(answer)
@@ -206,9 +226,10 @@ def generate_answer_feedback(answer) -> str:
             user_answer=user_answer or "No answer",
             correct_answer=correct_answer or "Unknown",
             confidence=confidence,
+            question_type=question.get_question_type_display(),
         )
         if ai_feedback:
-            return ai_feedback
+            return normalize_feedback_text(ai_feedback)
     except Exception:
         pass
 
@@ -423,15 +444,30 @@ def topic_progress_summary(student: User) -> list[dict]:
     return results
 
 
+def enrolled_bsed_student_count() -> int:
+    """Active BSED Math students (expected participation ceiling for overview charts)."""
+    return User.objects.filter(
+        role=User.Role.STUDENT,
+        home_degree_program=User.HomeDegreeProgram.BSED_MATH,
+        is_active=True,
+    ).count()
+
+
 def professor_overview_summary(professor: User) -> dict:
-    """Return cross-course KPIs for a professor."""
+    """Aggregate KPIs for the professor overview dashboard."""
     from django.db.models import Max
     from django.utils import timezone
 
+    from apps.questions.models import Subject
     from apps.reviews.models import ExamSetup
 
-    courses = Course.objects.filter(professor=professor, is_archived=False)
-    answers = Answer.objects.filter(session__course__professor=professor)
+    subject_count = Subject.objects.filter(
+        program__slug=User.HomeDegreeProgram.BSED_MATH
+    ).count()
+    answers = Answer.objects.filter(
+        session__course__professor=professor,
+        session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+    )
     total_answers = answers.count()
     correct_answers = answers.filter(is_correct=True).count()
     accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
@@ -441,32 +477,53 @@ def professor_overview_summary(professor: User) -> dict:
     enabled_exam_setups = ExamSetup.objects.filter(
         course__professor=professor,
         course__is_archived=False,
+        course__program__slug=User.HomeDegreeProgram.BSED_MATH,
         is_enabled=True,
     ).count()
 
     last_activity_at = (
-        ReviewSession.objects.filter(course__professor=professor)
+        ReviewSession.objects.filter(
+            course__professor=professor,
+            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        )
         .aggregate(last=Max("started_at"))
         .get("last")
     )
     total_sessions = ReviewSession.objects.filter(
         course__professor=professor,
+        course__program__slug=User.HomeDegreeProgram.BSED_MATH,
         status__in=[ReviewSession.Status.COMPLETED, ReviewSession.Status.EXPIRED],
     ).count()
+    mistake_count = MistakeRecord.objects.filter(
+        answer__session__course__professor=professor,
+        answer__session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+    ).count()
+    avg_mistakes_per_session = (
+        round(mistake_count / total_sessions, 1) if total_sessions else 0.0
+    )
 
     return {
-        "course_count": courses.count(),
-        "student_count": ReviewSession.objects.filter(course__professor=professor)
+        "course_count": subject_count,
+        "subject_count": subject_count,
+        "expected_students": enrolled_bsed_student_count(),
+        "student_count": ReviewSession.objects.filter(
+            course__professor=professor,
+            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        )
         .values("student")
         .distinct()
         .count(),
         "accuracy": accuracy,
         "sessions_this_week": ReviewSession.objects.filter(
             course__professor=professor,
+            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
             started_at__gte=week_ago,
         ).count(),
         "enabled_exam_setups": enabled_exam_setups,
         "total_sessions": total_sessions,
+        "mistake_count": mistake_count,
+        "avg_mistakes_per_session": avg_mistakes_per_session,
+        "mistakes_subtext": f"{mistake_count} total",
         "as_of": now,
         "week_start": week_ago,
         "week_end": now,
@@ -483,7 +540,11 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
 
     now = timezone.now()
     week_ago = now - timezone.timedelta(days=7)
-    courses = Course.objects.filter(professor=professor, is_archived=False).select_related("program")
+    courses = Course.objects.filter(
+        professor=professor,
+        is_archived=False,
+        program__slug=User.HomeDegreeProgram.BSED_MATH,
+    ).select_related("program")
 
     cards = []
     for course in courses:
@@ -525,23 +586,10 @@ def professor_overview_course_cards(professor: User) -> list[dict]:
 
 
 def confidence_to_scale_0_3(value) -> int:
-    """Map stored 1–5 / null confidence onto chart scale 0–3.
+    """Map stored 1–5 / null confidence onto chart scale 0–3."""
+    from apps.analytics.confidence import confidence_to_scale_0_3 as _map_confidence
 
-    null → 0 (none), 1–2 → 1 (low), 3–4 → 2 (average), 5 → 3 (high).
-    """
-    if value is None:
-        return 0
-    try:
-        c = int(value)
-    except (TypeError, ValueError):
-        return 0
-    if c <= 0:
-        return 0
-    if c <= 2:
-        return 1
-    if c <= 4:
-        return 2
-    return 3
+    return _map_confidence(value)
 
 
 def _confidence_scale_0_3_annotation():
@@ -651,6 +699,34 @@ def professor_overview_trends(professor: User) -> dict:
             )
         return points
 
+    def _fill_confidence(conf_map, cfg):
+        points = []
+        for start in _bucket_starts(cfg):
+            k = cfg["key"](start)
+            bucket = conf_map.get(k, {})
+            points.append(
+                {
+                    "label": cfg["label"](start),
+                    "value": bucket.get("value", 0),
+                    "student_count": bucket.get("student_count", 0),
+                }
+            )
+        return points
+
+    def _fill_scores(scores_map, cfg):
+        points = []
+        for start in _bucket_starts(cfg):
+            k = cfg["key"](start)
+            bucket = scores_map.get(k, {})
+            points.append(
+                {
+                    "label": cfg["label"](start),
+                    "value": bucket.get("value", 0),
+                    "student_count": bucket.get("student_count", 0),
+                }
+            )
+        return points
+
     result = {}
     for range_key, cfg in ranges.items():
         trunc_fn = cfg["trunc"]
@@ -669,34 +745,56 @@ def professor_overview_trends(professor: User) -> dict:
             if row["bucket"]
         }
 
-        answer_rows = (
-            Answer.objects.filter(answer_filter, answered_at__gte=earliest)
-            .annotate(bucket=trunc_fn("answered_at"))
+        from django.db.models import IntegerField, OuterRef, Subquery
+
+        correct_count_subq = (
+            Answer.objects.filter(session_id=OuterRef("pk"), is_correct=True)
+            .values("session_id")
+            .annotate(c=Count("id"))
+            .values("c")[:1]
+        )
+        score_rows = (
+            ReviewSession.objects.filter(
+                course_filter,
+                status=ReviewSession.Status.COMPLETED,
+                started_at__gte=earliest,
+            )
+            .annotate(
+                bucket=trunc_fn("started_at"),
+                score=Subquery(correct_count_subq, output_field=IntegerField()),
+            )
             .values("bucket")
             .annotate(
-                total=Count("id"),
-                correct=Count("id", filter=Q(is_correct=True)),
+                value=Avg("score"),
+                student_count=Count("student_id", distinct=True),
             )
             .order_by("bucket")
         )
         scores_map = {}
-        for row in answer_rows:
+        for row in score_rows:
             if not row["bucket"]:
                 continue
             k = cfg["key"](row["bucket"])
-            total = row["total"] or 0
-            scores_map[k] = (
-                round((row["correct"] or 0) / total * 100, 1) if total else 0
-            )
+            scores_map[k] = {
+                "value": round(float(row["value"] or 0), 1),
+                "student_count": row["student_count"] or 0,
+            }
 
         conf_rows = (
-            Answer.objects.filter(answer_filter, answered_at__gte=earliest)
+            Answer.objects.filter(
+                answer_filter,
+                answered_at__gte=earliest,
+                confidence__isnull=False,
+            )
             .annotate(
                 mapped_conf=_confidence_scale_0_3_annotation(),
                 bucket=trunc_fn("answered_at"),
             )
             .values("bucket")
-            .annotate(value=Avg("mapped_conf"))
+            .annotate(
+                value=Avg("mapped_conf"),
+                student_count=Count("session__student_id", distinct=True),
+            )
             .order_by("bucket")
         )
         confidence_map = {}
@@ -704,12 +802,15 @@ def professor_overview_trends(professor: User) -> dict:
             if not row["bucket"]:
                 continue
             k = cfg["key"](row["bucket"])
-            confidence_map[k] = round(float(row["value"] or 0), 2)
+            confidence_map[k] = {
+                "value": round(float(row["value"] or 0), 2),
+                "student_count": row["student_count"] or 0,
+            }
 
         result[range_key] = {
             "students": _fill(students_map, cfg),
-            "scores": _fill(scores_map, cfg),
-            "confidence": _fill(confidence_map, cfg),
+            "scores": _fill_scores(scores_map, cfg),
+            "confidence": _fill_confidence(confidence_map, cfg),
         }
 
     return result
@@ -757,9 +858,14 @@ def course_performance_summary(course: Course) -> dict:
 
     confidence_by_topic = list(
         answers.values("question__topic__name")
-        .annotate(avg_confidence=Avg("confidence"), total=Count("id"))
+        .annotate(
+            avg_confidence=Avg(_confidence_scale_0_3_annotation()),
+            total=Count("id"),
+        )
         .order_by("question__topic__name")
     )
+    for row in confidence_by_topic:
+        row["avg_confidence"] = round(float(row["avg_confidence"] or 0), 1)
 
     mistake_patterns = list(
         MistakeRecord.objects.filter(
@@ -1053,7 +1159,7 @@ def build_session_history_rows(sessions) -> list[dict]:
 
 
 def build_confidence_performance_series(sessions) -> list[dict]:
-    """Per-session data for confidence vs performance grouped bar chart."""
+    """Per-session data for confidence (0–3) vs performance (%) bar chart."""
     series = []
     for session in sessions:
         total = getattr(session, "session_answer_count", None)
@@ -1063,17 +1169,19 @@ def build_confidence_performance_series(sessions) -> list[dict]:
         if correct is None:
             correct = session.correct_count
         accuracy = round(correct / total * 100, 1) if total else 0.0
-        avg_conf = getattr(session, "session_avg_confidence", None)
-        if avg_conf is None and total:
-            avg_conf = session.answers.aggregate(avg=Avg("confidence"))["avg"] or 0
-        avg_conf = round(float(avg_conf or 0), 1)
+        session_answers = list(session.answers.all())
+        if session_answers:
+            mapped = [confidence_to_scale_0_3(a.confidence) for a in session_answers]
+            avg_conf = round(sum(mapped) / len(mapped), 2)
+        else:
+            avg_conf = 0.0
         started = session.started_at
         label = f"{session.topic.name} {started.strftime('%m-%d %I:%M %p')}" if started else session.topic.name
         series.append(
             {
                 "label": label,
                 "topic": session.topic.name,
-                "confidence": round(avg_conf / 5 * 100, 1) if avg_conf else 0,
+                "confidence": avg_conf,
                 "performance": accuracy,
             }
         )
@@ -1111,16 +1219,40 @@ def get_roster_summaries(course: Course) -> list[dict]:
     return roster
 
 
-def get_professor_students_with_exams(professor: User) -> list[dict]:
-    """Students who completed at least one exam on this professor's courses."""
+def get_professor_students_with_exams(
+    professor: User, *, include_archived: bool = False
+) -> list[dict]:
+    """Students in faculty-assigned sections who completed exams on assigned subjects.
+
+    Option B: no profile sections/subjects → empty roster.
+    """
+    from apps.users.assignment_services import (
+        faculty_has_chat_scope,
+        get_faculty_profile_section_ids,
+        get_faculty_profile_subject_ids,
+    )
+
+    if not faculty_has_chat_scope(professor):
+        return []
+
+    section_ids = get_faculty_profile_section_ids(professor)
+    subject_ids = get_faculty_profile_subject_ids(professor)
     completed = (
         ReviewSession.objects.filter(
-            course__professor=professor,
+            student__section_id__in=section_ids,
             status=ReviewSession.Status.COMPLETED,
         )
-        .select_related("student", "course")
+        .filter(
+            Q(subjects__in=subject_ids)
+            | Q(topic__subject_id__in=subject_ids)
+            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
+        )
+        .select_related("student", "student__section", "course")
+        .distinct()
         .order_by("-ended_at", "-started_at")
     )
+    if not include_archived:
+        completed = completed.filter(student__is_archived=False)
 
     by_student: dict[int, dict] = {}
     for session in completed:
@@ -1142,22 +1274,34 @@ def get_professor_students_with_exams(professor: User) -> list[dict]:
         ):
             by_student[student.pk]["last_activity"] = activity
 
-    # Distinct subjects answered under this professor (from answers).
+    # Distinct assigned subjects answered by these students.
     subject_counts = {
         row["session__student_id"]: row["n"]
         for row in Answer.objects.filter(
-            session__course__professor=professor,
             session__student_id__in=by_student.keys(),
-            question__topic__subject_id__isnull=False,
+            question__topic__subject_id__in=subject_ids,
         )
         .values("session__student_id")
         .annotate(n=Count("question__topic__subject_id", distinct=True))
+    }
+
+    from apps.analytics.models import MistakeRecord
+
+    mistake_counts = {
+        row["student_id"]: row["n"]
+        for row in MistakeRecord.objects.filter(
+            student_id__in=by_student.keys(),
+            question__topic__subject_id__in=subject_ids,
+        )
+        .values("student_id")
+        .annotate(n=Count("id"))
     }
 
     rows = list(by_student.values())
     for row in rows:
         row["subjects_taken_count"] = subject_counts.get(row["student"].pk, 0)
         row["courses_label"] = str(row["subjects_taken_count"])
+        row["mistake_count"] = mistake_counts.get(row["student"].pk, 0)
     rows.sort(
         key=lambda r: (
             (r["student"].last_name or "").lower(),
@@ -1375,7 +1519,9 @@ def get_intervention_list(course: Course) -> list[dict]:
         total = student_answers.count()
         correct = student_answers.filter(is_correct=True).count()
         accuracy = round(correct / total * 100, 1) if total else 0.0
-        avg_confidence = student_answers.aggregate(avg=Avg("confidence"))["avg"] or 0
+        avg_confidence = student_answers.aggregate(
+            avg=Avg(_confidence_scale_0_3_annotation())
+        )["avg"] or 0
         sessions_count = ReviewSession.objects.filter(
             student=student,
             course=course,
@@ -1501,12 +1647,15 @@ def section_performance_summary(section) -> dict:
     }
 
 
-def get_section_roster_summaries(section) -> list[dict]:
+def get_section_roster_summaries(
+    section, *, include_archived: bool = False
+) -> list[dict]:
     """Per-student rows for every student enrolled in a ProgramSection."""
-    students = (
-        User.objects.filter(section=section, role=User.Role.STUDENT)
-        .select_related("year_level", "section")
-        .order_by("last_name", "email")
+    students = User.objects.filter(section=section, role=User.Role.STUDENT)
+    if not include_archived:
+        students = students.filter(is_archived=False)
+    students = students.select_related("year_level", "section").order_by(
+        "last_name", "email"
     )
     answers = _section_answers(section)
     roster = []

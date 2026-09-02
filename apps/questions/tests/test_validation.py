@@ -110,3 +110,42 @@ class TestDuplicateValidation:
         )
         assert result["is_valid"] is False
         assert "Duplicate" in result["feedback"]
+
+    def test_off_subject_stem_rejected(self, topic, settings):
+        settings.AI_ENABLED = False
+        topic.subject.code = "GNED 03"
+        topic.subject.name = "Mathematics in the Modern World"
+        topic.subject.save(update_fields=["code", "name"])
+        result = validate_question_for_submit(
+            "What is love?",
+            [
+                {"label": "A", "text": "4", "is_correct": True},
+                {"label": "B", "text": "5", "is_correct": False},
+                {"label": "C", "text": "6", "is_correct": False},
+                {"label": "D", "text": "7", "is_correct": False},
+            ],
+            topic,
+            "easy",
+            "A",
+            ai_enabled=True,
+        )
+        assert result["is_valid"] is False
+        assert "GNED 03" in result["feedback"]
+
+    def test_off_subject_rejected_before_structure_errors(self, topic, settings):
+        settings.AI_ENABLED = False
+        topic.subject.code = "GNED 03"
+        topic.subject.name = "Mathematics in the Modern World"
+        topic.subject.save(update_fields=["code", "name"])
+        result = validate_question_for_submit(
+            "What is love?",
+            [],
+            topic,
+            "easy",
+            "A",
+            ai_enabled=True,
+            question_type="mcq",
+        )
+        assert result["is_valid"] is False
+        assert "GNED 03" in result["feedback"] or "not look related" in result["feedback"].lower()
+        assert "four choices" not in result["feedback"].lower()

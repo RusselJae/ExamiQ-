@@ -162,7 +162,12 @@ GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
 GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-2.0-flash")
 GEMINI_FALLBACK_MODELS = env.list(
     "GEMINI_FALLBACK_MODELS",
-    default=["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite"],
+    default=[
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash-lite",
+    ],
 )
 GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=2048)
 AI_GENERATION_BATCH_SIZE = env.int("AI_GENERATION_BATCH_SIZE", default=5)

@@ -1,18 +1,31 @@
 <div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="generate-modal">
-    <div class="bento-card bento-card--elevated p-6 max-w-md w-full mx-4 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="generate-loading-title">
-        <div class="flex justify-between items-start mb-4">
+    <div class="gen-progress-modal" role="dialog" aria-modal="true" aria-labelledby="generate-loading-title">
+        <div class="gen-progress-modal__header">
             <div>
-                <h2 id="generate-loading-title" class="text-lg font-semibold text-examiq-navy">Generating questions</h2>
-                <p class="text-sm text-examiq-slate mt-1" id="generate-loading-status">
-                    Working with the AI provider — this can take a minute.
+                <h2 id="generate-loading-title" class="gen-progress-modal__title">Generating questions</h2>
+                <p class="gen-progress-modal__subtitle">
+                    Working from your source material. This usually takes about a minute.
                 </p>
             </div>
-            <button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+            <button type="button" id="close-generate-modal" class="gen-progress-modal__close" aria-label="Close">&times;</button>
         </div>
-        <div class="flex items-center gap-3 py-4">
-            <div class="feedback-modal__spinner" aria-hidden="true"></div>
-            <p class="text-sm text-examiq-slate" id="generate-loading-detail">Queued…</p>
+
+        <div class="gen-progress-modal__progress">
+            <div class="gen-progress-modal__count" id="generate-loading-count">0 written</div>
+            <div class="gen-progress-modal__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="generate-loading-bar-wrap">
+                <div class="gen-progress-modal__bar" id="generate-loading-bar" style="width: 0%"></div>
+            </div>
+            <div class="gen-progress-modal__stages" id="generate-loading-stages">
+                <span class="gen-progress-modal__stage is-active" data-stage="reading">Reading material</span>
+                <span class="gen-progress-modal__stage" data-stage="writing">Writing questions</span>
+                <span class="gen-progress-modal__stage" data-stage="finalizing">Finalizing</span>
+            </div>
+            <p class="sr-only" id="generate-loading-detail">Queued…</p>
         </div>
-        <button type="button" id="close-generate-modal-footer" class="btn-secondary">Hide</button>
+
+        <div class="gen-progress-modal__footer">
+            <button type="button" id="cancel-generate-modal" class="btn-outline btn-primary-sm">Cancel</button>
+            <button type="button" id="close-generate-modal-footer" class="btn-secondary btn-primary-sm">Hide</button>
+        </div>
     </div>
 </div>

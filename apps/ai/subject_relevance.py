@@ -12,16 +12,80 @@ from apps.ai.prompts import build_subject_relevance_prompt
 
 logger = logging.getLogger(__name__)
 
+# Tokens that appear across many math subjects — never enough alone to pass.
+_GENERIC_MATH_TOKENS = frozenset(
+    {
+        "math",
+        "maths",
+        "mathematics",
+        "mathematical",
+        "algebra",
+        "number",
+        "numbers",
+        "system",
+        "systems",
+        "equation",
+        "equations",
+        "problem",
+        "problems",
+        "module",
+        "lesson",
+        "chapter",
+        "unit",
+        "review",
+        "introduction",
+        "history",
+        "historical",
+        "basic",
+        "basics",
+        "elementary",
+        "advanced",
+        "course",
+        "subject",
+        "topic",
+        "topics",
+        "learning",
+        "student",
+        "students",
+        "teacher",
+        "education",
+        "example",
+        "examples",
+        "exercise",
+        "exercises",
+        "practice",
+        "answer",
+        "answers",
+        "question",
+        "questions",
+        "solve",
+        "solution",
+        "solutions",
+        "formula",
+        "formulas",
+        "formulae",
+        "concept",
+        "concepts",
+        "theory",
+        "theories",
+    }
+)
+
 
 def _tokenize(text: str) -> set[str]:
-    return {t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(t) > 2}
+    return {t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(t) > 3}
+
+
+def _content_tokens(tokens: set[str]) -> set[str]:
+    """Drop generic math/education tokens from a token set."""
+    return {t for t in tokens if t not in _GENERIC_MATH_TOKENS}
 
 
 def _stub_relevance(source_material: str, subject, topics) -> dict[str, Any]:
     """Keyword-based relevance used when the LLM is unavailable or fails.
 
-    Partial/truncated extracts are fine as long as a subject or topic signal
-    appears.
+    Requires a strong subject or topic signal so adjacent math subjects
+    (e.g. history of mathematics vs plane geometry) do not pass.
     """
     text = (source_material or "").strip()
     if not text:
@@ -35,16 +99,17 @@ def _stub_relevance(source_material: str, subject, topics) -> dict[str, Any]:
 
     lowered = text.lower()
     material_tokens = _tokenize(lowered)
+    material_content = _content_tokens(material_tokens)
     code = (getattr(subject, "code", "") or "").strip().lower()
     name = (getattr(subject, "name", "") or "").strip().lower()
-    subject_tokens = _tokenize(f"{code} {name}")
+    subject_tokens = _content_tokens(_tokenize(f"{code} {name}"))
 
     subject_score = 0
     if code and len(code) >= 2 and code in lowered:
-        subject_score += 3
-    if name and len(name) >= 4 and name in lowered:
-        subject_score += 3
-    subject_score += sum(1 for token in subject_tokens if token in material_tokens)
+        subject_score += 4
+    if name and len(name) >= 6 and name in lowered:
+        subject_score += 4
+    subject_score += sum(2 for token in subject_tokens if token in material_content)
 
     best_topic = None
     best_score = 0
@@ -52,15 +117,19 @@ def _stub_relevance(source_material: str, subject, topics) -> dict[str, Any]:
         tname = (getattr(topic, "name", "") or "").strip()
         if not tname:
             continue
-        score = sum(1 for token in _tokenize(tname) if token in material_tokens)
+        topic_tokens = _content_tokens(_tokenize(tname))
+        score = sum(2 for token in topic_tokens if token in material_content)
         t_lower = tname.lower()
-        if len(t_lower) >= 4 and t_lower in lowered:
-            score += 2
+        if len(t_lower) >= 6 and t_lower in lowered:
+            score += 3
         if score > best_score:
             best_score = score
             best_topic = topic
 
-    related = subject_score >= 1 or best_score >= 1
+    # Pass if the subject code/name appears, or at least one distinctive
+    # topic/subject token matches. Since garbage PDF syntax is now blocked
+    # before reaching this point, we can trust that the text is real content.
+    related = subject_score >= 2 or best_score >= 2
     if not related:
         return {
             "related": False,
@@ -69,7 +138,9 @@ def _stub_relevance(source_material: str, subject, topics) -> dict[str, Any]:
             "topic_score": best_score,
             "reason": (
                 "This module does not look related to "
-                f"{getattr(subject, 'code', '')} — {getattr(subject, 'name', 'this course subject')}."
+                f"{getattr(subject, 'code', '')} — "
+                f"{getattr(subject, 'name', 'this course subject')}. "
+                "Upload material that matches this subject."
             ),
         }
 
@@ -160,5 +231,70 @@ def assess_subject_relevance(
         "subject_score": stub["subject_score"],
         "topic_score": stub["topic_score"],
         "reason": reason,
+        "ai_assessed": True,
+    }
+
+
+def assess_question_subject_relevance(
+    stem: str,
+    subject,
+    topic=None,
+    *,
+    use_ai: bool = True,
+) -> dict[str, Any]:
+    """Return whether a question stem fits the target course subject."""
+    from apps.ai.prompts import build_question_subject_relevance_prompt
+
+    text = (stem or "").strip()
+    if not text:
+        code = getattr(subject, "code", "") or ""
+        name = getattr(subject, "name", "") or "this course subject"
+        return {
+            "related": False,
+            "reason": f"Add a question stem for {code} — {name}.",
+            "subject_score": 0,
+            "topic_score": 0,
+        }
+
+    topics = [topic] if topic is not None else []
+    stub = _stub_relevance(text, subject, topics)
+    if not use_ai or not ai_available():
+        return stub
+
+    topic_name = getattr(topic, "name", "") if topic is not None else ""
+    system, user = build_question_subject_relevance_prompt(
+        text,
+        getattr(subject, "code", "") or "",
+        getattr(subject, "name", "") or "",
+        topic_name,
+    )
+    raw = chat(user, system=system, max_output_tokens=400)
+    parsed = _parse_relevance_json(raw)
+    if parsed is None:
+        return stub
+
+    related = bool(parsed.get("related"))
+    reason = str(parsed.get("reason") or "").strip()
+    if not related:
+        if not reason:
+            code = getattr(subject, "code", "") or ""
+            name = getattr(subject, "name", "") or "this course subject"
+            reason = (
+                f"This question does not look related to {code} — {name}. "
+                "Write a stem that matches this subject."
+            )
+        return {
+            "related": False,
+            "reason": reason,
+            "subject_score": stub["subject_score"],
+            "topic_score": stub["topic_score"],
+            "ai_assessed": True,
+        }
+
+    return {
+        "related": True,
+        "reason": reason,
+        "subject_score": stub["subject_score"],
+        "topic_score": stub["topic_score"],
         "ai_assessed": True,
     }

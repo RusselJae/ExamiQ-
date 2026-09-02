@@ -12,16 +12,20 @@ from apps.ai.interfaces import (
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
+    ExplanationGenerator,
     QuestionGenerator,
     QuestionValidator,
 )
 from apps.ai.prompts import (
+    adaptive_feedback_max_tokens,
     build_adaptive_feedback_prompt,
     build_calibration_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
+    build_explanation_generation_prompt,
     build_question_generation_prompt,
     build_question_validation_prompt,
+    validation_max_tokens,
 )
 from apps.ai.providers import gemini_client
 from apps.ai.stubs import (
@@ -57,6 +61,29 @@ def _parse_question_json(raw: str) -> list[dict]:
     if not isinstance(data, list):
         raise json.JSONDecodeError("Expected JSON array", text, 0)
     return data
+
+
+def _parse_explanation_json(raw: str) -> dict:
+    """Extract and parse an explanation JSON object from model output."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        text = match.group(0)
+    text = re.sub(r",\s*]", "]", text)
+    text = re.sub(r",\s*}", "}", text)
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise json.JSONDecodeError("Expected JSON object", text, 0)
+    steps = data.get("explanation_steps") or []
+    if not isinstance(steps, list):
+        steps = []
+    return {
+        "explanation_steps": [str(s).strip() for s in steps if str(s).strip()],
+        "solution_summary": str(data.get("solution_summary") or "").strip(),
+    }
 
 
 def _chat(prompt: str, system: str = "You are a concise educational analytics assistant.", max_output_tokens: int = 500) -> str | None:
@@ -95,12 +122,25 @@ class GeminiDifficultyTagger(DifficultyTagger):
 
 
 class GeminiQuestionGenerator(QuestionGenerator):
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
+    def generate(
+        self,
+        topic,
+        difficulty: str,
+        count: int = 5,
+        reference_stem: str = "",
+        source_material: str = "",
+        question_type: str = "mcq",
+    ):
         if topic is None:
             return []
 
         system, user_prompt, max_tokens = build_question_generation_prompt(
-            topic, difficulty, count, reference_stem, source_material=source_material
+            topic,
+            difficulty,
+            count,
+            reference_stem,
+            source_material=source_material,
+            question_type=question_type,
         )
         token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
         last_raw = ""
@@ -119,7 +159,10 @@ class GeminiQuestionGenerator(QuestionGenerator):
                 if data:
                     from apps.ai.normalize import normalize_generated_questions
 
-                    return normalize_generated_questions(data[:count])
+                    return normalize_generated_questions(
+                        data[:count],
+                        question_type=question_type,
+                    )
             except (json.JSONDecodeError, TypeError) as exc:
                 last_exc = exc
                 logger.warning(
@@ -130,6 +173,40 @@ class GeminiQuestionGenerator(QuestionGenerator):
 
         raise AIServiceUnavailableError(
             "AI returned incomplete or invalid JSON. Try again with fewer questions.",
+            detail=str(last_exc) if last_exc else last_raw[:500],
+            retryable=True,
+        )
+
+
+class GeminiExplanationGenerator(ExplanationGenerator):
+    def generate(self, question) -> dict:
+        system, user_prompt, max_tokens = build_explanation_generation_prompt(question)
+        token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
+        last_raw = ""
+        last_exc: json.JSONDecodeError | TypeError | None = None
+
+        for budget in token_budgets:
+            result = gemini_client.chat_with_fallback(
+                user_prompt,
+                system=system,
+                max_output_tokens=budget,
+                json_mode=True,
+            )
+            last_raw = result.text
+            try:
+                data = _parse_explanation_json(last_raw)
+                if data.get("explanation_steps") or data.get("solution_summary"):
+                    return data
+            except (json.JSONDecodeError, TypeError) as exc:
+                last_exc = exc
+                logger.warning(
+                    "Failed to parse Gemini explanation JSON (budget=%s): %s",
+                    budget,
+                    exc,
+                )
+
+        raise AIServiceUnavailableError(
+            "AI returned incomplete explanation JSON. Please try again.",
             detail=str(last_exc) if last_exc else last_raw[:500],
             retryable=True,
         )
@@ -149,7 +226,7 @@ class GeminiQuestionValidator(QuestionValidator):
         system, prompt = build_question_validation_prompt(
             stem, choices, topic, difficulty, correct_label
         )
-        raw = _chat(prompt, system=system)
+        raw = _chat(prompt, system=system, max_output_tokens=validation_max_tokens())
         if not raw:
             return stub.validate(stem, choices, topic, difficulty, correct_label)
         try:
@@ -169,13 +246,28 @@ class GeminiAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         user_answer: str,
         correct_answer: str,
         confidence: str = "medium",
+        question_type: str = "",
     ) -> str:
         stub = StubAdaptiveFeedbackGenerator()
         system, prompt = build_adaptive_feedback_prompt(
-            topic, question, user_answer, correct_answer, confidence
+            topic,
+            question,
+            user_answer,
+            correct_answer,
+            confidence,
+            question_type=question_type,
         )
-        result = _chat(prompt, system=system, max_output_tokens=600)
-        return result or stub.generate(topic, question, user_answer, correct_answer, confidence)
+        result = _chat(
+            prompt, system=system, max_output_tokens=adaptive_feedback_max_tokens()
+        )
+        return result or stub.generate(
+            topic,
+            question,
+            user_answer,
+            correct_answer,
+            confidence,
+            question_type=question_type,
+        )
 
 
 class GeminiErrorClassifier(ErrorClassifier):

@@ -42,9 +42,10 @@
                 </td>
                 <td class="py-3 text-right">
                     <button type="button"
-                            class="text-link text-sm font-medium open-concern-btn"
-                            data-mistake-id="{{ concern.pk }}">
-                        View
+                            class="text-link text-sm font-medium"
+                            data-open-student-chat
+                            data-student-id="{{ concern.student.pk }}">
+                        Chat
                     </button>
                 </td>
             </tr>
@@ -52,20 +53,7 @@
         </tbody>
     </table>
     {% else %}
-    {% include "components/empty_state.html" with compact=True title="No concerns yet" body="When students in this section flag mistakes with a note or photo, they show up here." %}
+    {% include "components/empty_state.html" with compact=True title="No concerns yet" body="When students message faculty, conversations show up in Chat." %}
     {% endif %}
 </div>
-
-{% include "professor/feedback/partials/concern_modal.html" %}
-{% endblock %}
-
-{% block extra_js %}
-<script>
-window.ExamiQFacultyFeedback = {
-    concernsUrl: "{% url 'analytics_professor:section_feedback_concerns_api' section.pk %}",
-    noteUrlBase: "{% url 'analytics_professor:section_feedback_faculty_note' section.pk 0 %}",
-    csrfToken: "{{ csrf_token }}"
-};
-</script>
-<script src="{% static 'js/faculty-concern-modal.js' %}"></script>
 {% endblock %}

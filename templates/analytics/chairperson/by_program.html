@@ -5,13 +5,13 @@
 {% block content %}
 {% include "components/page_header.html" with title="Cross-Program Analytics" subtitle="Math performance by home degree program in your department." %}
 
-<div class="bento-grid mb-6">
-    <div class="span-kpi">
-        <div class="bento-card bento-card--kpi bento-card-inner">
-            <p class="text-sm text-examiq-slate">Overall department accuracy</p>
-            <p class="text-3xl font-bold stat-value-good">{{ analytics.overall_accuracy }}%</p>
-        </div>
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=analytics.overall_accuracy suffix="%" label="Overall department accuracy" variant="neutral" %}
     </div>
+</div>
+
+<div class="bento-grid mb-6">
     {% for row in analytics.breakdown %}
     <div class="span-half">
         <div class="bento-card bento-card-inner flex justify-between items-center h-full">
@@ -19,7 +19,7 @@
                 <p class="font-semibold text-examiq-navy">{{ row.label }}</p>
                 <p class="text-xs text-examiq-slate">{{ row.student_count }} students · {{ row.total_answers }} answers</p>
             </div>
-            <p class="text-xl font-bold stat-value-good">{{ row.accuracy }}%</p>
+            <p class="text-xl font-semibold font-serif text-examiq-navy">{{ row.accuracy }}%</p>
         </div>
     </div>
     {% empty %}

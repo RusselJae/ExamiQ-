@@ -1,13 +1,29 @@
-<div class="page-header">
-    <div>
-        <h1 class="text-3xl font-bold text-examiq-navy mb-2">{{ title }}</h1>
-        {% if subtitle %}
-        <p class="text-examiq-slate">{{ subtitle }}</p>
-        {% endif %}
-    </div>
-    {% if cta_url and cta_label %}
-    <div class="page-header-actions">
-        <a href="{{ cta_url }}" class="btn-primary">{{ cta_label }}</a>
-    </div>
+{# Shared faculty page chrome (Overview-style). #}
+{# Required: title #}
+{# Optional: eyebrow, subtitle, cta_url, cta_label, show_live #}
+<div class="overview-header mb-6">
+    {% if eyebrow %}
+    <p class="overview-eyebrow">{{ eyebrow }}</p>
     {% endif %}
+    <div class="overview-header__main">
+        <div class="overview-header__copy">
+            <h1 class="overview-title">{{ title }}</h1>
+            {% if subtitle %}
+            <p class="overview-as-of">{{ subtitle }}</p>
+            {% endif %}
+        </div>
+        <div class="overview-header__aside">
+            {% if show_live %}
+            <span class="overview-live-badge">
+                <span class="overview-live-badge__dot" aria-hidden="true"></span>
+                Live
+            </span>
+            {% endif %}
+            {% if cta_url and cta_label %}
+            <div class="page-header-actions">
+                <a href="{{ cta_url }}" class="btn-outline btn-outline-sm">{{ cta_label }}</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>

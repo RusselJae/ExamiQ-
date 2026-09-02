@@ -21,6 +21,11 @@ from apps.users.models import (
 )
 from apps.users.section_services import (
     get_current_academic_year,
+    get_or_create_student_section,
+    parse_section_label,
+    section_matches_student,
+    sections_for_student,
+    validate_section_capacity,
 )
 
 INPUT_CLASS = (
@@ -166,6 +171,28 @@ class ExamiQSignupForm(SignupForm):
         label="Phone number",
         widget=forms.HiddenInput(),
     )
+    year_level = forms.ModelChoiceField(
+        queryset=YearLevel.objects.none(),
+        required=True,
+        empty_label="— Select year level —",
+        label="Year level",
+        widget=forms.Select(
+            attrs={"class": AUTH_SELECT_CLASS, "id": "id_year_level"}
+        ),
+    )
+    section = forms.ModelChoiceField(
+        queryset=ProgramSection.objects.none(),
+        required=True,
+        empty_label="— Select section —",
+        label="Section",
+        widget=forms.Select(
+            attrs={
+                "class": AUTH_SELECT_CLASS,
+                "id": "id_section",
+                "data-program": User.HomeDegreeProgram.BSED_MATH,
+            }
+        ),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -175,6 +202,8 @@ class ExamiQSignupForm(SignupForm):
                 self.fields[name].widget.attrs.setdefault("class", "auth-field__input")
         if "email" in self.fields:
             self.fields["email"].widget.attrs["placeholder"] = "name@school.edu.ph"
+        if "employee_id" in self.fields:
+            self.fields["employee_id"].help_text = ""
         if "password1" in self.fields:
             self.fields["password1"].label = "Password"
             self.fields["password1"].help_text = ""
@@ -182,6 +211,27 @@ class ExamiQSignupForm(SignupForm):
         if "password2" in self.fields:
             self.fields["password2"].label = "Confirm password"
             self.fields["password2"].widget.attrs.setdefault("placeholder", "Re-enter password")
+
+        self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
+        year_level_id = None
+        if self.data.get("year_level"):
+            try:
+                year_level_id = int(self.data.get("year_level"))
+            except (TypeError, ValueError):
+                year_level_id = None
+        self.fields["section"].queryset = sections_for_student(
+            User.HomeDegreeProgram.BSED_MATH,
+            year_level_id,
+        )
+        self.fields["section"].label_from_instance = (
+            lambda obj: obj.display_label
+        )
+        self.fields["section"].widget.attrs["data-program"] = (
+            User.HomeDegreeProgram.BSED_MATH
+        )
+        self.fields["section"].widget.attrs["data-sections-url"] = (
+            "/profile/api/sections/"
+        )
 
     def clean_student_number(self):
         value = self.cleaned_data.get("student_number", "").strip()
@@ -218,6 +268,28 @@ class ExamiQSignupForm(SignupForm):
             student_number = cleaned.get("student_number")
             if student_number and User.objects.filter(student_number=student_number).exists():
                 self.add_error("student_number", "This student number is already registered.")
+
+        year_level = cleaned.get("year_level")
+        section = cleaned.get("section")
+        if not year_level:
+            self.add_error("year_level", "Year level is required.")
+        if not section:
+            self.add_error("section", "Section is required.")
+        elif year_level and "section" not in self.errors:
+            if not section_matches_student(
+                section,
+                User.HomeDegreeProgram.BSED_MATH,
+                year_level.pk,
+            ):
+                self.add_error("section", "Choose a section for the selected year level.")
+            elif role == User.Role.STUDENT:
+                try:
+                    validate_section_capacity(section)
+                except ValidationError as exc:
+                    self.add_error(
+                        "section",
+                        exc.messages[0] if exc.messages else str(exc),
+                    )
         return cleaned
 
     def save(self, request):
@@ -229,22 +301,29 @@ class ExamiQSignupForm(SignupForm):
         user.middle_name = self.cleaned_data.get("middle_name", "").strip()
         user.suffix = self.cleaned_data.get("suffix", "").strip()
         user.phone_number = self.cleaned_data["phone_number"]
+        section = self.cleaned_data["section"]
 
         if role == User.Role.STUDENT:
             user.student_number = self.cleaned_data["student_number"]
             user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
             user.employee_id = ""
+            user.year_level = self.cleaned_data["year_level"]
+            user.section = section
         else:
             edu, _ = Department.objects.get_or_create(name=EDUCATION_DEPARTMENT_NAME)
             user.department = edu
             user.employee_id = self.cleaned_data.get("employee_id", "")
             user.student_number = None
+            user.year_level = None
+            user.section = None
 
         # Students and faculty are auto-approved (BSED Math–only product).
         user.approval_status = User.ApprovalStatus.APPROVED
         user.is_active = True
 
         user.save()
+        if role == User.Role.PROFESSOR and section is not None:
+            user.assigned_sections.add(section)
         return user
 
 
@@ -258,6 +337,33 @@ class ProfileUpdateForm(forms.Form):
     last_name = forms.CharField(max_length=150, required=False, label="Last name")
     suffix = forms.CharField(max_length=20, required=False, label="Suffix")
     profile_photo = forms.ImageField(required=False, label="Profile photo")
+    year_level = forms.ModelChoiceField(
+        queryset=YearLevel.objects.all(),
+        required=False,
+        empty_label="— Select year level —",
+        label="Year level",
+    )
+    section = forms.CharField(
+        required=False,
+        max_length=20,
+        label="Section",
+        widget=forms.TextInput(attrs={"placeholder": "1M or BSE 2-1M"}),
+        help_text="Your cohort section for Chat and exam access (e.g. 1M, 2-1M).",
+    )
+    assigned_sections = forms.ModelMultipleChoiceField(
+        queryset=ProgramSection.objects.none(),
+        required=False,
+        label="Sections you handle",
+        widget=forms.SelectMultiple(),
+        help_text="Students in these sections can message you about your subjects.",
+    )
+    assigned_subjects = forms.ModelMultipleChoiceField(
+        queryset=Subject.objects.none(),
+        required=False,
+        label="Course subjects you handle",
+        widget=forms.SelectMultiple(),
+        help_text="Required with sections for Chat. Leave empty to receive no student messages.",
+    )
 
     def __init__(self, user, *args, **kwargs):
         self.user = user
@@ -269,8 +375,86 @@ class ProfileUpdateForm(forms.Form):
         _style_fields(self)
         self.fields["profile_photo"].widget.attrs["accept"] = "image/jpeg,image/png,image/webp"
 
+        if user.role == User.Role.STUDENT:
+            self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
+            self.fields["year_level"].initial = user.year_level
+            if user.section_id:
+                self.fields["section"].initial = user.section.display_label
+            del self.fields["assigned_sections"]
+            del self.fields["assigned_subjects"]
+        elif user.role == User.Role.PROFESSOR:
+            from apps.users.section_services import get_current_academic_year
+
+            academic_year = get_current_academic_year()
+            sections = ProgramSection.objects.filter(
+                program__slug=User.HomeDegreeProgram.BSED_MATH,
+                is_active=True,
+            ).select_related("program", "year_level", "academic_year")
+            if academic_year:
+                sections = sections.filter(academic_year=academic_year)
+            sections = sections.order_by("year_level__order", "label")
+            self.fields["assigned_sections"].queryset = sections
+            self.fields["assigned_sections"].initial = list(
+                user.assigned_sections.values_list("pk", flat=True)
+            )
+            self.fields["assigned_sections"].label_from_instance = (
+                lambda obj: obj.display_label
+            )
+            subjects = Subject.objects.filter(
+                program__slug=User.HomeDegreeProgram.BSED_MATH
+            ).select_related("year_level").order_by("year_level__order", "code")
+            self.fields["assigned_subjects"].queryset = subjects
+            self.fields["assigned_subjects"].initial = list(
+                user.assigned_subjects.values_list("pk", flat=True)
+            )
+            self.fields["assigned_subjects"].label_from_instance = (
+                lambda obj: f"{obj.code} — {obj.name}"
+            )
+            # Associate with profile form when rendered outside the <form> tag.
+            for name in ("assigned_sections", "assigned_subjects"):
+                self.fields[name].widget.attrs["form"] = "profile-update-form"
+                self.fields[name].widget.attrs["class"] = "multi-select-native"
+            _style_fields(self)
+            del self.fields["year_level"]
+            del self.fields["section"]
+        else:
+            del self.fields["year_level"]
+            del self.fields["section"]
+            del self.fields["assigned_sections"]
+            del self.fields["assigned_subjects"]
+
+    def clean_section(self):
+        if self.user.role != User.Role.STUDENT:
+            return ""
+        value = (self.cleaned_data.get("section") or "").strip()
+        if not value:
+            raise forms.ValidationError("Section is required.")
+        try:
+            return parse_section_label(value)
+        except ValidationError as exc:
+            raise forms.ValidationError(exc.messages[0] if exc.messages else str(exc)) from exc
+
     def clean(self):
-        return super().clean()
+        cleaned = super().clean()
+        if self.user.role != User.Role.STUDENT:
+            return cleaned
+        year_level = cleaned.get("year_level")
+        section_label = cleaned.get("section")
+        if not year_level:
+            self.add_error("year_level", "Year level is required.")
+        elif section_label and "section" not in self.errors:
+            try:
+                cleaned["section_obj"] = get_or_create_student_section(
+                    year_level,
+                    section_label,
+                    exclude_user=self.user,
+                )
+            except ValidationError as exc:
+                self.add_error(
+                    "section",
+                    exc.messages[0] if exc.messages else str(exc),
+                )
+        return cleaned
 
     def clean_profile_photo(self):
         photo = self.cleaned_data.get("profile_photo")
@@ -297,8 +481,17 @@ class ProfileUpdateForm(forms.Form):
             update_fields.append("profile_photo")
         if self.user.role == User.Role.STUDENT:
             self.user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
-            update_fields.append("home_degree_program")
+            self.user.year_level = self.cleaned_data.get("year_level")
+            self.user.section = self.cleaned_data.get("section_obj")
+            update_fields.extend(["home_degree_program", "year_level", "section"])
         self.user.save(update_fields=update_fields)
+        if self.user.role == User.Role.PROFESSOR:
+            self.user.assigned_sections.set(
+                self.cleaned_data.get("assigned_sections") or []
+            )
+            self.user.assigned_subjects.set(
+                self.cleaned_data.get("assigned_subjects") or []
+            )
 
 
 class CampusUserCreateForm(forms.Form):

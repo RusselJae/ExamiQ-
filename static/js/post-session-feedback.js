@@ -24,6 +24,13 @@
         return labels[tier] || tier;
     }
 
+    function feedbackText(raw) {
+        if (window.ExamiQUI && window.ExamiQUI.extractFeedbackText) {
+            return window.ExamiQUI.extractFeedbackText(raw);
+        }
+        return String(raw || "").trim();
+    }
+
     function renderItem(item, index) {
         const status = item.is_correct
             ? '<span class="feedback-status feedback-status--correct">Correct</span>'
@@ -41,7 +48,7 @@
             '<p class="feedback-card__stem">' + escapeHtml(item.stem) + "</p>" +
             '<div class="feedback-card__body">' +
             '<p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Feedback</p>' +
-            '<div class="feedback-step-list">' + escapeHtml(item.feedback).replace(/\n/g, "<br>") + "</div>" +
+            '<div class="feedback-step-list">' + escapeHtml(feedbackText(item.feedback)).replace(/\n/g, "<br>") + "</div>" +
             "</div></article>"
         );
     }

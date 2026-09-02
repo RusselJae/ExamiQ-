@@ -9,12 +9,15 @@ from django.conf import settings
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
 from apps.ai.prompts import (
+    adaptive_feedback_max_tokens,
     build_adaptive_feedback_prompt,
     build_calibration_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
+    build_explanation_generation_prompt,
     build_question_generation_prompt,
     build_question_validation_prompt,
+    validation_max_tokens,
 )
 from apps.ai.interfaces import (
     AdaptiveFeedbackGenerator,
@@ -22,6 +25,7 @@ from apps.ai.interfaces import (
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
+    ExplanationGenerator,
     QuestionGenerator,
     QuestionValidator,
 )
@@ -103,11 +107,24 @@ class OpenAIDifficultyTagger(DifficultyTagger):
 
 
 class OpenAIQuestionGenerator(QuestionGenerator):
-    def generate(self, topic, difficulty: str, count: int = 5, reference_stem: str = "", source_material: str = ""):
+    def generate(
+        self,
+        topic,
+        difficulty: str,
+        count: int = 5,
+        reference_stem: str = "",
+        source_material: str = "",
+        question_type: str = "mcq",
+    ):
         if topic is None:
             return []
         system, user_prompt, max_tokens = build_question_generation_prompt(
-            topic, difficulty, count, reference_stem, source_material=source_material
+            topic,
+            difficulty,
+            count,
+            reference_stem,
+            source_material=source_material,
+            question_type=question_type,
         )
         token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
         last_raw = ""
@@ -130,7 +147,10 @@ class OpenAIQuestionGenerator(QuestionGenerator):
                 if isinstance(data, list):
                     from apps.ai.normalize import normalize_generated_questions
 
-                    return normalize_generated_questions(data[:count])
+                    return normalize_generated_questions(
+                        data[:count],
+                        question_type=question_type,
+                    )
             except (json.JSONDecodeError, TypeError) as exc:
                 last_exc = exc
                 logger.warning(
@@ -141,6 +161,56 @@ class OpenAIQuestionGenerator(QuestionGenerator):
 
         raise AIServiceUnavailableError(
             "AI returned incomplete or invalid JSON. Try again with fewer questions.",
+            detail=str(last_exc) if last_exc else last_raw[:500],
+            retryable=True,
+        )
+
+
+class OpenAIExplanationGenerator(ExplanationGenerator):
+    def generate(self, question) -> dict:
+        system, user_prompt, max_tokens = build_explanation_generation_prompt(question)
+        token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
+        last_raw = ""
+        last_exc: json.JSONDecodeError | TypeError | None = None
+
+        for budget in token_budgets:
+            raw = _chat(user_prompt, system=system, max_output_tokens=budget)
+            if not raw:
+                raise AIServiceUnavailableError(
+                    "AI service is temporarily unavailable. Please try again later.",
+                    retryable=True,
+                )
+            last_raw = raw
+            try:
+                cleaned = raw
+                match = re.search(r"\{.*\}", raw, re.DOTALL)
+                if match:
+                    cleaned = match.group(0)
+                data = json.loads(cleaned)
+                if isinstance(data, dict):
+                    steps = data.get("explanation_steps") or []
+                    if not isinstance(steps, list):
+                        steps = []
+                    payload = {
+                        "explanation_steps": [
+                            str(s).strip() for s in steps if str(s).strip()
+                        ],
+                        "solution_summary": str(
+                            data.get("solution_summary") or ""
+                        ).strip(),
+                    }
+                    if payload["explanation_steps"] or payload["solution_summary"]:
+                        return payload
+            except (json.JSONDecodeError, TypeError) as exc:
+                last_exc = exc
+                logger.warning(
+                    "Failed to parse OpenAI explanation JSON (budget=%s): %s",
+                    budget,
+                    exc,
+                )
+
+        raise AIServiceUnavailableError(
+            "AI returned incomplete explanation JSON. Please try again.",
             detail=str(last_exc) if last_exc else last_raw[:500],
             retryable=True,
         )
@@ -162,7 +232,7 @@ class OpenAIQuestionValidator(QuestionValidator):
         system, prompt = build_question_validation_prompt(
             stem, choices, topic, difficulty, correct_label
         )
-        raw = _chat(prompt, system=system)
+        raw = _chat(prompt, system=system, max_output_tokens=validation_max_tokens())
         if not raw:
             return stub.validate(stem, choices, topic, difficulty, correct_label)
         try:
@@ -182,13 +252,28 @@ class OpenAIAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         user_answer: str,
         correct_answer: str,
         confidence: str = "medium",
+        question_type: str = "",
     ) -> str:
         stub = StubAdaptiveFeedbackGenerator()
         system, prompt = build_adaptive_feedback_prompt(
-            topic, question, user_answer, correct_answer, confidence
+            topic,
+            question,
+            user_answer,
+            correct_answer,
+            confidence,
+            question_type=question_type,
         )
-        result = _chat(prompt, system=system)
-        return result or stub.generate(topic, question, user_answer, correct_answer, confidence)
+        result = _chat(
+            prompt, system=system, max_output_tokens=adaptive_feedback_max_tokens()
+        )
+        return result or stub.generate(
+            topic,
+            question,
+            user_answer,
+            correct_answer,
+            confidence,
+            question_type=question_type,
+        )
 
 
 class OpenAIErrorClassifier(ErrorClassifier):

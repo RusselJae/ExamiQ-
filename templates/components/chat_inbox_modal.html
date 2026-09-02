@@ -1,15 +1,19 @@
 {# Global two-pane Chat modal (faculty + student). Opened from navbar icon. #}
-<div id="examiq-chat-modal" class="examiq-chat-modal hidden" role="dialog" aria-modal="true" aria-labelledby="examiq-chat-title">
+<div id="examiq-chat-modal"
+     class="examiq-chat-modal hidden{% if user.role == 'student' %} examiq-chat-modal--student{% endif %}"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="examiq-chat-title">
     <div class="examiq-chat-modal__backdrop" data-dismiss-chat-modal></div>
     <div class="examiq-chat-modal__panel">
-        <aside class="examiq-chat-modal__sidebar">
+        <aside class="examiq-chat-modal__sidebar{% if user.role == 'student' %} hidden{% endif %}">
             <h2 id="examiq-chat-title" class="examiq-chat-modal__title">Chat</h2>
             <label class="examiq-chat-modal__search">
                 <span class="sr-only">Search</span>
                 <svg class="examiq-chat-modal__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
-                <input type="search" id="examiq-chat-search" placeholder="Search students..." autocomplete="off">
+                <input type="search" id="examiq-chat-search" placeholder="{% if user.role == 'professor' %}Search students…{% else %}Search…{% endif %}" autocomplete="off">
             </label>
             <div id="examiq-chat-list" class="examiq-chat-modal__list" role="listbox" aria-label="Conversations"></div>
             <p id="examiq-chat-list-empty" class="examiq-chat-modal__empty hidden">No conversations yet.</p>
@@ -20,7 +24,7 @@
                 <div class="examiq-chat-modal__peer">
                     <div class="examiq-chat-modal__avatar" id="examiq-chat-peer-avatar" aria-hidden="true">?</div>
                     <div>
-                        <p class="examiq-chat-modal__peer-name" id="examiq-chat-peer-name">Select a conversation</p>
+                        <p class="examiq-chat-modal__peer-name" id="examiq-chat-peer-name">{% if user.role == 'student' %}Faculty{% else %}Select a conversation{% endif %}</p>
                         <p class="examiq-chat-modal__peer-meta" id="examiq-chat-peer-meta"></p>
                     </div>
                 </div>
@@ -30,13 +34,21 @@
             <div id="examiq-chat-thread" class="examiq-chat-modal__thread" role="log" aria-live="polite"></div>
 
             <form id="examiq-chat-form" class="examiq-chat-modal__composer" enctype="multipart/form-data">
+                <label class="examiq-chat-modal__attach" for="examiq-chat-image" title="Attach image (max 5 MB)">
+                    <input type="file"
+                           id="examiq-chat-image"
+                           accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                           class="sr-only">
+                    <span aria-hidden="true">+</span>
+                    <span class="sr-only">Attach photo</span>
+                </label>
                 <textarea id="examiq-chat-input"
                           rows="1"
-                          placeholder="Explain the concept or point to the relevant lesson..."
-                          maxlength="2000"
-                          disabled></textarea>
-                <button type="submit" id="examiq-chat-send" class="examiq-chat-modal__send" disabled>Send</button>
+                          placeholder="Type your message…"
+                          maxlength="2000"></textarea>
+                <button type="submit" id="examiq-chat-send" class="examiq-chat-modal__send">Send</button>
             </form>
+            <p id="examiq-chat-image-name" class="examiq-chat-modal__file-name hidden"></p>
         </section>
     </div>
 </div>

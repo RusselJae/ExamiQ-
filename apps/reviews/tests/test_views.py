@@ -28,6 +28,33 @@ class TestQuestionPartialView:
         session.refresh_from_db()
         assert session.status == ReviewSession.Status.COMPLETED
 
+    def test_exam_results_shows_mapped_average_confidence_label(
+        self, client, student, topic, mcq_question
+    ):
+        question, _ = mcq_question
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        wrong = question.choices.filter(is_correct=False).first()
+        submit_answer(
+            session=session,
+            question=question,
+            confidence=5,
+            selected_choice=wrong,
+            time_spent_seconds=5,
+        )
+
+        client.force_login(student)
+        url = reverse("reviews:question_partial", kwargs={"pk": session.pk})
+        response = client.get(url, HTTP_HX_REQUEST="true")
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "High" in content
+        assert "Average Confidence" in content
+
     def test_non_htmx_redirects_to_session(self, client, student, topic, mcq_question):
         session = start_review_session(
             student=student,
@@ -56,6 +83,44 @@ class TestQuestionPartialView:
         content = response.content.decode()
         assert question.stem in content
         assert "confidence-btn" in content
+
+    def test_question_partial_shows_per_question_subject(
+        self, client, student, topic, mcq_question, program, year_level
+    ):
+        from apps.questions.models import Subject, Topic
+
+        other_subject = Subject.objects.create(
+            program=program,
+            code="MMW-2",
+            name="Mathematics in the Modern World",
+            year_level=year_level,
+            semester=1,
+        )
+        other_topic = Topic.objects.create(subject=other_subject, name="20th Century")
+        other_q = Question.objects.create(
+            topic=other_topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.ENUMERATION,
+            stem="List two branches.",
+            status=Question.Status.APPROVED,
+            expected_answer="Set theory",
+        )
+
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+            question_queue=[other_q.pk],
+        )
+        client.force_login(student)
+        url = reverse("reviews:question_partial", kwargs={"pk": session.pk})
+        response = client.get(url, HTTP_HX_REQUEST="true")
+        content = response.content.decode()
+
+        assert response.status_code == 200
+        assert "Mathematics in the Modern World" in content
+        assert "Enumeration" in content
 
     def test_timed_exam_hides_confidence_buttons(self, client, student, topic, mcq_question):
         session = start_review_session(
@@ -106,7 +171,10 @@ class TestReviewSetupPage:
         assert response.status_code == 200
         assert "id_setup_subjects" in content
         assert "id_setup_difficulty" in content
-        assert "pre-exam-step-confidence" in content
+        assert "id_setup_question_type" in content
+        assert "data-search" in content
+        assert "pre-exam-step-goal" in content
+        assert "pre-exam-step-warmup" not in content
         assert "review_window" not in content
         assert "Open review windows" not in content
 
@@ -129,6 +197,78 @@ class TestReviewSetupPrefill:
         assert topic.subject.code in content
         assert "id_setup_subjects" in content
         assert "id_setup_difficulty" in content
+
+    def test_setup_preselects_subject_from_query_param(
+        self, client, student, topic, mcq_question, bsed_program
+    ):
+        from conftest import make_bsed_student
+
+        make_bsed_student(
+            student, subject=topic.subject, bsed_program=bsed_program
+        )
+
+        client.force_login(student)
+        url = reverse("reviews:setup") + f"?subject={topic.subject_id}"
+        response = client.get(url)
+        assert response.status_code == 200
+        form = response.context["form"]
+        assert topic.subject_id in (form.fields["subjects"].initial or [])
+        content = response.content.decode()
+        import re
+
+        options = re.findall(
+            rf'<option[^>]*value="{topic.subject_id}"[^>]*>',
+            content,
+        )
+        assert options and "selected" in options[0]
+
+    def test_setup_preselects_subject_from_topic_param(
+        self, client, student, topic, mcq_question, bsed_program
+    ):
+        from conftest import make_bsed_student
+
+        make_bsed_student(
+            student, subject=topic.subject, bsed_program=bsed_program
+        )
+
+        client.force_login(student)
+        url = reverse("reviews:setup") + f"?topic={topic.pk}"
+        response = client.get(url)
+        assert response.status_code == 200
+        form = response.context["form"]
+        assert topic.subject_id in (form.fields["subjects"].initial or [])
+        content = response.content.decode()
+        import re
+
+        options = re.findall(
+            rf'<option[^>]*value="{topic.subject_id}"[^>]*>',
+            content,
+        )
+        assert options and "selected" in options[0]
+
+    def test_setup_ignores_unavailable_subject(
+        self, client, student, topic, mcq_question, bsed_program, year_level
+    ):
+        from apps.questions.models import Subject
+        from conftest import make_bsed_student
+
+        make_bsed_student(
+            student, subject=topic.subject, bsed_program=bsed_program
+        )
+        other = Subject.objects.create(
+            program=bsed_program,
+            code="OUT-99",
+            name="Unavailable",
+            year_level=year_level,
+            semester=1,
+        )
+
+        client.force_login(student)
+        url = reverse("reviews:setup") + f"?subject={other.pk}"
+        response = client.get(url)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert f'value="{other.pk}" selected' not in content.replace(" ", "")
 
     def test_setup_lists_subjects_across_years(
         self, client, student, year_level, bsed_program, mcq_question, subject
@@ -184,16 +324,17 @@ class TestSessionSummaryView:
         content = response.content.decode()
         assert response.status_code == 200
         assert "session-summary-score" in content or "exam-score-ring" in content
-        assert "session-insight-inline" in content
+        assert "session-insight-bubble" in content
         assert "Confidence gap" not in content
         assert "session-strip-grid" in content
         assert "ai-tutor-modal" in content
         assert "ai-tutor-modal.js" in content
         assert "tutor-visual-response.js" in content
         assert "open-ai-tutor-btn" in content
-        assert "Solution" in content
-        assert "AI Conversation" in content
-        assert "Faculty Conversation" in content
+        assert "Solution" in content or "Worked solution" in content
+        assert "AI conversation" in content
+        assert "Faculty Conversation" not in content
+        assert "ai-tutor-solution-collapsible" in content
         assert "openOnLoad: false" in content
         assert "studentName:" in content
 
@@ -447,7 +588,7 @@ class TestTutorChat:
         assert len(data["messages"]) == 2
         assert data["active_answer_id"] == answer.pk
 
-    def test_tutor_conversation_persists_across_retakes(self, student, topic, mcq_question):
+    def test_tutor_conversation_cleared_on_retake(self, student, topic, mcq_question):
         question, wrong = mcq_question
         wrong_choice = question.choices.filter(is_correct=False).first()
 
@@ -467,7 +608,14 @@ class TestTutorChat:
         session1.status = ReviewSession.Status.COMPLETED
         session1.save(update_fields=["status"])
 
+        from apps.questions.models import ExplanationStep
         from apps.reviews.tutor_services import process_tutor_chat, tutor_history_payload
+
+        ExplanationStep.objects.create(
+            question=question,
+            order=1,
+            content="Step 1: Add the numbers to find the sum.",
+        )
 
         process_tutor_chat(session1, "Explain this", answer_id=answer1.pk)
 
@@ -488,7 +636,12 @@ class TestTutorChat:
         session2.save(update_fields=["status"])
 
         payload = tutor_history_payload(session2, answer_id=answer2.pk)
-        assert len(payload["messages"]) == 2
+        assert payload["messages"] == []
+        item = next(i for i in payload["items"] if i["answer_id"] == answer2.pk)
+        assert item["correction_steps"] == [
+            "Step 1: Add the numbers to find the sum."
+        ]
+        assert item["message_count"] == 0
 
     def test_tutor_history_with_correct_and_wrong_answers(
         self, client, student, topic, mcq_question

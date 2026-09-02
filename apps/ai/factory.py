@@ -10,6 +10,7 @@ from apps.ai.interfaces import (
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
+    ExplanationGenerator,
     QuestionGenerator,
     QuestionValidator,
     SpacedRepetitionScheduler,
@@ -22,6 +23,7 @@ from apps.ai.stubs import (
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
+    StubExplanationGenerator,
     StubQuestionGenerator,
     StubQuestionValidator,
     StubTutorEngine,
@@ -85,6 +87,23 @@ def get_question_generator() -> QuestionGenerator:
         except Exception as exc:
             logger.warning("Falling back to stub QuestionGenerator: %s", exc)
     return StubQuestionGenerator()
+
+
+def get_explanation_generator() -> ExplanationGenerator:
+    if _ai_available():
+        try:
+            if settings.LLM_PROVIDER == "gemini":
+                from apps.ai.providers.gemini_provider import GeminiExplanationGenerator
+
+                return GeminiExplanationGenerator()
+            if settings.LLM_PROVIDER == "ollama":
+                return _ollama_import().OllamaExplanationGenerator()
+            from apps.ai.providers.openai_provider import OpenAIExplanationGenerator
+
+            return OpenAIExplanationGenerator()
+        except Exception as exc:
+            logger.warning("Falling back to stub ExplanationGenerator: %s", exc)
+    return StubExplanationGenerator()
 
 
 def get_question_validator() -> QuestionValidator:

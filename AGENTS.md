@@ -1,3 +1,8 @@
+---
+description: 
+alwaysApply: true
+---
+
 # ExamiQ — Agent Rules & Conventions
 
 Self-regulated mathematics exam review system (Django 5, Python 3.12).

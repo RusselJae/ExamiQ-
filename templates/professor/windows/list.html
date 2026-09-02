@@ -3,10 +3,7 @@
 {% block title %}Review Windows - {{ course.code }}{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-    <a href="{% url 'analytics_professor:dashboard' %}" class="text-link">&larr; Back to courses</a>
-    <h1 class="text-3xl font-bold text-examiq-navy mt-2">{{ course.code }}: Review Windows</h1>
-</div>
+{% include "components/professor_section_header.html" with course=course page_label="Review Windows" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
 <div class="flex justify-between items-center mb-4">

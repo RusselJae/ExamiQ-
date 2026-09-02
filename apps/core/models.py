@@ -18,6 +18,8 @@ class AuditLog(models.Model):
         SESSION_COMPLETE = "session_complete", "Exam session completed"
         USER_APPROVE = "user_approve", "User approved"
         USER_REJECT = "user_reject", "User rejected"
+        USER_ARCHIVE = "user_archive", "User archived"
+        USER_RESTORE = "user_restore", "User restored"
         EXAM_SETUP_SAVE = "exam_setup_save", "Exam setup saved"
 
     actor = models.ForeignKey(

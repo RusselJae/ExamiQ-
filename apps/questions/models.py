@@ -87,6 +87,9 @@ class Question(TimeStampedModel):
 
     class QuestionType(models.TextChoices):
         MCQ = "mcq", "Multiple Choice"
+        TRUE_FALSE = "true_false", "True or False"
+        IDENTIFICATION = "identification", "Identification"
+        ENUMERATION = "enumeration", "Enumeration"
         NUMERIC = "numeric", "Numeric Answer"
 
     class Status(models.TextChoices):
@@ -106,7 +109,7 @@ class Question(TimeStampedModel):
         default=Difficulty.MEDIUM,
     )
     question_type = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=QuestionType.choices,
         default=QuestionType.MCQ,
     )
@@ -115,6 +118,14 @@ class Question(TimeStampedModel):
         max_length=500,
         blank=True,
         help_text="Short concept label or AI-generated explanation summary.",
+    )
+    expected_answer = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Expected answer for True/False, Identification, or Enumeration. "
+            "For Enumeration, put one item per line."
+        ),
     )
     correct_answer = models.DecimalField(
         max_digits=20,

@@ -17,16 +17,36 @@ urlpatterns = [
         views_professor.ProfessorStudentDetailView.as_view(),
         name="professor_student_detail",
     ),
+    path(
+        "students/<int:student_pk>/sessions/<int:session_pk>/review/",
+        views_professor.ProfessorSessionReviewView.as_view(),
+        name="session_review",
+    ),
     path("chat/", views_professor_feedback.GlobalChatInboxView.as_view(), name="chat_inbox"),
     path(
+        "chat/conversations/",
+        views_professor_feedback.GlobalChatConversationsApiView.as_view(),
+        name="chat_conversations_api",
+    ),
+    path(
         "chat/concerns/",
-        views_professor_feedback.GlobalChatConcernsApiView.as_view(),
+        views_professor_feedback.GlobalChatConversationsApiView.as_view(),
         name="chat_concerns_api",
     ),
     path(
-        "chat/<int:mistake_pk>/note/",
-        views_professor_feedback.GlobalChatFacultyNoteView.as_view(),
+        "chat/<int:conversation_pk>/message/",
+        views_professor_feedback.GlobalChatFacultyMessageView.as_view(),
+        name="chat_faculty_message",
+    ),
+    path(
+        "chat/<int:conversation_pk>/note/",
+        views_professor_feedback.GlobalChatFacultyMessageView.as_view(),
         name="chat_faculty_note",
+    ),
+    path(
+        "exam-setup/",
+        views_professor.ExamSetupHubView.as_view(),
+        name="exam_setup_hub",
     ),
     path("courses/", course_views.ProfessorCourseListView.as_view(), name="course_list"),
     path("courses/create/", course_views.ProfessorCourseCreateView.as_view(), name="course_create"),
@@ -53,8 +73,18 @@ urlpatterns = [
         name="section_student_detail",
     ),
     path(
+        "sections/<int:section_pk>/roster/<int:student_pk>/archive/",
+        views_professor.SectionStudentArchiveView.as_view(),
+        name="section_student_archive",
+    ),
+    path(
+        "sections/<int:section_pk>/roster/<int:student_pk>/restore/",
+        views_professor.SectionStudentRestoreView.as_view(),
+        name="section_student_restore",
+    ),
+    path(
         "sections/<int:section_pk>/exam-setup/",
-        views_professor.SectionExamSetupView.as_view(),
+        views_professor.SectionExamSetupRedirectView.as_view(),
         name="section_exam_setup",
     ),
     path(
@@ -160,6 +190,11 @@ urlpatterns = [
         "courses/<int:course_pk>/curriculum/topics/",
         question_views.ProfessorCurriculumTopicsView.as_view(),
         name="curriculum_topics",
+    ),
+    path(
+        "courses/<int:course_pk>/questions/import-csv/",
+        question_views.QuestionCSVImportView.as_view(),
+        name="question_csv_import",
     ),
     path(
         "courses/<int:course_pk>/questions/ai-generate/",

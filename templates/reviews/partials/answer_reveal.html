@@ -26,7 +26,7 @@
 
         <div class="exam-meta-row">
             <div class="exam-meta-chips">
-                <span class="exam-topic-chip">{{ session.topic.name }}</span>
+                <span class="exam-topic-chip">{{ question.topic.subject.name }}</span>
                 <span class="exam-type-badge">{{ question.get_question_type_display }}</span>
             </div>
             <span class="exam-reveal-status {% if answer.is_correct %}exam-reveal-status--correct{% elif answer.timed_out %}exam-reveal-status--timeout{% else %}exam-reveal-status--incorrect{% endif %}">
@@ -52,15 +52,23 @@
         </div>
         {% endfor %}
     </div>
-    {% elif question.question_type == "numeric" %}
+    {% else %}
     <div class="exam-numeric-reveal">
         <p class="exam-numeric-reveal__label">Your answer</p>
         <p class="exam-numeric-reveal__value">
-            {% if answer.timed_out %}<em>Timed out</em>{% else %}{{ answer.numeric_response|default:"—" }}{% endif %}
+            {% if answer.timed_out %}<em>Timed out</em>{% else %}{{ answer.numeric_response|default:"—"|linebreaksbr }}{% endif %}
         </p>
         {% if not answer.is_correct %}
         <p class="exam-numeric-reveal__label">Correct answer</p>
-        <p class="exam-numeric-reveal__value exam-numeric-reveal__value--correct">{{ question.correct_answer }}</p>
+        <p class="exam-numeric-reveal__value exam-numeric-reveal__value--correct">
+            {% if question.expected_answer %}
+            {{ question.expected_answer|linebreaksbr }}
+            {% elif question.correct_answer is not None %}
+            {{ question.correct_answer }}
+            {% else %}
+            —
+            {% endif %}
+        </p>
         {% endif %}
     </div>
     {% endif %}

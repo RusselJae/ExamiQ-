@@ -30,7 +30,8 @@ from apps.analytics.services import (
 from apps.core.context_processors import navigation_context
 from apps.questions.models import ExplanationStep, Question
 from apps.reviews.models import Answer, ReviewSession, StepFeedbackView
-from apps.users.models import Course
+from apps.users.models import Course, User
+from conftest import make_bsed_student
 
 
 @pytest.mark.django_db
@@ -149,10 +150,7 @@ class TestProfessorRoster:
         )
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:course_roster", kwargs={"course_pk": course.pk}))
-        assert response.status_code == 200
-        content = response.content.decode()
-        assert student.email in content
-        assert "Masterlist" in content
+        assert response.status_code == 404
 
     def test_student_detail_ok_without_session(self, client, professor, student, program):
         """Faculty can open student detail even with no practice yet."""
@@ -172,8 +170,7 @@ class TestProfessorRoster:
                 kwargs={"course_pk": course.pk, "student_pk": student.pk},
             )
         )
-        assert response.status_code == 200
-        assert b"No sessions yet" in response.content or b"0" in response.content
+        assert response.status_code == 404
 
     def test_catalog_student_detail_uses_subject_answers(
         self, client, professor, student, mcq_question, program
@@ -215,27 +212,37 @@ class TestProfessorRoster:
                 kwargs={"course_pk": catalog.pk, "student_pk": student.pk},
             )
         )
-        assert response.status_code == 200
-        assert student.email.encode() in response.content
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
 class TestSidebarContext:
-    def test_sidebar_course_set_on_roster_url(self, rf, professor, student, program):
-        course = Course.objects.create(
-            program=program,
+    def test_sidebar_course_set_on_course_detail_url(
+        self, rf, professor, bsed_program, year_level
+    ):
+        from apps.questions.models import Subject
+
+        subject = Subject.objects.create(
+            program=bsed_program,
             code="NAV101",
-            name="Nav Course",
+            name="Nav Subject",
+            year_level=year_level,
+            semester=1,
+        )
+        course = Course.objects.create(
+            program=bsed_program,
+            code=subject.code,
+            name=subject.name,
             professor=professor,
         )
         request = rf.get(
-            reverse("analytics_professor:course_roster", kwargs={"course_pk": course.pk})
+            reverse("analytics_professor:course_detail", kwargs={"pk": course.pk})
         )
         request.user = professor
         request.resolver_match = MagicMock(
             namespace="analytics_professor",
-            kwargs={"course_pk": course.pk},
-            url_name="course_roster",
+            kwargs={"pk": course.pk},
+            url_name="course_detail",
         )
         context = navigation_context(request)
         assert context["sidebar_course"].pk == course.pk
@@ -290,10 +297,10 @@ class TestHeatmap:
 @pytest.mark.django_db
 class TestQuestionCRUD:
     @override_settings(AI_ENABLED=False)
-    def test_professor_can_create_question(self, client, professor, topic, program):
+    def test_professor_can_create_question(self, client, professor, topic, program, subject):
         course = Course.objects.create(
             program=program,
-            code="QB101",
+            code=subject.code,
             name="QB Course",
             professor=professor,
         )
@@ -317,10 +324,51 @@ class TestQuestionCRUD:
         assert Question.objects.filter(stem="Test question?").exists()
 
     @override_settings(AI_ENABLED=False)
-    def test_batch_skips_duplicate_question(self, client, professor, topic, program):
+    def test_batch_create_preserves_per_question_difficulty(
+        self, client, professor, topic, program, subject
+    ):
         course = Course.objects.create(
             program=program,
-            code="QB103",
+            code=subject.code,
+            name="Mixed Difficulty Course",
+            professor=professor,
+        )
+        client.force_login(professor)
+        response = client.post(
+            reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+            {
+                "topic": topic.id,
+                "difficulty": Question.Difficulty.EASY,
+                "question_count": 2,
+                "stem_0": "Beginner question one?",
+                "difficulty_0": Question.Difficulty.EASY,
+                "correct_0": "A",
+                "concept_tag_0": "Easy concept",
+                "choice_0_A": "1",
+                "choice_0_B": "2",
+                "choice_0_C": "3",
+                "choice_0_D": "4",
+                "stem_1": "Intermediate question two?",
+                "difficulty_1": Question.Difficulty.MEDIUM,
+                "correct_1": "B",
+                "concept_tag_1": "Medium concept",
+                "choice_1_A": "1",
+                "choice_1_B": "2",
+                "choice_1_C": "3",
+                "choice_1_D": "4",
+            },
+        )
+        assert response.status_code == 302, getattr(response, "context", None)
+        easy_q = Question.objects.get(stem="Beginner question one?")
+        medium_q = Question.objects.get(stem="Intermediate question two?")
+        assert easy_q.difficulty == Question.Difficulty.EASY
+        assert medium_q.difficulty == Question.Difficulty.MEDIUM
+
+    @override_settings(AI_ENABLED=False)
+    def test_batch_skips_duplicate_question(self, client, professor, topic, program, subject):
+        course = Course.objects.create(
+            program=program,
+            code=subject.code,
             name="QB Course 3",
             professor=professor,
         )
@@ -362,10 +410,64 @@ class TestQuestionCRUD:
         assert response.status_code == 200
         assert Question.objects.filter(stem__iexact="existing question?").count() == 1
 
-    def test_ai_validate_returns_json(self, client, professor, topic, program):
+    def test_ai_generated_batch_enqueues_background_explanations(
+        self, client, professor, topic, program, subject
+    ):
         course = Course.objects.create(
             program=program,
-            code="QB104",
+            code=subject.code,
+            name="AI Batch Course",
+            professor=professor,
+        )
+        client.force_login(professor)
+        generator = MagicMock()
+        generator.generate.return_value = {
+            "explanation_steps": ["Identify the operation.", "2 + 2 = 4"],
+            "solution_summary": "The correct answer is A.",
+        }
+
+        def _run_thread_inline(target, args=(), kwargs=None, **_ignored):
+            kwargs = kwargs or {}
+            target(*args, **kwargs)
+            return MagicMock()
+
+        from apps.ai.models import AIGenerationJob
+
+        with (
+            patch("apps.ai.job_services.is_ai_configured", return_value=True),
+            patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline),
+            patch("apps.ai.job_services.get_explanation_generator", return_value=generator),
+        ):
+            response = client.post(
+                reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+                {
+                    "topic": topic.id,
+                    "difficulty": Question.Difficulty.EASY,
+                    "question_count": 1,
+                    "stem_0": "What is 2 plus 2?",
+                    "correct_0": "A",
+                    "concept_tag_0": "Addition",
+                    "ai_generated_0": "1",
+                    "choice_0_A": "4",
+                    "choice_0_B": "3",
+                    "choice_0_C": "5",
+                    "choice_0_D": "0",
+                },
+            )
+        assert response.status_code == 302
+        question = Question.objects.get(stem="What is 2 plus 2?")
+        assert ExplanationStep.objects.filter(question=question).count() == 2
+        job = AIGenerationJob.objects.filter(
+            job_type=AIGenerationJob.JobType.EXPLANATION_GENERATE
+        ).first()
+        assert job is not None
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        generator.generate.assert_called_once()
+
+    def test_ai_validate_returns_json(self, client, professor, topic, program, subject):
+        course = Course.objects.create(
+            program=program,
+            code=subject.code,
             name="QB Course 4",
             professor=professor,
         )
@@ -529,9 +631,8 @@ class TestCourseInsights:
         )
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Click the lightbulb to generate your weekly summary." in content
-        assert 'id="summary-fab"' in content
-        assert "id=\"summary-narrative\"" not in content
+        assert course.code in content
+        assert "Enrolled students" in content
 
     def test_summary_generate_endpoint(self, client, professor, program):
         course = Course.objects.create(
@@ -551,10 +652,51 @@ class TestCourseInsights:
 
 
 @pytest.mark.django_db
-class TestProfessorOverviewUX:
-    def test_overview_includes_dates_and_course_stats(self, client, professor, program):
+class TestProfessorOverviewSummary:
+    def test_avg_mistakes_per_session(self, professor, bsed_program, student, mcq_question):
+        from apps.analytics.models import MistakeRecord
+        from apps.analytics.services import professor_overview_summary
+        from apps.reviews.models import Answer, ReviewSession
+
+        question, _correct = mcq_question
+        make_bsed_student(student, subject=question.topic.subject, bsed_program=bsed_program)
         course = Course.objects.create(
-            program=program,
+            program=bsed_program,
+            code="AVG101",
+            name="Avg Mistakes Course",
+            professor=professor,
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            course=course,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        answer = Answer.objects.create(
+            session=session,
+            question=question,
+            is_correct=False,
+            confidence=3,
+        )
+        MistakeRecord.objects.create(
+            student=student,
+            question=question,
+            topic=question.topic,
+            answer=answer,
+        )
+        summary = professor_overview_summary(professor)
+        assert summary["mistake_count"] == 1
+        assert summary["total_sessions"] == 1
+        assert summary["avg_mistakes_per_session"] == 1.0
+        assert summary["mistakes_subtext"] == "1 total"
+
+
+@pytest.mark.django_db
+class TestProfessorOverviewUX:
+    def test_overview_includes_dates_and_course_stats(self, client, professor, bsed_program):
+        Course.objects.create(
+            program=bsed_program,
             code="OV101",
             name="Overview Course",
             professor=professor,
@@ -563,20 +705,25 @@ class TestProfessorOverviewUX:
         response = client.get(reverse("analytics_professor:overview"))
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Data as of" in content
         assert "Week of" in content
         assert "overviewTrendsChart" in content
         assert "overview-trend-metric" in content
         assert "Jump to offering" not in content
         assert "Your courses" not in content
-        assert "Active courses" in content
-        assert "Average Score" in content
+        assert "Course subjects" in content
+        assert "Students practicing" in content
+        assert "Avg. mistakes / session" not in content
+        assert "Active courses" not in content
         assert "Cross-course snapshot" not in content
+        assert "sidebar-link-active" in content or "Overview" in content
 
-    def test_summary_courses_json_is_array(self, client, professor, program):
+    def test_summary_courses_json_is_array(self, client, professor, bsed_program, subject):
+        from apps.questions.models import Subject
+
+        Subject.objects.filter(pk=subject.pk).update(program=bsed_program)
         Course.objects.create(
-            program=program,
-            code="JSON101",
+            program=bsed_program,
+            code=subject.code,
             name="JSON Course",
             professor=professor,
         )
@@ -594,12 +741,17 @@ class TestProfessorOverviewUX:
         data = json.loads(match.group(1))
         assert isinstance(data, list)
         assert data[0]["pk"]
-        assert data[0]["code"] == "JSON101"
+        assert data[0]["code"] == subject.code
 
-    def test_summary_fab_on_overview_when_courses_exist(self, client, professor, program):
+    def test_summary_fab_on_overview_when_courses_exist(
+        self, client, professor, bsed_program, subject
+    ):
+        from apps.questions.models import Subject
+
+        Subject.objects.filter(pk=subject.pk).update(program=bsed_program)
         Course.objects.create(
-            program=program,
-            code="FAB101",
+            program=bsed_program,
+            code=subject.code,
             name="FAB Course",
             professor=professor,
         )
@@ -641,6 +793,19 @@ class TestProfessorOverviewTrends:
                 assert len(trends[range_key][metric]) >= 1
                 assert "label" in trends[range_key][metric][0]
                 assert "value" in trends[range_key][metric][0]
+                if metric in ("confidence", "scores"):
+                    assert "student_count" in trends[range_key][metric][0]
+                if metric == "scores":
+                    assert trends[range_key][metric][0]["value"] <= 70
+
+    def test_overview_summary_includes_expected_students(self, professor, program, student):
+        from apps.analytics.services import professor_overview_summary
+
+        student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
+        student.is_active = True
+        student.save(update_fields=["home_degree_program", "is_active"])
+        summary = professor_overview_summary(professor)
+        assert summary["expected_students"] >= 1
 
 
 @pytest.mark.django_db
@@ -730,7 +895,8 @@ class TestSessionHistoryHelpers:
         series = build_confidence_performance_series([session])
         assert len(series) == 1
         assert series[0]["performance"] == 100.0
-        assert series[0]["confidence"] == 60.0
+        # Stored confidence 3 (medium) maps to chart scale 2 on 0–3.
+        assert series[0]["confidence"] == 2.0
 
     def test_student_course_summary_includes_session_rows(self, student, mcq_question, program, professor):
         question, _correct = mcq_question
@@ -775,13 +941,99 @@ class TestSessionHistoryHelpers:
         client.force_login(professor)
         response = client.get(
             reverse(
-                "analytics_professor:student_detail",
-                kwargs={"course_pk": course.pk, "student_pk": student.pk},
+                "analytics_professor:professor_student_detail",
+                kwargs={"student_pk": student.pk},
             )
         )
         assert response.status_code == 200
         content = response.content.decode()
         assert "Exam session history" in content
-        assert "confidence-legend" in content or "None" in content
         assert "Review" in content
         assert "/1" in content or "0%" in content or "0.0%" in content
+
+
+@pytest.mark.django_db
+class TestProfessorSessionReview:
+    def _completed_session(self, student, question, course):
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(
+            session=session, question=question, confidence=4, is_correct=True
+        )
+        return session
+
+    def test_professor_can_review_student_session(
+        self, client, professor, student, mcq_question, program
+    ):
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="REV101",
+            name="Review Course",
+            professor=professor,
+        )
+        session = self._completed_session(student, question, course)
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:session_review",
+                kwargs={"student_pk": student.pk, "session_pk": session.pk},
+            )
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Session review" in content
+        assert "session-strip-grid" in content
+        assert "clickable: false" in content
+        assert "ai-tutor-modal" not in content
+        assert reverse(
+            "analytics_professor:professor_student_detail",
+            kwargs={"student_pk": student.pk},
+        ) in content
+
+    def test_other_professor_cannot_review_session(
+        self, client, professor, department, student, mcq_question, program
+    ):
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="REV102",
+            name="Private Course",
+            professor=professor,
+        )
+        session = self._completed_session(student, question, course)
+        other = User.objects.create_user(
+            email="otherprof@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+            department=department,
+        )
+        client.force_login(other)
+        response = client.get(
+            reverse(
+                "analytics_professor:session_review",
+                kwargs={"student_pk": student.pk, "session_pk": session.pk},
+            )
+        )
+        assert response.status_code == 404
+
+    def test_student_summary_still_works(
+        self, client, student, mcq_question, program, professor
+    ):
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="REV103",
+            name="Student Summary Course",
+            professor=professor,
+        )
+        session = self._completed_session(student, question, course)
+        client.force_login(student)
+        response = client.get(reverse("reviews:summary", kwargs={"pk": session.pk}))
+        assert response.status_code == 200
+        assert "session-strip-grid" in response.content.decode()

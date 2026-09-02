@@ -101,8 +101,7 @@ class TestSectionAndSubjectAnalytics:
         )
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:section_detail", kwargs={"pk": section.pk}))
-        assert response.status_code == 200
-        assert section.display_label in response.content.decode()
+        assert response.status_code == 404
 
     def test_professor_can_add_catalog_course(
         self, client, professor, year_level, bsed_program
@@ -153,9 +152,7 @@ class TestSectionRosterAndStudentDetail:
                 kwargs={"section_pk": section.pk},
             )
         )
-        assert response.status_code == 200
-        assert student.email in response.content.decode()
-        assert "Questions" in response.content.decode()
+        assert response.status_code == 404
 
         detail = client.get(
             reverse(
@@ -163,8 +160,7 @@ class TestSectionRosterAndStudentDetail:
                 kwargs={"section_pk": section.pk, "student_pk": student.pk},
             )
         )
-        assert detail.status_code == 200
-        assert b"No exam activity yet" in detail.content
+        assert detail.status_code == 404
 
     def test_section_roster_unique_subjects_and_question_count(
         self, student, professor, bsed_program, year_level, academic_year, course

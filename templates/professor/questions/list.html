@@ -15,33 +15,33 @@
     {% include "components/filter_bar.html" %}
 
     <div class="span-full">
-        <div class="bento-card p-6 overflow-x-auto">
-            <table class="w-full text-sm">
+        <div class="bento-card p-0 overflow-hidden data-table-wrap">
+            <table class="data-table">
                 <thead>
-                    <tr class="text-left text-examiq-slate border-b border-slate-100">
-                        <th class="pb-2 font-medium w-16">Q</th>
-                        <th class="pb-2 font-medium">Stem</th>
-                        <th class="pb-2 font-medium">Course</th>
-                        <th class="pb-2 font-medium">Topic</th>
-                        <th class="pb-2 font-medium">Difficulty</th>
-                        <th class="pb-2 font-medium">Type</th>
-                        <th class="pb-2 font-medium">Mistakes</th>
-                        <th class="pb-2 font-medium">Active</th>
-                        <th class="pb-2 font-medium"></th>
+                    <tr>
+                        <th class="w-16">Q</th>
+                        <th>Stem</th>
+                        <th>Course</th>
+                        <th>Topic</th>
+                        <th>Difficulty</th>
+                        <th>Type</th>
+                        <th>Mistakes</th>
+                        <th>Active</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for question in questions %}
-                    <tr class="border-b border-slate-50">
-                        <td class="py-2 text-examiq-slate font-semibold">{{ question.q_label }}</td>
-                        <td class="py-2 text-examiq-navy max-w-xs truncate">{{ question.stem|truncatechars:60 }}</td>
-                        <td class="py-2 text-examiq-slate">{{ question.topic.subject.name }}</td>
-                        <td class="py-2 text-examiq-slate">{{ question.topic.name }}</td>
-                        <td class="py-2 text-examiq-slate">{{ question.get_difficulty_display }}</td>
-                        <td class="py-2 text-examiq-slate">{{ question.get_question_type_display }}</td>
-                        <td class="py-2 text-examiq-mistake font-medium">{{ question.mistake_count }}</td>
-                        <td class="py-2">{% if question.is_active %}Yes{% else %}No{% endif %}</td>
-                        <td class="py-2 text-right space-x-2 whitespace-nowrap">
+                    <tr>
+                        <td class="text-examiq-slate font-semibold">{{ question.q_label }}</td>
+                        <td class="max-w-xs truncate">{{ question.stem|truncatechars:60 }}</td>
+                        <td class="text-examiq-slate">{{ question.topic.subject.name }}</td>
+                        <td class="text-examiq-slate">{{ question.topic.name }}</td>
+                        <td>{% include "components/difficulty_pill.html" with difficulty=question.difficulty %}</td>
+                        <td class="text-examiq-slate">{{ question.get_question_type_display }}</td>
+                        <td class="text-examiq-mistake font-medium">{{ question.mistake_count }}</td>
+                        <td>{% if question.is_active %}Yes{% else %}No{% endif %}</td>
+                        <td class="text-right space-x-2 whitespace-nowrap">
                             <a href="{% url 'analytics_professor:question_edit' course.pk question.pk %}" class="text-link">Edit</a>
                             <form method="post" action="{% url 'analytics_professor:question_toggle_active' course.pk question.pk %}" class="inline">
                                 {% csrf_token %}
@@ -55,7 +55,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="py-4 text-examiq-slate">
+                        <td colspan="9" class="text-examiq-slate">
                             {% if filter_has_active %}No questions match your filters.{% else %}No questions yet.{% endif %}
                         </td>
                     </tr>

@@ -193,9 +193,11 @@
         if (userEl) userEl.textContent = item.user_answer || "—";
         if (correctEl) correctEl.textContent = item.correct_answer || "—";
         if (aiEl) {
-            aiEl.innerHTML = escapeHtml(
-                item.ai_feedback || "No AI feedback generated yet."
-            ).replace(/\n/g, "<br>");
+            var aiText = item.ai_feedback || "No AI feedback generated yet.";
+            if (window.ExamiQUI && window.ExamiQUI.extractFeedbackText && item.ai_feedback) {
+                aiText = window.ExamiQUI.extractFeedbackText(item.ai_feedback);
+            }
+            aiEl.innerHTML = escapeHtml(aiText).replace(/\n/g, "<br>");
         }
         if (input) input.value = "";
         clearImageSelection();

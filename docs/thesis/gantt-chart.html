@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gantt Chart – ExamiQ+</title>
+  <title>Gantt Chart - ExamiQ+</title>
   <style>
     @page {
       size: landscape;
@@ -145,11 +145,9 @@
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       CHART 1 — July to December 2025
-       ═══════════════════════════════════════════════════════════ -->
+  <!-- Chart 1: July to December 2025 -->
   <div class="chart-page">
-    <div class="chart-title">Gantt Chart – 2025</div>
+    <div class="chart-title">Gantt Chart - 2025</div>
 
     <table class="gantt" id="chart-2025">
       <thead>
@@ -183,11 +181,9 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       CHART 2 — January to July 2026
-       ═══════════════════════════════════════════════════════════ -->
+  <!-- Chart 2: January to August 2026 -->
   <div class="chart-page">
-    <div class="chart-title">Gantt Chart – 2026</div>
+    <div class="chart-title">Gantt Chart - 2026</div>
 
     <table class="gantt" id="chart-2026">
       <thead>
@@ -200,9 +196,11 @@
           <th class="month-header" colspan="4">MAY</th>
           <th class="month-header" colspan="4">JUNE</th>
           <th class="month-header" colspan="4">JULY</th>
+          <th class="month-header" colspan="4">AUGUST</th>
           <th class="col-status" rowspan="2">STATUS / DESCRIPTION</th>
         </tr>
         <tr>
+          <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
           <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
           <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
           <th class="week-header">W1</th><th class="week-header">W2</th><th class="week-header">W3</th><th class="week-header">W4</th>
@@ -224,7 +222,7 @@
   </div>
 
   <p class="caption">
-    Gantt Chart of ExamiQ+: A Web-Based Self-Regulated Mathematics Exam Review System
+    Gantt Chart of ExamiQ+: A Web-Based Self-Regulated Mathematics Exam Review System for BSED Mathematics
   </p>
 
   <script>
@@ -266,7 +264,7 @@
       tbody.appendChild(tr);
     }
 
-    /* ── 2025 DATA (24 weeks: Jul–Dec) ── */
+    /* 2025 DATA (24 weeks: Jul-Dec) */
     const data2025 = [
       {
         phase: 'PHASE 1: SYSTEM ANALYSIS AND DESIGN',
@@ -312,12 +310,12 @@
       {
         task: 'SUBJECT AND TOPIC MANAGEMENT',
         weeks: buildWeeks(24, [{ start: 10, end: 12, status: 'completed' }]),
-        status: 'PROGRAM-SCOPED MATH CONTENT ORGANIZATION'
+        status: 'BSED MATHEMATICS CONTENT ORGANIZATION'
       },
       {
         task: 'QUESTION BANK MANAGEMENT',
         weeks: buildWeeks(24, [{ start: 12, end: 15, status: 'completed' }]),
-        status: 'CRUD AND APPROVAL WORKFLOW FOR QUESTIONS'
+        status: 'CRUD FOR BSED MATHEMATICS QUESTIONS'
       },
       {
         task: 'CONFIDENCE-BASED TEST FLOW',
@@ -346,100 +344,160 @@
       },
     ];
 
-    /* ── 2026 DATA (28 weeks: Jan–Jul) ── */
+    /* 2026 DATA (32 weeks: Jan-Aug)
+       Jul W1=24, Jul W2=25, Jul W3=26, Jul W4=27
+       Aug W1=28, Aug W2=29, Aug W3=30, Aug W4=31 */
+    const WEEKS_2026 = 32;
     const data2026 = [
       {
+        phase: 'PHASE 1: SYSTEM ANALYSIS AND DESIGN',
+        weeks: buildWeeks(WEEKS_2026, [{ start: 27, end: 27, status: 'completed' }]),
+        status: 'COMPLETED'
+      },
+      {
+        task: 'RESEARCH INTERVIEW WITH PROGRAM COORDINATOR',
+        weeks: buildWeeks(WEEKS_2026, [{ start: 27, end: 27, status: 'completed' }]),
+        status: 'REQUIREMENTS VALIDATION (JUL 22, 2026)'
+      },
+
+      {
         phase: 'PHASE 2: SYSTEM DEVELOPMENT (PART 2)',
-        weeks: buildWeeks(28, [{ start: 0, end: 10, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 0, end: 10, status: 'completed' },
+          { start: 27, end: 28, status: 'completed' },
+        ]),
         status: 'COMPLETED'
       },
       {
         task: 'ONLINE SURVEY',
-        weeks: buildWeeks(28, [{ start: 0, end: 1, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 0, end: 1, status: 'completed' }]),
         status: 'USABILITY AND RELEVANCE FEEDBACK (JAN 2026)'
       },
       {
         task: 'SURVEY-BASED SYSTEM REFINEMENT',
-        weeks: buildWeeks(28, [{ start: 1, end: 4, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 1, end: 4, status: 'completed' }]),
         status: 'IMPROVEMENTS FROM SURVEY RESULTS'
       },
       {
         task: 'ROLE-BASED ACCESS IMPLEMENTATION',
-        weeks: buildWeeks(28, [{ start: 8, end: 10, status: 'completed' }]),
-        status: 'ADMIN, CHAIRPERSON, FACULTY, AND STUDENT ROLES (MAR 2026)'
+        weeks: buildWeeks(WEEKS_2026, [{ start: 8, end: 10, status: 'completed' }]),
+        status: 'FACULTY AND STUDENT ROLES (MAR 2026)'
+      },
+      {
+        task: 'SYSTEM DEVELOPMENT BASED ON IDENTIFIED REQUIREMENTS',
+        weeks: buildWeeks(WEEKS_2026, [{ start: 27, end: 27, status: 'completed' }]),
+        status: 'UPDATES FROM COORDINATOR FEEDBACK (JUL 23, 2026)'
+      },
+      {
+        task: 'ONLINE SURVEY DATA GATHERING',
+        weeks: buildWeeks(WEEKS_2026, [{ start: 27, end: 28, status: 'completed' }]),
+        status: 'FOLLOW-UP USABILITY AND RELEVANCE SURVEY (JUL 29, 2026)'
       },
 
       {
         phase: 'PHASE 3: INTEGRATION AND REVISIONS',
-        weeks: buildWeeks(28, [{ start: 11, end: 18, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 11, end: 18, status: 'completed' },
+          { start: 27, end: 27, status: 'completed' },
+        ]),
         status: 'COMPLETED'
       },
       {
         task: 'SYSTEM INTEGRATION',
-        weeks: buildWeeks(28, [{ start: 11, end: 14, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 11, end: 14, status: 'completed' }]),
         status: 'MODULE INTEGRATION AND END-TO-END FLOW'
       },
       {
         task: 'DEBUGGING',
-        weeks: buildWeeks(28, [{ start: 13, end: 16, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 13, end: 16, status: 'completed' }]),
         status: 'DEFECT IDENTIFICATION AND RESOLUTION'
       },
       {
         task: 'FEATURE ENHANCEMENT',
-        weeks: buildWeeks(28, [{ start: 15, end: 17, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 15, end: 17, status: 'completed' }]),
         status: 'ADVISER AND EVALUATION RECOMMENDATIONS'
       },
       {
         task: 'MANUSCRIPT REFINEMENT',
-        weeks: buildWeeks(28, [{ start: 14, end: 18, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 14, end: 18, status: 'completed' }]),
         status: 'THESIS ALIGNMENT WITH SYSTEM FEATURES'
+      },
+      {
+        task: 'REVISION OF STUDY SCOPE AND RESEARCH FOCUS',
+        weeks: buildWeeks(WEEKS_2026, [{ start: 27, end: 27, status: 'completed' }]),
+        status: 'BSED MATHEMATICS SCOPE REALIGNMENT (JUL 27, 2026)'
       },
 
       {
         phase: 'PHASE 4: TESTING AND EVALUATION',
-        weeks: buildWeeks(28, [{ start: 17, end: 23, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 17, end: 23, status: 'completed' },
+          { start: 29, end: 29, status: 'completed' },
+        ]),
         status: 'COMPLETED'
       },
       {
         task: 'FUNCTIONALITY AND INTEGRATION TESTING',
-        weeks: buildWeeks(28, [{ start: 17, end: 19, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 17, end: 19, status: 'completed' }]),
         status: 'CORE FEATURE AND MODULE INTERACTION TESTS'
       },
       {
         task: 'USABILITY AND PERFORMANCE TESTING',
-        weeks: buildWeeks(28, [{ start: 19, end: 21, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 19, end: 21, status: 'completed' }]),
         status: 'USER EXPERIENCE AND LOAD EVALUATION'
       },
       {
         task: 'USER ACCEPTANCE TESTING (UAT)',
-        weeks: buildWeeks(28, [{ start: 21, end: 22, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 21, end: 22, status: 'completed' }]),
         status: 'TARGET RESPONDENT VALIDATION'
       },
       {
         task: 'ISSUE CORRECTION',
-        weeks: buildWeeks(28, [{ start: 22, end: 23, status: 'completed' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 22, end: 23, status: 'completed' }]),
         status: 'FIXES FROM TESTING AND UAT FINDINGS'
+      },
+      {
+        task: 'SYSTEM TESTING AND EVALUATION',
+        weeks: buildWeeks(WEEKS_2026, [{ start: 29, end: 29, status: 'completed' }]),
+        status: 'RE-TESTING AFTER REVISIONS (AUG 12, 2026)'
       },
 
       {
         phase: 'PHASE 5: FINAL REVISION AND DOCUMENTATION',
-        weeks: buildWeeks(28, [{ start: 23, end: 27, status: 'in-progress' }]),
+        weeks: buildWeeks(WEEKS_2026, [{ start: 23, end: 31, status: 'in-progress' }]),
         status: 'IN PROGRESS'
       },
       {
         task: 'FINAL SYSTEM REVISIONS',
-        weeks: buildWeeks(28, [{ start: 23, end: 25, status: 'completed' }]),
-        status: 'LAST-MILE BUG FIXES AND POLISH'
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 23, end: 25, status: 'completed' },
+          { start: 27, end: 31, status: 'in-progress' },
+        ]),
+        status: 'ONGOING BUG FIXES AND FEATURE POLISH'
       },
       {
         task: 'THESIS MANUSCRIPT COMPLETION',
-        weeks: buildWeeks(28, [{ start: 24, end: 26, status: 'in-progress' }]),
-        status: 'CHAPTERS 1–5 FINALIZATION'
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 24, end: 26, status: 'completed' },
+          { start: 27, end: 31, status: 'in-progress' },
+        ]),
+        status: 'CHAPTERS 1-3 IN PROGRESS'
       },
       {
         task: 'UPDATING SUPPORTING DOCUMENTS',
-        weeks: buildWeeks(28, [{ start: 26, end: 27, status: 'planned' }]),
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 26, end: 27, status: 'completed' },
+          { start: 28, end: 31, status: 'planned' },
+        ]),
         status: 'USER GUIDE, TEST REPORTS, AND APPENDICES'
+      },
+      {
+        task: 'MANUSCRIPT REFINEMENT AND REVISION',
+        weeks: buildWeeks(WEEKS_2026, [
+          { start: 27, end: 27, status: 'completed' },
+          { start: 28, end: 31, status: 'in-progress' },
+        ]),
+        status: 'THESIS UPDATES AFTER SCOPE REVISION (JUL 28, 2026)'
       },
     ];
 

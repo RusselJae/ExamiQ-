@@ -7,6 +7,7 @@ from django.db import models
 class AIGenerationJob(models.Model):
     class JobType(models.TextChoices):
         QUESTION_GENERATE = "question_generate", "Question generate"
+        EXPLANATION_GENERATE = "explanation_generate", "Explanation generate"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -34,6 +35,12 @@ class AIGenerationJob(models.Model):
     topic_id = models.PositiveIntegerField()
     difficulty = models.CharField(max_length=20, blank=True, default="")
     count = models.PositiveSmallIntegerField(default=3)
+    question_type = models.CharField(
+        max_length=20,
+        blank=True,
+        default="mcq",
+        help_text="Single question type for this generation job.",
+    )
     source_material = models.TextField(
         blank=True,
         default="",

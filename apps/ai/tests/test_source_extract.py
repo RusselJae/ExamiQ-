@@ -86,11 +86,25 @@ class TestPdfExtraction:
         assert "OCR text" in by_page[3]
 
     @patch("apps.ai.source_extract._extract_pdf_text_pages", return_value=None)
-    def test_raw_scan_fallback_when_no_reader(self, _text):
+    @patch("apps.ai.source_extract._build_ocr_function", return_value=None)
+    def test_raw_pdf_syntax_raises_error(self, _ocr, _text):
+        raw = (
+            b"%PDF-1.4 1 0 obj /Type /Catalog /Pages 2 0 R endobj "
+            b"2 0 obj /Type /Pages /MediaBox [0 0 612 792] endobj "
+            b"3 0 obj /Type /Page 0 R endobj"
+        )
+        upload = _FakeFile("module.pdf", raw)
+        with pytest.raises(SourceMaterialError, match="image-based"):
+            extract_pages_from_upload(upload)
+
+    @patch("apps.ai.source_extract.MAX_OCR_PAGES", 3)
+    @patch("apps.ai.source_extract._extract_pdf_text_pages", return_value=None)
+    @patch("apps.ai.source_extract._build_ocr_function", return_value=_fake_ocr)
+    def test_ocr_used_when_no_reader(self, _ocr, _text):
         upload = _FakeFile("module.pdf", b"%PDF\nParent, Child, (Kid) streaming object names")
         pages = extract_pages_from_upload(upload)
-        assert pages
-        assert len(pages) == 1
+        assert [p["page"] for p in pages] == [1, 2, 3]
+        assert all("OCR text for page" in p["text"] for p in pages)
 
 
 class TestChunking:

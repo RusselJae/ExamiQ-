@@ -24,7 +24,11 @@ from apps.core.filtering import (
     get_filter_param,
     has_active_filters,
 )
-from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
+from apps.core.mixins import (
+    FacultyLegacyRosterBlockedMixin,
+    ProfessorCourseMixin,
+    ProfessorRequiredMixin,
+)
 from apps.questions.models import Subject
 from apps.reviews.tutor_services import _answer_correct_response, _answer_user_response
 
@@ -265,7 +269,7 @@ class FeedbackFacultyNoteView(ProfessorCourseMixin, View):
         )
 
 
-class SectionFeedbackConcernsApiView(ProfessorRequiredMixin, View):
+class SectionFeedbackConcernsApiView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View):
     """JSON list of section student concerns for the faculty feedback modal."""
 
     def dispatch(self, request, *args, **kwargs):
@@ -301,7 +305,7 @@ class SectionFeedbackConcernsApiView(ProfessorRequiredMixin, View):
         )
 
 
-class SectionFeedbackFacultyNoteView(ProfessorRequiredMixin, View):
+class SectionFeedbackFacultyNoteView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View):
     """Post a faculty reply on a section student concern."""
 
     def dispatch(self, request, *args, **kwargs):
@@ -358,53 +362,79 @@ class GlobalChatInboxView(ProfessorRequiredMixin, View):
 
     def get(self, request):
         url = reverse("analytics_professor:overview")
-        mistake_id = request.GET.get("mistake_id") or ""
+        student_id = request.GET.get("student_id") or ""
+        conversation_id = request.GET.get("conversation_id") or ""
         qs = "open_chat=1"
-        if mistake_id:
-            qs += f"&mistake_id={mistake_id}"
+        if student_id:
+            qs += f"&student_id={student_id}"
+        if conversation_id:
+            qs += f"&conversation_id={conversation_id}"
         return redirect(f"{url}?{qs}")
 
 
-class GlobalChatConcernsApiView(ProfessorRequiredMixin, View):
-    """JSON list of concerns for the global faculty Chat modal."""
+class GlobalChatConversationsApiView(ProfessorRequiredMixin, View):
+    """JSON list of student conversations for the global faculty Chat modal."""
 
     def get(self, request):
-        from apps.analytics.concern_services import professor_concern_queryset
+        from apps.analytics.chat_services import (
+            mark_chat_notifications_read,
+            professor_chat_queryset,
+            serialize_conversation,
+        )
 
-        records = list(professor_concern_queryset(request.user)[:100])
-        items = [_concern_item_payload(record) for record in records]
-        active_id = request.GET.get("mistake_id")
-        active_mistake_id = None
+        records = list(professor_chat_queryset(request.user)[:100])
+        items = [serialize_conversation(record, viewer=request.user) for record in records]
+        active_id = request.GET.get("conversation_id")
+        student_id = request.GET.get("student_id")
+        active_conversation_id = None
         if active_id and str(active_id).isdigit():
-            active_mistake_id = int(active_id)
-        elif items:
-            active_mistake_id = items[0]["mistake_id"]
-
-        if active_mistake_id:
-            record = next((r for r in records if r.pk == active_mistake_id), None)
+            active_conversation_id = int(active_id)
+        elif student_id and str(student_id).isdigit():
+            record = next(
+                (r for r in records if r.student_id == int(student_id)),
+                None,
+            )
             if record:
-                mark_faculty_viewed(record)
-                mark_concern_notifications_read(request.user, active_mistake_id)
+                active_conversation_id = record.pk
+        elif items:
+            active_conversation_id = items[0]["conversation_id"]
+
+        if active_conversation_id:
+            record = next((r for r in records if r.pk == active_conversation_id), None)
+            if record:
+                mark_chat_notifications_read(
+                    request.user,
+                    conversation_id=active_conversation_id,
+                    student_id=record.student_id,
+                )
 
         return JsonResponse(
             {
                 "items": items,
-                "active_mistake_id": active_mistake_id,
+                "active_conversation_id": active_conversation_id,
             }
         )
 
 
-class GlobalChatFacultyNoteView(ProfessorRequiredMixin, View):
+class GlobalChatFacultyMessageView(ProfessorRequiredMixin, View):
     """Post a faculty reply from the global Chat inbox."""
 
-    def post(self, request, mistake_pk):
-        from apps.analytics.concern_services import professor_concern_queryset
+    def post(self, request, conversation_pk):
+        from apps.analytics.chat_services import (
+            post_chat_message,
+            professor_can_access_conversation,
+            professor_chat_queryset,
+            serialize_conversation,
+        )
         from apps.analytics.forms import MistakeConcernForm
 
-        record = get_object_or_404(
-            professor_concern_queryset(request.user),
-            pk=mistake_pk,
+        conversation = get_object_or_404(
+            professor_chat_queryset(request.user),
+            pk=conversation_pk,
         )
+        if not professor_can_access_conversation(request.user, conversation):
+            return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
+
         form = MistakeConcernForm(
             {
                 "body": (
@@ -423,16 +453,21 @@ class GlobalChatFacultyNoteView(ProfessorRequiredMixin, View):
                 },
                 status=400,
             )
-        post_concern_message(
-            record,
+        post_chat_message(
+            conversation,
             request.user,
             body=form.cleaned_data["body"],
             image=form.cleaned_data.get("image"),
         )
-        record.refresh_from_db()
+        conversation.refresh_from_db()
         return JsonResponse(
             {
                 "ok": True,
-                "item": _concern_item_payload(record),
+                "item": serialize_conversation(conversation, viewer=request.user),
             }
         )
+
+
+# Backward-compatible aliases
+GlobalChatConcernsApiView = GlobalChatConversationsApiView
+GlobalChatFacultyNoteView = GlobalChatFacultyMessageView

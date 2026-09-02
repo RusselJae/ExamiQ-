@@ -34,34 +34,34 @@
 </div>
 
 {% if course_cards %}
-<div class="bento-card p-0 overflow-x-auto shadow-sm">
-    <table class="w-full text-sm" id="course-subjects-table">
+<div class="data-table-wrap shadow-sm">
+    <table class="data-table" id="course-subjects-table">
         <thead>
-            <tr class="text-left text-examiq-slate border-b border-slate-200">
-                <th class="px-4 py-3 font-medium">Code</th>
-                <th class="px-4 py-3 font-medium">Name</th>
-                <th class="px-4 py-3 font-medium">Year / Sem</th>
-                <th class="px-4 py-3 font-medium text-right">Questions</th>
-                <th class="px-4 py-3 font-medium text-right">Actions</th>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Year / Sem</th>
+                <th class="text-right">Questions</th>
+                <th class="text-right">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for card in course_cards %}
             <tr
-                class="border-b border-slate-50 hover:bg-slate-50/60 course-subject-row"
+                class="course-subject-row"
                 data-code="{{ card.subject.code|lower }}"
                 data-name="{{ card.subject.name|lower }}"
                 data-year="{{ card.subject.year_level_id }}"
                 data-semester="{{ card.subject.semester }}"
             >
-                <td class="px-4 py-3 font-semibold text-examiq-navy">{{ card.subject.code }}</td>
-                <td class="px-4 py-3 text-examiq-navy">{{ card.subject.name }}</td>
-                <td class="px-4 py-3 text-examiq-slate">
+                <td class="font-semibold">{{ card.subject.code }}</td>
+                <td>{{ card.subject.name }}</td>
+                <td class="text-examiq-slate">
                     {{ card.subject.year_level.name }} · {{ card.subject.get_semester_display }}
                 </td>
-                <td class="px-4 py-3 text-right text-examiq-navy font-medium">{{ card.question_count }}</td>
-                <td class="px-4 py-3 text-right">
-                    <a href="{% url 'analytics_professor:topic_list' card.catalog_course.pk %}" class="text-link text-sm font-medium">Open</a>
+                <td class="text-right font-medium">{{ card.question_count }}</td>
+                <td class="text-right">
+                    <a href="{% url 'analytics_professor:question_list' card.catalog_course.pk %}" class="text-link text-sm font-medium">Open</a>
                 </td>
             </tr>
             {% endfor %}

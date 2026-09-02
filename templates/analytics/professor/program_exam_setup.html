@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Exam Setup - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Exam Setup" subtitle="Choose course subjects for student exams and set the per-question timer for each." %}
+
+<form method="post" class="exam-setup-form space-y-6" id="program-exam-setup-form">
+    {% csrf_token %}
+
+    <section class="bento-card p-6">
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-lg font-semibold text-examiq-navy">Course subjects &amp; timers</h2>
+                <p class="text-sm text-examiq-slate">Select subjects students may use for exams and set seconds per question for each.</p>
+            </div>
+            <div class="w-full sm:w-48">
+                <label for="default_seconds" class="block text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-1">Default timer (sec)</label>
+                <input type="number" name="default_seconds" id="default_seconds" class="form-input w-full" min="10" max="120" value="{{ default_seconds }}">
+            </div>
+        </div>
+
+        <label for="subject-timer-search" class="sr-only">Search course subjects</label>
+        <input type="search" id="subject-timer-search" class="course-subjects-toolbar__search w-full mb-4" placeholder="Search code or name…" autocomplete="off">
+
+        <div class="data-table-wrap">
+            <table class="data-table" id="subject-timer-table">
+                <thead>
+                    <tr>
+                        <th class="w-12">
+                            <input type="checkbox" id="subject-timer-select-all" aria-label="Select all subjects">
+                        </th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th class="w-32">Timer (sec)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in subject_rows %}
+                    <tr class="subject-timer-row" data-code="{{ row.subject.code|lower }}" data-name="{{ row.subject.name|lower }}">
+                        <td>
+                            <input type="checkbox" name="subjects" value="{{ row.subject.pk }}" class="subject-timer-check" {% if row.selected %}checked{% endif %}>
+                        </td>
+                        <td class="font-semibold">{{ row.subject.code }}</td>
+                        <td>{{ row.subject.name }}</td>
+                        <td>
+                            <input type="number" name="timer_{{ row.subject.pk }}" class="form-input w-full subject-timer-input" min="10" max="120" value="{{ row.seconds }}" aria-label="Timer for {{ row.subject.code }}">
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-examiq-slate py-6">No course subjects in the catalog yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p id="subject-timer-empty-filter" class="hidden p-6 text-center text-examiq-slate text-sm">No subjects match your search.</p>
+        </div>
+    </section>
+
+    {% if configured_rows %}
+    <section class="bento-card p-6">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Configured timers</h2>
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th class="text-right">Timer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in configured_rows %}
+                    <tr>
+                        <td class="font-semibold">{{ row.subject.code }}</td>
+                        <td>{{ row.subject.name }}</td>
+                        <td class="text-right font-medium">{{ row.seconds }}s</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+    <div class="exam-setup-footer">
+        <p class="exam-setup-footer__note">Changing the default timer updates all selected subjects. Unselected subjects keep their existing timers.</p>
+        <button type="submit" class="btn-primary exam-setup-footer__save">Save exam setup</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/program-exam-setup.js' %}"></script>
+{% endblock %}

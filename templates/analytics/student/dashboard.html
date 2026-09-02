@@ -40,7 +40,7 @@
             <div class="bento-card-scroll flex-1">
                 <ul class="list-none m-0 p-0">
                     {% for rec in recommendations %}
-                    {% include "components/topic_row.html" with name=rec.topic_name reason=rec.reason topic_pk=rec.topic.pk %}
+                    {% include "components/topic_row.html" with name=rec.topic_name reason=rec.reason topic_pk=rec.topic.pk subject_pk=rec.topic.subject_id %}
                     {% endfor %}
                 </ul>
             </div>

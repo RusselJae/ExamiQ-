@@ -9,12 +9,12 @@ from apps.reviews.exam_setup_services import (
 )
 
 FORM_INPUT_CLASS = (
-    "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
+    "w-full border border-slate-200 px-4 py-2.5 text-examiq-navy "
     "focus:border-examiq-green focus:ring-2 focus:ring-green-100 outline-none transition"
 )
 
 FORM_MULTISELECT_CLASS = (
-    "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
+    "multi-select-native w-full border border-slate-200 px-4 py-2.5 text-examiq-navy "
     "focus:border-examiq-green focus:ring-2 focus:ring-green-100 outline-none transition "
     "min-h-[10rem]"
 )
@@ -59,6 +59,19 @@ class ReviewSetupForm(forms.Form):
         label="Difficulty",
         widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}),
     )
+    question_type = forms.MultipleChoiceField(
+        choices=Question.QuestionType.choices,
+        initial=[Question.QuestionType.MCQ],
+        label="Question types",
+        widget=forms.SelectMultiple(
+            attrs={
+                "class": FORM_MULTISELECT_CLASS,
+                "id": "id_setup_question_type",
+                "size": "5",
+            }
+        ),
+        help_text="Select one or more question types.",
+    )
     pre_session_confidence = forms.ChoiceField(
         choices=PRE_SESSION_CONFIDENCE_CHOICES,
         required=False,
@@ -70,7 +83,7 @@ class ReviewSetupForm(forms.Form):
         widget=forms.HiddenInput(),
     )
 
-    def __init__(self, *args, student=None, **kwargs):
+    def __init__(self, *args, student=None, preselected_subject=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.student = student
         self._exam_target = None
@@ -79,6 +92,9 @@ class ReviewSetupForm(forms.Form):
         self.fields["subjects"].label_from_instance = (
             lambda obj: f"{obj.code} — {obj.name}"
         )
+        if preselected_subject is not None and qs.filter(pk=preselected_subject.pk).exists():
+            self.fields["subjects"].initial = [preselected_subject.pk]
+            self.initial["subjects"] = [preselected_subject.pk]
 
     def clean(self):
         cleaned = super().clean()
@@ -91,7 +107,14 @@ class ReviewSetupForm(forms.Form):
 
         subjects = cleaned.get("subjects")
         difficulty = cleaned.get("difficulty")
+        question_types = list(cleaned.get("question_type") or [])
+        if Question.QuestionType.MCQ not in question_types:
+            question_types.insert(0, Question.QuestionType.MCQ)
+        cleaned["question_type"] = question_types
         if not subjects or not difficulty:
+            return cleaned
+        if not question_types:
+            self.add_error("question_type", "Select at least one question type.")
             return cleaned
 
         if subjects.count() < MIN_EXAM_SUBJECTS:
@@ -101,7 +124,7 @@ class ReviewSetupForm(forms.Form):
 
         try:
             self._exam_target = build_multi_subject_exam_target(
-                self.student, subjects, difficulty
+                self.student, subjects, difficulty, question_types=question_types
             )
         except ValueError as exc:
             raise forms.ValidationError(str(exc)) from exc
@@ -118,6 +141,7 @@ class ReviewSetupForm(forms.Form):
 
 class AnswerForm(forms.Form):
     CONFIDENCE_CHOICES = [(i, str(i)) for i in range(1, 6)]
+    TRUE_FALSE_CHOICES = [("True", "True"), ("False", "False")]
 
     confidence = forms.ChoiceField(
         choices=CONFIDENCE_CHOICES,
@@ -153,11 +177,29 @@ class AnswerForm(forms.Form):
     def __init__(self, *args, question=None, timed_exam=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.timed_exam = timed_exam
+        self.question = question
         if question:
             if question.question_type == Question.QuestionType.MCQ:
                 self.fields["selected_choice"].queryset = question.choices.all()
                 del self.fields["numeric_response"]
+            elif question.question_type == Question.QuestionType.TRUE_FALSE:
+                del self.fields["selected_choice"]
+                self.fields["numeric_response"] = forms.ChoiceField(
+                    choices=self.TRUE_FALSE_CHOICES,
+                    required=False,
+                    widget=forms.RadioSelect,
+                )
+            elif question.question_type == Question.QuestionType.ENUMERATION:
+                del self.fields["selected_choice"]
+                self.fields["numeric_response"].widget = forms.Textarea(
+                    attrs={
+                        "class": "w-full rounded-lg border-gray-300",
+                        "rows": 4,
+                        "placeholder": "Enter one item per line",
+                    }
+                )
             else:
+                # identification / numeric / other free-text
                 del self.fields["selected_choice"]
 
     def clean(self):

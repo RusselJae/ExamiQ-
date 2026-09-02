@@ -7,6 +7,7 @@ from apps.analytics.concern_services import (
     concern_needs_faculty_reply,
     concern_thread_for,
     post_concern_message,
+    professor_concern_queryset,
 )
 from apps.analytics.models import MistakeConcernMessage, MistakeRecord
 from apps.reviews.models import Answer, ReviewSession
@@ -68,20 +69,23 @@ def test_post_concern_message_creates_thread(student, professor, mistake_record)
 
 @pytest.mark.django_db
 def test_student_message_notifies_professor(student, professor, mistake_record, subject):
-    Course.objects.create(
-        professor=professor,
-        program=subject.program,
-        code=subject.code,
-        name=subject.name,
-        section="Catalog",
-        term="Catalog",
-        academic_year="2025-2026",
-    )
+    professor.assigned_sections.add(student.section)
+    professor.assigned_subjects.add(subject)
     post_concern_message(mistake_record, student, body="Help please")
     assert Notification.objects.filter(
         user=professor,
         read_at__isnull=True,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_student_message_skips_professor_without_subjects(
+    student, professor, mistake_record, subject
+):
+    professor.assigned_sections.add(student.section)
+    # Option B: no subjects → no notification
+    post_concern_message(mistake_record, student, body="Help please")
+    assert not Notification.objects.filter(user=professor).exists()
 
 
 @pytest.mark.django_db
@@ -95,7 +99,32 @@ def test_faculty_reply_notifies_student(student, professor, mistake_record):
 
 
 @pytest.mark.django_db
-def test_upload_concern_view_appends_message(client, student, wrong_answer, mistake_record):
+def test_concern_thread_persists_after_faculty_section_change(
+    student, professor, mistake_record, subject, program_section, year_level, program
+):
+    from apps.users.models import ProgramSection
+
+    professor.assigned_sections.add(student.section)
+    professor.assigned_subjects.add(subject)
+    post_concern_message(mistake_record, student, body="Need help")
+    assert professor_concern_queryset(professor).filter(pk=mistake_record.pk).exists()
+
+    other_section = ProgramSection.objects.create(
+        program=program,
+        year_level=year_level,
+        label="9M",
+        academic_year=student.section.academic_year,
+        max_students=40,
+    )
+    professor.assigned_sections.set([other_section])
+    assert professor_concern_queryset(professor).filter(pk=mistake_record.pk).exists()
+    assert mistake_record.concern_faculty.filter(pk=professor.pk).exists()
+
+
+@pytest.mark.django_db
+def test_upload_concern_view_redirects_to_chat(client, student, wrong_answer):
+    from apps.analytics.models import StudentFacultyMessage
+
     client.force_login(student)
     url = reverse(
         "analytics_student:upload_mistake_concern",
@@ -103,8 +132,11 @@ def test_upload_concern_view_appends_message(client, student, wrong_answer, mist
     )
     response = client.post(url, {"body": "I am confused"})
     assert response.status_code == 302
-    record = MistakeRecord.objects.get(answer=wrong_answer)
-    assert record.concern_messages.filter(body="I am confused").exists()
+    assert "open_chat=1" in response.url
+    assert StudentFacultyMessage.objects.filter(
+        conversation__student=student,
+        body="I am confused",
+    ).exists()
 
 
 @pytest.mark.django_db

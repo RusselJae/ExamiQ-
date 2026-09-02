@@ -25,4 +25,6 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
             return redirect(f"{reverse('account_login')}?registered=pending")
         if approval_status == User.ApprovalStatus.REJECTED:
             return redirect(f"{reverse('account_login')}?registered=rejected")
+        if getattr(user, "is_archived", False):
+            return redirect(f"{reverse('account_login')}?archived=1")
         return super().respond_user_inactive(request, user)

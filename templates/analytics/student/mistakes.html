@@ -11,23 +11,39 @@
 
     {% if mistakes %}
     <div class="span-full">
-        <div class="bento-card bento-card-inner overflow-x-auto w-full">
-            <table class="w-full text-sm min-w-[640px]">
-                <thead class="bg-examiq-bg">
-                    <tr class="text-left text-examiq-slate">
-                        <th class="px-4 py-3 font-medium">Topic</th>
-                        <th class="px-4 py-3 font-medium">Question</th>
-                        <th class="px-4 py-3 font-medium">Confidence</th>
-                        <th class="px-4 py-3 font-medium">Date</th>
-                        <th class="px-4 py-3 font-medium">Actions</th>
+        <div class="data-table-wrap shadow-sm">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Subject</th>
+                        <th>Topic</th>
+                        <th>Question</th>
+                        <th>Type</th>
+                        <th>Confidence</th>
+                        <th>Date</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for mistake in mistakes %}
-                    <tr class="border-t border-slate-100">
-                        <td class="px-4 py-3 text-examiq-navy">{{ mistake.topic.name }}</td>
-                        <td class="px-4 py-3 text-examiq-slate">{{ mistake.question.stem|truncatewords:15 }}</td>
-                        <td class="px-4 py-3">
+                    <tr>
+                        <td class="text-examiq-slate whitespace-nowrap">
+                            {% if mistake.topic.subject %}
+                            {{ mistake.topic.subject.code }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td class="font-medium">{{ mistake.topic.name }}</td>
+                        <td class="max-w-xs truncate text-examiq-slate" title="{{ mistake.question.stem }}">
+                            {{ mistake.question.stem|truncatewords:12 }}
+                        </td>
+                        <td>
+                            <span class="exam-type-badge exam-type-badge--table">
+                                {{ mistake.question.get_question_type_display }}
+                            </span>
+                        </td>
+                        <td>
                             {% if mistake.answer.confidence %}
                             <span class="confidence-tier-badge confidence-tier-badge--{{ mistake.answer.confidence|confidence_tier_key }}">
                                 {{ mistake.answer.confidence|confidence_label }}
@@ -36,13 +52,12 @@
                             <span class="confidence-tier-badge confidence-tier-badge--none">No Confidence</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-examiq-slate">{{ mistake.occurred_at|date:"M d, Y H:i" }}</td>
-                        <td class="px-4 py-3">
+                        <td class="text-examiq-slate whitespace-nowrap">{{ mistake.occurred_at|date:"M d, Y H:i" }}</td>
+                        <td class="text-right whitespace-nowrap">
                             <button type="button"
                                     class="btn-primary btn-primary-sm open-tutor-btn"
                                     data-session-id="{{ mistake.answer.session_id }}"
-                                    data-answer-id="{{ mistake.answer_id }}"
-                                    data-tutor-screen="faculty">
+                                    data-answer-id="{{ mistake.answer_id }}">
                                 View
                             </button>
                         </td>

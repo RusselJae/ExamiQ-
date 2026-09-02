@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.ai.subject_relevance import assess_subject_relevance
+from apps.ai.subject_relevance import assess_question_subject_relevance, assess_subject_relevance
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +40,23 @@ def test_subject_relevance_rejects_unrelated_material():
     )
     assert result["related"] is False
     assert "not look related" in result["reason"].lower() or "not related" in result["reason"].lower()
+
+
+def test_subject_relevance_rejects_adjacent_math_history():
+    """History-of-math PDFs must not pass for a geometry subject."""
+    subject = _Fake(code="BSEM24", name="Plane and Solid Geometry")
+    topics = [
+        _Fake(pk=1, name="Planes and Angles"),
+        _Fake(pk=2, name="Solid Figures"),
+    ]
+    result = assess_subject_relevance(
+        "History of Mathematics: The Mayan number system was vigesimal. "
+        "Zero was a shell symbol. Classic Maya civilization spanned years. "
+        "Landa ordered books destroyed. Mathematics and number systems evolved.",
+        subject,
+        topics,
+    )
+    assert result["related"] is False
 
 
 def test_subject_relevance_allows_partial_related_extract():
@@ -101,3 +118,16 @@ def test_semantic_relevance_can_override_keyword_hit(_chat, _available):
     )
     assert result["related"] is False
     assert result["ai_assessed"] is True
+
+
+def test_question_subject_relevance_rejects_unrelated_stem():
+    subject = _Fake(code="GNED 03", name="Mathematics in the Modern World")
+    topic = _Fake(pk=1, name="Logic")
+    result = assess_question_subject_relevance(
+        "What is love?",
+        subject,
+        topic,
+        use_ai=False,
+    )
+    assert result["related"] is False
+    assert "GNED 03" in result["reason"] or "not look related" in result["reason"].lower()

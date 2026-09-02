@@ -1,8 +1,9 @@
 import pytest
 
 from apps.analytics.services import log_mistake
-from apps.reviews.models import ReviewSession
+from apps.reviews.models import ReviewSession, TutorConversation, TutorMessage
 from apps.reviews.services import SessionExpiredError, start_review_session, submit_answer
+from apps.reviews.tutor_services import clear_tutor_conversation_on_reanswer, get_or_create_conversation
 from apps.users.models import Course
 
 
@@ -63,3 +64,35 @@ class TestReviewServices:
 
         with pytest.raises(SessionExpiredError):
             submit_answer(session=session, question=question, confidence=4, selected_choice=correct)
+
+    def test_reanswer_clears_prior_tutor_messages(
+        self, student, topic, mcq_question
+    ):
+        question, correct = mcq_question
+        session1 = start_review_session(student, topic, "easy", 15)
+        answer1 = submit_answer(
+            session=session1,
+            question=question,
+            confidence=3,
+            selected_choice=correct,
+        )
+        conversation = get_or_create_conversation(student, question)
+        TutorMessage.objects.create(
+            conversation=conversation,
+            role=TutorMessage.Role.USER,
+            content="Old question",
+            answer=answer1,
+        )
+
+        session2 = start_review_session(student, topic, "easy", 15)
+        submit_answer(
+            session=session2,
+            question=question,
+            confidence=4,
+            selected_choice=correct,
+        )
+
+        assert not TutorConversation.objects.filter(
+            student=student, question=question
+        ).exists()
+        assert not clear_tutor_conversation_on_reanswer(student, question)

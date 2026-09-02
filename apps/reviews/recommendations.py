@@ -6,7 +6,11 @@ from django.db.models import Avg, Count, Max
 from django.utils import timezone
 
 from apps.ai.helpers import calibration_narrative_from_matrix
-from apps.analytics.confidence import confidence_accuracy_matrix, confidence_tier_matrix
+from apps.analytics.confidence import (
+    avg_confidence_scale_label,
+    confidence_accuracy_matrix,
+    confidence_tier_matrix,
+)
 from apps.analytics.models import MistakeRecord
 from apps.questions.models import Topic
 from apps.reviews.models import Answer, ReviewSession
@@ -17,6 +21,7 @@ def build_session_summary(session: ReviewSession) -> dict:
     """Build enriched summary for a completed review session."""
     answers = session.answers.all()
     total = answers.count()
+    answer_confidences = list(answers.values_list("confidence", flat=True))
     avg_confidence = answers.aggregate(avg=Avg("confidence"))["avg"] or 0
     accuracy = session.accuracy
     calibration_gap = round(avg_confidence * 20 - accuracy, 1) if total else 0
@@ -41,6 +46,7 @@ def build_session_summary(session: ReviewSession) -> dict:
         "correct_count": session.correct_count,
         "accuracy": accuracy,
         "avg_confidence": round(avg_confidence, 1),
+        "avg_confidence_label": avg_confidence_scale_label(answer_confidences),
         "calibration_gap": calibration_gap,
         "calibration_matrix": matrix,
         "calibration_tier_matrix": tier_matrix,

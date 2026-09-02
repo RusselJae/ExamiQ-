@@ -4,30 +4,21 @@
 {% block title %}Overview - EXAMIQ+{% endblock %}
 
 {% block content %}
-<div class="overview-header mb-6">
-    <p class="overview-eyebrow">Dashboard</p>
-    <div class="overview-header__main">
-        <h1 class="overview-title">Overview</h1>
-        <p class="overview-as-of">Data as of {{ overview.as_of|date:"M j, Y" }} · {{ overview.as_of|date:"g:i A" }}</p>
-    </div>
-    <div class="overview-meta">
-        <span class="overview-meta__item">
-            <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            {{ overview.as_of|date:"l, F j, Y" }}
-        </span>
-        <span class="overview-meta__item">
-            <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            Week of {{ overview.week_start|date:"M j" }} – {{ overview.week_end|date:"M j, Y" }}
-        </span>
-        <span class="overview-live-badge">
-            <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            Live
-        </span>
-    </div>
+{% include "components/page_header.html" with title="Overview" show_live=True %}
+
+<div class="overview-meta mb-6">
+    <span class="overview-meta__item">
+        <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        {{ overview.as_of|date:"l, F j, Y" }}
+    </span>
+    <span class="overview-meta__item">
+        <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Week of {{ overview.week_start|date:"M j" }} – {{ overview.week_end|date:"M j, Y" }}
+    </span>
 </div>
 
 <div class="overview-kpi-grid mb-8">
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.course_count label="Active courses" icon="book" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course subjects" icon="book" variant="neutral" %}</div>
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students practicing" icon="users" variant="neutral" %}</div>
 </div>
 
@@ -67,6 +58,7 @@
         canvas: "overviewTrendsChart",
         metricSelect: "overview-trend-metric",
         rangeSelect: "overview-trend-range",
+        expectedStudents: {{ overview.expected_students|default:0 }},
         data: JSON.parse(el.textContent),
     });
 })();

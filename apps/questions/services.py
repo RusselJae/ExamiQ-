@@ -40,28 +40,45 @@ def get_questions_for_session(
     return qs.order_by("?")[:count]
 
 
-def count_available_questions(topic, difficulty: str) -> int:
+def count_available_questions(
+    topic, difficulty: str, *, question_type: str | None = None
+) -> int:
     """Count approved active questions for a topic and difficulty."""
     from apps.questions.models import Question
 
-    return Question.objects.filter(
+    qs = Question.objects.filter(
         topic=topic,
         difficulty=difficulty,
         is_active=True,
         status=Question.Status.APPROVED,
-    ).count()
+    )
+    if question_type:
+        qs = qs.filter(question_type=question_type)
+    return qs.count()
 
 
-def count_available_questions_for_subject(subject, difficulty: str) -> int:
+def count_available_questions_for_subject(
+    subject,
+    difficulty: str,
+    *,
+    question_type: str | None = None,
+    question_types: list[str] | None = None,
+) -> int:
     """Count approved active questions under all topics of a subject."""
     from apps.questions.models import Question
 
-    return Question.objects.filter(
+    types = list(question_types or [])
+    if question_type:
+        types = [question_type]
+    qs = Question.objects.filter(
         topic__subject=subject,
         difficulty=difficulty,
         is_active=True,
         status=Question.Status.APPROVED,
-    ).count()
+    )
+    if types:
+        qs = qs.filter(question_type__in=types)
+    return qs.count()
 
 
 def question_ids_for_subject(
@@ -69,20 +86,26 @@ def question_ids_for_subject(
     difficulty: str,
     *,
     limit: int = 10,
+    question_type: str | None = None,
+    question_types: list[str] | None = None,
 ) -> list[int]:
     """Sample up to ``limit`` approved question PKs for a subject at difficulty."""
     import random
 
     from apps.questions.models import Question
 
-    ids = list(
-        Question.objects.filter(
-            topic__subject=subject,
-            difficulty=difficulty,
-            is_active=True,
-            status=Question.Status.APPROVED,
-        ).values_list("pk", flat=True)
+    types = list(question_types or [])
+    if question_type:
+        types = [question_type]
+    qs = Question.objects.filter(
+        topic__subject=subject,
+        difficulty=difficulty,
+        is_active=True,
+        status=Question.Status.APPROVED,
     )
+    if types:
+        qs = qs.filter(question_type__in=types)
+    ids = list(qs.values_list("pk", flat=True))
     if not ids:
         return []
     if len(ids) <= limit:
@@ -174,71 +197,98 @@ def get_adaptive_questions_for_session(
     )
 
 
+def _normalize_text_answer(value: str | None) -> str:
+    """Collapse whitespace and casefold for free-text comparison."""
+    import re
+
+    return re.sub(r"\s+", " ", (value or "").strip()).casefold()
+
+
+def _normalize_true_false(value: str | None) -> str | None:
+    text = (value or "").strip().casefold()
+    if text in {"true", "t", "yes", "1"}:
+        return "true"
+    if text in {"false", "f", "no", "0"}:
+        return "false"
+    return None
+
+
+def _split_enumeration_items(value: str | None) -> list[str]:
+    import re
+
+    parts = re.split(r"[\n|;]+", value or "")
+    items = [_normalize_text_answer(part) for part in parts]
+    return [item for item in items if item]
+
+
 def grade_answer(
-
     question: "Question",
-
     submitted_value: str | None = None,
-
     selected_choice: "QuestionChoice | None" = None,
-
 ) -> tuple[bool, dict]:
-
-    """
-
-    Grade a student's answer.
-
-
+    """Grade a student's answer.
 
     Returns (is_correct, context_dict).
-
     """
-
     from apps.questions.models import Question
 
-
-
     if question.question_type == Question.QuestionType.MCQ:
-
         is_correct = bool(selected_choice and selected_choice.is_correct)
-
         return is_correct, {
-
             "correct_choice": question.choices.filter(is_correct=True).first(),
-
             "selected_choice": selected_choice,
-
+            "expected_answer": "",
+            "submitted_value": submitted_value,
         }
-
-
 
     if question.question_type == Question.QuestionType.NUMERIC:
-
         try:
-
-            submitted = Decimal(submitted_value.strip())
-
+            submitted = Decimal(str(submitted_value).strip())
             correct = question.correct_answer
-
             tolerance = question.tolerance
-
             is_correct = abs(submitted - correct) <= tolerance
-
-        except (ArithmeticError, AttributeError, TypeError):
-
+        except (ArithmeticError, AttributeError, TypeError, ValueError):
             is_correct = False
-
         return is_correct, {
-
             "correct_answer": question.correct_answer,
-
+            "expected_answer": str(question.correct_answer or ""),
             "submitted_value": submitted_value,
-
         }
 
+    if question.question_type == Question.QuestionType.TRUE_FALSE:
+        expected = _normalize_true_false(question.expected_answer)
+        submitted = _normalize_true_false(submitted_value)
+        is_correct = bool(expected and submitted and expected == submitted)
+        return is_correct, {
+            "expected_answer": question.expected_answer,
+            "submitted_value": submitted_value,
+        }
 
+    if question.question_type == Question.QuestionType.IDENTIFICATION:
+        expected = _normalize_text_answer(question.expected_answer)
+        submitted = _normalize_text_answer(submitted_value)
+        is_correct = bool(expected and submitted and expected == submitted)
+        return is_correct, {
+            "expected_answer": question.expected_answer,
+            "submitted_value": submitted_value,
+        }
 
-    return False, {}
+    if question.question_type == Question.QuestionType.ENUMERATION:
+        expected_items = _split_enumeration_items(question.expected_answer)
+        submitted_items = set(_split_enumeration_items(submitted_value))
+        is_correct = bool(expected_items) and all(
+            item in submitted_items for item in expected_items
+        )
+        return is_correct, {
+            "expected_answer": question.expected_answer,
+            "submitted_value": submitted_value,
+            "expected_items": expected_items,
+        }
+
+    return False, {
+        "expected_answer": getattr(question, "expected_answer", "") or "",
+        "submitted_value": submitted_value,
+    }
 
 
 

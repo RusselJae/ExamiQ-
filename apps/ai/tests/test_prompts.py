@@ -5,15 +5,18 @@ from apps.ai.prompts import (
     build_adaptive_feedback_prompt,
     build_exam_feedback_batch_prompt,
     build_exam_feedback_single_prompt,
+    build_explanation_generation_prompt,
     build_question_generation_prompt,
     build_subject_relevance_prompt,
     build_topic_detection_prompt,
     build_tutor_chat_prompt,
     build_tutor_intro_prompt,
+    coerce_generate_question_type,
     format_exam_feedback_item,
     off_topic_redirect,
     question_generation_max_tokens,
 )
+from apps.questions.models import Question
 
 
 @pytest.mark.django_db
@@ -22,8 +25,8 @@ class TestQuestionGenerationPrompt:
     def test_token_budget_scales_with_count(self, topic):
         _, _, tokens_five = build_question_generation_prompt(topic, "easy", 5)
         _, _, tokens_three = build_question_generation_prompt(topic, "easy", 3)
-        assert tokens_five == 1500
-        assert tokens_three == 1200
+        assert tokens_five == 1100
+        assert tokens_three == 900
         assert tokens_five > tokens_three
 
     @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
@@ -37,7 +40,8 @@ class TestQuestionGenerationPrompt:
         assert "ExamiQ+" in system
         assert topic.name in user
         assert topic.subject.code in user
-        assert "explanation_steps" in user
+        assert "omit explanation_steps" in user
+        assert "Do NOT include explanation" in system
         assert "randomize" in system.lower() or "correct_label" in system.lower()
 
     def test_hard_difficulty_includes_advanced_guidance(self, topic):
@@ -45,6 +49,21 @@ class TestQuestionGenerationPrompt:
         assert "Advanced" in user
         assert "every subject" in user.lower() or "Applies to every subject" in user
         assert tokens > question_generation_max_tokens(3, "medium")
+
+    def test_identification_prompt_mentions_case_insensitive_grading(self, topic):
+        system, user, _ = build_question_generation_prompt(
+            topic, "medium", 2, question_type=Question.QuestionType.IDENTIFICATION
+        )
+        assert "identification" in user.lower()
+        assert "capitalization" in user.lower() or "capitalization" in system.lower()
+        assert "expected_answer" in user
+
+    def test_true_false_prompt_schema(self, topic):
+        _, user, _ = build_question_generation_prompt(
+            topic, "easy", 1, question_type=Question.QuestionType.TRUE_FALSE
+        )
+        assert "true or false" in user.lower()
+        assert "true_false" in user
 
 
 class TestLegacyTutorPrompts:
@@ -136,6 +155,7 @@ class TestSubjectRelevancePrompt:
             [{"id": 3, "name": "Right Triangles"}],
         )
         assert "ExamiQ+" in system
+        assert "PRIMARY" in system or "PRIMARY" in user
         assert "TRIG" in user
         assert "Trigonometry" in user
         assert "Right Triangles" in user
@@ -164,4 +184,58 @@ class TestTopicDetectionPrompt:
 class TestTokenHelpers:
     @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
     def test_question_generation_max_tokens_floor(self):
-        assert question_generation_max_tokens(1) == 1200
+        assert question_generation_max_tokens(1) == 900
+
+    def test_coerce_generate_question_type_defaults_to_mcq(self):
+        assert coerce_generate_question_type(None) == Question.QuestionType.MCQ
+        assert coerce_generate_question_type("identification") == Question.QuestionType.IDENTIFICATION
+
+
+@pytest.mark.django_db
+class TestExplanationGenerationPrompt:
+    def test_includes_question_and_schema(self, mcq_question):
+        question, _correct = mcq_question
+        system, user, tokens = build_explanation_generation_prompt(question)
+        assert "ExamiQ+" in system
+        assert question.stem in user
+        assert "explanation_steps" in user
+        assert "solution_summary" in user
+        assert tokens >= 800
+        assert tokens <= 2500
+        assert "distractor" in user.lower()
+
+    def test_true_false_prompt_mentions_claim(self, topic):
+        question = Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.TRUE_FALSE,
+            stem="Pi equals exactly 3.",
+            expected_answer="False",
+            status=Question.Status.APPROVED,
+        )
+        _, user, _ = build_explanation_generation_prompt(question)
+        assert "true" in user.lower() and "false" in user.lower()
+
+    def test_numeric_prompt_mentions_calculation(self, topic):
+        question = Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.NUMERIC,
+            stem="What is 2+2?",
+            correct_answer="4",
+            status=Question.Status.APPROVED,
+        )
+        _, user, _ = build_explanation_generation_prompt(question)
+        assert "numeric" in user.lower() or "calculation" in user.lower()
+
+    def test_enumeration_prompt_lists_items(self, topic):
+        question = Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.ENUMERATION,
+            stem="Name two types of angles.",
+            expected_answer="acute\nobtuse",
+            status=Question.Status.APPROVED,
+        )
+        _, user, _ = build_explanation_generation_prompt(question)
+        assert "enumeration" in user.lower() or "each required" in user.lower()

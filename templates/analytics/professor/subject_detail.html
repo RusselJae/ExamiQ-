@@ -19,11 +19,14 @@
        class="course-nav-link">Exam Setup</a>
 </nav>
 
-<div class="bento-grid mb-6">
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.enrolled_count label="Students" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.accuracy suffix="%" label="Average Score" variant="soft" %}</div>
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.enrolled_count label="Students" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.accuracy suffix="%" label="Average score" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=exam_timer_seconds suffix="s" label="Exam timer" variant="neutral" %}</div>
+</div>
 
+<div class="bento-grid mb-6">
     <div class="span-full">
         <div class="bento-card bento-card--chart bento-card-inner">
             <div class="flex flex-wrap items-center justify-between gap-3 mb-4 px-6 pt-6">

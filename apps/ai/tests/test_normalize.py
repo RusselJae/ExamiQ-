@@ -3,6 +3,7 @@ import random
 import pytest
 
 from apps.ai.normalize import (
+    normalize_feedback_text,
     normalize_generated_questions,
     randomize_choice_positions,
     reconcile_question_choices,
@@ -79,3 +80,115 @@ def test_normalize_varies_batch_positions():
     result = normalize_generated_questions(questions, rng=random.Random(1))
     labels = [q["correct_label"] for q in result]
     assert len(set(labels)) > 1
+
+
+def test_normalize_strips_explanation_fields():
+    questions = [
+        {
+            "stem": "Q1",
+            "correct_label": "B",
+            "choices": [
+                {"label": "A", "text": "w1", "is_correct": False},
+                {"label": "B", "text": "right", "is_correct": True},
+                {"label": "C", "text": "w2", "is_correct": False},
+                {"label": "D", "text": "w3", "is_correct": False},
+            ],
+            "explanation_steps": ["Do not keep this."],
+            "solution_summary": "Do not keep this either.",
+        }
+    ]
+    result = normalize_generated_questions(questions, rng=random.Random(0))
+    assert "explanation_steps" not in result[0]
+    assert "solution_summary" not in result[0]
+
+
+def test_normalize_identification_payload():
+    result = normalize_generated_questions(
+        [
+            {
+                "question_type": "identification",
+                "stem": "Name the slope formula.",
+                "concept_tag": "algebra",
+                "expected_answer": "  Rise Over Run ",
+            }
+        ],
+        question_type="identification",
+    )
+    assert result[0]["question_type"] == "identification"
+    assert result[0]["expected_answer"] == "Rise Over Run"
+    assert "choices" not in result[0]
+
+
+def test_normalize_true_false_payload():
+    result = normalize_generated_questions(
+        [
+            {
+                "question_type": "true_false",
+                "stem": "Zero is a natural number.",
+                "expected_answer": "false",
+            }
+        ],
+        question_type="true_false",
+    )
+    assert result[0]["expected_answer"] == "False"
+
+
+def test_normalize_true_false_accepts_bool_json_values():
+    result = normalize_generated_questions(
+        [
+            {
+                "question_type": "true_false",
+                "stem": "A triangle has three sides.",
+                "expected_answer": True,
+            },
+            {
+                "question_type": "true_false",
+                "stem": "A triangle has four sides.",
+                "expected_answer": False,
+            },
+        ],
+        question_type="true_false",
+    )
+    assert result[0]["expected_answer"] == "True"
+    assert result[1]["expected_answer"] == "False"
+
+
+def test_normalize_enumeration_accepts_list_json_values():
+    result = normalize_generated_questions(
+        [
+            {
+                "question_type": "enumeration",
+                "stem": "List central tendency measures.",
+                "expected_answer": ["mean", "median", "mode"],
+            }
+        ],
+        question_type="enumeration",
+    )
+    assert result[0]["expected_answer"] == "mean\nmedian\nmode"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Plain feedback text.", "Plain feedback text."),
+        (
+            '```json\n{"feedback": "That is the wrong approach."}\n```',
+            "That is the wrong approach.",
+        ),
+        ('{"feedback": "Check the distance formula."}', "Check the distance formula."),
+        ('{"why_wrong": "You forgot to simplify."}', "You forgot to simplify."),
+    ],
+)
+def test_normalize_feedback_text_strips_json(raw, expected):
+    assert normalize_feedback_text(raw) == expected
+
+
+def test_normalize_feedback_text_strips_internal_meta_prefix():
+    assert (
+        normalize_feedback_text("Redirect: Let's focus on the current problem.")
+        == "Let's focus on the current problem."
+    )
+    assert (
+        normalize_feedback_text("Query: How do I factor this?")
+        == "How do I factor this?"
+    )

@@ -34,8 +34,14 @@ TUTOR_RESPONSE_STYLE = """\
 - Do not add long practice-recommendation essays unless the student asks."""
 
 TUTOR_CHAT_JSON_SCHEMA = """\
-Return ONLY a JSON object (no markdown fences) with this shape:
+Return ONLY a JSON object (no markdown fences). Use ONE of these shapes:
+
+Text reply (conceptual / short follow-ups):
+{"type": "text", "content": "plain explanation..."}
+
+Solution reply (step-by-step solve):
 {
+  "type": "solution",
   "steps": [
     {
       "title": "short step title",
@@ -56,19 +62,22 @@ Optional chart (ONLY when a diagram clarifies optimization, geometry, or motion 
   "markers": [{"x": 5, "label": "x = 5 (minimum)"}]
 }
 
-Rules for steps:
+Rules for solution steps:
 - Stack equations aligned conceptually (each transformation on its own line).
 - Annotate the operation; do not dump paragraph prose.
-- Put the final result in "answer" separately from scratch work."""
+- Put the final result in "answer" separately from scratch work.
+- Keep "title" and "operation" in plain English; put all math in "equations" and "answer" wrapped in $...$."""
 
 TUTOR_CHAT_RULES = """\
 RULES:
 - Do NOT greet the user or introduce yourself.
 - Respond with the JSON schema only.
-- For solve-how questions: fill steps + answer.
-- For short conceptual questions: 1-3 steps or a single answer string is fine.
+- Short conceptual questions → {"type": "text", "content": "..."}.
+- Requests to solve, show steps, or show the complete solution → {"type": "solution", "steps": [...], "answer": "..."}.
+- NEVER return a plain numbered prose list for solve requests — always use type solution JSON.
 - If the message is vague, tie it to the active question in step 1, then help.
-- Use $...$ / $$...$$ for math (KaTeX)."""
+- Use $...$ / $$...$$ for math (KaTeX).
+- Do not put LaTeX commands in "title" or "operation"."""
 
 ADAPTIVE_TOPIC_RESTRICTION = """\
 ### TOPIC RESTRICTION (IMPORTANT)
@@ -118,22 +127,41 @@ AI_FEEDBACK_JSON_SCHEMA = """\
 
 QUESTION_VALIDATION_JSON_SCHEMA = (
     '{"is_valid": true/false, "topic_relevant": true/false, '
-    '"answer_correct": true/false, "feedback": "2-3 sentences", '
+    '"answer_correct": true/false, "feedback": "3-6 sentences with specific guidance", '
     '"suggested_concept_tag": "short label"}'
 )
 
 QUESTION_JSON_SCHEMA = (
-    '[{"stem":"short question text","concept_tag":"2-4 word tag","correct_label":"B",'
+    '[{"question_type":"mcq","stem":"short question text","concept_tag":"2-4 word tag",'
+    '"correct_label":"B",'
     '"choices":[{"label":"A","text":"plausible distractor","is_correct":false},'
     '{"label":"B","text":"the one correct answer","is_correct":true},'
     '{"label":"C","text":"plausible distractor","is_correct":false},'
-    '{"label":"D","text":"plausible distractor","is_correct":false}],'
-    '"explanation_steps":['
+    '{"label":"D","text":"plausible distractor","is_correct":false}]}'
+)
+
+TRUE_FALSE_JSON_SCHEMA = (
+    '[{"question_type":"true_false","stem":"A clear true or false statement.",'
+    '"concept_tag":"2-4 word tag","expected_answer":"True"}]'
+)
+
+IDENTIFICATION_JSON_SCHEMA = (
+    '[{"question_type":"identification","stem":"Name the property used here.",'
+    '"concept_tag":"2-4 word tag","expected_answer":"commutative property"}]'
+)
+
+ENUMERATION_JSON_SCHEMA = (
+    '[{"question_type":"enumeration","stem":"List the three measures of central tendency.",'
+    '"concept_tag":"2-4 word tag","expected_answer":"mean\\nmedian\\nmode"}]'
+)
+
+EXPLANATION_JSON_SCHEMA = (
+    '{"explanation_steps":['
     '"Align like terms.",'
     '"x^2 + 2x^2 = 3x^2",'
     '"Write the final answer: 3x^2 + x + 7"'
     '],'
-    '"solution_summary":"Final answer: B"}]'
+    '"solution_summary":"Final answer: B"}'
 )
 
 DIFFICULTY_GUIDANCE: dict[str, str] = {
@@ -226,14 +254,57 @@ def format_conversation_history(history: list[dict[str, str]] | None) -> str:
     return "Conversation so far:\n" + "\n".join(lines) + "\n\n"
 
 
+GENERATABLE_QUESTION_TYPES = frozenset(
+    {
+        Question.QuestionType.MCQ,
+        Question.QuestionType.TRUE_FALSE,
+        Question.QuestionType.IDENTIFICATION,
+        Question.QuestionType.ENUMERATION,
+    }
+)
+
+
+def coerce_generate_question_type(value: str | None) -> str:
+    """Return a supported generate type; default to MCQ."""
+    key = (value or "").strip().lower()
+    if key in GENERATABLE_QUESTION_TYPES:
+        return key
+    return Question.QuestionType.MCQ
+
+
 def question_generation_max_tokens(count: int, difficulty: str = "") -> int:
+    """Budget for MCQ-only generation (explanations are a separate call)."""
     from django.conf import settings
 
     cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
-    base = max(1200, 300 * count)
+    base = max(900, 220 * count)
     if difficulty == Question.Difficulty.HARD:
-        base = int(base * 1.5)
+        base = int(base * 1.35)
     return min(cap, base)
+
+
+def explanation_generation_max_tokens() -> int:
+    """Budget for a single question's explanation JSON."""
+    from django.conf import settings
+
+    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
+    return min(cap, 2500)
+
+
+def adaptive_feedback_max_tokens() -> int:
+    """Budget for per-answer adaptive feedback text."""
+    from django.conf import settings
+
+    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
+    return min(cap, 1200)
+
+
+def validation_max_tokens() -> int:
+    """Budget for professor question validation JSON."""
+    from django.conf import settings
+
+    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
+    return min(cap, 1000)
 
 
 def exam_feedback_max_tokens(item_count: int) -> int:
@@ -274,7 +345,7 @@ def off_topic_redirect(topic: str, question: str) -> str | None:
 # Question generation (professor AI generate / variations)
 # ---------------------------------------------------------------------------
 
-QUESTION_GENERATION_SYSTEM = (
+QUESTION_GENERATION_SYSTEM_MCQ = (
     f"You are {EXAMIQ_PERSONA} question writer. Return valid JSON only — no markdown, no prose.\n"
     "Rules:\n"
     "- MCQ with exactly 4 distinct non-empty choices (A-D); exactly one correct.\n"
@@ -284,16 +355,105 @@ QUESTION_GENERATION_SYSTEM = (
     "- Stems ≤50 words; choice text ≤120 characters; difficulty must match requested level.\n"
     "- Distractors plausible but definitively wrong to a subject expert.\n"
     "- Solve each problem yourself before marking the answer; verify correctness.\n"
-    "- For computation or multi-step problems: include ≥3 explanation_steps as a computational breakdown.\n"
-    "- Each explanation_step is ONE short instruction OR ONE math line (not a paragraph).\n"
-    "- Prefer: setup/align → operate on like terms or factors → write final answer.\n"
-    "- solution_summary is one short line stating the final answer only.\n"
-    "- Match the subject field exactly (theory, math, programming, statistics, etc.).\n"
+    "- Do NOT include explanation_steps or solution_summary — questions only.\n"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
     "- No trailing commas. Escape double quotes inside strings.\n"
-    "Use plain text for formulas and code snippets — no LaTeX or markdown."
+    "Use plain text for formulas — no LaTeX or markdown."
 )
+
+QUESTION_GENERATION_SYSTEM_TRUE_FALSE = (
+    f"You are {EXAMIQ_PERSONA} question writer. Return valid JSON only — no markdown, no prose.\n"
+    "Rules:\n"
+    "- Each item is a True or False statement (not a question with choices).\n"
+    "- expected_answer must be exactly True or False.\n"
+    "- Stems ≤50 words; difficulty must match requested level.\n"
+    "- Do NOT include explanation_steps or solution_summary.\n"
+    "JSON output rules:\n"
+    "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
+    "- No trailing commas. Escape double quotes inside strings."
+)
+
+QUESTION_GENERATION_SYSTEM_IDENTIFICATION = (
+    f"You are {EXAMIQ_PERSONA} question writer. Return valid JSON only — no markdown, no prose.\n"
+    "Rules:\n"
+    "- Each item asks for a short fill-in answer (term, value, or name).\n"
+    "- expected_answer must be concise and unambiguous (case does not matter for grading).\n"
+    "- Avoid answers that depend on capitalization unless the concept requires it.\n"
+    "- Stems ≤50 words; difficulty must match requested level.\n"
+    "- Do NOT include explanation_steps or solution_summary.\n"
+    "JSON output rules:\n"
+    "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
+    "- No trailing commas. Escape double quotes inside strings."
+)
+
+QUESTION_GENERATION_SYSTEM_ENUMERATION = (
+    f"You are {EXAMIQ_PERSONA} question writer. Return valid JSON only — no markdown, no prose.\n"
+    "Rules:\n"
+    "- Each item asks the student to list at least two related items.\n"
+    "- expected_answer must list items one per line (use \\n between items).\n"
+    "- Stems ≤50 words; difficulty must match requested level.\n"
+    "- Do NOT include explanation_steps or solution_summary.\n"
+    "JSON output rules:\n"
+    "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
+    "- No trailing commas. Escape double quotes inside strings."
+)
+
+EXPLANATION_GENERATION_SYSTEM = (
+    f"You are {EXAMIQ_PERSONA} solution writer. Return valid JSON only — no markdown, no prose.\n"
+    "Rules:\n"
+    "- Provide a complete worked solution matched to the question type (see user prompt).\n"
+    "- explanation_steps: 4-6 substantive steps for multi-step work; 3-4 for simpler items.\n"
+    "- Each step may be 1-2 sentences OR one math line — teach the reasoning, not just the answer.\n"
+    "- Start instructional steps with an action verb (Identify, Set up, Substitute, Solve, Check).\n"
+    "- Name the rule, formula, or concept when it helps the student understand why.\n"
+    "- Use plain, direct language a student can follow after missing the question.\n"
+    "- Avoid vague lines like 'do the calculation' or 'apply the formula' without showing what.\n"
+    "- solution_summary is one clear line stating the final answer.\n"
+    "- For math-heavy subjects you may use KaTeX-friendly $...$ in steps.\n"
+    "- For non-math subjects use plain English only.\n"
+    "JSON output rules:\n"
+    "- Return ONLY a raw JSON object. No markdown fences or commentary.\n"
+    "- No trailing commas. Escape double quotes inside strings."
+)
+
+
+def _explanation_type_guidance(qtype: str) -> str:
+    from apps.questions.models import Question as QuestionModel
+
+    if qtype == QuestionModel.QuestionType.TRUE_FALSE:
+        return (
+            "True/False: state clearly whether the claim is True or False, explain why "
+            "with the key fact or rule, and note a common misconception if relevant.\n"
+        )
+    if qtype == QuestionModel.QuestionType.IDENTIFICATION:
+        return (
+            "Identification: give the expected term/phrase, how to recognize it in context, "
+            "and a spelling or case note if helpful.\n"
+        )
+    if qtype == QuestionModel.QuestionType.ENUMERATION:
+        return (
+            "Enumeration: put each required list item on its own step with a brief why; "
+            "note if order matters.\n"
+        )
+    if qtype == QuestionModel.QuestionType.NUMERIC:
+        return (
+            "Numeric: show full calculation steps with intermediate values; end with the "
+            "final numeric answer and a quick reasonableness check if useful.\n"
+        )
+    return (
+        "MCQ: explain why the correct choice is right, why each major distractor is wrong, "
+        "and the concept that ties the problem together.\n"
+    )
+
+
+def _explanation_math_rules(subject) -> str:
+    name = (getattr(subject, "name", "") or "").lower()
+    code = (getattr(subject, "code", "") or "").lower()
+    math_hints = ("math", "algebra", "geometry", "trigonometry", "calculus", "statistics")
+    if any(hint in name or hint in code for hint in math_hints):
+        return "Use $...$ for formulas and equations in explanation_steps.\n"
+    return "Use plain English; avoid LaTeX.\n"
 
 
 def _difficulty_guidance(difficulty: str) -> str:
@@ -306,8 +466,10 @@ def build_question_generation_prompt(
     count: int,
     reference_stem: str = "",
     source_material: str = "",
+    question_type: str = "mcq",
 ) -> tuple[str, str, int]:
     """Return (system_instruction, user_prompt, max_output_tokens)."""
+    qtype = coerce_generate_question_type(question_type)
     subject = topic.subject
     label = difficulty_label(difficulty)
     ref = reference_stem.strip() or "none"
@@ -318,24 +480,103 @@ def build_question_generation_prompt(
         else ""
     )
     guidance = _difficulty_guidance(difficulty)
+    type_labels = {
+        Question.QuestionType.MCQ: "multiple-choice",
+        Question.QuestionType.TRUE_FALSE: "true or false",
+        Question.QuestionType.IDENTIFICATION: "identification (fill-in)",
+        Question.QuestionType.ENUMERATION: "enumeration (list items)",
+    }
+    type_label = type_labels.get(qtype, "multiple-choice")
+
+    if qtype == Question.QuestionType.TRUE_FALSE:
+        system = QUESTION_GENERATION_SYSTEM_TRUE_FALSE
+        schema = TRUE_FALSE_JSON_SCHEMA
+        extra = "Write clear statements that are definitively True or False.\n"
+    elif qtype == Question.QuestionType.IDENTIFICATION:
+        system = QUESTION_GENERATION_SYSTEM_IDENTIFICATION
+        schema = IDENTIFICATION_JSON_SCHEMA
+        extra = (
+            "Keep expected_answer short. Grading ignores capitalization and extra spaces.\n"
+        )
+    elif qtype == Question.QuestionType.ENUMERATION:
+        system = QUESTION_GENERATION_SYSTEM_ENUMERATION
+        schema = ENUMERATION_JSON_SCHEMA
+        extra = "List at least two items in expected_answer, one per line.\n"
+    else:
+        system = QUESTION_GENERATION_SYSTEM_MCQ
+        schema = QUESTION_JSON_SCHEMA
+        extra = (
+            "Keep stems and choice text short. Escape quotes inside JSON strings.\n"
+            "Pick a different correct_label for each question when possible (mix A, B, C, D).\n"
+            "Do NOT place the correct answer on the same letter for every question.\n"
+        )
 
     user_prompt = (
-        f"Generate exactly {count} multiple-choice questions.\n"
+        f"Generate exactly {count} {type_label} questions.\n"
         f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
         f"Difficulty: {label} ({difficulty})\n"
+        f"Question type: {qtype}\n"
         f"{guidance}\n"
         f"Reference (optional): {ref}\n\n"
         f"{material_block}"
-        "Keep stems and choice text short. Escape quotes inside JSON strings.\n"
-        "Pick a different correct_label for each question when possible (mix A, B, C, D).\n"
-        "Do NOT place the correct answer on the same letter for every question.\n"
-        "Each question must include explanation_steps (≥2 for multi-step work) and a one-line solution_summary.\n"
-        "explanation_steps must be a computational breakdown: short instruction lines alternating with math lines. "
-        "No long prose paragraphs.\n"
-        f"JSON array schema (example shows B correct — use any letter per question):\n"
-        f"{QUESTION_JSON_SCHEMA}"
+        f"{extra}"
+        "Return questions only — omit explanation_steps and solution_summary.\n"
+        f"JSON array schema:\n{schema}"
     )
-    return QUESTION_GENERATION_SYSTEM, user_prompt, question_generation_max_tokens(count, difficulty)
+    return system, user_prompt, question_generation_max_tokens(count, difficulty)
+
+
+def build_explanation_generation_prompt(question) -> tuple[str, str, int]:
+    """Return (system_instruction, user_prompt, max_output_tokens) for one question."""
+    from apps.questions.models import Question as QuestionModel
+
+    topic = question.topic
+    subject = topic.subject
+    qtype = question.question_type or QuestionModel.QuestionType.MCQ
+
+    if qtype == QuestionModel.QuestionType.MCQ:
+        choices = list(question.choices.order_by("label"))
+        choices_payload = [
+            {
+                "label": choice.label,
+                "text": choice.text,
+                "is_correct": choice.is_correct,
+            }
+            for choice in choices
+        ]
+        correct = next((c for c in choices if c.is_correct), None)
+        correct_label = correct.label if correct else ""
+        answer_block = (
+            f"Choices: {json.dumps(choices_payload)}\n"
+            f"Correct label: {correct_label}\n"
+        )
+    elif qtype == QuestionModel.QuestionType.NUMERIC:
+        answer_block = f"Correct numeric answer: {question.correct_answer}\n"
+    else:
+        answer_block = f"Expected answer: {question.expected_answer}\n"
+
+    type_guidance = _explanation_type_guidance(qtype)
+    math_rules = _explanation_math_rules(subject)
+    system = EXPLANATION_GENERATION_SYSTEM
+
+    user_prompt = (
+        f"Write explanation_steps and solution_summary for this {qtype} question.\n"
+        f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
+        f"Difficulty: {difficulty_label(question.difficulty)}\n"
+        f"Stem: {question.stem}\n"
+        f"{answer_block}\n"
+        f"{type_guidance}"
+        f"{math_rules}"
+        "Write a complete worked solution a student can study after a mistake — concrete, "
+        "ordered, and thorough without repeating the question stem verbatim.\n"
+        "Use full steps; escape quotes inside JSON strings.\n"
+        f"JSON object schema:\n{EXPLANATION_JSON_SCHEMA}"
+    )
+    return (
+        system,
+        user_prompt,
+        explanation_generation_max_tokens(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +587,12 @@ QUESTION_VALIDATION_SYSTEM = (
     f"You are {EXAMIQ_PERSONA} exam reviewer. Return valid JSON only.\n"
     "Structural checks: stem is clear; exactly 4 choices A-D with distinct text; "
     "exactly one marked correct; correct_label matches the true answer.\n"
-    "Semantic checks: solve the problem independently; confirm topic and difficulty fit.\n"
+    "Semantic checks: solve the problem independently; confirm the stem fits the "
+    "named course subject and topic; confirm difficulty fits.\n"
+    "Set topic_relevant:false when the stem is off-subject for the named course.\n"
+    "When topic_relevant is false, feedback MUST name the subject code and explain why.\n"
+    "feedback must be helpful and specific (3-6 sentences): what failed, why it matters, "
+    "and what to fix — not a bare error list.\n"
     "Set is_valid:false if ANY check fails. Be strict — do not pass flawed questions."
 )
 
@@ -358,15 +604,18 @@ def build_question_validation_prompt(
     difficulty: str,
     correct_label: str = "",
 ) -> tuple[str, str]:
-    subject_name = topic.subject.name if topic and hasattr(topic, "subject") else ""
+    subject = topic.subject if topic and hasattr(topic, "subject") else None
+    subject_code = getattr(subject, "code", "") or ""
+    subject_name = getattr(subject, "name", "") if subject else ""
     topic_name = topic.name if topic else ""
     choices_text = json.dumps(choices)
     user_prompt = (
-        f"Validate this MCQ for subject '{subject_name}', topic '{topic_name}', "
-        f"difficulty '{difficulty}'.\n"
+        f"Validate this MCQ for course subject '{subject_code} — {subject_name}', "
+        f"topic '{topic_name}', difficulty '{difficulty}'.\n"
         f"Stem: {stem}\nChoices: {choices_text}\nMarked correct: {correct_label}\n\n"
         "Solve the problem yourself. Verify the marked choice is definitively correct.\n"
-        "Reject if choices are duplicated, ambiguous, off-topic, or the marked answer is wrong.\n"
+        "Reject if off-subject for this course, choices are duplicated/ambiguous, "
+        "or the marked answer is wrong.\n"
         f"Return JSON only:\n{QUESTION_VALIDATION_JSON_SCHEMA}"
     )
     return QUESTION_VALIDATION_SYSTEM, user_prompt
@@ -484,7 +733,8 @@ def build_tutor_qa_prompt(topic: str, question: str) -> tuple[str, str]:
 ADAPTIVE_FEEDBACK_SYSTEM = (
     f"You are {EXAMIQ_PERSONA}, an adaptive, friendly, and flexible tutor.\n"
     f"{MATH_NOTATION_RULES}\n{ADAPTIVE_TOPIC_RESTRICTION}\n"
-    f"{CONFIDENCE_ADAPTIVE_RULES}\n{TUTOR_RESPONSE_STYLE}"
+    f"{CONFIDENCE_ADAPTIVE_RULES}\n"
+    "Reply in plain sentences only — no JSON, no markdown code fences."
 )
 
 
@@ -495,34 +745,41 @@ def build_adaptive_feedback_prompt(
     correct_answer: str,
     confidence: str = "medium",
     patterns: list[str] | None = None,
+    question_type: str = "",
 ) -> tuple[str, str]:
     pattern_text = format_pattern_text(patterns)
     user_prompt = f"""\
 ### DYNAMIC FEEDBACK RULES
 When the student is incorrect:
-- In 1-2 short sentences, name the mistake (no essays).
-- Point them to the Solution tab steps; do not paste a full lecture here.
-- If confidence is LOW, use simpler wording.
+- In 3-5 sentences, explain what went wrong and why the correct approach works.
+- Name the concept or rule they should remember; give a short hint toward the solution.
+- You may reference the worked-solution steps, but still teach the idea here — do not say only "see the solution tab."
+- If confidence is LOW, use simpler wording and smaller steps.
 
 Use plain language. Avoid decorative symbols unless the question uses math notation.
 
 ### PERFORMANCE PATTERNS
 {pattern_text}
 
-Keep the whole reply under ~120 words. No long practice-recommendation blocks.
+Keep the whole reply under ~250 words. No long practice-recommendation blocks.
 
 ---
 
 ### STUDENT DATA
 Topic: {topic}
+Question Type: {question_type or "General"}
 Question: {question}
 Student Answer: {user_answer}
 Correct Answer: {correct_answer}
 Confidence Level: {confidence}
 
+Tailor feedback to the question type (multiple choice, true/false, identification, enumeration, or numeric).
+
 ---
 
-Generate brief adaptive feedback based on the rules above."""
+Generate adaptive feedback based on the rules above.
+For MCQ mention the correct letter; for enumeration list required items; for true/false state True or False clearly.
+Return only the feedback text — not JSON."""
     return ADAPTIVE_FEEDBACK_SYSTEM, user_prompt
 
 
@@ -717,7 +974,12 @@ def build_topic_detection_prompt(
 
 SUBJECT_RELEVANCE_SYSTEM = (
     f"You are {EXAMIQ_PERSONA} curriculum analyst for secondary mathematics education. "
-    "Return valid JSON only. No markdown fences."
+    "Return valid JSON only. No markdown fences.\n"
+    "Be strict: the module's PRIMARY focus must match the named course subject. "
+    "Reject adjacent or sibling math subjects (e.g. history of mathematics, "
+    "number systems, or algebra for a plane-and-solid-geometry course). "
+    "A brief mention of the subject inside an otherwise unrelated document is "
+    "NOT enough — set related=false."
 )
 
 SUBJECT_RELEVANCE_JSON_SCHEMA = (
@@ -746,13 +1008,38 @@ def build_subject_relevance_prompt(
     user = (
         "A faculty member uploaded a learning module to generate exam questions for "
         f"the course subject {subject_code or '—'} — {subject_name or 'unknown'}.\n"
-        "Decide whether the module is actually related to this subject.\n"
-        "Be tolerant of long scanned documents: a single relevant section is enough.\n"
+        "Decide whether the module's PRIMARY content is this subject.\n"
+        "Reject if the document is mainly about a different math area "
+        "(history of math, number systems, algebra, statistics, etc.) even if "
+        "it briefly mentions this subject.\n"
+        "Accept only when a substantial portion teaches this subject's skills "
+        "or concepts (not merely references them historically).\n"
         "If related, set matched_topic_id to the best matching existing topic id "
         "(or null if none fit).\n"
         "Keep reason to one short sentence.\n\n"
         f"Existing topics JSON:\n{topics_payload}\n\n"
         f"Module text excerpt:\n{excerpt}\n\n"
+        f"Return JSON only matching:\n{SUBJECT_RELEVANCE_JSON_SCHEMA}"
+    )
+    return SUBJECT_RELEVANCE_SYSTEM, user
+
+
+def build_question_subject_relevance_prompt(
+    stem: str,
+    subject_code: str,
+    subject_name: str,
+    topic_name: str = "",
+) -> tuple[str, str]:
+    """Return (system, user) for judging a single question stem against a subject."""
+    topic_line = f"Topic: {topic_name}\n" if topic_name else ""
+    user = (
+        "A faculty member is adding an exam question for the course subject "
+        f"{subject_code or '—'} — {subject_name or 'unknown'}.\n"
+        f"{topic_line}"
+        f"Question stem:\n{stem.strip()}\n\n"
+        "Decide whether this question belongs to this subject (not a different course). "
+        "Reject pop culture, poetry, unrelated domains, or stems outside this subject.\n"
+        "If related=false, reason MUST name the subject code and explain why it does not fit.\n"
         f"Return JSON only matching:\n{SUBJECT_RELEVANCE_JSON_SCHEMA}"
     )
     return SUBJECT_RELEVANCE_SYSTEM, user

@@ -7,8 +7,13 @@ import random
 from collections.abc import Iterable
 
 from apps.questions.models import Question, Subject, Topic
-from apps.reviews.models import DEFAULT_EXAM_DIFFICULTIES, ExamSetup, SectionExamSetup
-from apps.users.models import Course, User
+from apps.reviews.models import (
+    DEFAULT_EXAM_DIFFICULTIES,
+    ExamSetup,
+    ProgramExamSetup,
+    SectionExamSetup,
+)
+from apps.users.models import Course, Program, User
 
 QUESTIONS_PER_SUBJECT = 10
 MIN_EXAM_SUBJECTS = 1
@@ -34,6 +39,27 @@ def get_or_create_exam_setup(course) -> ExamSetup:
     return setup
 
 
+def get_or_create_program_exam_setup(program: Program | None = None) -> ProgramExamSetup:
+    """Ensure BSED Math (or given program) has a program-wide exam setup."""
+    if program is None:
+        program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
+    if program is None:
+        raise ValueError("BSED Math program is not configured.")
+    setup, created = ProgramExamSetup.objects.get_or_create(
+        program=program,
+        defaults={
+            "is_enabled": True,
+            "allowed_difficulties": list(DEFAULT_EXAM_DIFFICULTIES),
+        },
+    )
+    if created:
+        return setup
+    if not setup.allowed_difficulties:
+        setup.allowed_difficulties = list(DEFAULT_EXAM_DIFFICULTIES)
+        setup.save(update_fields=["allowed_difficulties"])
+    return setup
+
+
 def student_setup_eligibility(student: User) -> dict:
     """Return eligibility flags and messages for the exam setup page.
 
@@ -44,6 +70,16 @@ def student_setup_eligibility(student: User) -> dict:
             "eligible": False,
             "reason": "program",
             "message": "Exam practice is available for BSEd Mathematics students.",
+        }
+    try:
+        setup = get_or_create_program_exam_setup()
+    except ValueError:
+        setup = None
+    if setup is not None and not setup.is_enabled:
+        return {
+            "eligible": False,
+            "reason": "disabled",
+            "message": "Exams are currently disabled by faculty. Check back later.",
         }
     if not program_has_approved_questions():
         return {
@@ -71,12 +107,22 @@ def get_or_create_section_exam_setup(section) -> SectionExamSetup:
 
 
 def subjects_available_for_student(student: User | None = None):
-    """All BSED Math subjects open to the student."""
-    return (
+    """BSED Math subjects open for student exams (program exam setup)."""
+    base = (
         Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
         .select_related("year_level", "program")
         .order_by("year_level__order", "semester", "code")
     )
+    try:
+        setup = get_or_create_program_exam_setup()
+    except ValueError:
+        return base
+    if not setup.is_enabled:
+        return base.none()
+    selected_ids = list(setup.subjects.values_list("pk", flat=True))
+    if selected_ids:
+        return base.filter(pk__in=selected_ids)
+    return base
 
 
 def program_has_approved_questions() -> bool:
@@ -106,14 +152,110 @@ def course_for_subject(subject: Subject) -> Course | None:
     )
 
 
-def exam_seconds_per_question(course) -> int:
-    """Return per-question time limit from exam setup."""
+def ensure_catalog_course_for_subject(subject: Subject) -> Course:
+    """Ensure a catalog Course shell exists for per-subject exam timers."""
+    from apps.users.section_services import get_current_academic_year
+
+    existing = course_for_subject(subject)
+    if existing:
+        return existing
+
+    academic_year = get_current_academic_year()
+    ay_label = academic_year.label if academic_year else "2025-2026"
+    course, _ = Course.objects.get_or_create(
+        code=subject.code,
+        program=subject.program,
+        term="Catalog",
+        academic_year=ay_label,
+        section="Catalog",
+        defaults={
+            "name": subject.name,
+            "is_archived": False,
+        },
+    )
+    if course.name != subject.name:
+        course.name = subject.name
+        course.save(update_fields=["name"])
+    return course
+
+
+def subject_exam_timer_seconds(subject: Subject, *, default_seconds: int = 30) -> int:
+    """Read per-subject timer from catalog course ExamSetup, else default."""
+    course = course_for_subject(subject)
     if course is None:
+        return default_seconds
+    return get_or_create_exam_setup(course).seconds_per_question
+
+
+def program_subject_timer_rows(program: Program) -> list[dict]:
+    """Rows for faculty exam-setup UI: subject, selected flag, timer seconds."""
+    setup = get_or_create_program_exam_setup(program)
+    default_seconds = setup.seconds_per_question or 30
+    selected_ids = set(setup.subjects.values_list("pk", flat=True))
+    rows = []
+    for subject in (
+        Subject.objects.filter(program=program)
+        .select_related("year_level")
+        .order_by("year_level__order", "semester", "code")
+    ):
+        rows.append(
+            {
+                "subject": subject,
+                "selected": subject.pk in selected_ids,
+                "seconds": subject_exam_timer_seconds(
+                    subject, default_seconds=default_seconds
+                ),
+            }
+        )
+    return rows
+
+
+def sync_program_subject_timers(
+    program: Program,
+    *,
+    subject_ids: list[int],
+    timers_by_subject_id: dict[int, int],
+    default_seconds: int = 30,
+) -> ProgramExamSetup:
+    """Save program subject selection and per-subject exam timers."""
+    setup = get_or_create_program_exam_setup(program)
+    setup.is_enabled = True
+    setup.seconds_per_question = default_seconds
+    setup.save(update_fields=["is_enabled", "seconds_per_question"])
+
+    subjects = list(
+        Subject.objects.filter(program=program, pk__in=subject_ids).order_by(
+            "year_level__order", "semester", "code"
+        )
+    )
+    setup.subjects.set(subjects)
+
+    for subject in subjects:
+        seconds = timers_by_subject_id.get(subject.pk, default_seconds)
+        if not 10 <= seconds <= 120:
+            raise ValueError(
+                f"Timer for {subject.code} must be between 10 and 120 seconds."
+            )
+        course = ensure_catalog_course_for_subject(subject)
+        exam_setup = get_or_create_exam_setup(course)
+        exam_setup.seconds_per_question = seconds
+        exam_setup.save(update_fields=["seconds_per_question"])
+
+    return setup
+
+
+def exam_seconds_per_question(course) -> int:
+    """Return per-question time limit from course setup, else program setup."""
+    if course is not None:
+        setup = get_or_create_exam_setup(course)
+        return setup.seconds_per_question
+    try:
+        program_setup = get_or_create_program_exam_setup()
+        return program_setup.seconds_per_question
+    except ValueError:
         from django.conf import settings
 
         return getattr(settings, "DEFAULT_SECONDS_PER_QUESTION", 30)
-    setup = get_or_create_exam_setup(course)
-    return setup.seconds_per_question
 
 
 def exam_timing_for_course(course) -> tuple[int, int]:
@@ -153,6 +295,8 @@ def build_multi_subject_exam_target(
     student: User,
     subjects: Iterable[Subject],
     difficulty: str,
+    *,
+    question_types: list[str] | None = None,
 ) -> dict:
     """Build a shuffled question queue across multiple subjects.
 
@@ -163,6 +307,7 @@ def build_multi_subject_exam_target(
 
     Raises ValueError with a user-facing message when validation fails.
     """
+    from apps.questions.models import Question
     from apps.questions.services import (
         count_available_questions_for_subject,
         question_ids_for_subject,
@@ -172,18 +317,42 @@ def build_multi_subject_exam_target(
     if len(subject_list) < MIN_EXAM_SUBJECTS:
         raise ValueError(f"Select at least {MIN_EXAM_SUBJECTS} courses.")
 
+    types = list(question_types or [])
+    type_labels: list[str] = []
+    for value in types:
+        try:
+            type_labels.append(Question.QuestionType(value).label)
+        except ValueError:
+            type_labels.append(value.replace("_", " "))
+    type_label = ", ".join(type_labels)
+
     weak: list[str] = []
     for subject in subject_list:
-        if count_available_questions_for_subject(subject, difficulty) < 1:
+        if (
+            count_available_questions_for_subject(
+                subject, difficulty, question_types=types
+            )
+            < 1
+        ):
             weak.append(subject.code)
     if weak:
         codes = ", ".join(weak)
+        if type_label:
+            raise ValueError(
+                f"No approved {type_label} questions at this difficulty for: {codes}. "
+                "Pick other courses, another difficulty, or other question types."
+            )
         raise ValueError(
             f"No approved questions at this difficulty for: {codes}. "
             "Pick other courses or another difficulty."
         )
 
-    avail = [count_available_questions_for_subject(s, difficulty) for s in subject_list]
+    avail = [
+        count_available_questions_for_subject(
+            s, difficulty, question_types=types
+        )
+        for s in subject_list
+    ]
     floors = [min(MIN_QUESTIONS_PER_SUBJECT, a) for a in avail]
 
     if len(subject_list) == 1:
@@ -211,7 +380,12 @@ def build_multi_subject_exam_target(
     queue: list[int] = []
     primary_topic = None
     for i, subject in enumerate(subject_list):
-        ids = question_ids_for_subject(subject, difficulty, limit=per_subject[i])
+        ids = question_ids_for_subject(
+            subject,
+            difficulty,
+            limit=per_subject[i],
+            question_types=types,
+        )
         queue.extend(ids)
         if primary_topic is None:
             target = resolve_exam_target(student, subject, difficulty)
@@ -237,6 +411,7 @@ def build_multi_subject_exam_target(
         "topic": primary_topic,
         "subjects": subject_list,
         "difficulty": difficulty,
+        "question_types": types,
         "course": course,
         "question_queue": queue,
         "question_count": len(queue),

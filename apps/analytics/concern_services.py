@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from apps.analytics.models import MistakeConcernMessage, MistakeRecord
 from apps.users.assignment_services import get_or_create_catalog_course
-from apps.users.models import Course, TeachingAssignment, User
+from apps.users.models import Course, User
 from apps.users.notification_services import create_notification
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,8 @@ def post_concern_message(
             update_fields.append("student_image")
         if update_fields:
             mistake_record.save(update_fields=update_fields)
+        for professor in _professors_for_mistake(mistake_record):
+            mistake_record.concern_faculty.add(professor)
         _notify_professors_of_student_message(mistake_record, message)
     elif author.role == User.Role.PROFESSOR:
         update_fields = ["faculty_noted_at"]
@@ -114,6 +116,7 @@ def post_concern_message(
             mistake_record.faculty_note = body
             update_fields.append("faculty_note")
         mistake_record.save(update_fields=update_fields)
+        mistake_record.concern_faculty.add(author)
         _notify_student_of_faculty_reply(mistake_record, message)
 
     return message
@@ -241,69 +244,38 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
 
 
 def _professors_for_mistake(record: MistakeRecord) -> list[User]:
-    subject = record.question.topic.subject
-    professors: list[User] = []
-    seen: set[int] = set()
+    """Faculty whose profile sections+subjects cover this student's mistake.
 
+    Option B: faculty must have both sections and subjects set. No Catalog fallback.
+    """
+    subject = getattr(getattr(record.question, "topic", None), "subject", None)
     student_section = getattr(record.student, "section", None)
-    if student_section:
-        assignments = TeachingAssignment.objects.filter(
-            program_section=student_section,
-            subject=subject,
-        ).select_related("professor")
-        for assignment in assignments:
-            if assignment.professor_id and assignment.professor_id not in seen:
-                professors.append(assignment.professor)
-                seen.add(assignment.professor_id)
+    if subject is None or student_section is None:
+        return []
 
-    if not professors:
-        course = (
-            Course.objects.filter(
-                code=subject.code,
-                program=subject.program,
-                professor__isnull=False,
-            )
-            .select_related("professor")
-            .first()
+    return list(
+        User.objects.filter(
+            role=User.Role.PROFESSOR,
+            assigned_sections=student_section,
+            assigned_subjects=subject,
         )
-        if course and course.professor_id and course.professor_id not in seen:
-            professors.append(course.professor)
-            seen.add(course.professor_id)
-
-    if not professors:
-        catalog_course = (
-            Course.objects.filter(
-                code=subject.code,
-                program=subject.program,
-                section="Catalog",
-                professor__isnull=False,
-            )
-            .select_related("professor")
-            .first()
-        )
-        if (
-            catalog_course
-            and catalog_course.professor_id
-            and catalog_course.professor_id not in seen
-        ):
-            professors.append(catalog_course.professor)
-            seen.add(catalog_course.professor_id)
-
-    return professors
+        .distinct()
+        .order_by("email")
+    )
 
 
 def _feedback_link_for_professor(record: MistakeRecord, professor: User) -> str:
     """Deep-link into overview with Chat modal open."""
     return (
         reverse("analytics_professor:overview")
-        + f"?open_chat=1&mistake_id={record.pk}"
+        + f"?open_chat=1&student_id={record.student_id}"
     )
 
 
 def _section_feedback_link(record: MistakeRecord) -> str:
     return (
         reverse("analytics_professor:overview")
-        + f"?open_chat=1&mistake_id={record.pk}"
+        + f"?open_chat=1&student_id={record.student_id}"
     )
 
 
@@ -338,10 +310,7 @@ def _notify_student_of_faculty_reply(
     message: MistakeConcernMessage,
 ) -> None:
     topic_name = record.topic.name
-    link = (
-        reverse("analytics_student:dashboard")
-        + f"?open_chat=1&mistake_id={record.pk}"
-    )
+    link = reverse("analytics_student:dashboard") + "?open_chat=1"
     create_notification(
         record.student,
         f"Faculty replied to your question on {topic_name}",
@@ -350,35 +319,63 @@ def _notify_student_of_faculty_reply(
 
 
 def pending_concern_count_for_course(course: Course) -> int:
-    """Concerns in this course scope where faculty has not replied yet."""
+    """Conversations for students in this course scope needing faculty reply."""
+    from apps.analytics.chat_services import chat_needs_faculty_reply
+    from apps.analytics.models import StudentFacultyConversation
     from apps.questions.models import Subject
 
     subject = Subject.objects.filter(code=course.code, program=course.program).first()
     if not subject:
         return 0
-    qs = MistakeRecord.objects.filter(question__topic__subject=subject)
-    return _pending_concern_count(qs)
+    qs = (
+        StudentFacultyConversation.objects.filter(
+            messages__isnull=False,
+            student__mistake_records__question__topic__subject=subject,
+        )
+        .distinct()
+        .prefetch_related("messages__author")
+    )
+    return sum(1 for conv in qs if chat_needs_faculty_reply(conv))
 
 
 def pending_concern_count_for_section(section) -> int:
-    qs = MistakeRecord.objects.filter(student__section=section)
-    return _pending_concern_count(qs)
+    from apps.analytics.chat_services import chat_needs_faculty_reply
+    from apps.analytics.models import StudentFacultyConversation
+
+    qs = (
+        StudentFacultyConversation.objects.filter(
+            student__section=section,
+            messages__isnull=False,
+        )
+        .distinct()
+        .prefetch_related("messages__author")
+    )
+    return sum(1 for conv in qs if chat_needs_faculty_reply(conv))
 
 
 def professor_concern_queryset(professor: User):
-    """Active concern threads for students who sat exams with this professor."""
-    from apps.reviews.models import ReviewSession
-
-    student_ids = (
-        ReviewSession.objects.filter(course__professor=professor)
-        .values_list("student_id", flat=True)
-        .distinct()
+    """Active concern threads for faculty profile scope plus persisted ownership."""
+    from apps.users.assignment_services import (
+        get_faculty_profile_section_ids,
+        get_faculty_profile_subject_ids,
     )
-    return concern_queryset_with_messages(
-        MistakeRecord.objects.filter(
-            student_id__in=student_ids,
-            question__topic__subject__program__slug=User.HomeDegreeProgram.BSED_MATH,
+
+    section_ids = get_faculty_profile_section_ids(professor)
+    subject_ids = get_faculty_profile_subject_ids(professor)
+    scope_filter = Q()
+    if section_ids and subject_ids:
+        scope_filter = Q(
+            student__section_id__in=section_ids,
+            question__topic__subject_id__in=subject_ids,
         )
+    owned_filter = Q(concern_faculty=professor)
+    if scope_filter:
+        thread_filter = scope_filter | owned_filter
+    else:
+        thread_filter = owned_filter
+
+    return concern_queryset_with_messages(
+        MistakeRecord.objects.filter(thread_filter)
         .filter(_concern_activity_filter())
         .select_related(
             "student",
@@ -395,7 +392,9 @@ def professor_concern_queryset(professor: User):
 
 
 def pending_concern_count_for_professor(professor: User) -> int:
-    return _pending_concern_count(professor_concern_queryset(professor))
+    from apps.analytics.chat_services import pending_chat_count_for_professor
+
+    return pending_chat_count_for_professor(professor)
 
 
 def student_concern_queryset(student: User):
@@ -416,8 +415,9 @@ def student_concern_queryset(student: User):
 
 
 def pending_concern_count_for_student(student: User) -> int:
-    qs = student_concern_queryset(student).select_related("student")
-    return sum(1 for record in qs if concern_needs_student_attention(record))
+    from apps.analytics.chat_services import pending_chat_count_for_student
+
+    return pending_chat_count_for_student(student)
 
 
 def _pending_concern_count(queryset):

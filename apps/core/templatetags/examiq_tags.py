@@ -57,3 +57,11 @@ def confidence_tier_badge(value):
     if value in CONFIDENCE_TIER_LABELS:
         return CONFIDENCE_TIER_LABELS[value]
     return str(value)
+
+
+@register.filter
+def plain_feedback(value):
+    """Strip JSON wrappers from AI feedback for display."""
+    from apps.ai.normalize import normalize_feedback_text
+
+    return normalize_feedback_text(str(value or ""))

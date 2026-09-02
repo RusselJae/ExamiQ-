@@ -29,8 +29,15 @@ class QuestionGenerator:
         count: int = 5,
         reference_stem: str = "",
         source_material: str = "",
+        question_type: str = "mcq",
     ) -> list[dict]:
         return []
+
+
+class ExplanationGenerator:
+    def generate(self, question) -> dict:
+        """Return ``{"explanation_steps": [...], "solution_summary": "..."}``."""
+        return {"explanation_steps": [], "solution_summary": ""}
 
 
 class DifficultyTagger:
@@ -87,6 +94,7 @@ class AdaptiveFeedbackGenerator:
         user_answer: str,
         correct_answer: str,
         confidence: str = "medium",
+        question_type: str = "",
     ) -> str:
         return (
             f"You answered '{user_answer}' but the correct answer is '{correct_answer}'. "

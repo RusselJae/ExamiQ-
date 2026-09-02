@@ -23,7 +23,7 @@
 
         <div class="exam-meta-row">
             <div class="exam-meta-chips">
-                <span class="exam-topic-chip">{{ session.topic.name }}</span>
+                <span class="exam-topic-chip">{{ question.topic.subject.name }}</span>
                 <span class="exam-type-badge">{{ question.get_question_type_display }}</span>
             </div>
 
@@ -74,17 +74,43 @@
                 {% endfor %}
             </div>
         </fieldset>
-        {% endif %}
-
-        {% if form.numeric_response %}
+        {% elif question.question_type == "true_false" and form.numeric_response %}
+        <fieldset class="exam-choices-fieldset">
+            <legend class="sr-only">Select True or False</legend>
+            <div class="exam-choices-grid exam-choices-grid--tf">
+                {% for value, label in form.fields.numeric_response.choices %}
+                <label class="choice-tile exam-choice-tile">
+                    <input type="radio" name="numeric_response" value="{{ value }}" class="sr-only" {% if not is_timed_exam %}required{% endif %}>
+                    <span class="exam-choice-tile__letter">{% if value == "True" %}T{% else %}F{% endif %}</span>
+                    <span class="exam-choice-tile__text">{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+        {% elif form.numeric_response %}
         <div class="exam-numeric-field">
-            <label for="id_numeric_response" class="focus-field-legend block mb-3">Your answer</label>
+            <label for="id_numeric_response" class="focus-field-legend block mb-3">
+                {% if question.question_type == "enumeration" %}
+                Your answers <span class="text-examiq-slate font-normal">(one item per line)</span>
+                {% else %}
+                Your answer
+                {% endif %}
+            </label>
+            {% if question.question_type == "enumeration" %}
+            <textarea name="numeric_response"
+                      id="id_numeric_response"
+                      rows="4"
+                      placeholder="Enter one item per line"
+                      {% if not is_timed_exam %}required{% endif %}
+                      class="exam-numeric-input"></textarea>
+            {% else %}
             <input type="text"
                    name="numeric_response"
                    id="id_numeric_response"
                    placeholder="Enter your answer"
                    {% if not is_timed_exam %}required{% endif %}
                    class="exam-numeric-input">
+            {% endif %}
         </div>
         {% endif %}
 

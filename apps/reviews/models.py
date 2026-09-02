@@ -119,7 +119,10 @@ class ExamSetup(TimeStampedModel):
 
 
 class SectionExamSetup(TimeStampedModel):
-    """Faculty exam availability for a student ProgramSection cohort."""
+    """Faculty exam availability for a student ProgramSection cohort.
+
+    Deprecated for faculty UI — prefer ProgramExamSetup for all BSED Math students.
+    """
 
     section = models.OneToOneField(
         ProgramSection,
@@ -145,6 +148,43 @@ class SectionExamSetup(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Exam setup for {self.section.display_label}"
+
+    def save(self, *args, **kwargs):
+        if not self.allowed_difficulties:
+            self.allowed_difficulties = list(DEFAULT_EXAM_DIFFICULTIES)
+        super().save(*args, **kwargs)
+
+    def effective_difficulties(self) -> list[str]:
+        return self.allowed_difficulties or list(DEFAULT_EXAM_DIFFICULTIES)
+
+
+class ProgramExamSetup(TimeStampedModel):
+    """Program-wide exam availability for all students in a degree program."""
+
+    program = models.OneToOneField(
+        "users.Program",
+        on_delete=models.CASCADE,
+        related_name="exam_setup",
+    )
+    is_enabled = models.BooleanField(default=True)
+    subjects = models.ManyToManyField(
+        Subject,
+        blank=True,
+        related_name="program_exam_setups",
+        help_text="Course subjects students may select for exams. Empty = full catalog.",
+    )
+    seconds_per_question = models.PositiveIntegerField(
+        default=30,
+        help_text="Default time limit per question for student exams.",
+    )
+    allowed_difficulties = models.JSONField(default=list)
+
+    class Meta:
+        verbose_name = "Program Exam Setup"
+        verbose_name_plural = "Program Exam Setups"
+
+    def __str__(self) -> str:
+        return f"Exam setup for {self.program.name}"
 
     def save(self, *args, **kwargs):
         if not self.allowed_difficulties:

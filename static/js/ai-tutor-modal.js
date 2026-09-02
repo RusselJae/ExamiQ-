@@ -15,8 +15,7 @@
         sending: false,
         loaded: false,
         enriching: {},
-        screen: "solution",
-        preferredScreen: "solution",
+        preferredScreen: "unified",
         reviewMode: false,
         includeAll: false,
     };
@@ -309,100 +308,9 @@
 
     function updateComposeUi() {
         var input = document.getElementById("ai-tutor-chat-input");
-        var attach = document.getElementById("ai-tutor-image-label");
-        var composer = document.getElementById("ai-tutor-chat");
-        var isFaculty = state.screen === "faculty";
-        var isSolution = state.screen === "solution";
-        var canAttach = !isSolution;
-
-        if (composer) composer.classList.toggle("hidden", isSolution);
         if (input) {
-            input.placeholder = isFaculty
-                ? "Ask your professor about this question…"
-                : "Ask how to solve this step by step…";
+            input.placeholder = "Ask how to solve this step by step…";
         }
-        if (attach) attach.classList.toggle("hidden", !canAttach);
-        if (!canAttach) clearImageSelection();
-    }
-
-    function setTutorScreen(screen) {
-        if (screen === "faculty") state.screen = "faculty";
-        else if (screen === "solution") state.screen = "solution";
-        else state.screen = "ai";
-
-        var ai = document.getElementById("ai-tutor-screen-ai");
-        var solution = document.getElementById("ai-tutor-screen-solution");
-        var faculty = document.getElementById("ai-tutor-screen-faculty");
-        if (ai) ai.classList.toggle("hidden", state.screen !== "ai");
-        if (solution) solution.classList.toggle("hidden", state.screen !== "solution");
-        if (faculty) faculty.classList.toggle("hidden", state.screen !== "faculty");
-        document.querySelectorAll("[data-tutor-screen]").forEach(function (btn) {
-            var active = btn.getAttribute("data-tutor-screen") === state.screen;
-            btn.classList.toggle("ai-tutor-modal__tab--active", active);
-            btn.setAttribute("aria-selected", active ? "true" : "false");
-        });
-        updateComposeUi();
-    }
-
-    function renderFacultyThread(item) {
-        var container = document.getElementById("ai-tutor-faculty-thread");
-        if (!container) return;
-        var messages = (item && item.concern_messages) || [];
-        if (!messages.length) {
-            container.innerHTML =
-                '<p class="chat-thread__empty">No messages yet. Start the conversation below.</p>';
-            return;
-        }
-        container.innerHTML = messages
-            .map(function (msg) {
-                var isSelf = msg.author_role === "student";
-                var side = isSelf ? "out" : "in";
-                var initials = msg.author_initials || (isSelf ? "YOU" : "FA");
-                var header = isSelf
-                    ? "You"
-                    : escapeHtml(msg.author_name || "Faculty") +
-                      (item && item.topic ? " · " + escapeHtml(item.topic) : "");
-                var bodyHtml = msg.body
-                    ? '<p class="chat-bubble__text">' +
-                      escapeHtml(msg.body).replace(/\n/g, "<br>") +
-                      "</p>"
-                    : "";
-                return (
-                    '<div class="chat-row chat-row--' +
-                    side +
-                    '">' +
-                    (isSelf
-                        ? ""
-                        : '<div class="chat-avatar chat-avatar--sm" aria-hidden="true">' +
-                          escapeHtml(initials) +
-                          "</div>") +
-                    '<div class="chat-row__body">' +
-                    '<p class="chat-row__header">' +
-                    header +
-                    "</p>" +
-                    '<div class="chat-bubble chat-bubble--' +
-                    side +
-                    '">' +
-                    bodyHtml +
-                    attachmentChip(msg) +
-                    "</div>" +
-                    '<p class="chat-row__time">' +
-                    escapeHtml(formatTimestamp(msg.created_at)) +
-                    "</p></div>" +
-                    (isSelf
-                        ? '<div class="chat-avatar chat-avatar--sm chat-avatar--self" aria-hidden="true">' +
-                          escapeHtml(initials) +
-                          "</div>"
-                        : "") +
-                    "</div>"
-                );
-            })
-            .join("");
-        container.scrollTop = container.scrollHeight;
-    }
-
-    function renderFacultyNotes(item) {
-        renderFacultyThread(item);
     }
 
     function activeItem() {
@@ -442,6 +350,9 @@
 
     function truncateFeedback(text, maxLen) {
         var raw = String(text || "").trim();
+        if (window.ExamiQUI && window.ExamiQUI.extractFeedbackText) {
+            raw = window.ExamiQUI.extractFeedbackText(raw);
+        }
         if (!raw) return "";
         if (raw.length <= maxLen) return raw;
         var cut = raw.slice(0, maxLen);
@@ -498,7 +409,6 @@
         if (!item || !stemEl) return;
 
         stemEl.textContent = item.stem;
-        renderFacultyNotes(item);
 
         if (userAnswerEl) {
             userAnswerEl.textContent = item.user_answer || "No answer";
@@ -511,18 +421,9 @@
         if (visualHost && window.ExamiQUI && window.ExamiQUI.renderTutorVisualResponse) {
             var why = "";
             if (!item.is_correct) {
-                why = truncateFeedback(item.feedback || "", 220);
-            }
-            var structured = null;
-            for (var i = state.messages.length - 1; i >= 0; i -= 1) {
-                var msg = state.messages[i];
-                if (msg && msg.role === "assistant" && msg.structured) {
-                    structured = msg.structured;
-                    break;
-                }
+                why = truncateFeedback(item.feedback || "", 600);
             }
             window.ExamiQUI.renderTutorVisualResponse(visualHost, {
-                structured: structured,
                 correctionSteps: item.correction_steps || [],
                 finalAnswer: item.final_answer || item.correct_answer || "",
                 why: why,
@@ -570,20 +471,44 @@
                       "</p>"
                     : "";
                 bubble.innerHTML = bodyHtml + attachmentChip(msg);
-            } else if (window.ExamiQUI && window.ExamiQUI.renderTutorVisualResponse) {
-                var host = document.createElement("div");
-                host.className = "tutor-visual-host tutor-visual-host--chat";
-                bubble.appendChild(host);
-                window.ExamiQUI.renderTutorVisualResponse(host, {
-                    structured: msg.structured || null,
-                    raw: msg.content || "",
-                    progressive: false,
-                });
             } else {
-                bubble.innerHTML =
-                    '<p class="chat-bubble__text">' +
-                    escapeHtml(msg.content || "").replace(/\n/g, "<br>") +
-                    "</p>";
+                var structured =
+                    msg.structured ||
+                    (window.ExamiQUI && window.ExamiQUI.parseTutorStructured
+                        ? window.ExamiQUI.parseTutorStructured(msg.content)
+                        : null);
+                var isSolution =
+                    window.ExamiQUI &&
+                    window.ExamiQUI.isSolutionResponse &&
+                    window.ExamiQUI.isSolutionResponse(structured, msg.content);
+                if (!isSolution) {
+                    var plain =
+                        window.ExamiQUI && window.ExamiQUI.plainTutorText
+                            ? window.ExamiQUI.plainTutorText(structured, msg.content)
+                            : msg.content || "";
+                    bubble.className += " chat-bubble--simple";
+                    bubble.innerHTML =
+                        '<p class="chat-bubble__text">' +
+                        escapeHtml(plain).replace(/\n/g, "<br>") +
+                        "</p>";
+                } else if (
+                    window.ExamiQUI &&
+                    window.ExamiQUI.renderTutorVisualResponse
+                ) {
+                    var host = document.createElement("div");
+                    host.className = "tutor-visual-host tutor-visual-host--chat";
+                    bubble.appendChild(host);
+                    window.ExamiQUI.renderTutorVisualResponse(host, {
+                        structured: structured,
+                        raw: msg.content || "",
+                        progressive: false,
+                    });
+                } else {
+                    bubble.innerHTML =
+                        '<p class="chat-bubble__text">' +
+                        escapeHtml(msg.content || "").replace(/\n/g, "<br>") +
+                        "</p>";
+                }
             }
 
             body.appendChild(bubble);
@@ -598,6 +523,35 @@
         });
         katexRender(container);
         container.scrollTop = container.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+        hideTypingIndicator();
+        var container = document.getElementById("ai-tutor-messages");
+        if (!container) return;
+        var identity = studentIdentity();
+        var row = document.createElement("div");
+        row.id = "ai-tutor-typing-row";
+        row.className = "chat-row chat-row--in";
+        row.setAttribute("aria-live", "polite");
+        row.setAttribute("aria-label", "AI Tutor is typing");
+        row.innerHTML =
+            avatarHtml("in", identity) +
+            '<div class="chat-row__body">' +
+            '<p class="chat-row__header">AI Tutor</p>' +
+            '<div class="chat-bubble chat-bubble--in">' +
+            '<div class="chat-typing" aria-hidden="true">' +
+            '<span class="chat-typing__dot"></span>' +
+            '<span class="chat-typing__dot"></span>' +
+            '<span class="chat-typing__dot"></span>' +
+            "</div></div></div>";
+        container.appendChild(row);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function hideTypingIndicator() {
+        var el = document.getElementById("ai-tutor-typing-row");
+        if (el) el.remove();
     }
 
     function pickDefaultAnswer() {
@@ -619,7 +573,7 @@
         if (errorEl) errorEl.classList.add("hidden");
         if (content) content.classList.remove("hidden");
         pickDefaultAnswer();
-        setTutorScreen(state.preferredScreen || "solution");
+        updateComposeUi();
         renderQuestionSelect();
         renderFeedbackPanel();
         renderMessages();
@@ -650,69 +604,6 @@
         return null;
     }
 
-    async function sendFacultyMessage(message, imageFile) {
-        if (state.sending) return;
-        var item = activeItem();
-        if (!item) return;
-        var url = concernUrlForAnswer(item.answer_id);
-        if (!url) {
-            if (typeof showToast === "function") {
-                showToast("Could not find concern endpoint for this question.", "error");
-            }
-            return;
-        }
-        if (!message.trim() && !imageFile) {
-            if (typeof showToast === "function") {
-                showToast("Add a message or photo.", "warning");
-            }
-            return;
-        }
-        var imageError = validateImageFile(imageFile);
-        if (imageError) {
-            if (typeof showToast === "function") showToast(imageError, "error");
-            return;
-        }
-
-        state.sending = true;
-        var btn = document.getElementById("ai-tutor-send-btn");
-        if (btn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-            window.ExamiQUI.setButtonLoading(btn, true, "Sending…");
-        }
-        try {
-            var fd = new FormData();
-            fd.append("csrfmiddlewaretoken", getConfig().csrfToken || "");
-            fd.append("body", message.trim());
-            if (imageFile) fd.append("image", imageFile);
-            var resp = await fetch(url, {
-                method: "POST",
-                body: fd,
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRFToken": getConfig().csrfToken || "",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                credentials: "same-origin",
-            });
-            var data = await resp.json().catch(function () {
-                return {};
-            });
-            if (!resp.ok) throw new Error(data.error || "Could not send message.");
-            item.concern_messages = data.messages || [];
-            renderFacultyThread(item);
-            clearImageSelection();
-            if (typeof showToast === "function") showToast("Message sent to faculty.", "success");
-        } catch (err) {
-            if (typeof showToast === "function") {
-                showToast(err.message || "Could not send message.", "error");
-            }
-        } finally {
-            state.sending = false;
-            if (btn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-                window.ExamiQUI.setButtonLoading(btn, false);
-            }
-        }
-    }
-
     async function sendMessage(message, imageFile) {
         if (state.sending) return;
         var config = getConfig();
@@ -735,6 +626,7 @@
         });
         renderMessages();
         clearImageSelection();
+        showTypingIndicator();
 
         try {
             var resp;
@@ -784,7 +676,6 @@
             }
             renderQuestionSelect();
             renderMessages();
-            renderFeedbackPanel();
         } catch (err) {
             state.messages.pop();
             renderMessages();
@@ -793,6 +684,7 @@
             }
         } finally {
             if (previewUrl) URL.revokeObjectURL(previewUrl);
+            hideTypingIndicator();
             state.sending = false;
         }
     }
@@ -809,12 +701,7 @@
         }
         state.reviewMode = !!options.reviewMode;
         state.includeAll = !!options.includeAll || !!options.reviewMode;
-        state.preferredScreen =
-            options.screen === "faculty"
-                ? "faculty"
-                : options.screen === "ai"
-                  ? "ai"
-                  : "solution";
+        state.preferredScreen = "unified";
 
         if (options.answerId) {
             markAnswerNotificationsRead(options.answerId);
@@ -861,7 +748,7 @@
         document.querySelectorAll("[data-open-ai-tutor]").forEach(function (el) {
             el.addEventListener("click", function (event) {
                 event.preventDefault();
-                openTutorModal({ includeAll: true, screen: "ai" });
+                openTutorModal({ includeAll: true, screen: "solution" });
             });
         });
 
@@ -878,11 +765,9 @@
                 event.preventDefault();
                 var sessionId = parseInt(btn.getAttribute("data-session-id"), 10);
                 var answerId = parseInt(btn.getAttribute("data-answer-id"), 10);
-                var screen = btn.getAttribute("data-tutor-screen") || "faculty";
                 openTutorModal({
                     sessionId: sessionId,
                     answerId: answerId,
-                    screen: screen,
                 });
             });
         });
@@ -896,12 +781,6 @@
                 }
             });
         }
-
-        document.querySelectorAll("[data-tutor-screen]").forEach(function (btn) {
-            btn.addEventListener("click", function () {
-                setTutorScreen(btn.getAttribute("data-tutor-screen"));
-            });
-        });
 
         var imageInput = document.getElementById("ai-tutor-chat-image");
         var imageName = document.getElementById("ai-tutor-image-name");
@@ -932,13 +811,8 @@
                 event.preventDefault();
                 var text = input.value;
                 var file = imageInput && imageInput.files ? imageInput.files[0] : null;
-                if (state.screen === "faculty") {
-                    input.value = "";
-                    sendFacultyMessage(text, file);
-                } else {
-                    input.value = "";
-                    sendMessage(text, file);
-                }
+                input.value = "";
+                sendMessage(text, file);
             });
             input.addEventListener("keydown", function (event) {
                 if (event.key === "Enter" && !event.shiftKey) {
@@ -966,7 +840,7 @@
                 sessionId: sessionId || undefined,
                 answerId: answerId || null,
                 includeAll: true,
-                screen: openTutor ? "ai" : config.openScreen || "ai",
+                screen: openTutor ? (config.openScreen || "solution") : config.openScreen || "solution",
             });
         }
     });

@@ -12,11 +12,26 @@
 
 <form id="batch-edit-form" class="space-y-6">
     <div class="bento-card bento-card--elevated p-6 shadow-sm space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="edit-question-type" class="block text-sm font-medium text-examiq-slate mb-1">Question type</label>
+                <select id="edit-question-type" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
+                    <option value="mcq">Multiple Choice</option>
+                    <option value="true_false">True or False</option>
+                    <option value="identification">Identification</option>
+                    <option value="enumeration">Enumeration</option>
+                </select>
+            </div>
+            <div>
+                <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
+                <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="Short concept label">
+            </div>
+        </div>
         <div>
             <label for="edit-stem" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
             <textarea id="edit-stem" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm" placeholder="Enter question text..."></textarea>
         </div>
-        <div class="space-y-4">
+        <div id="edit-mcq-fields" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {% for letter in "ABCD" %}
                 <div>
@@ -30,9 +45,10 @@
                 <input type="text" id="edit-correct" value="A" maxlength="1" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy uppercase shadow-sm">
             </div>
         </div>
-        <div>
-            <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
-            <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="Short concept label">
+        <div id="edit-expected-fields" class="hidden">
+            <label for="edit-expected" class="block text-sm font-medium text-examiq-slate mb-1">Expected answer</label>
+            <textarea id="edit-expected" rows="3" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm" placeholder="True/False, identification phrase, or one enumeration item per line"></textarea>
+            <p id="edit-expected-help" class="text-xs text-examiq-slate mt-2">Enter the correct answer students should match.</p>
         </div>
     </div>
     <div class="flex flex-wrap gap-3">
@@ -51,27 +67,55 @@
     const draft = window.ExamiQBatch.loadDraft(coursePk);
     const data = draft.questions[questionIndex] || {
         stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
-        question_type: "mcq", ai_generated: false
+        question_type: "mcq", expected_answer: "", ai_generated: false
     };
+
+    const typeSelect = document.getElementById("edit-question-type");
+    const mcqFields = document.getElementById("edit-mcq-fields");
+    const expectedFields = document.getElementById("edit-expected-fields");
+    const expectedHelp = document.getElementById("edit-expected-help");
 
     document.getElementById("edit-stem").value = data.stem || "";
     document.getElementById("edit-correct").value = data.correct || "A";
     document.getElementById("edit-concept").value = data.concept || "";
+    document.getElementById("edit-expected").value = data.expected_answer || "";
+    typeSelect.value = data.question_type || "mcq";
     ["A","B","C","D"].forEach(function(letter) {
         document.getElementById("edit-choice-" + letter).value =
             (data.choices && data.choices[letter]) || "";
     });
 
+    function syncTypeUi() {
+        const type = typeSelect.value || "mcq";
+        const isMcq = type === "mcq";
+        mcqFields.classList.toggle("hidden", !isMcq);
+        expectedFields.classList.toggle("hidden", isMcq);
+        if (type === "true_false") {
+            expectedHelp.textContent = "Enter True or False.";
+        } else if (type === "enumeration") {
+            expectedHelp.textContent = "List each expected item on its own line.";
+        } else if (type === "identification") {
+            expectedHelp.textContent = "Enter the exact phrase or term students should identify.";
+        } else {
+            expectedHelp.textContent = "Enter the correct answer students should match.";
+        }
+    }
+    typeSelect.addEventListener("change", syncTypeUi);
+    syncTypeUi();
+
     document.getElementById("batch-edit-form").addEventListener("submit", function(e) {
         e.preventDefault();
+        const type = typeSelect.value || "mcq";
         const updated = {
             stem: document.getElementById("edit-stem").value,
             correct: document.getElementById("edit-correct").value,
             concept: document.getElementById("edit-concept").value,
-            question_type: "mcq",
+            question_type: type,
+            expected_answer: type === "mcq" ? "" : document.getElementById("edit-expected").value,
             ai_generated: !!data.ai_generated,
             steps: data.steps || [],
             solution_summary: data.solution_summary || "",
+            difficulty: data.difficulty || "medium",
             choices: {},
             validation: null,
         };
@@ -81,7 +125,7 @@
         while (draft.questions.length <= questionIndex) {
             draft.questions.push({
                 stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
-                question_type: "mcq"
+                question_type: "mcq", expected_answer: ""
             });
         }
         draft.questions[questionIndex] = updated;

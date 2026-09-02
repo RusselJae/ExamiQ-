@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ form_title }} - {{ course.section|default:course.code }}{% endblock %}
+{% block title %}{% if course %}{{ form_title }} - {{ course.section|default:course.code }}{% else %}{{ form_title }} - EXAMIQ+{% endif %}{% endblock %}
 
 {% block content %}
 {% if hub_mode %}
@@ -14,63 +14,122 @@
 <form method="post" id="batch-question-form" class="space-y-6" enctype="multipart/form-data"{% if form_action %} action="{{ form_action }}"{% endif %}>
     {% csrf_token %}
 
-    {% if hub_mode %}
-    <div class="bento-card bento-card--elevated p-4 shadow-sm">
-        <label for="hub-course-filter" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Course subject</label>
-        <select id="hub-course-filter" class="w-full max-w-xl rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm"
-                onchange="if (this.value) { window.location = '{% url 'analytics_professor:question_add' %}?course=' + this.value; } else { window.location = '{% url 'analytics_professor:question_add' %}'; }">
-            <option value="">Select a course subject…</option>
-            {% for opt in course_options %}
-            <option value="{{ opt.course.pk }}" {% if selected_course_pk == opt.course.pk %}selected{% endif %}>
-                {{ opt.label }}
-            </option>
-            {% endfor %}
-        </select>
-        <p class="text-xs text-examiq-slate mt-2">Questions you add are saved under the selected subject.</p>
-    </div>
-    {% endif %}
-
     <div class="bento-card bento-card--elevated p-6 shadow-sm">
-        <div class="batch-settings-grid">
-            <div>
-                <label for="settings-difficulty" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Difficulty</label>
-                <select id="settings-difficulty" name="difficulty" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm">
-                    {% for value, label in difficulty_choices %}
-                    <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
-                </select>
+        <div class="batch-settings-rows{% if hub_mode %} batch-settings-rows--hub{% endif %}">
+            <div class="batch-settings-row batch-settings-row--primary">
+                {% if hub_mode %}
+                <div class="batch-settings-field">
+                    <label for="hub-course-search" class="batch-settings-field__label">Course subject</label>
+                    <div
+                        class="searchable-select"
+                        data-searchable-select
+                        data-navigate-url="{% url 'analytics_professor:question_add' %}?course={id}"
+                        data-navigate-clear="{% url 'analytics_professor:question_add' %}"
+                    >
+                        <input type="hidden" id="hub-course-filter" value="{% if selected_course_pk %}{{ selected_course_pk }}{% endif %}">
+                        <button type="button" class="searchable-select__trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-course-search">
+                            <span class="searchable-select__value{% if not selected_course_pk %} is-placeholder{% endif %}">
+                                {% if selected_course_pk %}
+                                    {% for opt in course_options %}
+                                        {% if opt.course.pk == selected_course_pk %}{{ opt.label }}{% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    Search or select a course subject…
+                                {% endif %}
+                            </span>
+                            <span class="searchable-select__chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="searchable-select__panel hidden" role="presentation">
+                            <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
+                            <ul class="searchable-select__list" role="listbox" aria-label="Course subjects">
+                                <li class="searchable-select__option{% if not selected_course_pk %} is-selected{% endif %}"
+                                    role="option"
+                                    data-value=""
+                                    data-label="Search or select a course subject…"
+                                    data-search="">
+                                    Clear selection
+                                </li>
+                                {% for opt in course_options %}
+                                <li class="searchable-select__option{% if selected_course_pk == opt.course.pk %} is-selected{% endif %}"
+                                    role="option"
+                                    data-value="{{ opt.course.pk }}"
+                                    data-label="{{ opt.label }}"
+                                    data-search="{{ opt.label|lower }}">
+                                    {{ opt.label }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="batch-settings-field">
+                    <label for="settings-difficulty" class="batch-settings-field__label">Difficulty</label>
+                    <select id="settings-difficulty" name="difficulty" required class="batch-settings-input">
+                        {% for value, label in difficulty_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="batch-settings-field">
+                    <label for="settings-question-type" class="batch-settings-field__label">Question type</label>
+                    <select id="settings-question-type" class="batch-settings-input">
+                        {% for value, label in question_type_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-            <div>
-                <label for="ai-source-file" class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Learning Material</label>
-                <input
-                    type="file"
-                    id="ai-source-file"
-                    accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    class="w-full rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm shadow-sm bg-white"
-                >
-            </div>
-            <div>
-                <label for="ai-generate-count" class="block text-xs font-semibold uppercase text-examiq-slate mb-1"># To Generate</label>
-                <input
-                    type="number"
-                    id="ai-generate-count"
-                    min="1"
-                    max="10"
-                    value="3"
-                    class="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm shadow-sm bg-white"
-                >
-            </div>
-            <div class="batch-settings-generate">
-                <button type="button"
-                        id="ai-generate-btn"
-                        class="inline-flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition shadow-sm">
-                    <span aria-hidden="true">+</span> AI Generate
-                </button>
+            <div class="batch-settings-row batch-settings-row--secondary">
+                <div class="batch-settings-field">
+                    <label for="ai-source-file" class="batch-settings-field__label">Learning Material</label>
+                    <input
+                        type="file"
+                        id="ai-source-file"
+                        accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        class="batch-settings-input batch-settings-input--file"
+                    >
+                </div>
+                <div class="batch-settings-field">
+                    <label for="ai-generate-count" class="batch-settings-field__label"># To Generate</label>
+                    <input
+                        type="number"
+                        id="ai-generate-count"
+                        min="1"
+                        max="20"
+                        value="3"
+                        class="batch-settings-input"
+                    >
+                </div>
+                <div class="batch-settings-field batch-settings-field--generate">
+                    <span class="batch-settings-field__label batch-settings-field__label--invisible" aria-hidden="true">Generate</span>
+                    <button type="button"
+                            id="ai-generate-btn"
+                            class="btn-ai-generate"
+                            {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                        <span aria-hidden="true">+</span> AI Generate
+                    </button>
+                    <button type="button"
+                            id="show-generate-modal-btn"
+                            class="gen-progress-show-btn hidden"
+                            hidden>
+                        Show generation progress
+                    </button>
+                </div>
             </div>
         </div>
-        {% if not course_subject %}
+        {% if hub_mode and not hub_subject_selected %}
+        <p class="text-xs text-amber-700 mt-3">Select a course subject to save questions.</p>
+        {% elif hub_mode %}
+        <p class="text-xs text-examiq-slate mt-3">Questions you add are saved under the selected subject.</p>
+        {% endif %}
+        {% if hub_subject_selected and not course_subject %}
         <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
-        {% elif not topics %}
+        {% elif hub_subject_selected and not topics %}
+        <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
+        {% elif not hub_mode and not course_subject %}
+        <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
+        {% elif not hub_mode and not topics %}
         <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
         {% endif %}
         <input type="hidden" id="settings-topic" name="topic" value="{% if topics %}{{ topics.0.pk }}{% endif %}">
@@ -84,10 +143,10 @@
             <h2 class="text-lg font-semibold text-examiq-navy">Questions</h2>
             <div class="batch-questions-toolbar__actions">
                 <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1">0 questions</span>
-                <button type="button" id="validate-all-btn" class="btn-secondary btn-primary-sm inline-flex items-center gap-1">
+                <button type="button" id="validate-all-btn" class="btn-secondary btn-primary-sm inline-flex items-center gap-1" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Validate All
                 </button>
-                <button type="submit" class="btn-primary btn-primary-sm inline-flex items-center gap-1">
+                <button type="submit" class="btn-primary btn-primary-sm inline-flex items-center gap-1" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Submit all
                 </button>
             </div>
@@ -102,15 +161,17 @@
             </div>
         </div>
 
-        <table id="questions-table" class="w-full text-sm hidden">
+        <table id="questions-table" class="data-table hidden">
             <thead>
-                <tr class="text-left text-examiq-slate border-b border-slate-200">
-                    <th class="pb-3 pr-4 font-medium w-12">#</th>
-                    <th class="pb-3 pr-4 font-medium">Question</th>
-                    <th class="pb-3 pr-4 font-medium w-20">Answer</th>
-                    <th class="pb-3 pr-4 font-medium w-40">Concept</th>
-                    <th class="pb-3 pr-4 font-medium w-28">Status</th>
-                    <th class="pb-3 font-medium w-36"></th>
+                <tr>
+                    <th class="w-12">#</th>
+                    <th>Question</th>
+                    <th class="w-28">Type</th>
+                    <th class="w-28">Difficulty</th>
+                    <th class="w-20">Answer</th>
+                    <th class="w-40">Concept</th>
+                    <th class="w-28">Status</th>
+                    <th class="w-36"></th>
                 </tr>
             </thead>
             <tbody id="questions-table-body"></tbody>
@@ -125,10 +186,10 @@
     <input type="hidden" name="question_count" id="question-count" value="0">
 
     <div class="flex flex-col sm:flex-row gap-3 justify-between">
-        <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2">
+        <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
             <span>+</span> Add Another Question
         </button>
-        <button type="submit" class="btn-primary inline-flex items-center gap-2">
+        <button type="submit" class="btn-primary inline-flex items-center gap-2" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
             Submit All Questions
         </button>
     </div>
@@ -136,17 +197,26 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/searchable-select.js' %}"></script>
 <script src="{% static 'js/batch-questions.js' %}"></script>
 <script>
 (function() {
-    const coursePk = "{{ course.pk }}";
-    const generateUrl = "{% url 'analytics_professor:question_ai_generate' course.pk %}";
-    const validateUrl = "{% url 'analytics_professor:question_ai_validate' course.pk %}";
-    const editUrlBase = "{% url 'analytics_professor:question_batch_edit' course.pk 0 %}".replace("/0/", "/");
+    const subjectSelected = {% if hub_mode and not hub_subject_selected %}false{% else %}true{% endif %};
+    const coursePk = "{% if course %}{{ course.pk }}{% endif %}";
+    const generateUrl = coursePk
+        ? "{% if course %}{% url 'analytics_professor:question_ai_generate' course.pk %}{% endif %}"
+        : "";
+    const validateUrl = coursePk
+        ? "{% if course %}{% url 'analytics_professor:question_ai_validate' course.pk %}{% endif %}"
+        : "";
+    const editUrlBase = coursePk
+        ? "{% if course %}{% url 'analytics_professor:question_batch_edit' course.pk 0 %}{% endif %}".replace("/0/", "/")
+        : "";
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
     const topicSelect = document.getElementById("settings-topic");
     const difficultySelect = document.getElementById("settings-difficulty");
+    const questionTypeSelect = document.getElementById("settings-question-type");
     const fieldsStore = document.getElementById("question-fields-store");
     const tableBody = document.getElementById("questions-table-body");
     const questionsTable = document.getElementById("questions-table");
@@ -165,11 +235,11 @@
     function getGenerateCount() {
         let n = parseInt(generateCountInput && generateCountInput.value, 10);
         if (isNaN(n) || n < 1) n = 1;
-        if (n > 10) {
-            n = 10;
-            if (generateCountInput) generateCountInput.value = "10";
+        if (n > 20) {
+            n = 20;
+            if (generateCountInput) generateCountInput.value = "20";
             if (window.showToast) {
-                window.showToast("Maximum is 10 questions per generate run.", "warning");
+                window.showToast("Maximum is 20 questions per generate run.", "warning");
             }
         }
         if (generateCountInput) generateCountInput.value = String(n);
@@ -178,9 +248,10 @@
     let questionIndex = 0;
     let restoring = false;
     let formDirty = false;
-    let ignoreRelevance = false;
     const validationState = {};
-
+    const showGenerateModalBtn = document.getElementById("show-generate-modal-btn");
+    let generateModalHidden = false;
+    let lastGenerateProgress = { written: 0, total: 0, status: "pending" };
     function markDirty() {
         if (restoring) return;
         formDirty = true;
@@ -239,13 +310,14 @@
         const validBadge = result.is_valid
             ? '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Yes</span>'
             : '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">Needs review</span>';
+        const statusLabel = result.is_valid ? "Overall valid" : "Validation result";
         validateContainer.innerHTML =
             '<div class="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" id="validate-modal">' +
             '<div class="bento-card bento-card--elevated p-6 max-w-lg w-full mx-4 shadow-xl">' +
             '<div class="flex justify-between items-center mb-5"><h2 class="text-lg font-semibold text-examiq-navy">AI Validation</h2>' +
             '<button type="button" class="close-validate-modal text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button></div>' +
             '<div class="space-y-4 text-sm"><div class="flex items-center justify-between gap-3 py-2 border-b border-slate-100">' +
-            '<span class="font-medium text-examiq-navy">Overall valid</span>' + validBadge + '</div>' +
+            '<span class="font-medium text-examiq-navy">' + statusLabel + '</span>' + validBadge + '</div>' +
             '<div class="rounded-xl bg-slate-50 border border-slate-200 p-4 shadow-inner">' +
             '<span class="font-medium text-examiq-navy block mb-2">AI Feedback</span>' +
             '<p class="text-examiq-slate leading-relaxed">' + (result.feedback || "") + "</p></div></div>" +
@@ -287,10 +359,57 @@
         return fieldsStore.querySelector('[name="' + name + '"]');
     }
 
+    const DIFFICULTY_LABELS = {
+        easy: "Beginner",
+        medium: "Intermediate",
+        hard: "Advanced",
+    };
+    const TYPE_LABELS = {
+        mcq: "Multiple Choice",
+        true_false: "True or False",
+        identification: "Identification",
+        enumeration: "Enumeration",
+    };
+
+    function normalizeDifficulty(value) {
+        const key = String(value || "").toLowerCase();
+        if (key === "easy" || key === "medium" || key === "hard") return key;
+        return difficultySelect.value || "medium";
+    }
+
+    function normalizeQuestionType(value) {
+        const key = String(value || "").toLowerCase();
+        if (TYPE_LABELS[key]) return key;
+        return (questionTypeSelect && questionTypeSelect.value) || "mcq";
+    }
+
+    function difficultyPillHtml(difficulty) {
+        const key = normalizeDifficulty(difficulty);
+        const label = DIFFICULTY_LABELS[key] || key;
+        return '<span class="difficulty-pill difficulty-pill--' + key + '">' + label + "</span>";
+    }
+
+    function typeBadgeHtml(questionType) {
+        const key = normalizeQuestionType(questionType);
+        return '<span class="exam-type-badge exam-type-badge--table">' + (TYPE_LABELS[key] || key) + "</span>";
+    }
+
+    function answerPreview(data) {
+        const type = normalizeQuestionType(data.question_type);
+        if (type === "mcq") return data.stem ? (data.correct || "—") : "—";
+        if (type === "true_false") return data.expected_answer || "—";
+        if (data.expected_answer) return truncate(data.expected_answer, 24);
+        return "—";
+    }
+
     function ensureFieldsForIndex(index) {
         if (getField("stem_" + index)) return;
         const wrapper = document.createElement("div");
         wrapper.dataset.index = index;
+        const defaultDifficulty = normalizeDifficulty(difficultySelect.value);
+        const defaultType = normalizeQuestionType(
+            questionTypeSelect ? questionTypeSelect.value : "mcq"
+        );
         wrapper.innerHTML =
             '<textarea name="stem_' + index + '"></textarea>' +
             ["A", "B", "C", "D"].map(function(letter) {
@@ -298,7 +417,9 @@
             }).join("") +
             '<input type="text" name="correct_' + index + '" value="A">' +
             '<input type="text" name="concept_tag_' + index + '">' +
-            '<input type="hidden" name="question_type_' + index + '" value="mcq">' +
+            '<input type="hidden" name="difficulty_' + index + '" value="' + defaultDifficulty + '">' +
+            '<input type="hidden" name="question_type_' + index + '" value="' + defaultType + '">' +
+            '<textarea name="expected_answer_' + index + '"></textarea>' +
             '<input type="hidden" name="ai_generated_' + index + '" value="0">' +
             '<input type="hidden" name="steps_' + index + '" value="">' +
             '<input type="hidden" name="solution_summary_' + index + '" value="">';
@@ -315,7 +436,9 @@
             stem: getField("stem_" + index).value,
             correct: getField("correct_" + index).value || "A",
             concept: getField("concept_tag_" + index).value,
-            question_type: "mcq",
+            difficulty: normalizeDifficulty(getField("difficulty_" + index).value),
+            question_type: normalizeQuestionType(getField("question_type_" + index).value),
+            expected_answer: getField("expected_answer_" + index).value || "",
             ai_generated: getField("ai_generated_" + index).value === "1",
             solution_summary: getField("solution_summary_" + index).value || "",
             steps: Array.isArray(steps) ? steps : [],
@@ -333,7 +456,15 @@
         getField("stem_" + index).value = data.stem || "";
         getField("correct_" + index).value = (data.correct || "A").toUpperCase();
         getField("concept_tag_" + index).value = data.concept || "";
-        getField("question_type_" + index).value = "mcq";
+        getField("difficulty_" + index).value = normalizeDifficulty(
+            data.difficulty != null ? data.difficulty : difficultySelect.value
+        );
+        getField("question_type_" + index).value = normalizeQuestionType(
+            data.question_type != null
+                ? data.question_type
+                : (questionTypeSelect ? questionTypeSelect.value : "mcq")
+        );
+        getField("expected_answer_" + index).value = data.expected_answer || "";
         getField("ai_generated_" + index).value = data.ai_generated ? "1" : "0";
         getField("solution_summary_" + index).value = data.solution_summary || "";
         getField("steps_" + index).value = JSON.stringify(data.steps || []);
@@ -365,20 +496,22 @@
         if (!row) {
             row = document.createElement("tr");
             row.dataset.index = index;
-            row.className = "border-b border-slate-50 hover:bg-slate-50/60 transition-colors";
+            row.className = "";
             tableBody.appendChild(row);
         }
         row.innerHTML =
-            '<td class="py-3 pr-4 text-examiq-slate font-medium">' + (index + 1) + "</td>" +
-            '<td class="py-3 pr-4 text-examiq-navy max-w-md">' +
+            '<td class="text-examiq-slate font-medium">' + (index + 1) + "</td>" +
+            '<td class="max-w-md">' +
             (data.stem ? truncate(data.stem, 80) : '<span class="text-examiq-slate italic">Click to write question text…</span>') +
             "</td>" +
-            '<td class="py-3 pr-4 text-examiq-navy font-medium">' + (data.stem ? (data.correct || "—") : "—") + "</td>" +
-            '<td class="py-3 pr-4 text-examiq-slate max-w-[10rem] truncate">' +
+            "<td>" + typeBadgeHtml(data.question_type) + "</td>" +
+            '<td>' + difficultyPillHtml(data.difficulty) + "</td>" +
+            '<td class="font-medium">' + answerPreview(data) + "</td>" +
+            '<td class="text-examiq-slate max-w-[10rem] truncate">' +
             (data.concept ? truncate(data.concept, 24) : '<span class="text-examiq-slate">— select —</span>') +
             "</td>" +
-            '<td class="py-3 pr-4">' + statusBadgeHtml(index) + "</td>" +
-            '<td class="py-3 whitespace-nowrap">' +
+            "<td>" + statusBadgeHtml(index) + "</td>" +
+            '<td class="whitespace-nowrap">' +
             '<a href="' + editUrlFor(index) + '" class="text-link text-sm font-medium mr-3">Edit</a>' +
             validateButtonHtml(index) +
             '<button type="button" class="delete-question-btn btn-icon-delete" data-index="' + index + '" aria-label="Delete question">' +
@@ -388,7 +521,16 @@
     function addQuestion(data, openEdit) {
         const index = questionIndex;
         ensureFieldsForIndex(index);
-        if (data) setQuestionData(index, data);
+        const payload = Object.assign(
+            {
+                difficulty: normalizeDifficulty(difficultySelect.value),
+                question_type: normalizeQuestionType(
+                    questionTypeSelect ? questionTypeSelect.value : "mcq"
+                ),
+            },
+            data || {}
+        );
+        setQuestionData(index, payload);
         renderTableRow(index);
         questionIndex += 1;
         syncCountInput();
@@ -431,7 +573,9 @@
         fd.append("csrfmiddlewaretoken", csrfToken);
         fd.append("topic", topicSelect.value);
         fd.append("difficulty", difficultySelect.value);
-        if (ignoreRelevance) fd.append("ignore_relevance", "1");
+        if (questionTypeSelect) {
+            fd.append("question_type", questionTypeSelect.value);
+        }
         return fd;
     }
 
@@ -458,7 +602,8 @@
         const fd = getSettingsFormData();
         fd.append("stem", data.stem);
         fd.append("correct_label", data.correct);
-        fd.append("question_type", "mcq");
+        fd.append("question_type", data.question_type || "mcq");
+        fd.append("expected_answer", data.expected_answer || "");
         fd.append("peer_stems", JSON.stringify(peerStemsForIndex(index)));
         ["A", "B", "C", "D"].forEach(function(letter) {
             fd.append("choice_" + letter, data.choices[letter] || "");
@@ -594,6 +739,11 @@
     }
 
     batchForm.addEventListener("submit", async function(e) {
+        if (!subjectSelected || !coursePk) {
+            e.preventDefault();
+            if (window.showToast) window.showToast("Select a course subject to save questions.", "warning");
+            return;
+        }
         if (!topicSelect || !topicSelect.value) {
             e.preventDefault();
             if (window.showToast) window.showToast("No topic available for this course subject.", "warning");
@@ -644,19 +794,114 @@
         window.ExamiQBatch.persist(batchConfig);
     });
 
-    function showGenerateLoading(detail) {
+    let abortGeneratePoll = false;
+    let generateTargetCount = 0;
+
+    function setShowGenerateButtonVisible(visible, label) {
+        if (!showGenerateModalBtn) return;
+        if (visible) {
+            showGenerateModalBtn.hidden = false;
+            showGenerateModalBtn.classList.remove("hidden");
+            if (label) showGenerateModalBtn.textContent = label;
+        } else {
+            showGenerateModalBtn.hidden = true;
+            showGenerateModalBtn.classList.add("hidden");
+            showGenerateModalBtn.textContent = "Show generation progress";
+        }
+    }
+
+    function hideGenerateModal() {
+        const modal = document.getElementById("generate-modal");
+        if (!modal) return;
+        generateModalHidden = true;
+        modal.classList.add("is-hidden");
+        modal.setAttribute("aria-hidden", "true");
+        const hasResult = !!document.getElementById("apply-generated-btn");
+        setShowGenerateButtonVisible(
+            true,
+            hasResult ? "Show generated questions" : "Show generation progress"
+        );
+    }
+
+    function revealGenerateModal() {
+        const modal = document.getElementById("generate-modal");
+        generateModalHidden = false;
+        setShowGenerateButtonVisible(false);
+        if (!modal) return;
+        modal.classList.remove("is-hidden");
+        modal.removeAttribute("aria-hidden");
+    }
+
+    function clearGenerateModal() {
+        generateModalHidden = false;
+        setShowGenerateButtonVisible(false);
+        const container = document.getElementById("generate-modal-container");
+        if (container) container.innerHTML = "";
+    }
+
+    function showGenerateLoading(detail, targetCount) {
+        abortGeneratePoll = false;
+        generateTargetCount = targetCount || getGenerateCount() || 1;
+        generateModalHidden = false;
+        setShowGenerateButtonVisible(false);
+        lastGenerateProgress = { written: 0, total: generateTargetCount, status: "pending" };
         const container = document.getElementById("generate-modal-container");
         container.innerHTML =
             '<div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="generate-modal">' +
-            '<div class="bento-card bento-card--elevated p-6 max-w-md w-full mx-4 shadow-xl" role="dialog" aria-modal="true">' +
-            '<div class="flex justify-between items-start mb-4">' +
-            '<div><h2 class="text-lg font-semibold text-examiq-navy">Generating questions</h2>' +
-            '<p class="text-sm text-examiq-slate mt-1">Working with the AI provider — this can take a minute.</p></div>' +
-            '<button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>' +
-            '</div><div class="flex items-center gap-3 py-4">' +
-            '<div class="feedback-modal__spinner" aria-hidden="true"></div>' +
-            '<p class="text-sm text-examiq-slate" id="generate-loading-detail">' + (detail || "Queued…") + "</p>" +
-            '</div><button type="button" id="close-generate-modal-footer" class="btn-secondary">Hide</button></div></div>';
+            '<div class="gen-progress-modal" role="dialog" aria-modal="true" aria-labelledby="generate-loading-title">' +
+            '<div class="gen-progress-modal__header">' +
+            '<div><h2 id="generate-loading-title" class="gen-progress-modal__title">Generating questions</h2>' +
+            '<p class="gen-progress-modal__subtitle">Working from your source material. This usually takes about a minute.</p></div>' +
+            '<button type="button" id="close-generate-modal" class="gen-progress-modal__close" aria-label="Close">&times;</button>' +
+            '</div>' +
+            '<div class="gen-progress-modal__progress">' +
+            '<div class="gen-progress-modal__count" id="generate-loading-count">0 written</div>' +
+            '<div class="gen-progress-modal__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="generate-loading-bar-wrap">' +
+            '<div class="gen-progress-modal__bar" id="generate-loading-bar" style="width: 0%"></div></div>' +
+            '<div class="gen-progress-modal__stages" id="generate-loading-stages">' +
+            '<span class="gen-progress-modal__stage is-active" data-stage="reading">Reading material</span>' +
+            '<span class="gen-progress-modal__stage" data-stage="writing">Writing questions</span>' +
+            '<span class="gen-progress-modal__stage" data-stage="finalizing">Finalizing</span>' +
+            '</div>' +
+            '<p class="sr-only" id="generate-loading-detail">' + (detail || "Queued…") + "</p>" +
+            '</div>' +
+            '<div class="gen-progress-modal__footer">' +
+            '<button type="button" id="cancel-generate-modal" class="btn-outline btn-primary-sm">Cancel</button>' +
+            '<button type="button" id="close-generate-modal-footer" class="btn-secondary btn-primary-sm">Hide</button>' +
+            '</div></div></div>';
+        updateGenerateProgress(0, generateTargetCount, "pending");
+    }
+
+    function updateGenerateProgress(written, total, status) {
+        const safeTotal = Math.max(1, total || generateTargetCount || 1);
+        const safeWritten = Math.max(0, Math.min(written || 0, safeTotal));
+        lastGenerateProgress = { written: safeWritten, total: safeTotal, status: status || "running" };
+        let pct = Math.round((safeWritten / safeTotal) * 100);
+        if (status === "pending" || status === "running") {
+            pct = Math.max(pct, status === "pending" ? 4 : 8);
+            if (safeWritten >= safeTotal) pct = Math.min(pct, 96);
+        }
+        const countEl = document.getElementById("generate-loading-count");
+        const barEl = document.getElementById("generate-loading-bar");
+        const trackEl = document.getElementById("generate-loading-bar-wrap");
+        const detailEl = document.getElementById("generate-loading-detail");
+        if (countEl) countEl.textContent = safeWritten + " written";
+        if (barEl) barEl.style.width = pct + "%";
+        if (trackEl) trackEl.setAttribute("aria-valuenow", String(pct));
+        if (detailEl) {
+            detailEl.textContent = safeWritten + " of " + safeTotal + " written";
+        }
+        let stage = "reading";
+        if (safeWritten > 0 && safeWritten < safeTotal) stage = "writing";
+        else if (safeWritten >= safeTotal || status === "finalizing") stage = "finalizing";
+        else if (status === "running") stage = "writing";
+        document.querySelectorAll("#generate-loading-stages .gen-progress-modal__stage").forEach(function (el) {
+            el.classList.toggle("is-active", el.dataset.stage === stage);
+        });
+        if (generateModalHidden && showGenerateModalBtn && !showGenerateModalBtn.hidden) {
+            showGenerateModalBtn.textContent =
+                "Show generation progress (" + safeWritten + "/" + safeTotal + ")";
+        }
     }
 
     function sleep(ms) {
@@ -666,18 +911,22 @@
     async function pollGenerateJob(statusUrl) {
         const maxAttempts = 90;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const detail = document.getElementById("generate-loading-detail");
-            if (detail) {
-                detail.textContent = attempt < 2 ? "Starting…" : "Still generating (" + (attempt + 1) + ")…";
-            }
+            if (abortGeneratePoll) return;
             const resp = await fetch(statusUrl + "?html=1", {
                 headers: { Accept: "text/html" },
                 credentials: "same-origin",
             });
+            if (abortGeneratePoll) return;
             const contentType = resp.headers.get("Content-Type") || "";
             if (contentType.indexOf("application/json") !== -1) {
                 const data = await resp.json();
+                if (abortGeneratePoll) return;
                 if (!data.done) {
+                    updateGenerateProgress(
+                        data.written || 0,
+                        data.count || generateTargetCount,
+                        data.status || "running"
+                    );
                     await sleep(2000);
                     continue;
                 }
@@ -686,13 +935,30 @@
                 }
                 break;
             }
+            if (abortGeneratePoll) return;
+            const wasHidden = generateModalHidden;
             document.getElementById("generate-modal-container").innerHTML = await resp.text();
+            if (wasHidden) {
+                const modal = document.getElementById("generate-modal");
+                if (modal) {
+                    generateModalHidden = true;
+                    modal.classList.add("is-hidden");
+                    modal.setAttribute("aria-hidden", "true");
+                    setShowGenerateButtonVisible(true, "Show generated questions");
+                } else {
+                    clearGenerateModal();
+                }
+            } else {
+                generateModalHidden = false;
+                setShowGenerateButtonVisible(false);
+            }
             return;
         }
+        if (abortGeneratePoll) return;
         if (window.showToast) {
             window.showToast("Generation is taking too long. Try again with a smaller model or fewer questions.", "error");
         }
-        document.getElementById("generate-modal-container").innerHTML = "";
+        clearGenerateModal();
     }
 
     async function postGenerate() {
@@ -710,6 +976,10 @@
     }
 
     generateBtn.addEventListener("click", async function() {
+        if (!subjectSelected || !coursePk || !generateUrl) {
+            if (window.showToast) window.showToast("Select a course subject to save questions.", "warning");
+            return;
+        }
         if (!sourceInput || !sourceInput.files || !sourceInput.files[0]) {
             if (window.showToast) window.showToast("Upload a learning material file first.", "warning");
             return;
@@ -717,22 +987,16 @@
         if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
             window.ExamiQUI.setButtonLoading(generateBtn, true, "Generating…");
         }
-        showGenerateLoading("Queued…");
+        showGenerateLoading("Queued…", getGenerateCount());
         try {
-            let result = await postGenerate();
-            if (!result.resp.ok && result.data.relevance_blocked && !ignoreRelevance) {
-                document.getElementById("generate-modal-container").innerHTML = "";
-                const proceed = await showConfirm({
-                    message: (result.data.reason || "This module does not look related to the selected subject.") +
-                        " Continue anyway?",
-                    type: "warning",
-                    confirmLabel: "Continue anyway",
-                    cancelLabel: "Cancel",
-                });
-                if (!proceed) return;
-                ignoreRelevance = true;
-                showGenerateLoading("Queued…");
-                result = await postGenerate();
+            const result = await postGenerate();
+            if (!result.resp.ok && result.data.relevance_blocked) {
+                clearGenerateModal();
+                throw new Error(
+                    result.data.reason ||
+                    result.data.error ||
+                    "Uploaded module is not related to this course subject."
+                );
             }
             if (!result.resp.ok || !result.data.status_url) {
                 throw new Error(result.data.error || "Generation failed. Please try again.");
@@ -743,7 +1007,7 @@
             }
             await pollGenerateJob(result.data.status_url);
         } catch (err) {
-            document.getElementById("generate-modal-container").innerHTML = "";
+            clearGenerateModal();
             if (window.showToast) window.showToast(err.message || "Generation failed. Please try again.", "error");
         } finally {
             if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
@@ -752,8 +1016,17 @@
         }
     });
 
+    if (showGenerateModalBtn) {
+        showGenerateModalBtn.addEventListener("click", function () {
+            revealGenerateModal();
+        });
+    }
     addQuestionBtn.addEventListener("click", function() {
-        addQuestion({ question_type: "mcq" }, true);
+        addQuestion({
+            question_type: normalizeQuestionType(
+                questionTypeSelect ? questionTypeSelect.value : "mcq"
+            ),
+        }, true);
     });
     if (addQuestionInlineBtn) {
         addQuestionInlineBtn.addEventListener("click", function () {
@@ -763,7 +1036,11 @@
     const addQuestionRowBtn = document.getElementById("add-question-row-btn");
     if (addQuestionRowBtn) {
         addQuestionRowBtn.addEventListener("click", function () {
-            addQuestion({ question_type: "mcq" }, true);
+            addQuestion({
+                question_type: normalizeQuestionType(
+                    questionTypeSelect ? questionTypeSelect.value : "mcq"
+                ),
+            }, true);
         });
     }
     if (emptyAddManualBtn) {
@@ -777,7 +1054,8 @@
         if (deleteBtn) {
             const index = parseInt(deleteBtn.dataset.index, 10);
             showConfirm({
-                message: "Delete this question?",
+                title: "Delete question?",
+                message: "This removes the question from the batch. It is not saved yet.",
                 type: "warning",
                 confirmLabel: "Delete",
             }).then(function (ok) {
@@ -807,10 +1085,16 @@
                     stem: cb.dataset.stem || "",
                     concept: cb.dataset.concept || "",
                     correct: cb.dataset.correct || "A",
+                    difficulty: normalizeDifficulty(
+                        cb.dataset.difficulty || difficultySelect.value
+                    ),
                     solution_summary: cb.dataset.solution || "",
                     steps: steps,
                     choices: {},
-                    question_type: "mcq",
+                    question_type: normalizeQuestionType(
+                        cb.dataset.questionType || questionTypeSelect.value
+                    ),
+                    expected_answer: cb.dataset.expected || "",
                     ai_generated: true,
                 };
                 ["A", "B", "C", "D"].forEach(function(letter) {
@@ -825,14 +1109,20 @@
                     nextIndex = questionIndex;
                 }
             });
-            document.getElementById("generate-modal-container").innerHTML = "";
+            clearGenerateModal();
             window.ExamiQBatch.persist(batchConfig);
             if (window.showToast && checked.length) {
                 window.showToast("Applied " + checked.length + " question(s) to the form.", "success");
             }
         }
+        if (e.target.id === "cancel-generate-modal") {
+            abortGeneratePoll = true;
+            clearGenerateModal();
+            return;
+        }
         if (e.target.id === "close-generate-modal" || e.target.id === "close-generate-modal-footer") {
-            document.getElementById("generate-modal-container").innerHTML = "";
+            hideGenerateModal();
+            return;
         }
         if (e.target.classList.contains("close-validate-modal")) {
             document.getElementById("validate-modal-container").innerHTML = "";

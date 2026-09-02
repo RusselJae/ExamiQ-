@@ -72,6 +72,7 @@ class TestReviewSetupForm:
             data={
                 "subjects": [],
                 "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
             },
             student=student,
         )
@@ -99,6 +100,7 @@ class TestReviewSetupForm:
             data={
                 "subjects": [subject.pk],
                 "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
             },
             student=student,
         )
@@ -129,6 +131,7 @@ class TestReviewSetupForm:
             data={
                 "subjects": [subject.pk, s2.pk, s3.pk],
                 "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
             },
             student=student,
         )
@@ -149,6 +152,7 @@ class TestReviewSetupForm:
             data={
                 "subjects": [s1.pk, s2.pk, s3.pk],
                 "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
             },
             student=student,
         )
@@ -158,6 +162,69 @@ class TestReviewSetupForm:
         assert len(target["subjects"]) == 3
         assert len(target["question_queue"]) == 6
         assert target["question_count"] == 6
+
+    def test_mcq_only_excludes_other_question_types(
+        self, student, subject, topic, mcq_question, bsed_program, year_level
+    ):
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        for i in range(MIN_QUESTIONS_PER_SUBJECT - 1):
+            q = Question.objects.create(
+                topic=topic,
+                difficulty=Question.Difficulty.EASY,
+                question_type=Question.QuestionType.MCQ,
+                stem=f"Extra MCQ {i}",
+                status=Question.Status.APPROVED,
+            )
+            QuestionChoice.objects.create(question=q, label="A", text="ok", is_correct=True)
+            QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+        Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.TRUE_FALSE,
+            stem="TF question",
+            expected_answer="True",
+            status=Question.Status.APPROVED,
+        )
+
+        form = ReviewSetupForm(
+            data={
+                "subjects": [subject.pk],
+                "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
+            },
+            student=student,
+        )
+        assert form.is_valid(), form.errors
+        queue = form.get_auto_target()["question_queue"]
+        types = set(
+            Question.objects.filter(pk__in=queue).values_list("question_type", flat=True)
+        )
+        assert types == {Question.QuestionType.MCQ}
+
+    def test_rejects_when_no_questions_for_selected_type(
+        self, student, subject, topic, bsed_program, year_level
+    ):
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.TRUE_FALSE,
+            stem="TF only",
+            expected_answer="True",
+            status=Question.Status.APPROVED,
+        )
+
+        form = ReviewSetupForm(
+            data={
+                "subjects": [subject.pk],
+                "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
+            },
+            student=student,
+        )
+        assert not form.is_valid()
+        err = str(form.errors)
+        assert "Multiple Choice" in err or "No approved" in err
 
 
 @pytest.mark.django_db

@@ -42,6 +42,31 @@
         }
     }
 
+    function extractFeedbackText(raw) {
+        var text = String(raw || "").trim();
+        if (!text) return "";
+        if (text.charAt(0) === "`") {
+            text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+        }
+        var candidates = [text];
+        var match = text.match(/\{[\s\S]*\}/);
+        if (match) candidates.push(match[0]);
+        for (var i = 0; i < candidates.length; i += 1) {
+            try {
+                var data = JSON.parse(candidates[i]);
+                if (data && typeof data === "object") {
+                    if (data.feedback) return String(data.feedback).trim();
+                    if (data.why_wrong) return String(data.why_wrong).trim();
+                    if (data.message) return String(data.message).trim();
+                    if (data.text) return String(data.text).trim();
+                }
+            } catch (err) {
+                /* try next candidate */
+            }
+        }
+        return text;
+    }
+
     function normalizeSteps(data) {
         if (!data) return [];
         if (Array.isArray(data.steps) && data.steps.length) {
@@ -69,11 +94,20 @@
         return [];
     }
 
+    function wrapBareLatex(text) {
+        var t = String(text || "").trim();
+        if (!t || /\$/.test(t)) return t;
+        if (/\\frac|\\sqrt|\\sum|\\int|\\lim|\\text\{|\\rightarrow|\^\{|_\{/.test(t)) {
+            return "$" + t + "$";
+        }
+        return t;
+    }
+
     function looksLikeMathLine(text) {
         var t = String(text || "").trim();
         if (!t) return false;
         if (/^\$/.test(t) || /\$\$/.test(t)) return true;
-        if (/\\frac|\\sqrt|\\sum|\\int/.test(t)) return true;
+        if (/\\frac|\\sqrt|\\sum|\\int|\\xrightarrow|\\text\{/.test(t)) return true;
         var words = t.split(/\s+/);
         if (words.length > 18) return false;
         if (/[=+\-×÷^√≤≥≠≈]/.test(t) && /[0-9a-zA-Z]/.test(t)) return true;
@@ -260,20 +294,171 @@
         });
     }
 
+    function stripLatexDecorations(text) {
+        return stripInternalMetaContent(
+            String(text || "")
+                .replace(/\\text\{([^}]*)\}/g, "$1")
+                .replace(/\\'/g, "'")
+                .replace(/\{\s*'([^']*)'\s*\}/g, "'$1'")
+                .trim()
+        );
+    }
+
+    function prepareMathField(text, mode) {
+        var t = String(text || "").trim();
+        if (!t) return "";
+        if (mode === "label") {
+            return escapeHtml(stripLatexDecorations(t));
+        }
+        t = wrapBareLatex(t);
+        if (/\\[a-zA-Z]/.test(t) && !/\$/.test(t)) {
+            t = "$" + t + "$";
+        }
+        return escapeHtml(t);
+    }
+
+    var INTERNAL_META_LABELS =
+        /^(query|focus|redirect|instruction|note|context|metadata|system|response type)$/i;
+
+    function isInternalMetaLabel(text) {
+        return INTERNAL_META_LABELS.test(String(text || "").trim());
+    }
+
+    function stripInternalMetaContent(text) {
+        return String(text || "")
+            .split(/\n+/)
+            .map(function (line) {
+                var trimmed = line.trim();
+                if (!trimmed) return "";
+                var match = trimmed.match(/^([A-Za-z][A-Za-z\s]{0,24}):\s*(.*)$/);
+                if (match && isInternalMetaLabel(match[1])) {
+                    return match[2].trim();
+                }
+                return trimmed;
+            })
+            .filter(Boolean)
+            .join("\n")
+            .trim();
+    }
+
+    function scrubInternalMetaSteps(steps) {
+        var cleaned = [];
+        (steps || []).forEach(function (step) {
+            if (isInternalMetaLabel(step.title)) {
+                var text = stripInternalMetaContent(step.operation || "");
+                (step.equations || []).forEach(function (eq) {
+                    var line = stripInternalMetaContent(eq);
+                    if (line) {
+                        text = text ? text + "\n" + line : line;
+                    }
+                });
+                if (text) {
+                    cleaned.push({
+                        title: "Step " + (cleaned.length + 1),
+                        operation: text,
+                        equations: [],
+                        highlight: "",
+                    });
+                }
+                return;
+            }
+            cleaned.push({
+                title: step.title,
+                operation: stripInternalMetaContent(step.operation || ""),
+                equations: (step.equations || []).map(stripInternalMetaContent).filter(Boolean),
+                highlight: step.highlight || "",
+            });
+        });
+        return cleaned;
+    }
+
+    function plainTutorText(structured, raw) {
+        if (structured && structured.type === "text" && structured.content) {
+            return stripLatexDecorations(structured.content);
+        }
+        var parts = [];
+        if (structured) {
+            if (structured.feedback) parts.push(structured.feedback);
+            if (structured.message) parts.push(structured.message);
+            if (structured.why) parts.push(structured.why);
+            var steps = normalizeSteps(structured);
+            steps.forEach(function (step) {
+                if (step.title && !/^Step\s+\d+$/i.test(step.title)) {
+                    parts.push(step.title);
+                }
+                if (step.operation) parts.push(step.operation);
+                (step.equations || []).forEach(function (eq) {
+                    parts.push(eq);
+                });
+            });
+            if (structured.answer) parts.push(structured.answer);
+        }
+        var combined = parts.filter(Boolean).join("\n\n");
+        return stripLatexDecorations(extractFeedbackText(combined || raw || ""));
+    }
+
+    function looksLikePlainMathSolution(raw) {
+        var text = String(raw || "").trim();
+        if (!text) return false;
+        var lines = text.split(/\n+/).map(function (line) {
+            return line.trim();
+        }).filter(Boolean);
+        if (lines.length < 2) return false;
+        var numbered = lines.filter(function (line) {
+            return /^(?:step\s*)?\d+[.)]\s+/i.test(line);
+        });
+        if (numbered.length < 2) return false;
+        return lines.some(looksLikeMathLine);
+    }
+
+    function isSolutionResponse(structured, raw) {
+        var data = structured || parseStructured(raw);
+        if (!data) {
+            return looksLikePlainMathSolution(raw);
+        }
+        if (data.type === "text") {
+            return false;
+        }
+        if (data.type === "solution") {
+            return true;
+        }
+        return !!(data.steps && data.steps.length);
+    }
+
+    function isRichTutorResponse(structured, raw) {
+        return isSolutionResponse(structured, raw);
+    }
+
     function renderVisualResponse(host, options) {
         options = options || {};
         if (!host) return null;
 
         var structured = options.structured || parseStructured(options.raw);
-        var steps = normalizeSteps(structured);
+        var useStructured =
+            structured &&
+            structured.type !== "text" &&
+            (structured.type === "solution" || (structured.steps && structured.steps.length));
+        var steps = useStructured
+            ? scrubInternalMetaSteps(normalizeSteps(structured))
+            : [];
         if (!steps.length && options.correctionSteps) {
             steps = stepsFromCorrectionList(options.correctionSteps);
         }
+        if (!steps.length && looksLikePlainMathSolution(options.raw)) {
+            steps = stepsFromCorrectionList(
+                String(options.raw || "")
+                    .split(/\n+/)
+                    .map(function (line) {
+                        return line.trim();
+                    })
+                    .filter(Boolean)
+            );
+        }
         var answer =
-            (structured && structured.answer) ||
+            (useStructured && structured && structured.answer) ||
             options.finalAnswer ||
             "";
-        var why = options.why || "";
+        var why = stripLatexDecorations(extractFeedbackText(options.why || ""));
         var progressive = options.progressive !== false;
         var revealed = progressive ? 0 : steps.length;
 
@@ -326,7 +511,7 @@
                             '<div class="' +
                             cls +
                             ' examiq-math-block">' +
-                            escapeHtml(eq) +
+                            prepareMathField(eq, "equation") +
                             "</div>"
                         );
                     })
@@ -337,11 +522,11 @@
                     "</div>" +
                     '<div class="tutor-visual-step__body">' +
                     '<p class="tutor-visual-step__title">' +
-                    escapeHtml(step.title || "Step " + (index + 1)) +
+                    prepareMathField(step.title || "Step " + (index + 1), "label") +
                     "</p>" +
                     (step.operation
                         ? '<p class="tutor-visual-step__op">' +
-                          escapeHtml(step.operation) +
+                          prepareMathField(step.operation, "label") +
                           "</p>"
                         : "") +
                     '<div class="tutor-visual-eq-stack">' +
@@ -380,7 +565,7 @@
                     '<span class="tutor-visual-answer__icon" aria-hidden="true">✓</span>' +
                     '<div><span class="tutor-visual-answer__label">Answer</span>' +
                     '<div class="tutor-visual-answer__value examiq-math-block">' +
-                    escapeHtml(answer) +
+                    prepareMathField(answer, "equation") +
                     "</div></div></div>";
             }
 
@@ -389,9 +574,10 @@
 
         if (!steps.length && !answer && !why) {
             if (options.raw) {
+                var plain = plainTutorText(structured, options.raw);
                 host.innerHTML =
                     '<div class="tutor-visual-fallback examiq-math-block">' +
-                    escapeHtml(options.raw).replace(/\n/g, "<br>") +
+                    escapeHtml(plain).replace(/\n/g, "<br>") +
                     "</div>";
                 katexRender(host);
             }
@@ -405,4 +591,11 @@
     window.ExamiQUI = window.ExamiQUI || {};
     window.ExamiQUI.renderTutorVisualResponse = renderVisualResponse;
     window.ExamiQUI.parseTutorStructured = parseStructured;
+    window.ExamiQUI.extractFeedbackText = extractFeedbackText;
+    window.ExamiQUI.plainTutorText = plainTutorText;
+    window.ExamiQUI.isRichTutorResponse = isRichTutorResponse;
+    window.ExamiQUI.isSolutionResponse = isSolutionResponse;
+    window.ExamiQUI.looksLikePlainMathSolution = looksLikePlainMathSolution;
+    window.ExamiQUI.wrapBareLatex = wrapBareLatex;
+    window.ExamiQUI.stripLatexDecorations = stripLatexDecorations;
 })();

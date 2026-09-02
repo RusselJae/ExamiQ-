@@ -59,6 +59,12 @@ class MistakeRecord(models.Model):
     faculty_noted_at = models.DateTimeField(null=True, blank=True)
     faculty_viewed_at = models.DateTimeField(null=True, blank=True)
     occurred_at = models.DateTimeField(auto_now_add=True)
+    concern_faculty = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name="concern_mistake_records",
+        limit_choices_to={"role": User.Role.PROFESSOR},
+    )
 
     class Meta:
         verbose_name = "Mistake Record"
@@ -112,3 +118,60 @@ class MistakeConcernMessage(models.Model):
 
     def __str__(self) -> str:
         return f"Concern message by {self.author.email} on mistake {self.mistake_record_id}"
+
+
+class StudentFacultyConversation(models.Model):
+    """One shared chat thread per student with assigned faculty."""
+
+    student = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="faculty_conversation",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    participating_faculty = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name="student_chat_conversations",
+        limit_choices_to={"role": User.Role.PROFESSOR},
+    )
+
+    class Meta:
+        verbose_name = "Student Faculty Conversation"
+        verbose_name_plural = "Student Faculty Conversations"
+        ordering = ["-last_message_at", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"Chat with {self.student.email}"
+
+
+class StudentFacultyMessage(models.Model):
+    """Message in a student–faculty conversation thread."""
+
+    conversation = models.ForeignKey(
+        StudentFacultyConversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="faculty_chat_messages",
+    )
+    body = models.TextField(blank=True)
+    image = models.ImageField(
+        upload_to="faculty_chat/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Student Faculty Message"
+        verbose_name_plural = "Student Faculty Messages"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"Chat message by {self.author.email} in conversation {self.conversation_id}"

@@ -23,7 +23,8 @@ class TestGeminiClient:
         mock_response = MagicMock()
         mock_response.read.return_value = (
             b'{"models": ['
-            b'{"name": "models/gemini-1.5-flash", "supportedGenerationMethods": ["generateContent"]},'
+            b'{"name": "models/gemini-2.0-flash", "supportedGenerationMethods": ["generateContent"]},'
+            b'{"name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent"]},'
             b'{"name": "models/embedding-001", "supportedGenerationMethods": ["embedContent"]}'
             b"]}"
         )
@@ -32,18 +33,22 @@ class TestGeminiClient:
         mock_urlopen.return_value = mock_response
 
         models = gemini_client.list_available_models(force_refresh=True)
-        assert models == ["gemini-1.5-flash"]
+        assert models == ["gemini-2.0-flash"]
+        assert "gemini-2.5-pro" not in models
 
         cached = gemini_client.list_available_models()
-        assert cached == ["gemini-1.5-flash"]
+        assert cached == ["gemini-2.0-flash"]
         assert mock_urlopen.call_count == 1
 
     @override_settings(
         GEMINI_API_KEY="test-key",
         GEMINI_MODEL="gemini-old",
-        GEMINI_FALLBACK_MODELS=["gemini-1.5-pro"],
+        GEMINI_FALLBACK_MODELS=["gemini-2.5-flash"],
     )
-    @patch("apps.ai.providers.gemini_client.list_available_models", return_value=["gemini-2.0-flash", "gemini-1.5-pro"])
+    @patch(
+        "apps.ai.providers.gemini_client.list_available_models",
+        return_value=["gemini-2.0-flash", "gemini-2.5-flash"],
+    )
     @patch("apps.ai.providers.gemini_client._generate_with_model")
     @patch("apps.ai.providers.gemini_client.time.sleep")
     def test_chat_with_fallback_tries_next_model_on_quota(self, mock_sleep, mock_generate, _mock_list):
@@ -56,18 +61,19 @@ class TestGeminiClient:
 
         result = gemini_client.chat_with_fallback("prompt", system="sys")
         assert result.text == "Generated text"
-        assert result.model_used == "gemini-1.5-pro"
+        assert result.model_used == "gemini-2.5-flash"
         assert mock_generate.call_count == 4
 
     @override_settings(GEMINI_API_KEY="test-key", GEMINI_MODEL="gemini-1.5-flash")
     @patch(
         "apps.ai.providers.gemini_client.list_available_models",
-        return_value=["gemini-2.0-flash", "gemini-2.5-flash"],
+        return_value=["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"],
     )
     def test_models_to_try_skips_unavailable_configured_models(self, _mock_list):
         models = gemini_client.models_to_try()
         assert models == ["gemini-2.0-flash", "gemini-2.5-flash"]
         assert "gemini-1.5-flash" not in models
+        assert "gemini-2.5-pro" not in models
 
     @override_settings(GEMINI_API_KEY="test-key", GEMINI_MODEL="gemini-2.0-flash")
     @patch("apps.ai.providers.gemini_client.list_available_models", return_value=["gemini-2.0-flash"])
@@ -80,7 +86,7 @@ class TestGeminiClient:
 
     @override_settings(
         GEMINI_API_KEY="test-key",
-        GEMINI_MODEL="gemini-1.5-flash",
+        GEMINI_MODEL="gemini-2.0-flash",
         GEMINI_FALLBACK_MODELS=[],
     )
     @patch("apps.ai.providers.gemini_client.list_available_models", return_value=[])
@@ -97,7 +103,11 @@ class TestGeminiClient:
         assert mock_generate.call_count == 2
         mock_sleep.assert_called()
 
-    @override_settings(GEMINI_API_KEY="test-key", GEMINI_MODEL="gemini-1.5-flash", GEMINI_FALLBACK_MODELS=[])
+    @override_settings(
+        GEMINI_API_KEY="test-key",
+        GEMINI_MODEL="gemini-2.0-flash",
+        GEMINI_FALLBACK_MODELS=[],
+    )
     @patch("apps.ai.providers.gemini_client.list_available_models", return_value=[])
     @patch("apps.ai.providers.gemini_client._generate_with_model", side_effect=Exception("429 quota exceeded"))
     @patch("apps.ai.providers.gemini_client.time.sleep")

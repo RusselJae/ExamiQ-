@@ -23,10 +23,22 @@ CACHE_TTL_SECONDS = 3600
 MAX_RETRIES_PER_MODEL = 2
 # Image/multimodal-only models — skip for text MCQ generation.
 EXCLUDED_MODEL_MARKERS = ("-image", "gemma-")
+# Models Google has retired for new API keys (404 "no longer available").
+DEPRECATED_MODELS = frozenset(
+    {
+        "gemini-2.5-pro",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+        "gemini-1.0-pro",
+        "gemini-pro",
+    }
+)
 
 
 def _is_text_generation_model(model_name: str) -> bool:
-    lowered = model_name.lower()
+    lowered = model_name.lower().replace("models/", "")
+    if lowered in DEPRECATED_MODELS:
+        return False
     return not any(marker in lowered for marker in EXCLUDED_MODEL_MARKERS)
 
 
@@ -102,8 +114,9 @@ def models_to_try(primary: str | None = None) -> list[str]:
     ordered: list[str] = []
 
     def add(model: str) -> None:
-        if model and model not in ordered:
-            ordered.append(model)
+        name = (model or "").replace("models/", "").strip()
+        if name and name not in ordered and _is_text_generation_model(name):
+            ordered.append(name)
 
     if discovered:
         discovered_set = set(discovered)

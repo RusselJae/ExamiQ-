@@ -9,14 +9,6 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView, RedirectView, TemplateView
 
-from apps.analytics.concern_services import (
-    concern_needs_student_attention,
-    concern_thread_for,
-    post_concern_message,
-    serialize_concern_message,
-    serialize_concern_thread,
-    student_concern_queryset,
-)
 from apps.analytics.forms import MistakeConcernForm
 from apps.analytics.models import MistakeRecord
 from apps.analytics.services import (
@@ -63,7 +55,13 @@ class MistakeListView(StudentRequiredMixin, ListView):
     def get_queryset(self):
         queryset = (
             MistakeRecord.objects.filter(student=self.request.user)
-            .select_related("question", "topic", "answer", "answer__session")
+            .select_related(
+                "question",
+                "topic",
+                "topic__subject",
+                "answer",
+                "answer__session",
+            )
         )
         queryset = apply_date_range(queryset, self.request, "occurred_at")
         queryset = apply_sort(
@@ -255,46 +253,28 @@ class AnswerDetailView(StudentRequiredMixin, DetailView):
         )
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        mistake = getattr(self.object, "mistake_record", None)
-        if mistake:
-            context["concern_form"] = MistakeConcernForm()
-            thread = []
-            for msg in concern_thread_for(mistake):
-                entry = serialize_concern_message(msg)
-                entry["created_at"] = msg.created_at
-                thread.append(entry)
-            if not thread:
-                thread = [
-                    {**entry, "created_at": None}
-                    for entry in serialize_concern_thread(mistake)
-                ]
-            context["concern_messages"] = thread
-        return context
+        return super().get_context_data(**kwargs)
 
 
 class UploadMistakeConcernView(StudentRequiredMixin, View):
-    """Append a student message (+ optional image) to a mistake concern thread."""
+    """Deprecated — redirects chat to the unified student faculty thread."""
 
     def post(self, request, answer_pk):
-        answer = get_object_or_404(
-            Answer.objects.select_related("mistake_record", "session"),
-            pk=answer_pk,
-            session__student=request.user,
+        from apps.analytics.chat_services import (
+            get_or_create_conversation,
+            post_chat_message,
+            serialize_conversation,
         )
-        mistake_record = getattr(answer, "mistake_record", None)
-        if answer.is_correct or not mistake_record:
-            raise Http404
 
         wants_json = (
             "application/json" in (request.headers.get("Accept") or "")
             or request.headers.get("X-Requested-With") == "XMLHttpRequest"
         )
-
+        conversation = get_or_create_conversation(request.user)
         form = MistakeConcernForm(request.POST, request.FILES)
         if form.is_valid():
-            post_concern_message(
-                mistake_record,
+            post_chat_message(
+                conversation,
                 request.user,
                 body=form.cleaned_data["body"],
                 image=form.cleaned_data.get("image"),
@@ -303,18 +283,18 @@ class UploadMistakeConcernView(StudentRequiredMixin, View):
                 return JsonResponse(
                     {
                         "ok": True,
-                        "messages": serialize_concern_thread(mistake_record),
+                        "item": serialize_conversation(
+                            conversation, viewer=request.user
+                        ),
                     }
                 )
             messages.success(request, "Your message was sent.")
         else:
-            error_text = form.errors.as_text() or "Could not save your note or image."
+            error_text = form.errors.as_text() or "Could not save your message."
             if wants_json:
                 return JsonResponse({"ok": False, "error": error_text}, status=400)
             messages.error(request, error_text)
-        return redirect(
-            reverse("analytics_student:answer_detail", kwargs={"answer_pk": answer.pk})
-        )
+        return redirect(reverse("analytics_student:dashboard") + "?open_chat=1")
 
 
 class GenerateAnswerFeedbackView(StudentRequiredMixin, View):
@@ -352,35 +332,77 @@ class GenerateAnswerFeedbackView(StudentRequiredMixin, View):
 
 
 class StudentChatInboxView(StudentRequiredMixin, View):
-    """Legacy chat page — open AI Tutor modal on the dashboard."""
+    """Legacy chat page — open Chat modal on the dashboard."""
 
     def get(self, request):
         url = reverse("analytics_student:dashboard")
-        answer_id = request.GET.get("answer_id") or ""
-        qs = "open_tutor=1"
-        if answer_id:
-            qs += f"&answer_id={answer_id}"
+        conversation_id = request.GET.get("conversation_id") or ""
+        qs = "open_chat=1"
+        if conversation_id:
+            qs += f"&conversation_id={conversation_id}"
         return redirect(f"{url}?{qs}")
 
 
-class StudentChatConcernsApiView(StudentRequiredMixin, View):
-    """JSON list of the student's concern threads for the Chat modal."""
+class StudentChatConversationsApiView(StudentRequiredMixin, View):
+    """JSON list of the student's faculty chat thread for the Chat modal."""
 
     def get(self, request):
-        from apps.reviews.views_professor_feedback import _concern_item_payload
+        from apps.analytics.chat_services import (
+            get_or_create_conversation,
+            mark_chat_notifications_read,
+            serialize_conversation,
+        )
 
-        records = list(student_concern_queryset(request.user)[:100])
-        items = [_concern_item_payload(record) for record in records]
-        # For students, peer label is still the student (self) in list — rename in UI via role
-        active_id = request.GET.get("mistake_id")
-        active_mistake_id = None
+        conversation = get_or_create_conversation(request.user)
+        items = [serialize_conversation(conversation, viewer=request.user)]
+        active_id = request.GET.get("conversation_id")
+        active_conversation_id = conversation.pk
         if active_id and str(active_id).isdigit():
-            active_mistake_id = int(active_id)
-        elif items:
-            active_mistake_id = items[0]["mistake_id"]
+            active_conversation_id = int(active_id)
+        mark_chat_notifications_read(
+            request.user,
+            conversation_id=active_conversation_id,
+        )
         return JsonResponse(
             {
                 "items": items,
-                "active_mistake_id": active_mistake_id,
+                "active_conversation_id": active_conversation_id,
             }
         )
+
+
+class StudentChatMessageView(StudentRequiredMixin, View):
+    """Post a student message to the faculty chat thread."""
+
+    def post(self, request):
+        from apps.analytics.chat_services import (
+            get_or_create_conversation,
+            post_chat_message,
+            serialize_conversation,
+        )
+        from apps.analytics.forms import MistakeConcernForm
+
+        conversation = get_or_create_conversation(request.user)
+        form = MistakeConcernForm(request.POST, request.FILES)
+        if not form.is_valid():
+            return JsonResponse(
+                {"ok": False, "error": form.errors.as_text() or "Message cannot be empty."},
+                status=400,
+            )
+        post_chat_message(
+            conversation,
+            request.user,
+            body=form.cleaned_data["body"],
+            image=form.cleaned_data.get("image"),
+        )
+        conversation.refresh_from_db()
+        return JsonResponse(
+            {
+                "ok": True,
+                "item": serialize_conversation(conversation, viewer=request.user),
+            }
+        )
+
+
+# Backward-compatible alias
+StudentChatConcernsApiView = StudentChatConversationsApiView

@@ -4,8 +4,10 @@ from apps.analytics.confidence import (
     CONFIDENCE_HIGH,
     CONFIDENCE_LOW,
     CONFIDENCE_MEDIUM,
+    avg_confidence_scale_label,
     confidence_from_time_spent,
     confidence_tier_key,
+    confidence_to_scale_0_3,
 )
 
 
@@ -25,3 +27,17 @@ class TestConfidenceFromTimeSpent:
         assert confidence_tier_key(CONFIDENCE_LOW) == "low"
         assert confidence_tier_key(CONFIDENCE_MEDIUM) == "average"
         assert confidence_tier_key(CONFIDENCE_HIGH) == "high"
+
+    def test_confidence_to_scale_0_3(self):
+        assert confidence_to_scale_0_3(None) == 0
+        assert confidence_to_scale_0_3(1) == 1
+        assert confidence_to_scale_0_3(2) == 1
+        assert confidence_to_scale_0_3(3) == 2
+        assert confidence_to_scale_0_3(5) == 3
+
+    def test_avg_confidence_scale_label(self):
+        assert avg_confidence_scale_label([]) == "—"
+        assert avg_confidence_scale_label([1, 1]) == "Low"
+        assert avg_confidence_scale_label([3, 3]) == "Average"
+        assert avg_confidence_scale_label([5, 5]) == "High"
+        assert avg_confidence_scale_label([None, 5]) == "Average"

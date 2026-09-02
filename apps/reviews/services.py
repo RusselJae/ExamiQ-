@@ -172,6 +172,14 @@ def submit_answer(
             generate_ai=False,
         )
 
+    from apps.reviews.tutor_services import clear_tutor_conversation_on_reanswer
+
+    clear_tutor_conversation_on_reanswer(
+        session.student,
+        question,
+        exclude_answer_pk=answer.pk,
+    )
+
     return answer
 
 
@@ -220,6 +228,7 @@ def get_next_queued_question(session: ReviewSession):
         if question_id not in answered:
             return (
                 Question.objects.filter(pk=question_id)
+                .select_related("topic__subject")
                 .prefetch_related("choices", "explanation_steps")
                 .first()
             )

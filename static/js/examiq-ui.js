@@ -101,10 +101,10 @@
         }, TOAST_DURATION);
     };
 
-    const CONFIRM_BORDER = {
-        warning: "toast-item--warning",
-        error: "toast-item--error",
-        info: "toast-item--info",
+    const CONFIRM_TYPES = {
+        warning: "confirm-dialog-card--warning",
+        error: "confirm-dialog-card--error",
+        info: "confirm-dialog-card--info",
     };
 
     window.showConfirm = function (options) {
@@ -112,20 +112,25 @@
         const root = document.getElementById("confirm-dialog-root");
         if (!root) return Promise.resolve(false);
 
+        const titleEl = root.querySelector("#confirm-dialog-title");
         const messageEl = root.querySelector("#confirm-dialog-message");
         const card = root.querySelector(".confirm-dialog-card");
         const okBtn = root.querySelector("[data-confirm-ok]");
-        const cancelBtns = root.querySelectorAll("[data-confirm-cancel]");
+        const cancelLabelBtn = root.querySelector("[data-confirm-cancel-btn]");
+        const cancelTriggers = root.querySelectorAll("[data-confirm-cancel]");
         if (!messageEl || !card || !okBtn) return Promise.resolve(false);
 
         const type = options.type || "warning";
         card.className =
-            "confirm-dialog-card toast-item " + (CONFIRM_BORDER[type] || CONFIRM_BORDER.warning);
+            "confirm-dialog-card " + (CONFIRM_TYPES[type] || CONFIRM_TYPES.warning);
+        if (titleEl) {
+            titleEl.textContent = options.title || "Confirm";
+        }
         messageEl.textContent = options.message || "Are you sure?";
         okBtn.textContent = options.confirmLabel || "Confirm";
-        cancelBtns.forEach(function (btn) {
-            btn.textContent = options.cancelLabel || "Cancel";
-        });
+        if (cancelLabelBtn) {
+            cancelLabelBtn.textContent = options.cancelLabel || "Cancel";
+        }
 
         root.classList.remove("hidden");
         root.setAttribute("aria-hidden", "false");
@@ -136,8 +141,8 @@
                 root.classList.add("hidden");
                 root.setAttribute("aria-hidden", "true");
                 okBtn.removeEventListener("click", onOk);
-                cancelBtns.forEach(function (btn) {
-                    btn.removeEventListener("click", onCancel);
+                cancelTriggers.forEach(function (el) {
+                    el.removeEventListener("click", onCancel);
                 });
                 document.removeEventListener("keydown", onKeydown);
                 resolve(result);
@@ -156,8 +161,8 @@
             }
 
             okBtn.addEventListener("click", onOk);
-            cancelBtns.forEach(function (btn) {
-                btn.addEventListener("click", onCancel);
+            cancelTriggers.forEach(function (el) {
+                el.addEventListener("click", onCancel);
             });
             document.addEventListener("keydown", onKeydown);
         });
@@ -226,6 +231,7 @@
                 const type = form.dataset.confirmType || "warning";
                 showConfirm({
                     message: message,
+                    title: form.dataset.confirmTitle || "Confirm",
                     type: type,
                     confirmLabel: form.dataset.confirmLabel || "Confirm",
                     cancelLabel: form.dataset.cancelLabel || "Cancel",
@@ -433,16 +439,18 @@
                 labels: data.map(function (d) { return d.label; }),
                 datasets: [
                     {
-                        label: "Confidence",
+                        label: "Confidence (0–3)",
                         data: data.map(function (d) { return d.confidence; }),
                         backgroundColor: "#F57C00",
                         borderRadius: 4,
+                        yAxisID: "yConfidence",
                     },
                     {
-                        label: "Performance",
+                        label: "Performance (%)",
                         data: data.map(function (d) { return d.performance; }),
                         backgroundColor: "#388E3C",
                         borderRadius: 4,
+                        yAxisID: "yPerformance",
                     },
                 ],
             },
@@ -450,7 +458,23 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { min: 0, max: 100, grid: { color: "#f1f5f9" } },
+                    yConfidence: {
+                        type: "linear",
+                        position: "left",
+                        min: 0,
+                        max: 3,
+                        ticks: { stepSize: 1, precision: 0 },
+                        grid: { color: "#f1f5f9" },
+                        title: { display: true, text: "Confidence (0–3)" },
+                    },
+                    yPerformance: {
+                        type: "linear",
+                        position: "right",
+                        min: 0,
+                        max: 100,
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: "Performance (%)" },
+                    },
                     x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0 } },
                 },
                 plugins: {

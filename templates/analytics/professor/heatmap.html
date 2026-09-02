@@ -39,30 +39,32 @@
         <span class="heatmap-chart-page-label" id="heatmapPageLabel">Page 1 of 1</span>
         <button type="button" class="btn-secondary heatmap-chart-btn" id="heatmapNextPage">Next</button>
     </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm min-w-[640px] course-overview-table">
+    <div class="data-table-wrap">
+        <table class="data-table w-full min-w-[640px] course-overview-table">
             <thead>
-                <tr class="text-examiq-slate border-b border-slate-100">
-                    <th class="pb-2 font-medium text-center">Question</th>
-                    <th class="pb-2 font-medium text-center">No Confidence</th>
-                    <th class="pb-2 font-medium text-center">Low Confidence</th>
-                    <th class="pb-2 font-medium text-center">Average Confidence</th>
-                    <th class="pb-2 font-medium text-center">High Confidence</th>
-                    <th class="pb-2 font-medium text-center">Actions</th>
+                <tr>
+                    <th class="text-center">Question</th>
+                    <th class="text-center">No Confidence</th>
+                    <th class="text-center">Low Confidence</th>
+                    <th class="text-center">Average Confidence</th>
+                    <th class="text-center">High Confidence</th>
+                    <th class="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody id="course-overview-table-body">
                 {% for question in heatmap.questions %}
-                <tr class="border-b border-slate-50 course-overview-row" data-row-index="{{ forloop.counter0 }}">
-                    <td class="py-2 text-examiq-navy font-medium max-w-xs">
-                        <span class="text-examiq-slate font-semibold mr-1">{{ question.q_label }}</span>
-                        {{ question.question_stem }}
+                <tr class="course-overview-row" data-row-index="{{ forloop.counter0 }}">
+                    <td class="text-examiq-navy font-medium max-w-xs">
+                        <div class="flex items-start gap-2">
+                            <span class="text-examiq-slate font-semibold tabular-nums">{{ question.q_label }}</span>
+                            <span class="text-examiq-navy">{{ question.question_stem }}</span>
+                        </div>
                     </td>
-                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
-                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
-                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
-                    <td class="py-2 text-center"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
-                    <td class="py-2 text-center whitespace-nowrap">
+                    <td class="text-center"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
+                    <td class="text-center"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
+                    <td class="text-center"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
+                    <td class="text-center"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
+                    <td class="text-center whitespace-nowrap">
                         <a href="{% url 'analytics_professor:question_edit' course.pk question.question_id %}"
                            class="text-link text-sm font-medium">Edit</a>
                     </td>

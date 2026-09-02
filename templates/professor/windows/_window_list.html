@@ -1,21 +1,21 @@
-<table class="w-full text-sm">
+<table class="data-table">
     <thead>
-        <tr class="text-left text-examiq-slate border-b border-slate-100">
-            <th class="pb-2 font-medium">Title</th>
-            <th class="pb-2 font-medium">Opens</th>
-            <th class="pb-2 font-medium">Closes</th>
-            <th class="pb-2 font-medium">Duration</th>
-            <th class="pb-2 font-medium"></th>
+        <tr>
+            <th>Title</th>
+            <th>Opens</th>
+            <th>Closes</th>
+            <th>Duration</th>
+            <th></th>
         </tr>
     </thead>
     <tbody>
         {% for window in windows %}
-        <tr class="border-b border-slate-50">
-            <td class="py-2 text-examiq-navy font-medium">{{ window.title }}</td>
-            <td class="py-2 text-examiq-slate">{{ window.opens_at|date:"M d, Y H:i" }}</td>
-            <td class="py-2 text-examiq-slate">{{ window.closes_at|date:"M d, Y H:i" }}</td>
-            <td class="py-2 text-examiq-slate">{{ window.duration_minutes }} min</td>
-            <td class="py-2 text-right space-x-2">
+        <tr>
+            <td class="font-medium">{{ window.title }}</td>
+            <td class="text-examiq-slate">{{ window.opens_at|date:"M d, Y H:i" }}</td>
+            <td class="text-examiq-slate">{{ window.closes_at|date:"M d, Y H:i" }}</td>
+            <td class="text-examiq-slate">{{ window.duration_minutes }} min</td>
+            <td class="text-right space-x-2">
                 <a href="{% url 'analytics_professor:window_edit' course.pk window.pk %}" class="text-link">Edit</a>
                 <a href="{% url 'analytics_professor:window_delete' course.pk window.pk %}" class="text-examiq-mistake">Deactivate</a>
             </td>

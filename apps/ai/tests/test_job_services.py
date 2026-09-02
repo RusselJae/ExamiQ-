@@ -4,9 +4,14 @@ import pytest
 from django.test import override_settings
 
 from apps.ai.exceptions import AIServiceUnavailableError
-from apps.ai.job_services import _chunk_sizes, run_question_generation_job
+from apps.ai.job_services import (
+    _chunk_sizes,
+    run_explanation_generation_job,
+    run_question_generation_job,
+)
 from apps.ai.models import AIGenerationJob
 from apps.ai.normalize import normalize_generated_questions
+from apps.questions.models import ExplanationStep
 
 
 def _make_question_batch(count: int, stem_prefix: str = "Q") -> list[dict]:
@@ -21,14 +26,12 @@ def _make_question_batch(count: int, stem_prefix: str = "Q") -> list[dict]:
             ],
             "correct_label": "A",
             "concept_tag": "Concept",
-            "explanation_steps": ["Step 1", "Step 2"],
-            "solution_summary": f"Answer {i}-a",
         }
         for i in range(count)
     ]
 
 
-def _create_job(*, professor, course, topic, count: int, difficulty: str = "easy") -> AIGenerationJob:
+def _create_job(*, professor, course, topic, count: int, difficulty: str = "easy", question_type: str = "mcq") -> AIGenerationJob:
     return AIGenerationJob.objects.create(
         job_type=AIGenerationJob.JobType.QUESTION_GENERATE,
         status=AIGenerationJob.Status.PENDING,
@@ -37,6 +40,7 @@ def _create_job(*, professor, course, topic, count: int, difficulty: str = "easy
         topic_id=topic.pk,
         difficulty=difficulty,
         count=count,
+        question_type=question_type,
         source_material="Module text about linear equations.",
     )
 
@@ -117,3 +121,93 @@ class TestQuestionGenerationJob:
         assert job.status == AIGenerationJob.Status.FAILED
         assert generator.generate.call_count == 1
         assert "API key" in job.error_message
+
+
+def _create_explanation_job(*, professor, course, topic, question_ids: list[int]) -> AIGenerationJob:
+    return AIGenerationJob.objects.create(
+        job_type=AIGenerationJob.JobType.EXPLANATION_GENERATE,
+        status=AIGenerationJob.Status.PENDING,
+        created_by=professor,
+        course_id=course.pk,
+        topic_id=topic.pk,
+        count=len(question_ids),
+        result={"question_ids": question_ids, "completed_ids": [], "failed_ids": []},
+    )
+
+
+def _run_explanation(generator, job_id: int) -> AIGenerationJob:
+    with (
+        patch("apps.ai.job_services.get_explanation_generator", return_value=generator),
+        patch("apps.ai.job_services.time.sleep"),
+    ):
+        run_explanation_generation_job(job_id)
+    return AIGenerationJob.objects.get(pk=job_id)
+
+
+@pytest.mark.django_db
+class TestExplanationGenerationJob:
+    def test_writes_steps_for_questions_without_explanations(
+        self, professor, course, topic, mcq_question
+    ):
+        question, _correct = mcq_question
+        generator = MagicMock()
+        generator.generate.return_value = {
+            "explanation_steps": ["Add both numbers.", "2 + 2 = 4"],
+            "solution_summary": "The correct answer is A.",
+        }
+        job = _create_explanation_job(
+            professor=professor,
+            course=course,
+            topic=topic,
+            question_ids=[question.pk],
+        )
+        job = _run_explanation(generator, job.pk)
+
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        steps = list(
+            ExplanationStep.objects.filter(question=question).order_by("order").values_list(
+                "content", flat=True
+            )
+        )
+        assert steps == ["Add both numbers.", "2 + 2 = 4"]
+        assert generator.generate.call_count == 1
+
+    def test_skips_questions_that_already_have_steps(
+        self, professor, course, topic, mcq_question
+    ):
+        question, _correct = mcq_question
+        ExplanationStep.objects.create(question=question, order=1, content="Existing step.")
+        generator = MagicMock()
+        job = _create_explanation_job(
+            professor=professor,
+            course=course,
+            topic=topic,
+            question_ids=[question.pk],
+        )
+        job = _run_explanation(generator, job.pk)
+
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        generator.generate.assert_not_called()
+        assert ExplanationStep.objects.filter(question=question).count() == 1
+
+    def test_retries_then_succeeds(self, professor, course, topic, mcq_question):
+        question, _correct = mcq_question
+        generator = MagicMock()
+        generator.generate.side_effect = [
+            AIServiceUnavailableError("AI unavailable: API quota exceeded.", retryable=True),
+            {
+                "explanation_steps": ["Work the problem."],
+                "solution_summary": "Answer A.",
+            },
+        ]
+        job = _create_explanation_job(
+            professor=professor,
+            course=course,
+            topic=topic,
+            question_ids=[question.pk],
+        )
+        job = _run_explanation(generator, job.pk)
+
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        assert generator.generate.call_count == 2
+        assert ExplanationStep.objects.filter(question=question).exists()

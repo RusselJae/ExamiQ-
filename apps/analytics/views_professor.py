@@ -31,14 +31,33 @@ from apps.analytics.services import (
     student_subject_summary,
     subject_performance_summary,
 )
-from apps.core.filtering import build_filter_fields, get_filter_param, has_active_filters
-from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
+from apps.core.filtering import (
+    build_filter_fields,
+    get_filter_param,
+    has_active_filters,
+    redirect_preserving_filters,
+)
+from apps.core.mixins import (
+    FacultyLegacyRosterBlockedMixin,
+    ProfessorCourseMixin,
+    ProfessorRequiredMixin,
+)
 from apps.questions.models import Subject
-from apps.reviews.exam_setup_services import get_or_create_section_exam_setup
-from apps.reviews.forms_professor import SectionExamSetupForm
+from apps.reviews.exam_setup_services import (
+    get_or_create_program_exam_setup,
+    program_subject_timer_rows,
+    subject_exam_timer_seconds,
+)
 from apps.reviews.models import Answer, ReviewSession
-from apps.users.assignment_services import get_or_create_catalog_course
-from apps.users.models import Course, ProgramSection, User
+from apps.users.assignment_services import (
+    archive_section_student,
+    faculty_can_manage_section_student,
+    get_faculty_profile_section_ids,
+    get_or_create_catalog_course,
+    professor_can_view_session,
+    restore_section_student,
+)
+from apps.users.models import Course, Program, ProgramSection, User
 
 
 def _student_initials(student: User) -> str:
@@ -72,6 +91,83 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         return context
 
 
+class ExamSetupHubView(ProfessorRequiredMixin, View):
+    """Program-wide exam setup for all BSED Math students."""
+
+    template_name = "analytics/professor/program_exam_setup.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
+        if program is None:
+            from django.contrib import messages
+
+            messages.error(request, "BSED Math program is not configured.")
+            return redirect("analytics_professor:overview")
+        self.program = program
+        self.setup = get_or_create_program_exam_setup(program)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        subject_rows = program_subject_timer_rows(self.program)
+        configured_rows = [row for row in subject_rows if row["selected"]]
+        return render(
+            request,
+            self.template_name,
+            {
+                "program": self.program,
+                "setup": self.setup,
+                "subject_rows": subject_rows,
+                "configured_rows": configured_rows,
+                "default_seconds": self.setup.seconds_per_question or 30,
+            },
+        )
+
+    def post(self, request):
+        from apps.reviews.exam_setup_services import sync_program_subject_timers
+
+        default_raw = request.POST.get("default_seconds", "")
+        try:
+            default_seconds = int(default_raw) if default_raw else self.setup.seconds_per_question
+        except (TypeError, ValueError):
+            default_seconds = self.setup.seconds_per_question or 30
+        if not 10 <= default_seconds <= 120:
+            from django.contrib import messages
+
+            messages.error(request, "Default timer must be between 10 and 120 seconds.")
+            return self.get(request)
+
+        subject_ids = [
+            int(value)
+            for value in request.POST.getlist("subjects")
+            if str(value).isdigit()
+        ]
+        timers: dict[int, int] = {}
+        for subject_id in subject_ids:
+            raw = request.POST.get(f"timer_{subject_id}", "").strip()
+            try:
+                timers[subject_id] = int(raw) if raw else default_seconds
+            except ValueError:
+                timers[subject_id] = default_seconds
+
+        try:
+            sync_program_subject_timers(
+                self.program,
+                subject_ids=subject_ids,
+                timers_by_subject_id=timers,
+                default_seconds=default_seconds,
+            )
+        except ValueError as exc:
+            from django.contrib import messages
+
+            messages.error(request, str(exc))
+            return self.get(request)
+
+        from django.contrib import messages
+
+        messages.success(request, "Exam setup saved for all BSED Math students.")
+        return redirect("analytics_professor:exam_setup_hub")
+
+
 class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
     """Students who completed exams on this professor's courses."""
 
@@ -79,7 +175,11 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
     context_object_name = "roster"
 
     def get_queryset(self):
-        roster = get_professor_students_with_exams(self.request.user)
+        show_archived = get_filter_param(self.request, "show_archived") == "1"
+        roster = get_professor_students_with_exams(
+            self.request.user, include_archived=show_archived
+        )
+        section_ids = get_faculty_profile_section_ids(self.request.user)
 
         search = get_filter_param(self.request, "q").lower()
         if search:
@@ -102,11 +202,18 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
                 reverse=True,
             )
 
+        for row in roster:
+            student = row["student"]
+            row["can_manage"] = bool(
+                student.section_id and student.section_id in section_ids
+            )
+
         return roster
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        filter_names = ["q", "sort"]
+        filter_names = ["q", "sort", "show_archived"]
+        context["show_archived"] = get_filter_param(self.request, "show_archived") == "1"
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -125,6 +232,13 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
                         ("sessions", "Sessions"),
                         ("recent", "Recent activity"),
                     ],
+                },
+                {
+                    "type": "select",
+                    "name": "show_archived",
+                    "label": "Archived",
+                    "all_label": "Hide archived",
+                    "choices": [("1", "Show archived")],
                 },
             ],
         )
@@ -193,6 +307,59 @@ class ProfessorStudentDetailView(ProfessorRequiredMixin, DetailView):
         return context
 
 
+class ProfessorSessionReviewView(ProfessorRequiredMixin, DetailView):
+    """Read-only session summary for faculty reviewing a student's exam."""
+
+    model = ReviewSession
+    template_name = "analytics/professor/session_review.html"
+    context_object_name = "session"
+    pk_url_kwarg = "session_pk"
+
+    def get_queryset(self):
+        return ReviewSession.objects.filter(
+            student_id=self.kwargs["student_pk"],
+            status__in=[
+                ReviewSession.Status.COMPLETED,
+                ReviewSession.Status.EXPIRED,
+            ],
+        ).select_related("student", "topic", "topic__subject", "course")
+
+    def get_object(self, queryset=None):
+        session = super().get_object(queryset)
+        if not professor_can_view_session(self.request.user, session):
+            from django.http import Http404
+
+            raise Http404()
+        return session
+
+    def get_context_data(self, **kwargs):
+        import math
+
+        from apps.reviews.recommendations import build_session_summary
+
+        context = super().get_context_data(**kwargs)
+        session = self.object
+        session_summary = build_session_summary(session)
+        incorrect = max(
+            0,
+            session_summary["total_questions"] - session_summary["correct_count"],
+        )
+        circumference = 2 * math.pi * 42
+        fraction = (session_summary["accuracy"] or 0) / 100
+        context["student"] = session.student
+        context["session_summary"] = session_summary
+        context["incorrect_count"] = incorrect
+        context["score_ring_dasharray"] = f"{circumference:.2f}"
+        context["score_ring_dashoffset"] = f"{circumference * (1 - fraction):.2f}"
+        context["student_initials"] = _student_initials(session.student)
+        context["back_url"] = reverse(
+            "analytics_professor:professor_student_detail",
+            kwargs={"student_pk": session.student_id},
+        )
+        context["back_label"] = "Back to student"
+        return context
+
+
 class CourseDetailView(ProfessorCourseMixin, DetailView):
     model = Course
     template_name = "analytics/professor/course_detail.html"
@@ -233,7 +400,7 @@ class CourseInsightsRedirectView(ProfessorCourseMixin, View):
         return redirect("analytics_professor:course_detail", pk=self.course.pk)
 
 
-class CourseRosterView(ProfessorCourseMixin, ListView):
+class CourseRosterView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, ListView):
     template_name = "analytics/professor/roster.html"
     context_object_name = "roster"
 
@@ -305,7 +472,7 @@ class CourseRosterView(ProfessorCourseMixin, ListView):
         return context
 
 
-class StudentDetailView(ProfessorCourseMixin, DetailView):
+class StudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, DetailView):
     template_name = "analytics/professor/student_detail.html"
     context_object_name = "student"
     pk_url_kwarg = "student_pk"
@@ -364,7 +531,7 @@ class StudentDetailView(ProfessorCourseMixin, DetailView):
         return context
 
 
-class SectionStudentDetailView(ProfessorRequiredMixin, DetailView):
+class SectionStudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
     """Student detail for a ProgramSection — never 404s for missing practice."""
 
     template_name = "analytics/professor/section_student_detail.html"
@@ -507,7 +674,7 @@ class CourseInterventionsExportView(ProfessorCourseMixin, View):
         return response
 
 
-class SectionDetailView(ProfessorRequiredMixin, DetailView):
+class SectionDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
     """Section-scoped analytics: students in a ProgramSection across subjects."""
 
     model = ProgramSection
@@ -530,7 +697,7 @@ class SectionDetailView(ProfessorRequiredMixin, DetailView):
         return context
 
 
-class SectionRosterView(ProfessorRequiredMixin, ListView):
+class SectionRosterView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView):
     template_name = "analytics/professor/section_roster.html"
     context_object_name = "roster"
 
@@ -542,7 +709,10 @@ class SectionRosterView(ProfessorRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        roster = get_section_roster_summaries(self.section)
+        show_archived = get_filter_param(self.request, "show_archived") == "1"
+        roster = get_section_roster_summaries(
+            self.section, include_archived=show_archived
+        )
         search = get_filter_param(self.request, "q").lower()
         if search:
             roster = [
@@ -557,6 +727,7 @@ class SectionRosterView(ProfessorRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["section"] = self.section
         context["active_tab"] = "roster"
+        context["show_archived"] = get_filter_param(self.request, "show_archived") == "1"
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -566,61 +737,99 @@ class SectionRosterView(ProfessorRequiredMixin, ListView):
                     "label": "Search",
                     "placeholder": "Student name or email",
                 },
+                {
+                    "type": "select",
+                    "name": "show_archived",
+                    "label": "Archived",
+                    "all_label": "Hide archived",
+                    "choices": [("1", "Show archived")],
+                },
             ],
         )
-        context["filter_has_active"] = has_active_filters(self.request, ["q"])
+        context["filter_has_active"] = has_active_filters(
+            self.request, ["q", "show_archived"]
+        )
         context["filter_bar_compact"] = True
         return context
 
 
-class SectionExamSetupView(ProfessorRequiredMixin, View):
-    """Faculty configures courses available for a section's exams."""
+class SectionStudentArchiveView(ProfessorRequiredMixin, View):
+    def post(self, request, section_pk, student_pk):
+        section = get_object_or_404(ProgramSection, pk=section_pk)
+        student = get_object_or_404(User, pk=student_pk, role=User.Role.STUDENT)
+        if not faculty_can_manage_section_student(request.user, section, student):
+            from django.http import Http404
 
-    template_name = "analytics/professor/section_exam_setup.html"
+            raise Http404()
 
-    def dispatch(self, request, *args, **kwargs):
-        self.section = get_object_or_404(
-            ProgramSection.objects.select_related("program", "year_level"),
-            pk=kwargs["section_pk"],
+        from django.contrib import messages
+
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        archive_section_student(request.user, section, student)
+        log_audit_event(
+            request.user,
+            AuditLog.Action.USER_ARCHIVE,
+            target_user=student,
+            message=f"Archived student {student.email} from {section.display_label}",
+            target_type="User",
+            target_id=student.pk,
         )
-        self.setup = get_or_create_section_exam_setup(self.section)
-        return super().dispatch(request, *args, **kwargs)
+        messages.success(
+            request,
+            f"{student.get_full_name() or student.email} has been archived.",
+        )
+        return redirect_preserving_filters(
+            request,
+            "analytics_professor:students",
+        )
+
+
+class SectionStudentRestoreView(ProfessorRequiredMixin, View):
+    def post(self, request, section_pk, student_pk):
+        section = get_object_or_404(ProgramSection, pk=section_pk)
+        student = get_object_or_404(User, pk=student_pk, role=User.Role.STUDENT)
+        if not faculty_can_manage_section_student(request.user, section, student):
+            from django.http import Http404
+
+            raise Http404()
+
+        from django.contrib import messages
+
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+
+        restore_section_student(request.user, section, student)
+        log_audit_event(
+            request.user,
+            AuditLog.Action.USER_RESTORE,
+            target_user=student,
+            message=f"Restored student {student.email} in {section.display_label}",
+            target_type="User",
+            target_id=student.pk,
+        )
+        messages.success(
+            request,
+            f"{student.get_full_name() or student.email} has been restored.",
+        )
+        return redirect_preserving_filters(
+            request,
+            "analytics_professor:students",
+        )
+
+
+class SectionExamSetupRedirectView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View):
+    """Legacy per-section exam setup URLs redirect to program-wide setup."""
 
     def get(self, request, section_pk):
-        form = SectionExamSetupForm(instance=self.setup)
-        return render(
-            request,
-            self.template_name,
-            {
-                "section": self.section,
-                "form": form,
-                "active_tab": "exam_setup",
-            },
-        )
+        return redirect("analytics_professor:exam_setup_hub")
 
     def post(self, request, section_pk):
-        form = SectionExamSetupForm(request.POST, instance=self.setup)
-        if form.is_valid():
-            setup = form.save(commit=False)
-            setup.section = self.section
-            setup.save()
-            form.save_m2m()
-            from django.contrib import messages
-
-            messages.success(request, f"Exam setup saved for {self.section.display_label}.")
-            return redirect("analytics_professor:section_exam_setup", section_pk=self.section.pk)
-        return render(
-            request,
-            self.template_name,
-            {
-                "section": self.section,
-                "form": form,
-                "active_tab": "exam_setup",
-            },
-        )
+        return redirect("analytics_professor:exam_setup_hub")
 
 
-class SectionHeatmapView(ProfessorRequiredMixin, DetailView):
+class SectionHeatmapView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
     model = ProgramSection
     template_name = "analytics/professor/section_heatmap.html"
     context_object_name = "section"
@@ -649,7 +858,7 @@ class SectionHeatmapView(ProfessorRequiredMixin, DetailView):
         return context
 
 
-class SectionFeedbackView(ProfessorRequiredMixin, ListView):
+class SectionFeedbackView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView):
     """Student concerns from anyone in this ProgramSection."""
 
     template_name = "analytics/professor/section_feedback.html"
@@ -700,7 +909,7 @@ class SectionFeedbackView(ProfessorRequiredMixin, ListView):
         return context
 
 
-class SubjectDetailView(ProfessorRequiredMixin, DetailView):
+class SubjectDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
     """Catalog subject analytics across all year levels."""
 
     model = Subject
@@ -723,10 +932,11 @@ class SubjectDetailView(ProfessorRequiredMixin, DetailView):
         context["catalog_course"] = get_or_create_catalog_course(
             self.request.user, self.object
         )
+        context["exam_timer_seconds"] = subject_exam_timer_seconds(self.object)
         return context
 
 
-class SubjectRosterView(ProfessorRequiredMixin, ListView):
+class SubjectRosterView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView):
     template_name = "analytics/professor/subject_roster.html"
     context_object_name = "roster"
 

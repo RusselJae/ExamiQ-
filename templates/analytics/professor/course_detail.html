@@ -6,11 +6,13 @@
 {% include "components/professor_section_header.html" with course=course %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-<div class="bento-grid mb-6">
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.enrolled_count label="Enrolled Students" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.accuracy suffix="%" label="Average Score" variant="soft" %}</div>
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.enrolled_count label="Enrolled students" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.accuracy suffix="%" label="Average score" variant="neutral" %}</div>
+</div>
 
+<div class="bento-grid mb-6">
     <div class="span-half">
         {% include "components/calibration_tier_card.html" with calibration_matrix=summary.calibration_matrix calibration_max=calibration_max %}
     </div>
@@ -88,7 +90,7 @@
             <thead>
                 <tr class="text-left text-examiq-slate border-b border-slate-100">
                     <th class="pb-2 font-medium">Topic</th>
-                    <th class="pb-2 font-medium">Average Confidence</th>
+                    <th class="pb-2 font-medium">Average confidence (0–3)</th>
                     <th class="pb-2 font-medium">Answers</th>
                 </tr>
             </thead>

@@ -5,11 +5,13 @@
 {% block content %}
 {% include "components/professor_section_nav.html" with section=section active_tab=active_tab section_subtitle="Students in this section — all courses they practiced." %}
 
-<div class="bento-grid mb-6">
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.enrolled_count label="Active Students" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.sessions_completed label="Sessions Completed" variant="primary" %}</div>
-    <div class="span-kpi">{% include "components/stat_card.html" with value=summary.accuracy suffix="%" label="Average Score" variant="soft" %}</div>
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.enrolled_count label="Active students" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" variant="neutral" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.accuracy suffix="%" label="Average score" variant="neutral" %}</div>
+</div>
 
+<div class="bento-grid mb-6">
     <div class="span-half">
         {% include "components/calibration_tier_card.html" with calibration_matrix=summary.calibration_matrix calibration_max=calibration_max %}
     </div>

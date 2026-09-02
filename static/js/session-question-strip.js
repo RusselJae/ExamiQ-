@@ -131,6 +131,7 @@
         }
 
         grid.addEventListener("click", function (event) {
+            if (options.clickable === false) return;
             var btn = event.target.closest(".session-strip-cell");
             if (!btn) return;
             var answerId = parseInt(btn.getAttribute("data-answer-id"), 10);

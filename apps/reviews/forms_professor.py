@@ -2,7 +2,13 @@ from django import forms
 from django.utils import timezone
 
 from apps.questions.models import Question, Subject, Topic
-from apps.reviews.models import DEFAULT_EXAM_DIFFICULTIES, ExamSetup, ReviewWindow, SectionExamSetup
+from apps.reviews.models import (
+    DEFAULT_EXAM_DIFFICULTIES,
+    ExamSetup,
+    ProgramExamSetup,
+    ReviewWindow,
+    SectionExamSetup,
+)
 from apps.users.models import User as AuthUser
 
 FORM_INPUT_CLASS = (
@@ -155,6 +161,73 @@ def get_open_windows_for_student(student):
         .distinct()
         .order_by("closes_at")
     )
+
+
+class ProgramExamSetupForm(forms.ModelForm):
+    """Faculty configures program-wide exam availability for all students."""
+
+    subjects = forms.ModelMultipleChoiceField(
+        queryset=Subject.objects.none(),
+        required=False,
+        widget=forms.SelectMultiple(
+            attrs={
+                "class": FORM_INPUT_CLASS,
+                "id": "id_program_exam_subjects",
+                "size": "8",
+            }
+        ),
+        label="Course subjects available for exams",
+        help_text="Students pick at least 1 from this list. Leave empty to allow the full BSED Math catalog.",
+    )
+    allowed_difficulties = forms.MultipleChoiceField(
+        choices=Question.Difficulty.choices,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "exam-setup-topic-grid"}),
+        initial=list(DEFAULT_EXAM_DIFFICULTIES),
+        required=False,
+    )
+
+    class Meta:
+        model = ProgramExamSetup
+        fields = [
+            "is_enabled",
+            "seconds_per_question",
+            "subjects",
+            "allowed_difficulties",
+        ]
+        widgets = {
+            "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "seconds_per_question": forms.NumberInput(
+                attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}
+            ),
+        }
+        labels = {
+            "seconds_per_question": "Time per question (seconds)",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["subjects"].queryset = (
+            Subject.objects.filter(program__slug=AuthUser.HomeDegreeProgram.BSED_MATH)
+            .select_related("year_level")
+            .order_by("year_level__order", "semester", "code")
+        )
+        self.fields["subjects"].label_from_instance = (
+            lambda obj: f"{obj.code} — {obj.name}"
+        )
+        if self.instance and self.instance.pk:
+            self.fields["subjects"].initial = self.instance.subjects.all()
+
+    def clean_seconds_per_question(self):
+        seconds = self.cleaned_data.get("seconds_per_question")
+        if seconds is not None and not 10 <= seconds <= 120:
+            raise forms.ValidationError("Seconds per question must be between 10 and 120.")
+        return seconds
+
+    def clean_allowed_difficulties(self):
+        difficulties = self.cleaned_data.get("allowed_difficulties")
+        if not difficulties:
+            return list(DEFAULT_EXAM_DIFFICULTIES)
+        return difficulties
 
 
 class SectionExamSetupForm(forms.ModelForm):

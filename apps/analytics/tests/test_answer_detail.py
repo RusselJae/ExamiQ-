@@ -29,7 +29,8 @@ class TestAnswerDetailAndMistakeLog:
         content = response.content.decode()
         assert response.status_code == 200
         assert "View" in content
-        assert reverse("analytics_student:answer_detail", kwargs={"answer_pk": answer.pk}) in content
+        assert "open-tutor-btn" in content
+        assert f'data-answer-id="{answer.pk}"' in content
 
     def test_weak_areas_redirects_to_mistakes(self, client, student, topic, mcq_question):
         question, _ = mcq_question
@@ -95,3 +96,40 @@ class TestAnswerDetailAndMistakeLog:
         response = client.get(detail_url)
         assert "Why you missed it" in response.content.decode()
         assert "Generate feedback" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_rule_based_feedback_for_true_false(topic):
+    from apps.analytics.services import _rule_based_answer_feedback
+    from apps.questions.models import Question
+    from apps.reviews.models import Answer, ReviewSession
+    from apps.users.models import User
+
+    question = Question.objects.create(
+        topic=topic,
+        stem="Pi is exactly 3.",
+        question_type=Question.QuestionType.TRUE_FALSE,
+        expected_answer="False",
+        difficulty=Question.Difficulty.EASY,
+    )
+    student = User.objects.create_user(
+        email="tf-student@test.edu",
+        password="x",
+        role=User.Role.STUDENT,
+    )
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=Question.Difficulty.EASY,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    answer = Answer.objects.create(
+        session=session,
+        question=question,
+        numeric_response="True",
+        confidence=3,
+        is_correct=False,
+    )
+    feedback = _rule_based_answer_feedback(answer)
+    assert "False" in feedback
+    assert "True" in feedback

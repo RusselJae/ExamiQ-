@@ -9,7 +9,7 @@
 
     var DEFAULT_METRIC_LABELS = {
         students: "Students participating",
-        scores: "Average scores (%)",
+        scores: "Average score (out of 70)",
         confidence: "Confidence level (0–3)",
         mistakes: "Mistakes",
     };
@@ -22,7 +22,7 @@
     };
 
     var DEFAULT_Y_MAX = {
-        scores: 100,
+        scores: 70,
         confidence: 3,
     };
 
@@ -62,6 +62,7 @@
         var data = options.data || {};
         var flatMode = !!options.flatMode;
         var pageSize = options.pageSize || 0;
+        var expectedStudents = options.expectedStudents || 0;
         var defaultMetric = options.defaultMetric || (flatMode ? "confidence" : "students");
         var metricLabels = mergeMaps(DEFAULT_METRIC_LABELS, options.metricLabels);
         var metricColors = mergeMaps(DEFAULT_METRIC_COLORS, options.metricColors);
@@ -119,6 +120,9 @@
                 values: points.map(function (p) {
                     return p.value;
                 }),
+                studentCounts: points.map(function (p) {
+                    return p.student_count != null ? p.student_count : null;
+                }),
                 total: total,
                 start: start,
                 end: end,
@@ -131,7 +135,25 @@
             values.forEach(function (v) {
                 if (v > max) max = v;
             });
+            if (metric === "students") {
+                return Math.max(
+                    expectedStudents || 1,
+                    Math.ceil(max),
+                    1
+                );
+            }
+            if (metric === "mistakes") {
+                return Math.max(1, Math.ceil(max));
+            }
             return Math.max(3, Math.ceil(max * 1.15) || 3);
+        }
+
+        function usesIntegerTicks(metric) {
+            return (
+                metric === "students" ||
+                metric === "scores" ||
+                metric === "mistakes"
+            );
         }
 
         function updatePager(series) {
@@ -184,6 +206,7 @@
                         {
                             label: label,
                             data: series.values,
+                            studentCounts: series.studentCounts,
                             borderColor: color,
                             backgroundColor: color + "22",
                             fill: true,
@@ -201,26 +224,62 @@
                             grid: { display: false },
                             title: { display: false },
                         },
-                        y: {
-                            beginAtZero: true,
-                            suggestedMax: ySuggestedMax(series.metric, series.values),
-                            ticks: {
-                                precision:
-                                    series.metric === "scores" ||
-                                    series.metric === "mistakes" ||
-                                    series.metric === "confidence"
-                                        ? 0
-                                        : undefined,
-                            },
-                            grid: { color: "#f1f5f9" },
-                            title: {
-                                display: true,
-                                text: label,
-                            },
-                        },
+                        y: (function () {
+                            var isConfidence = series.metric === "confidence";
+                            var axis = {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: usesIntegerTicks(series.metric) ? 0 : undefined,
+                                    stepSize: usesIntegerTicks(series.metric) ? 1 : undefined,
+                                },
+                                grid: { color: "#f1f5f9" },
+                                title: {
+                                    display: true,
+                                    text: label,
+                                },
+                            };
+                            if (isConfidence) {
+                                axis.min = 0;
+                                axis.max = 3;
+                                axis.ticks.stepSize = 1;
+                            } else if (series.metric === "scores") {
+                                axis.max = 70;
+                                axis.ticks.stepSize = 5;
+                            } else if (series.metric === "students") {
+                                axis.max = ySuggestedMax(
+                                    series.metric,
+                                    series.values
+                                );
+                                axis.ticks.stepSize = 1;
+                            } else {
+                                axis.suggestedMax = ySuggestedMax(
+                                    series.metric,
+                                    series.values
+                                );
+                            }
+                            return axis;
+                        })(),
                     },
                     plugins: {
                         legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function (context) {
+                                    var counts =
+                                        context.dataset.studentCounts || [];
+                                    var count = counts[context.dataIndex];
+                                    if (
+                                        (series.metric === "confidence" ||
+                                            series.metric === "scores") &&
+                                        count != null
+                                    ) {
+                                        var noun = count === 1 ? "student" : "students";
+                                        return count + " " + noun;
+                                    }
+                                    return "";
+                                },
+                            },
+                        },
                     },
                 },
             };

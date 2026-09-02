@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Count, Q
 
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -14,8 +14,12 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
 
-
-from apps.ai.factory import get_ai_provider_label, get_difficulty_tagger, get_question_generator, get_question_validator
+from apps.ai.factory import (
+    get_ai_provider_label,
+    get_difficulty_tagger,
+    get_question_generator,
+    get_question_validator,
+)
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.normalize import normalize_generated_questions
 
@@ -52,17 +56,14 @@ from apps.users.assignment_services import (
     get_assigned_subjects_queryset,
     get_or_create_catalog_course,
     get_professor_course_queryset,
+    professor_can_access_course,
     professor_can_access_subject,
 )
 from apps.users.models import Course, User
 from apps.questions.validation import validate_question_for_submit
 
 
-
-
-
 class QuestionListView(ProfessorCourseMixin, ListView):
-
     model = Question
 
     template_name = "professor/questions/list.html"
@@ -70,8 +71,6 @@ class QuestionListView(ProfessorCourseMixin, ListView):
     context_object_name = "questions"
 
     paginate_by = 25
-
-
 
     def get_queryset(self):
 
@@ -118,8 +117,6 @@ class QuestionListView(ProfessorCourseMixin, ListView):
             queryset = queryset.filter(is_active=False)
 
         return queryset
-
-
 
     def get_context_data(self, **kwargs):
 
@@ -181,18 +178,12 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         return context
 
 
-
-
-
 class QuestionCreateView(ProfessorCourseMixin, CreateView):
-
     model = Question
 
     form_class = QuestionEditForm
 
     template_name = "professor/questions/form.html"
-
-
 
     def get_form_kwargs(self):
 
@@ -202,18 +193,16 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         return kwargs
 
-
-
     def get_context_data(self, **kwargs):
 
         context = super().get_context_data(**kwargs)
 
         if self.request.POST:
-
-            context["choice_formset"] = SimplifiedQuestionChoiceFormSet(self.request.POST)
+            context["choice_formset"] = SimplifiedQuestionChoiceFormSet(
+                self.request.POST
+            )
 
         else:
-
             context["choice_formset"] = SimplifiedQuestionChoiceFormSet()
 
         context["active_tab"] = "questions"
@@ -226,31 +215,32 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         return context
 
-
-
     def form_valid(self, form):
 
         context = self.get_context_data()
 
         choice_formset = context["choice_formset"]
+        qtype = form.cleaned_data.get("question_type") or Question.QuestionType.MCQ
 
-        if not choice_formset.is_valid():
-
+        if qtype == Question.QuestionType.MCQ:
+            if not choice_formset.is_valid():
+                return self.form_invalid(form)
+        elif not form.is_valid():
             return self.form_invalid(form)
 
         self.object = form.save(commit=False)
-
-        self.object.question_type = Question.QuestionType.MCQ
-
+        self.object.question_type = qtype
         self.object.status = Question.Status.APPROVED
-
         self.object.proposed_by = self.request.user
-
+        if qtype != Question.QuestionType.MCQ:
+            self.object.correct_answer = None
         self.object.save()
 
-        choice_formset.instance = self.object
-
-        choice_formset.save()
+        if qtype == Question.QuestionType.MCQ:
+            choice_formset.instance = self.object
+            choice_formset.save()
+        else:
+            self.object.choices.all().delete()
 
         from apps.core.audit import log_audit_event
         from apps.core.models import AuditLog
@@ -267,18 +257,14 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         return redirect(self.get_success_url())
 
-
-
     def get_success_url(self):
 
-        return reverse("analytics_professor:question_list", kwargs={"course_pk": self.course.pk})
-
-
-
+        return reverse(
+            "analytics_professor:question_list", kwargs={"course_pk": self.course.pk}
+        )
 
 
 class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
-
     model = Question
 
     form_class = QuestionEditForm
@@ -287,13 +273,9 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
     pk_url_kwarg = "question_pk"
 
-
-
     def get_queryset(self):
 
         return Question.objects.filter(topic__subject__program=self.course.program)
-
-
 
     def get_form_kwargs(self):
 
@@ -303,21 +285,19 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
         return kwargs
 
-
-
     def get_context_data(self, **kwargs):
 
         context = super().get_context_data(**kwargs)
 
         if self.request.POST:
-
             context["choice_formset"] = SimplifiedQuestionChoiceFormSet(
                 self.request.POST, instance=self.object
             )
 
         else:
-
-            context["choice_formset"] = SimplifiedQuestionChoiceFormSet(instance=self.object)
+            context["choice_formset"] = SimplifiedQuestionChoiceFormSet(
+                instance=self.object
+            )
 
         context["active_tab"] = "questions"
 
@@ -329,21 +309,27 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
         return context
 
-
-
     def form_valid(self, form):
 
         context = self.get_context_data()
 
         choice_formset = context["choice_formset"]
+        qtype = form.cleaned_data.get("question_type") or Question.QuestionType.MCQ
 
-        if not choice_formset.is_valid():
-
+        if qtype == Question.QuestionType.MCQ and not choice_formset.is_valid():
             return self.form_invalid(form)
 
-        self.object = form.save()
+        self.object = form.save(commit=False)
+        self.object.question_type = qtype
+        if qtype != Question.QuestionType.MCQ:
+            self.object.correct_answer = None
+        self.object.save()
 
-        choice_formset.save()
+        if qtype == Question.QuestionType.MCQ:
+            choice_formset.instance = self.object
+            choice_formset.save()
+        else:
+            self.object.choices.all().delete()
 
         from apps.core.audit import log_audit_event
         from apps.core.models import AuditLog
@@ -360,31 +346,23 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
         return redirect(self.get_success_url())
 
-
-
     def get_success_url(self):
 
-        return reverse("analytics_professor:question_list", kwargs={"course_pk": self.course.pk})
-
-
-
+        return reverse(
+            "analytics_professor:question_list", kwargs={"course_pk": self.course.pk}
+        )
 
 
 class QuestionDeleteView(ProfessorCourseMixin, DeleteView):
-
     model = Question
 
     template_name = "professor/questions/confirm_delete.html"
 
     pk_url_kwarg = "question_pk"
 
-
-
     def get_queryset(self):
 
         return Question.objects.filter(topic__subject__program=self.course.program)
-
-
 
     def form_valid(self, form):
 
@@ -394,13 +372,11 @@ class QuestionDeleteView(ProfessorCourseMixin, DeleteView):
 
         return redirect(self.get_success_url())
 
-
-
     def get_success_url(self):
 
-        return reverse("analytics_professor:question_list", kwargs={"course_pk": self.course.pk})
-
-
+        return reverse(
+            "analytics_professor:question_list", kwargs={"course_pk": self.course.pk}
+        )
 
     def get_context_data(self, **kwargs):
 
@@ -409,8 +385,6 @@ class QuestionDeleteView(ProfessorCourseMixin, DeleteView):
         context["active_tab"] = "questions"
 
         return context
-
-
 
 
 class QuestionToggleActiveView(ProfessorCourseMixin, View):
@@ -446,10 +420,7 @@ class QuestionToggleActiveView(ProfessorCourseMixin, View):
         )
 
 
-
-
 class QuestionSuggestDifficultyView(ProfessorCourseMixin, View):
-
     def post(self, request, course_pk):
 
         stem = request.POST.get("stem", "")
@@ -459,19 +430,15 @@ class QuestionSuggestDifficultyView(ProfessorCourseMixin, View):
         suggested = get_difficulty_tagger().tag(stem, current)
 
         return render(
-
             request,
-
             "professor/questions/partials/difficulty_suggestion.html",
-
             {"difficulty": suggested},
-
         )
 
 
-
-
-class ProfessorCurriculumSubjectsView(ProfessorCourseMixin, ProfessorCurriculumSubjectsAPI):
+class ProfessorCurriculumSubjectsView(
+    ProfessorCourseMixin, ProfessorCurriculumSubjectsAPI
+):
     def get(self, request, course_pk):
         request.GET = request.GET.copy()
         request.GET["program"] = str(self.course.program_id)
@@ -521,6 +488,12 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 (Question.Difficulty.MEDIUM, "Intermediate"),
                 (Question.Difficulty.HARD, "Advanced"),
             ],
+            "question_type_choices": [
+                (Question.QuestionType.MCQ, "Multiple Choice"),
+                (Question.QuestionType.TRUE_FALSE, "True or False"),
+                (Question.QuestionType.IDENTIFICATION, "Identification"),
+                (Question.QuestionType.ENUMERATION, "Enumeration"),
+            ],
             "ai_provider_label": get_ai_provider_label(),
         }
 
@@ -530,9 +503,11 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
         topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.MEDIUM)
-        topic = topics_for_course_section(self.course, request.user).filter(
-            pk=topic_id
-        ).first()
+        topic = (
+            topics_for_course_section(self.course, request.user)
+            .filter(pk=topic_id)
+            .first()
+        )
         if not topic:
             messages.error(request, "Select a valid topic before submitting.")
             return render(request, self.template_name, self.get_context_data())
@@ -546,33 +521,58 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
         skipped_invalid = 0
         skipped_duplicates: list[str] = []
         seen_stems: set[str] = set()
+        explanation_question_ids: list[int] = []
+
+        valid_difficulties = {c.value for c in Question.Difficulty}
+        valid_types = {
+            Question.QuestionType.MCQ,
+            Question.QuestionType.TRUE_FALSE,
+            Question.QuestionType.IDENTIFICATION,
+            Question.QuestionType.ENUMERATION,
+        }
 
         for index in range(count):
             stem = request.POST.get(f"stem_{index}", "").strip()
             if not stem:
                 continue
             concept_tag = request.POST.get(f"concept_tag_{index}", "").strip()
-            question_type = Question.QuestionType.MCQ
+            question_type = request.POST.get(
+                f"question_type_{index}", Question.QuestionType.MCQ
+            )
+            if question_type not in valid_types:
+                question_type = Question.QuestionType.MCQ
+            expected_answer = request.POST.get(f"expected_answer_{index}", "").strip()
             skip_ai_gate = request.POST.get(f"ai_generated_{index}", "") == "1"
             correct_label = request.POST.get(f"correct_{index}", "A").upper()
+            row_difficulty = request.POST.get(f"difficulty_{index}", difficulty)
+            if row_difficulty not in valid_difficulties:
+                row_difficulty = (
+                    difficulty
+                    if difficulty in valid_difficulties
+                    else Question.Difficulty.MEDIUM
+                )
             choices_data = []
-            for label in ("A", "B", "C", "D"):
-                text = request.POST.get(f"choice_{index}_{label}", "").strip()
-                if text:
-                    choices_data.append({
-                        "label": label,
-                        "text": text,
-                        "is_correct": label == correct_label,
-                    })
+            if question_type == Question.QuestionType.MCQ:
+                for label in ("A", "B", "C", "D"):
+                    text = request.POST.get(f"choice_{index}_{label}", "").strip()
+                    if text:
+                        choices_data.append(
+                            {
+                                "label": label,
+                                "text": text,
+                                "is_correct": label == correct_label,
+                            }
+                        )
 
             validation = validate_question_for_submit(
                 stem,
                 choices_data,
                 topic,
-                difficulty,
+                row_difficulty,
                 correct_label,
                 ai_enabled=False,
                 question_type=question_type,
+                expected_answer=expected_answer,
             )
             if not validation.get("is_valid"):
                 skipped_invalid += 1
@@ -591,17 +591,29 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 continue
             seen_stems.add(stem_key)
 
-            steps = build_steps_from_post(
-                request.POST.get(f"steps_{index}", ""),
-                concept_tag=concept_tag,
-                solution_summary=request.POST.get(f"solution_summary_{index}", ""),
-            )
+            steps_raw = request.POST.get(f"steps_{index}", "")
+            solution_summary = request.POST.get(f"solution_summary_{index}", "")
+            # AI drafts defer explanations to a background job; do not invent
+            # steps from concept_tag alone.
+            if skip_ai_gate and not steps_raw.strip() and not solution_summary.strip():
+                steps = []
+            else:
+                steps = build_steps_from_post(
+                    steps_raw,
+                    concept_tag=concept_tag,
+                    solution_summary=solution_summary,
+                )
             question_payload = {
                 "topic": topic,
-                "difficulty": difficulty,
+                "difficulty": row_difficulty,
                 "question_type": question_type,
                 "stem": stem,
                 "concept_tag": concept_tag,
+                "expected_answer": (
+                    expected_answer
+                    if question_type != Question.QuestionType.MCQ
+                    else ""
+                ),
                 "is_active": True,
                 "status": Question.Status.APPROVED,
                 "proposed_by": request.user,
@@ -609,9 +621,11 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
             question = create_question(
                 question_payload,
-                choices_data,
+                choices_data if question_type == Question.QuestionType.MCQ else [],
                 steps,
             )
+            if skip_ai_gate and not steps:
+                explanation_question_ids.append(question.pk)
             # ai_generated flag is client-side only (skip_ai_gate used at validate time)
             _ = skip_ai_gate
             from apps.core.audit import log_audit_event
@@ -639,11 +653,95 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 + ("…" if len(skipped_duplicates) > 3 else ""),
             )
         if created:
-            messages.success(request, f"Saved {created} question(s) to the question bank.")
-            return redirect("analytics_professor:question_list", course_pk=self.course.pk)
+            explanation_job = None
+            if explanation_question_ids:
+                from apps.ai.job_services import start_explanation_generation_job
+
+                explanation_job = start_explanation_generation_job(
+                    user=request.user,
+                    course_id=self.course.pk,
+                    topic_id=topic.pk,
+                    question_ids=explanation_question_ids,
+                )
+            if explanation_job:
+                messages.success(
+                    request,
+                    f"Saved {created} question(s). Explanations are generating in the background.",
+                )
+            else:
+                messages.success(
+                    request, f"Saved {created} question(s) to the question bank."
+                )
+            return redirect(
+                "analytics_professor:question_list", course_pk=self.course.pk
+            )
         if not skipped_invalid and not skipped_duplicates:
-            messages.warning(request, "No questions were saved. Add at least one complete question.")
+            messages.warning(
+                request, "No questions were saved. Add at least one complete question."
+            )
         return render(request, self.template_name, self.get_context_data())
+
+
+class QuestionCSVImportView(ProfessorCourseMixin, View):
+    """Import questions from a CSV file on the Add Questions screen."""
+
+    def post(self, request, course_pk):
+        from apps.core.audit import log_audit_event
+        from apps.core.models import AuditLog
+        from apps.questions.import_services import (
+            ImportFormatError,
+            import_questions_from_csv,
+        )
+
+        uploaded = request.FILES.get("csv_file")
+        if not uploaded:
+            return JsonResponse({"error": "Upload a CSV file to import."}, status=400)
+
+        subject = _subject_for_course(self.course)
+        if not subject:
+            return JsonResponse(
+                {"error": "Link a subject to this course before importing."},
+                status=400,
+            )
+
+        try:
+            summary = import_questions_from_csv(
+                uploaded,
+                subject=subject,
+                professor=request.user,
+            )
+        except ImportFormatError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        if summary.created:
+            log_audit_event(
+                request.user,
+                AuditLog.Action.QUESTION_CREATE,
+                message=f"Imported {summary.created} question(s) from CSV",
+                target_type="Question",
+                target_id=subject.pk,
+            )
+            messages.success(
+                request,
+                f"Imported {summary.created} question(s) from CSV.",
+            )
+        if summary.skipped_invalid:
+            messages.warning(
+                request,
+                f"Skipped {summary.skipped_invalid} invalid row(s). Check the import summary.",
+            )
+        if summary.skipped_duplicates:
+            messages.warning(
+                request,
+                f"Skipped {summary.skipped_duplicates} duplicate row(s).",
+            )
+
+        payload = summary.to_dict()
+        payload["redirect_url"] = reverse(
+            "analytics_professor:question_list",
+            kwargs={"course_pk": self.course.pk},
+        )
+        return JsonResponse(payload)
 
 
 def _hub_course_options(professor):
@@ -670,15 +768,14 @@ class QuestionAddHubView(ProfessorRequiredMixin, View):
     """Top-level Add Questions entry with course-subject filter."""
 
     template_name = "professor/questions/batch_form.html"
-    empty_template_name = "professor/questions/add_hub.html"
 
     def get(self, request):
         course_options = _hub_course_options(request.user)
         course_pk = request.GET.get("course", "")
         if course_pk.isdigit():
-            course = get_object_or_404(
-                Course, pk=int(course_pk), professor=request.user
-            )
+            course = get_object_or_404(Course, pk=int(course_pk))
+            if not professor_can_access_course(request.user, course):
+                raise Http404()
             batch_view = QuestionBatchCreateView()
             batch_view.request = request
             batch_view.course = course
@@ -687,6 +784,7 @@ class QuestionAddHubView(ProfessorRequiredMixin, View):
             context.update(
                 {
                     "hub_mode": True,
+                    "hub_subject_selected": True,
                     "form_action": reverse(
                         "analytics_professor:question_create",
                         kwargs={"course_pk": course.pk},
@@ -699,8 +797,30 @@ class QuestionAddHubView(ProfessorRequiredMixin, View):
 
         return render(
             request,
-            self.empty_template_name,
-            {"course_options": course_options},
+            self.template_name,
+            {
+                "hub_mode": True,
+                "hub_subject_selected": False,
+                "form_title": "Add Questions",
+                "form_action": "#",
+                "course": None,
+                "topics": [],
+                "course_subject": None,
+                "difficulty_choices": [
+                    (Question.Difficulty.EASY, "Beginner"),
+                    (Question.Difficulty.MEDIUM, "Intermediate"),
+                    (Question.Difficulty.HARD, "Advanced"),
+                ],
+                "question_type_choices": [
+                    (Question.QuestionType.MCQ, "Multiple Choice"),
+                    (Question.QuestionType.TRUE_FALSE, "True or False"),
+                    (Question.QuestionType.IDENTIFICATION, "Identification"),
+                    (Question.QuestionType.ENUMERATION, "Enumeration"),
+                ],
+                "course_options": course_options,
+                "selected_course_pk": None,
+                "ai_provider_label": get_ai_provider_label(),
+            },
         )
 
 
@@ -718,11 +838,12 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         from apps.ai.subject_relevance import assess_subject_relevance
 
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
+        question_type = request.POST.get("question_type", Question.QuestionType.MCQ)
         try:
             count = int(request.POST.get("count") or 3)
         except (TypeError, ValueError):
             count = 3
-        count = max(1, min(count, 10))
+        count = max(1, min(count, 20))
 
         subject = _subject_for_course(self.course)
         if not subject:
@@ -731,7 +852,9 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                 status=400,
             )
         topics = list(
-            topics_for_course_section(self.course, request.user).select_related("subject")
+            topics_for_course_section(self.course, request.user).select_related(
+                "subject"
+            )
         )
         if not topics:
             return JsonResponse(
@@ -742,7 +865,9 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         uploaded = request.FILES.get("source_file")
         if not uploaded:
             return JsonResponse(
-                {"error": "Upload a module or learning material file to generate questions."},
+                {
+                    "error": "Upload a module or learning material file to generate questions."
+                },
                 status=400,
             )
         try:
@@ -757,24 +882,27 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         sample = sample_material_for_relevance(document)
         relevance = assess_subject_relevance(sample, subject, topics)
         if not relevance["related"]:
-            payload = {
-                "error": relevance.get("reason")
-                or "Uploaded module is not related to this course subject.",
-                "relevance_blocked": True,
-                "reason": relevance.get("reason")
-                or "Uploaded module is not related to this course subject.",
-                "subject_score": relevance.get("subject_score", 0),
-                "topic_score": relevance.get("topic_score", 0),
-            }
-            if request.POST.get("ignore_relevance") != "1":
-                return JsonResponse(payload, status=400)
+            return JsonResponse(
+                {
+                    "error": relevance.get("reason")
+                    or "Uploaded module is not related to this course subject.",
+                    "relevance_blocked": True,
+                    "reason": relevance.get("reason")
+                    or "Uploaded module is not related to this course subject.",
+                    "subject_score": relevance.get("subject_score", 0),
+                    "topic_score": relevance.get("topic_score", 0),
+                },
+                status=400,
+            )
 
         topic_id = relevance.get("matched_topic_id") or request.POST.get("topic")
         try:
             topic_id = int(topic_id) if topic_id is not None else None
         except (TypeError, ValueError):
             topic_id = None
-        topic = next((t for t in topics if t.pk == topic_id), None) if topic_id else None
+        topic = (
+            next((t for t in topics if t.pk == topic_id), None) if topic_id else None
+        )
         if topic is None:
             topic = topics[0]
 
@@ -795,6 +923,7 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             count=count,
             source_material=source_material,
             learning_document=document,
+            question_type=question_type,
         )
         return JsonResponse(
             {
@@ -828,17 +957,23 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
             AIGenerationJob.Status.PENDING,
             AIGenerationJob.Status.RUNNING,
         ):
+            written = len((job.result or {}).get("variations") or [])
             return JsonResponse(
                 {
                     "job_id": job.pk,
                     "status": job.status,
                     "done": False,
+                    "written": written,
+                    "count": job.count,
                 }
             )
 
         variations = []
         if job.status == AIGenerationJob.Status.SUCCEEDED:
-            variations = normalize_generated_questions(job.result.get("variations") or [])
+            variations = normalize_generated_questions(
+                job.result.get("variations") or [],
+                question_type=job.question_type,
+            )
 
         wants_json = "application/json" in (request.headers.get("Accept") or "")
         if wants_json and request.GET.get("html") != "1":
@@ -860,6 +995,7 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
                 "course": self.course,
                 "topic": topic,
                 "difficulty": job.difficulty or Question.Difficulty.EASY,
+                "question_type": job.question_type or Question.QuestionType.MCQ,
                 "ai_error": job.error_message or None,
             },
         )
@@ -873,6 +1009,16 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
         stem = request.POST.get("stem", "")
         correct_label = request.POST.get("correct_label", "A").upper()
+        question_type = request.POST.get("question_type", Question.QuestionType.MCQ)
+        expected_answer = request.POST.get("expected_answer", "").strip()
+        valid_types = {
+            Question.QuestionType.MCQ,
+            Question.QuestionType.TRUE_FALSE,
+            Question.QuestionType.IDENTIFICATION,
+            Question.QuestionType.ENUMERATION,
+        }
+        if question_type not in valid_types:
+            question_type = Question.QuestionType.MCQ
         topic = (
             topics_for_course_section(self.course, request.user)
             .filter(pk=topic_id)
@@ -883,10 +1029,17 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
             return HttpResponse("Select a topic first.", status=400)
 
         choices = []
-        for label in ("A", "B", "C", "D"):
-            text = request.POST.get(f"choice_{label}", "").strip()
-            if text:
-                choices.append({"label": label, "text": text, "is_correct": label == correct_label})
+        if question_type == Question.QuestionType.MCQ:
+            for label in ("A", "B", "C", "D"):
+                text = request.POST.get(f"choice_{label}", "").strip()
+                if text:
+                    choices.append(
+                        {
+                            "label": label,
+                            "text": text,
+                            "is_correct": label == correct_label,
+                        }
+                    )
 
         peer_stems = []
         raw_peer_stems = request.POST.get("peer_stems", "")
@@ -905,7 +1058,8 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
             difficulty,
             correct_label,
             peer_stems=peer_stems,
-            question_type=Question.QuestionType.MCQ,
+            question_type=question_type,
+            expected_answer=expected_answer,
         )
 
         if "application/json" in request.headers.get("Accept", ""):
@@ -964,7 +1118,11 @@ def _get_program_subject(course, subject_id, professor=None):
         pk=int(subject_id),
         program=course.program,
     ).first()
-    if subject and professor and not professor_can_access_subject(professor, subject):
+    if (
+        subject
+        and professor
+        and not professor_can_access_subject(professor, subject, course=course)
+    ):
         return None
     return subject
 
@@ -1025,7 +1183,9 @@ def topics_for_course_subject(course, professor=None):
     subject = _subject_for_course(course)
     if not subject:
         return Topic.objects.none()
-    if professor is not None and not professor_can_access_subject(professor, subject):
+    if professor is not None and not professor_can_access_subject(
+        professor, subject, course=course
+    ):
         return Topic.objects.none()
     return (
         Topic.objects.filter(subject=subject, parent__isnull=True)
@@ -1066,7 +1226,9 @@ class TopicCreateView(ProfessorCourseMixin, View):
                 )
             messages.error(request, "This course has no linked subject.")
             return redirect(
-                reverse("analytics_professor:topic_list", kwargs={"course_pk": course_pk})
+                reverse(
+                    "analytics_professor:topic_list", kwargs={"course_pk": course_pk}
+                )
             )
         form = TopicForm(request.POST)
         if form.is_valid():
@@ -1083,10 +1245,14 @@ class TopicCreateView(ProfessorCourseMixin, View):
             except IntegrityError:
                 if wants_json:
                     return JsonResponse(
-                        {"error": "A topic with this name already exists for this course."},
+                        {
+                            "error": "A topic with this name already exists for this course."
+                        },
                         status=400,
                     )
-                messages.error(request, "A topic with this name already exists for this course.")
+                messages.error(
+                    request, "A topic with this name already exists for this course."
+                )
         else:
             if wants_json:
                 return JsonResponse({"error": "Enter a valid topic name."}, status=400)
@@ -1130,4 +1296,3 @@ class TopicDeleteView(ProfessorCourseMixin, View):
         return redirect(
             reverse("analytics_professor:topic_list", kwargs={"course_pk": course_pk})
         )
-
