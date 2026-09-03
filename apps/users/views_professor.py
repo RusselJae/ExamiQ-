@@ -10,6 +10,7 @@ from apps.core.mixins import ProfessorRequiredMixin
 from apps.questions.models import Subject, YearLevel
 from apps.users.assignment_services import (
     create_catalog_subject,
+    delete_catalog_subject,
     get_or_create_catalog_course,
 )
 from apps.users.forms import FacultySelfServeCourseForm
@@ -95,4 +96,23 @@ class ProfessorCourseArchiveView(ProfessorRequiredMixin, View):
         course.is_archived = True
         course.save(update_fields=["is_archived"])
         messages.success(request, f"{course.code} archived.")
+        return redirect("analytics_professor:course_list")
+
+
+class ProfessorCourseRemoveView(ProfessorRequiredMixin, View):
+    """Remove a BSED Math curriculum subject from the catalog."""
+
+    def post(self, request, subject_pk):
+        subject = get_object_or_404(
+            Subject.objects.select_related("program"),
+            pk=subject_pk,
+            program__slug=User.HomeDegreeProgram.BSED_MATH,
+        )
+        code = subject.code
+        try:
+            delete_catalog_subject(subject)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("analytics_professor:course_list")
+        messages.success(request, f"Course subject {code} removed.")
         return redirect("analytics_professor:course_list")

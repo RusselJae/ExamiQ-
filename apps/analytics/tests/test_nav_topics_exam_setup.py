@@ -106,6 +106,31 @@ class TestCourseTopicScope:
         )
         assert questions.status_code == 200
 
+    def test_professor_can_remove_catalog_subject(
+        self, client, professor, bsed_program, year_level
+    ):
+        from apps.users.assignment_services import create_catalog_subject
+
+        subject, _course = create_catalog_subject(
+            code="BSEM TMP",
+            name="Temp Subject",
+            year_level=year_level,
+            semester=1,
+            professor=professor,
+        )
+        client.force_login(professor)
+        list_response = client.get(reverse("analytics_professor:course_list"))
+        assert "Remove" in list_response.content.decode()
+        response = client.post(
+            reverse(
+                "analytics_professor:course_subject_remove",
+                kwargs={"subject_pk": subject.pk},
+            )
+        )
+        assert response.status_code == 302
+        assert not Subject.objects.filter(pk=subject.pk).exists()
+        assert response.url == reverse("analytics_professor:course_list")
+
     def test_catalog_questions_accessible_without_profile_subject_assignment(
         self, client, professor, bsed_program, year_level, academic_year, subject
     ):

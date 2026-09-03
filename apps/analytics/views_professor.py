@@ -55,6 +55,7 @@ from apps.users.assignment_services import (
     get_faculty_profile_section_ids,
     get_or_create_catalog_course,
     professor_can_view_session,
+    professor_can_view_student,
     restore_section_student,
 )
 from apps.users.models import Course, Program, ProgramSection, User
@@ -258,16 +259,12 @@ class ProfessorStudentDetailView(ProfessorRequiredMixin, DetailView):
         student = get_object_or_404(
             User, pk=self.kwargs["student_pk"], role=User.Role.STUDENT
         )
-        # Only allow students who completed an exam for this professor.
-        allowed = ReviewSession.objects.filter(
-            student=student,
-            course__professor=self.request.user,
-            status=ReviewSession.Status.COMPLETED,
-        ).exists()
-        if not allowed:
+        if not professor_can_view_student(self.request.user, student):
             from django.http import Http404
 
-            raise Http404("Student has no completed exams for your courses.")
+            raise Http404(
+                "Student has no completed exams in your assigned courses or subjects."
+            )
         return student
 
     def get_context_data(self, **kwargs):

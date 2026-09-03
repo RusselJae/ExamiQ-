@@ -951,6 +951,48 @@ class TestSessionHistoryHelpers:
         assert "Review" in content
         assert "/1" in content or "0%" in content or "0.0%" in content
 
+    def test_student_detail_allows_profile_scoped_professor(
+        self, client, professor, student, mcq_question, program, program_section, department
+    ):
+        """New faculty with section/subject profile can open roster students."""
+        question, _correct = mcq_question
+        other = User.objects.create_user(
+            email="owner@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+            department=department,
+        )
+        course = Course.objects.create(
+            program=program,
+            code="OWN201",
+            name="Owned by other",
+            professor=other,
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(
+            session=session, question=question, confidence=3, is_correct=True
+        )
+        professor.assigned_sections.add(program_section)
+        professor.assigned_subjects.add(question.topic.subject)
+        student.section = program_section
+        student.save(update_fields=["section"])
+
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:professor_student_detail",
+                kwargs={"student_pk": student.pk},
+            )
+        )
+        assert response.status_code == 200
+        assert "Exam session history" in response.content.decode()
+
 
 @pytest.mark.django_db
 class TestProfessorSessionReview:

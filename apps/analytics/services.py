@@ -1312,21 +1312,47 @@ def get_professor_students_with_exams(
 
 
 def student_professor_summary(student: User, professor: User) -> dict:
-    """Performance summary for a student across a professor's courses."""
-    sessions = ReviewSession.objects.filter(
-        student=student,
-        course__professor=professor,
-        status=ReviewSession.Status.COMPLETED,
-    ).select_related("topic", "topic__subject", "course")
-    answers = Answer.objects.filter(
-        session__student=student,
-        session__course__professor=professor,
+    """Performance summary for a student across a professor's visible scope.
+
+    Includes sessions on courses they own plus completed exams in their
+    assigned section/subject profile scope (same gate as the Students list).
+    """
+    from apps.users.assignment_services import (
+        faculty_has_chat_scope,
+        get_faculty_profile_section_ids,
+        get_faculty_profile_subject_ids,
     )
+
+    owned = Q(course__professor=professor)
+    scoped = Q(pk__in=[])
+    if faculty_has_chat_scope(professor):
+        section_ids = get_faculty_profile_section_ids(professor)
+        subject_ids = get_faculty_profile_subject_ids(professor)
+        if student.section_id in section_ids:
+            scoped = Q(subjects__in=subject_ids) | Q(
+                topic__subject_id__in=subject_ids
+            ) | Q(
+                course__code__in=Subject.objects.filter(pk__in=subject_ids).values(
+                    "code"
+                )
+            )
+
+    sessions = (
+        ReviewSession.objects.filter(
+            student=student,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .filter(owned | scoped)
+        .select_related("topic", "topic__subject", "course")
+        .distinct()
+    )
+    session_ids = sessions.values_list("pk", flat=True)
+    answers = Answer.objects.filter(session_id__in=session_ids)
     return _build_student_activity_summary(
         student,
         sessions,
         answers,
-        weak_topics_filter=Q(answer__session__course__professor=professor),
+        weak_topics_filter=Q(answer__session_id__in=session_ids),
         confidence_group_by="subject",
     )
 

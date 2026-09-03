@@ -223,6 +223,26 @@ def create_catalog_subject(
     return subject, course
 
 
+def delete_catalog_subject(subject: Subject) -> str:
+    """Remove a BSED Math curriculum subject and matching catalog courses.
+
+    Cascades topics/questions via FK. Returns the deleted subject code.
+    """
+    if subject.program.slug != User.HomeDegreeProgram.BSED_MATH:
+        raise ValueError("Only BSED Math course subjects can be removed here.")
+
+    code = subject.code
+    program = subject.program
+    Course.objects.filter(
+        program=program,
+        code=code,
+        term="Catalog",
+        section="Catalog",
+    ).delete()
+    subject.delete()
+    return code
+
+
 def get_assigned_subjects_queryset(professor: User, program_id: int):
     """Subjects the professor may teach; scoped when assignments exist."""
     from apps.questions.models import Subject
@@ -368,6 +388,45 @@ def restore_section_student(
     student.is_archived = False
     student.is_active = True
     student.save(update_fields=["is_archived", "is_active"])
+
+
+def professor_can_view_student(professor: User, student: User) -> bool:
+    """True when faculty may open a student's detail page.
+
+    Matches the Students roster gate: completed exams on courses they own,
+    or completed exams in their assigned section/subject profile scope.
+    """
+    from django.db.models import Q
+
+    from apps.reviews.models import ReviewSession
+
+    if student.role != User.Role.STUDENT:
+        return False
+
+    completed = ReviewSession.objects.filter(
+        student=student,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    if completed.filter(course__professor=professor).exists():
+        return True
+
+    if not faculty_has_chat_scope(professor):
+        return False
+
+    section_ids = get_faculty_profile_section_ids(professor)
+    subject_ids = get_faculty_profile_subject_ids(professor)
+    if student.section_id not in section_ids:
+        return False
+
+    return completed.filter(
+        Q(subjects__in=subject_ids)
+        | Q(topic__subject_id__in=subject_ids)
+        | Q(
+            course__code__in=Subject.objects.filter(pk__in=subject_ids).values(
+                "code"
+            )
+        )
+    ).exists()
 
 
 def professor_can_view_session(professor: User, session) -> bool:

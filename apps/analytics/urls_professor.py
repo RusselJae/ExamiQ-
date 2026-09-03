@@ -53,6 +53,11 @@ urlpatterns = [
     path("courses/<int:pk>/clone/", course_views.ProfessorCourseCloneView.as_view(), name="course_clone"),
     path("courses/<int:pk>/archive/", course_views.ProfessorCourseArchiveView.as_view(), name="course_archive"),
     path(
+        "courses/subjects/<int:subject_pk>/remove/",
+        course_views.ProfessorCourseRemoveView.as_view(),
+        name="course_subject_remove",
+    ),
+    path(
         "questions/add/",
         question_views.QuestionAddHubView.as_view(),
         name="question_add",
