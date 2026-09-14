@@ -406,3 +406,118 @@ class StudentChatMessageView(StudentRequiredMixin, View):
 
 # Backward-compatible alias
 StudentChatConcernsApiView = StudentChatConversationsApiView
+
+
+def _student_material_subjects(student):
+    """Year-level and other-year exam subjects the student may browse."""
+    from apps.reviews.exam_setup_services import (
+        other_subjects_available_for_student,
+        subjects_available_for_student,
+    )
+
+    year = list(subjects_available_for_student(student))
+    other = list(other_subjects_available_for_student(student))
+    seen: set[int] = set()
+    subjects = []
+    for subject in year + other:
+        if subject.pk in seen:
+            continue
+        seen.add(subject.pk)
+        subjects.append(subject)
+    return subjects
+
+
+def _student_can_access_subject(student, subject) -> bool:
+    return any(s.pk == subject.pk for s in _student_material_subjects(student))
+
+
+class StudentMaterialHubView(StudentRequiredMixin, TemplateView):
+    """List course subjects with learning materials available to the student."""
+
+    template_name = "analytics/student/materials_hub.html"
+
+    def get_context_data(self, **kwargs):
+        from apps.ai.material_services import ready_documents_for_subject
+        from apps.questions.models import Subject, YearLevel
+
+        context = super().get_context_data(**kwargs)
+        cards = []
+        for subject in _student_material_subjects(self.request.user):
+            docs = ready_documents_for_subject(subject)
+            cards.append(
+                {
+                    "subject": subject,
+                    "document_count": len(docs),
+                }
+            )
+        # Filters match the faculty course-subjects table toolbar
+        context["subject_cards"] = cards
+        context["year_levels"] = YearLevel.objects.order_by("order")
+        context["semester_choices"] = Subject.Semester.choices
+        return context
+
+
+class StudentMaterialListView(StudentRequiredMixin, View):
+    """Per-subject learning materials library (download-only)."""
+
+    template_name = "analytics/student/materials_list.html"
+
+    def get(self, request, subject_pk):
+        from apps.ai.material_services import ready_documents_for_subject
+        from apps.ai.models import LearningDocument
+        from apps.questions.models import Subject
+
+        subject = get_object_or_404(
+            Subject.objects.select_related("year_level", "program"),
+            pk=subject_pk,
+        )
+        if not _student_can_access_subject(request.user, subject):
+            raise Http404
+        documents = ready_documents_for_subject(subject)
+        return render(
+            request,
+            self.template_name,
+            {
+                "subject": subject,
+                "documents": documents,
+                "library_count": len(documents),
+                "material_types": LearningDocument.MaterialType.choices,
+            },
+        )
+
+
+class StudentMaterialDownloadView(StudentRequiredMixin, View):
+    """Authenticated download of a ready material for an accessible subject."""
+
+    def get(self, request, subject_pk, pk):
+        import mimetypes
+
+        from apps.ai.material_services import (
+            document_download_name,
+            ready_documents_for_subject,
+        )
+        from apps.ai.models import LearningDocument
+        from apps.questions.models import Subject
+        from django.http import FileResponse
+
+        subject = get_object_or_404(Subject, pk=subject_pk)
+        if not _student_can_access_subject(request.user, subject):
+            raise Http404
+        allowed_ids = {doc.pk for doc in ready_documents_for_subject(subject)}
+        if pk not in allowed_ids:
+            raise Http404
+        document = get_object_or_404(LearningDocument, pk=pk)
+        if not document.file:
+            raise Http404("File not available.")
+        try:
+            handle = document.file.open("rb")
+        except (FileNotFoundError, OSError, ValueError) as exc:
+            raise Http404("File not available.") from exc
+        filename = document_download_name(document)
+        content_type, _ = mimetypes.guess_type(filename)
+        return FileResponse(
+            handle,
+            as_attachment=True,
+            filename=filename,
+            content_type=content_type or "application/octet-stream",
+        )

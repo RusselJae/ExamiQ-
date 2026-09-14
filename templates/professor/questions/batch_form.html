@@ -14,110 +14,218 @@
 <form method="post" id="batch-question-form" class="space-y-6" enctype="multipart/form-data"{% if form_action %} action="{{ form_action }}"{% endif %}>
     {% csrf_token %}
 
-    <div class="bento-card bento-card--elevated p-6 shadow-sm">
-        <div class="batch-settings-rows{% if hub_mode %} batch-settings-rows--hub{% endif %}">
-            <div class="batch-settings-row batch-settings-row--primary">
-                {% if hub_mode %}
-                <div class="batch-settings-field">
-                    <label for="hub-course-search" class="batch-settings-field__label">Course subject</label>
-                    <div
-                        class="searchable-select"
-                        data-searchable-select
-                        data-navigate-url="{% url 'analytics_professor:question_add' %}?course={id}"
-                        data-navigate-clear="{% url 'analytics_professor:question_add' %}"
-                    >
-                        <input type="hidden" id="hub-course-filter" value="{% if selected_course_pk %}{{ selected_course_pk }}{% endif %}">
-                        <button type="button" class="searchable-select__trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-course-search">
-                            <span class="searchable-select__value{% if not selected_course_pk %} is-placeholder{% endif %}">
-                                {% if selected_course_pk %}
-                                    {% for opt in course_options %}
-                                        {% if opt.course.pk == selected_course_pk %}{{ opt.label }}{% endif %}
-                                    {% endfor %}
-                                {% else %}
-                                    Search or select a course subject…
-                                {% endif %}
-                            </span>
-                            <span class="searchable-select__chevron" aria-hidden="true">▾</span>
-                        </button>
-                        <div class="searchable-select__panel hidden" role="presentation">
-                            <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
-                            <ul class="searchable-select__list" role="listbox" aria-label="Course subjects">
-                                <li class="searchable-select__option{% if not selected_course_pk %} is-selected{% endif %}"
-                                    role="option"
-                                    data-value=""
-                                    data-label="Search or select a course subject…"
-                                    data-search="">
-                                    Clear selection
-                                </li>
+    <div class="bento-card bento-card--elevated batch-setup-card p-6 sm:p-8 shadow-sm">
+        <header class="batch-setup-card__header">
+            <h2 class="batch-setup-card__title">Set up this batch</h2>
+            <p class="batch-setup-card__subtitle">These settings apply to everything you generate or add below.</p>
+        </header>
+
+        <div class="batch-setup-stack">
+            {% if hub_mode %}
+            <div class="batch-settings-field">
+                <label for="hub-course-search" class="batch-setup-label">Course subject</label>
+                <div
+                    class="searchable-select searchable-select--batch"
+                    data-searchable-select
+                    data-navigate-url="{% url 'analytics_professor:question_add' %}?course={id}"
+                    data-navigate-clear="{% url 'analytics_professor:question_add' %}"
+                >
+                    <input type="hidden" id="hub-course-filter" value="{% if selected_course_pk %}{{ selected_course_pk }}{% endif %}">
+                    <button type="button" class="searchable-select__trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-course-search">
+                        <span class="searchable-select__icon" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                        </span>
+                        <span class="searchable-select__value{% if not selected_course_pk %} is-placeholder{% endif %}">
+                            {% if selected_course_pk %}
                                 {% for opt in course_options %}
-                                <li class="searchable-select__option{% if selected_course_pk == opt.course.pk %} is-selected{% endif %}"
-                                    role="option"
-                                    data-value="{{ opt.course.pk }}"
-                                    data-label="{{ opt.label }}"
-                                    data-search="{{ opt.label|lower }}">
-                                    {{ opt.label }}
-                                </li>
+                                    {% if opt.course.pk == selected_course_pk %}{{ opt.label }}{% endif %}
                                 {% endfor %}
-                            </ul>
+                            {% else %}
+                                Search or select a course subject…
+                            {% endif %}
+                        </span>
+                        <span class="searchable-select__chevron" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="searchable-select__panel hidden" role="presentation">
+                        <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
+                        <ul class="searchable-select__list" role="listbox" aria-label="Course subjects">
+                            <li class="searchable-select__option{% if not selected_course_pk %} is-selected{% endif %}"
+                                role="option"
+                                data-value=""
+                                data-label="Search or select a course subject…"
+                                data-search="">
+                                Clear selection
+                            </li>
+                            {% for opt in course_options %}
+                            <li class="searchable-select__option{% if selected_course_pk == opt.course.pk %} is-selected{% endif %}"
+                                role="option"
+                                data-value="{{ opt.course.pk }}"
+                                data-label="{{ opt.label }}"
+                                data-search="{{ opt.label|lower }}">
+                                {{ opt.label }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% elif course %}
+            <div class="batch-settings-field">
+                <span class="batch-setup-label">Course subject</span>
+                <div class="batch-setup-readonly" aria-live="polite">
+                    <span class="batch-setup-readonly__icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                    </span>
+                    <span>{{ course.code }}{% if course.name %} — {{ course.name }}{% endif %}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="batch-settings-field">
+                <span class="batch-setup-label" id="difficulty-label">Difficulty</span>
+                <select id="settings-difficulty" name="difficulty" required class="sr-only" aria-labelledby="difficulty-label" tabindex="-1">
+                    {% for value, label in difficulty_choices %}
+                    <option value="{{ value }}"{% if value == "medium" %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="batch-pill-group" role="group" aria-labelledby="difficulty-label" data-pill-group data-pill-target="settings-difficulty">
+                    {% for value, label in difficulty_choices %}
+                    <button type="button"
+                            class="batch-pill{% if value == "medium" %} is-selected{% endif %}"
+                            data-pill-value="{{ value }}"
+                            aria-pressed="{% if value == "medium" %}true{% else %}false{% endif %}">
+                        {{ label }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="batch-settings-field">
+                <span class="batch-setup-label" id="question-type-label">Question type</span>
+                <select id="settings-question-type" class="sr-only" aria-labelledby="question-type-label" tabindex="-1">
+                    {% for value, label in question_type_choices %}
+                    <option value="{{ value }}"{% if forloop.first %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="batch-pill-group batch-pill-group--wrap" role="group" aria-labelledby="question-type-label" data-pill-group data-pill-target="settings-question-type">
+                    {% for value, label in question_type_choices %}
+                    <button type="button"
+                            class="batch-pill{% if forloop.first %} is-selected{% endif %}"
+                            data-pill-value="{{ value }}"
+                            aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">
+                        {{ label }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="batch-source-section" data-source-tabs>
+                <div class="batch-source-divider" role="separator">
+                    <span>Source material</span>
+                </div>
+
+                <div class="batch-source-tabs" role="tablist" aria-label="Source material">
+                    <button type="button"
+                            class="batch-source-tab is-selected"
+                            role="tab"
+                            id="source-tab-saved"
+                            aria-selected="true"
+                            aria-controls="source-panel-saved"
+                            data-source-tab="saved">
+                        Saved material
+                    </button>
+                    <button type="button"
+                            class="batch-source-tab"
+                            role="tab"
+                            id="source-tab-upload"
+                            aria-selected="false"
+                            aria-controls="source-panel-upload"
+                            data-source-tab="upload">
+                        Upload a file
+                    </button>
+                </div>
+
+                <div class="batch-source-panels">
+                    <div class="batch-source-panel"
+                         role="tabpanel"
+                         id="source-panel-saved"
+                         aria-labelledby="source-tab-saved"
+                         data-source-panel="saved">
+                        <label for="ai-library-document" class="sr-only">Saved material</label>
+                        <select id="ai-library-document" class="batch-setup-select">
+                            <option value="">Choose saved material…</option>
+                            {% for doc in learning_documents %}
+                            <option value="{{ doc.pk }}">{{ doc.display_title }}</option>
+                            {% empty %}
+                            <option value="" disabled>No saved materials yet</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="batch-source-panel hidden"
+                         role="tabpanel"
+                         id="source-panel-upload"
+                         aria-labelledby="source-tab-upload"
+                         data-source-panel="upload"
+                         hidden>
+                        <div class="batch-dropzone" data-dropzone>
+                            <input
+                                type="file"
+                                id="ai-source-file"
+                                accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                class="sr-only"
+                            >
+                            <div class="batch-dropzone__icon" aria-hidden="true">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                                    <path d="M12 16V6"/>
+                                    <path d="M8 9l4-4 4 4"/>
+                                    <path d="M4 18h16"/>
+                                </svg>
+                            </div>
+                            <p class="batch-dropzone__text">
+                                Drop a syllabus, textbook chapter, or notes — or
+                                <button type="button" class="batch-dropzone__choose" data-dropzone-choose>Choose file</button>
+                            </p>
+                            <p class="batch-dropzone__filename text-xs text-examiq-slate hidden" data-dropzone-filename></p>
+                        </div>
+                    </div>
+
+                    <div class="batch-generate-count batch-generate-count--inline">
+                        <label for="ai-generate-count" class="batch-generate-count__label"># to generate</label>
+                        <div class="batch-stepper" data-stepper data-stepper-min="1" data-stepper-max="50">
+                            <button type="button" class="batch-stepper__btn" data-stepper-dec aria-label="Decrease count">−</button>
+                            <input
+                                type="number"
+                                id="ai-generate-count"
+                                min="1"
+                                max="50"
+                                value="10"
+                                class="batch-stepper__input"
+                                inputmode="numeric"
+                            >
+                            <button type="button" class="batch-stepper__btn" data-stepper-inc aria-label="Increase count">+</button>
                         </div>
                     </div>
                 </div>
-                {% endif %}
-                <div class="batch-settings-field">
-                    <label for="settings-difficulty" class="batch-settings-field__label">Difficulty</label>
-                    <select id="settings-difficulty" name="difficulty" required class="batch-settings-input">
-                        {% for value, label in difficulty_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="batch-settings-field">
-                    <label for="settings-question-type" class="batch-settings-field__label">Question type</label>
-                    <select id="settings-question-type" class="batch-settings-input">
-                        {% for value, label in question_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
             </div>
-            <div class="batch-settings-row batch-settings-row--secondary">
-                <div class="batch-settings-field">
-                    <label for="ai-source-file" class="batch-settings-field__label">Learning Material</label>
-                    <input
-                        type="file"
-                        id="ai-source-file"
-                        accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        class="batch-settings-input batch-settings-input--file"
-                    >
-                </div>
-                <div class="batch-settings-field">
-                    <label for="ai-generate-count" class="batch-settings-field__label"># To Generate</label>
-                    <input
-                        type="number"
-                        id="ai-generate-count"
-                        min="1"
-                        max="20"
-                        value="3"
-                        class="batch-settings-input"
-                    >
-                </div>
-                <div class="batch-settings-field batch-settings-field--generate">
-                    <span class="batch-settings-field__label batch-settings-field__label--invisible" aria-hidden="true">Generate</span>
-                    <button type="button"
-                            id="ai-generate-btn"
-                            class="btn-ai-generate"
-                            {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
-                        <span aria-hidden="true">+</span> AI Generate
-                    </button>
-                    <button type="button"
-                            id="show-generate-modal-btn"
-                            class="gen-progress-show-btn hidden"
-                            hidden>
-                        Show generation progress
-                    </button>
-                </div>
+
+            <div class="batch-setup-generate">
+                <button type="button"
+                        id="ai-generate-btn"
+                        class="btn-ai-generate"
+                        {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                    <span aria-hidden="true">+</span> Generate questions
+                </button>
+                <button type="button"
+                        id="show-generate-modal-btn"
+                        class="gen-progress-show-btn hidden"
+                        hidden>
+                    Show generation progress
+                </button>
+                <p class="batch-setup-disclaimer">AI drafts the questions — you review and confirm before anything is published.</p>
             </div>
         </div>
+
         {% if hub_mode and not hub_subject_selected %}
         <p class="text-xs text-amber-700 mt-3">Select a course subject to save questions.</p>
         {% elif hub_mode %}
@@ -143,10 +251,10 @@
             <h2 class="text-lg font-semibold text-examiq-navy">Questions</h2>
             <div class="batch-questions-toolbar__actions">
                 <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1">0 questions</span>
-                <button type="button" id="validate-all-btn" class="btn-secondary btn-primary-sm inline-flex items-center gap-1" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                <button type="button" id="validate-all-btn" class="btn-secondary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Validate All
                 </button>
-                <button type="submit" class="btn-primary btn-primary-sm inline-flex items-center gap-1" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                <button type="submit" class="btn-primary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Submit all
                 </button>
             </div>
@@ -171,6 +279,7 @@
                     <th class="w-20">Answer</th>
                     <th class="w-40">Concept</th>
                     <th class="w-28">Status</th>
+                    <th class="batch-col-validate">Faculty validation</th>
                     <th class="w-36"></th>
                 </tr>
             </thead>
@@ -198,6 +307,7 @@
 
 {% block extra_js %}
 <script src="{% static 'js/searchable-select.js' %}"></script>
+<script src="{% static 'js/batch-setup-ui.js' %}"></script>
 <script src="{% static 'js/batch-questions.js' %}"></script>
 <script>
 (function() {
@@ -230,16 +340,17 @@
     const validateAllBtn = document.getElementById("validate-all-btn");
     const batchForm = document.getElementById("batch-question-form");
     const sourceInput = document.getElementById("ai-source-file");
+    const librarySelect = document.getElementById("ai-library-document");
     const generateCountInput = document.getElementById("ai-generate-count");
 
     function getGenerateCount() {
         let n = parseInt(generateCountInput && generateCountInput.value, 10);
         if (isNaN(n) || n < 1) n = 1;
-        if (n > 20) {
-            n = 20;
-            if (generateCountInput) generateCountInput.value = "20";
+        if (n > 50) {
+            n = 50;
+            if (generateCountInput) generateCountInput.value = "50";
             if (window.showToast) {
-                window.showToast("Maximum is 20 questions per generate run.", "warning");
+                window.showToast("Maximum is 50 questions per generate run.", "warning");
             }
         }
         if (generateCountInput) generateCountInput.value = String(n);
@@ -403,27 +514,47 @@
     }
 
     function ensureFieldsForIndex(index) {
-        if (getField("stem_" + index)) return;
-        const wrapper = document.createElement("div");
-        wrapper.dataset.index = index;
-        const defaultDifficulty = normalizeDifficulty(difficultySelect.value);
-        const defaultType = normalizeQuestionType(
-            questionTypeSelect ? questionTypeSelect.value : "mcq"
-        );
-        wrapper.innerHTML =
-            '<textarea name="stem_' + index + '"></textarea>' +
-            ["A", "B", "C", "D"].map(function(letter) {
-                return '<input type="text" name="choice_' + index + "_" + letter + '">';
-            }).join("") +
-            '<input type="text" name="correct_' + index + '" value="A">' +
-            '<input type="text" name="concept_tag_' + index + '">' +
-            '<input type="hidden" name="difficulty_' + index + '" value="' + defaultDifficulty + '">' +
-            '<input type="hidden" name="question_type_' + index + '" value="' + defaultType + '">' +
-            '<textarea name="expected_answer_' + index + '"></textarea>' +
-            '<input type="hidden" name="ai_generated_' + index + '" value="0">' +
-            '<input type="hidden" name="steps_' + index + '" value="">' +
-            '<input type="hidden" name="solution_summary_' + index + '" value="">';
-        fieldsStore.appendChild(wrapper);
+        if (!getField("stem_" + index)) {
+            const wrapper = document.createElement("div");
+            wrapper.dataset.index = index;
+            const defaultDifficulty = normalizeDifficulty(difficultySelect.value);
+            const defaultType = normalizeQuestionType(
+                questionTypeSelect ? questionTypeSelect.value : "mcq"
+            );
+            wrapper.innerHTML =
+                '<textarea name="stem_' + index + '"></textarea>' +
+                ["A", "B", "C", "D"].map(function(letter) {
+                    return '<input type="text" name="choice_' + index + "_" + letter + '">';
+                }).join("") +
+                '<input type="text" name="correct_' + index + '" value="A">' +
+                '<input type="text" name="concept_tag_' + index + '">' +
+                '<input type="hidden" name="difficulty_' + index + '" value="' + defaultDifficulty + '">' +
+                '<input type="hidden" name="question_type_' + index + '" value="' + defaultType + '">' +
+                '<textarea name="expected_answer_' + index + '"></textarea>' +
+                '<input type="hidden" name="ai_generated_' + index + '" value="0">' +
+                '<input type="hidden" name="steps_' + index + '" value="">' +
+                '<input type="hidden" name="solution_summary_' + index + '" value="">' +
+                '<input type="hidden" name="faculty_attest_' + index + '" value="0">' +
+                '<input type="hidden" name="approve_explanations_' + index + '" value="0">';
+            fieldsStore.appendChild(wrapper);
+            return;
+        }
+        // Backfill validation fields for drafts created before per-row checkboxes.
+        const wrapper = getField("stem_" + index).closest("[data-index]") || getField("stem_" + index).parentElement;
+        if (!getField("faculty_attest_" + index)) {
+            const attest = document.createElement("input");
+            attest.type = "hidden";
+            attest.name = "faculty_attest_" + index;
+            attest.value = "0";
+            wrapper.appendChild(attest);
+        }
+        if (!getField("approve_explanations_" + index)) {
+            const approve = document.createElement("input");
+            approve.type = "hidden";
+            approve.name = "approve_explanations_" + index;
+            approve.value = "0";
+            wrapper.appendChild(approve);
+        }
     }
 
     function getQuestionData(index) {
@@ -441,6 +572,8 @@
             expected_answer: getField("expected_answer_" + index).value || "",
             ai_generated: getField("ai_generated_" + index).value === "1",
             solution_summary: getField("solution_summary_" + index).value || "",
+            faculty_attest: getField("faculty_attest_" + index).value === "1",
+            approve_explanations: getField("approve_explanations_" + index).value === "1",
             steps: Array.isArray(steps) ? steps : [],
             choices: {},
             validation: validationState[index] || null,
@@ -467,23 +600,35 @@
         getField("expected_answer_" + index).value = data.expected_answer || "";
         getField("ai_generated_" + index).value = data.ai_generated ? "1" : "0";
         getField("solution_summary_" + index).value = data.solution_summary || "";
+        getField("faculty_attest_" + index).value = data.faculty_attest ? "1" : "0";
+        getField("approve_explanations_" + index).value = data.approve_explanations ? "1" : "0";
         getField("steps_" + index).value = JSON.stringify(data.steps || []);
         ["A", "B", "C", "D"].forEach(function(letter) {
             getField("choice_" + index + "_" + letter).value =
                 (data.choices && data.choices[letter]) || "";
         });
-        if (data.ai_generated) {
-            validationState[index] = {
-                is_valid: true,
-                feedback: "AI-generated — validation not required.",
-                checked_at: Date.now(),
-                skipped: true,
-            };
-        } else if (data.validation) {
+        if (data.validation) {
             validationState[index] = data.validation;
         } else {
             delete validationState[index];
         }
+    }
+
+    function facultyValidationCellHtml(index, data) {
+        return (
+            '<div class="batch-row-validate" role="group" aria-label="Faculty validation for question ' + (index + 1) + '">' +
+            '<label class="batch-row-validate__row">' +
+            '<input type="checkbox" class="batch-row-validate__input" data-faculty-attest="' + index + '"' +
+            (data.faculty_attest ? " checked" : "") + ">" +
+            "<span>Validated by faculty (publish)</span>" +
+            "</label>" +
+            '<label class="batch-row-validate__row">' +
+            '<input type="checkbox" class="batch-row-validate__input" data-approve-explanations="' + index + '"' +
+            (data.approve_explanations ? " checked" : "") + ">" +
+            "<span>Approve explanations</span>" +
+            "</label>" +
+            "</div>"
+        );
     }
 
     function editUrlFor(index) {
@@ -511,6 +656,7 @@
             (data.concept ? truncate(data.concept, 24) : '<span class="text-examiq-slate">— select —</span>') +
             "</td>" +
             "<td>" + statusBadgeHtml(index) + "</td>" +
+            '<td class="batch-col-validate">' + facultyValidationCellHtml(index, data) + "</td>" +
             '<td class="whitespace-nowrap">' +
             '<a href="' + editUrlFor(index) + '" class="text-link text-sm font-medium mr-3">Edit</a>' +
             validateButtonHtml(index) +
@@ -582,23 +728,6 @@
     function runValidate(index, triggerBtn, showModal) {
         if (typeof showModal === "undefined") showModal = true;
         const data = getQuestionData(index);
-        if (data.ai_generated) {
-            validationState[index] = {
-                is_valid: true,
-                feedback: "AI-generated — validation not required.",
-                checked_at: Date.now(),
-                skipped: true,
-            };
-            renderTableRow(index);
-            window.ExamiQBatch.persist(batchConfig);
-            if (showModal) {
-                showValidateModal({
-                    is_valid: true,
-                    feedback: "AI-generated questions do not require validation.",
-                });
-            }
-            return Promise.resolve({ is_valid: true });
-        }
         const fd = getSettingsFormData();
         fd.append("stem", data.stem);
         fd.append("correct_label", data.correct);
@@ -702,7 +831,6 @@
         for (let i = 0; i < questionIndex; i++) {
             const data = getQuestionData(i);
             if (!data.stem.trim()) continue;
-            if (data.ai_generated) continue;
             if (validationState[i] && validationState[i].is_valid === true) continue;
             pending.push(i);
         }
@@ -964,7 +1092,12 @@
     async function postGenerate() {
         const fd = getSettingsFormData();
         fd.append("count", String(getGenerateCount()));
-        fd.append("source_file", sourceInput.files[0]);
+        const libraryId = librarySelect && librarySelect.value ? librarySelect.value : "";
+        if (libraryId) {
+            fd.append("learning_document_id", libraryId);
+        } else if (sourceInput && sourceInput.files && sourceInput.files[0]) {
+            fd.append("source_file", sourceInput.files[0]);
+        }
         const resp = await fetch(generateUrl, {
             method: "POST",
             body: fd,
@@ -980,8 +1113,12 @@
             if (window.showToast) window.showToast("Select a course subject to save questions.", "warning");
             return;
         }
-        if (!sourceInput || !sourceInput.files || !sourceInput.files[0]) {
-            if (window.showToast) window.showToast("Upload a learning material file first.", "warning");
+        const hasLibrary = librarySelect && librarySelect.value;
+        const hasUpload = sourceInput && sourceInput.files && sourceInput.files[0];
+        if (!hasLibrary && !hasUpload) {
+            if (window.showToast) {
+                window.showToast("Pick a saved learning material or upload a file first.", "warning");
+            }
             return;
         }
         if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
@@ -1069,6 +1206,26 @@
         const validateBtn = e.target.closest(".validate-btn");
         if (validateBtn) {
             runValidate(parseInt(validateBtn.dataset.index, 10), validateBtn);
+        }
+    });
+
+    tableBody.addEventListener("change", function(e) {
+        const attest = e.target.closest("[data-faculty-attest]");
+        if (attest) {
+            const index = parseInt(attest.getAttribute("data-faculty-attest"), 10);
+            ensureFieldsForIndex(index);
+            getField("faculty_attest_" + index).value = attest.checked ? "1" : "0";
+            markDirty();
+            window.ExamiQBatch.persist(batchConfig);
+            return;
+        }
+        const approve = e.target.closest("[data-approve-explanations]");
+        if (approve) {
+            const index = parseInt(approve.getAttribute("data-approve-explanations"), 10);
+            ensureFieldsForIndex(index);
+            getField("approve_explanations_" + index).value = approve.checked ? "1" : "0";
+            markDirty();
+            window.ExamiQBatch.persist(batchConfig);
         }
     });
 

@@ -1,12 +1,13 @@
 import pytest
 
-from apps.questions.models import Question, QuestionChoice, Subject, Topic
+from apps.questions.models import Question, QuestionChoice, Subject, Topic, YearLevel
 from apps.reviews.exam_setup_services import (
     MAX_QUESTIONS_SINGLE_SUBJECT,
     MAX_TOTAL_QUESTIONS,
-    MIN_EXAM_SUBJECTS,
     MIN_QUESTIONS_PER_SUBJECT,
     build_multi_subject_exam_target,
+    other_subjects_available_for_student,
+    subjects_available_for_student,
 )
 from apps.reviews.forms import ReviewSetupForm
 from apps.users.models import Program, User
@@ -38,7 +39,7 @@ def _make_subject_with_questions(bsed_program, year_level, code, *, count=3, dif
 
 @pytest.mark.django_db
 class TestReviewSetupForm:
-    def test_lists_all_bsed_subjects_when_student_is_bsed(
+    def test_year_subjects_exclude_other_programs_and_years(
         self, student, bsed_program, subject, year_level
     ):
         make_bsed_student(student, subject=subject, bsed_program=bsed_program)
@@ -57,34 +58,45 @@ class TestReviewSetupForm:
             year_level=year_level,
             semester=1,
         )
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=99, defaults={"name": "Other Year"}
+        )
+        Subject.objects.create(
+            program=bsed_program,
+            code="Y2-101",
+            name="Year Two",
+            year_level=other_year,
+            semester=1,
+        )
 
         form = ReviewSetupForm(student=student)
-        subject_ids = set(form.fields["subjects"].queryset.values_list("pk", flat=True))
-        assert subject.pk in subject_ids
-        assert form.fields["subjects"].queryset.filter(code="IT-101").count() == 0
+        codes = {s.code for s in form.year_subjects}
+        assert subject.code in codes
+        assert "IT-101" not in codes
+        assert "Y2-101" not in codes
+        assert "subjects" not in form.fields
 
-    def test_rejects_setup_when_no_subjects_selected(
+    def test_rejects_setup_when_student_has_no_year_level(
         self, student, subject, topic, mcq_question, bsed_program, year_level
     ):
         make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        student.year_level = None
+        student.save(update_fields=["year_level"])
 
         form = ReviewSetupForm(
             data={
-                "subjects": [],
                 "difficulty": Question.Difficulty.EASY,
                 "question_type": [Question.QuestionType.MCQ],
             },
             student=student,
         )
         assert not form.is_valid()
-        err = str(form.errors).lower()
-        assert "subjects" in form.errors or f"at least {MIN_EXAM_SUBJECTS}" in err
+        assert "year level" in str(form.errors).lower()
 
-    def test_accepts_setup_with_one_subject(
+    def test_accepts_setup_with_year_subjects(
         self, student, subject, topic, mcq_question, bsed_program, year_level
     ):
         make_bsed_student(student, subject=subject, bsed_program=bsed_program)
-        # Ensure enough questions for one subject
         for i in range(MIN_QUESTIONS_PER_SUBJECT - 1):
             q = Question.objects.create(
                 topic=topic,
@@ -98,38 +110,28 @@ class TestReviewSetupForm:
 
         form = ReviewSetupForm(
             data={
-                "subjects": [subject.pk],
                 "difficulty": Question.Difficulty.EASY,
                 "question_type": [Question.QuestionType.MCQ],
             },
             student=student,
         )
         assert form.is_valid(), form.errors
+        assert subject in form.get_auto_target()["subjects"]
 
     def test_rejects_setup_when_no_questions_available(
         self, student, subject, topic, bsed_program, year_level
     ):
         make_bsed_student(student, subject=subject, bsed_program=bsed_program)
-        s2 = Subject.objects.create(
+        Subject.objects.create(
             program=bsed_program,
             code="EMPTY-2",
             name="Empty 2",
             year_level=year_level,
             semester=1,
         )
-        Topic.objects.create(subject=s2, name="T2")
-        s3 = Subject.objects.create(
-            program=bsed_program,
-            code="EMPTY-3",
-            name="Empty 3",
-            year_level=year_level,
-            semester=1,
-        )
-        Topic.objects.create(subject=s3, name="T3")
 
         form = ReviewSetupForm(
             data={
-                "subjects": [subject.pk, s2.pk, s3.pk],
                 "difficulty": Question.Difficulty.EASY,
                 "question_type": [Question.QuestionType.MCQ],
             },
@@ -150,7 +152,6 @@ class TestReviewSetupForm:
 
         form = ReviewSetupForm(
             data={
-                "subjects": [s1.pk, s2.pk, s3.pk],
                 "difficulty": Question.Difficulty.EASY,
                 "question_type": [Question.QuestionType.MCQ],
             },
@@ -162,6 +163,82 @@ class TestReviewSetupForm:
         assert len(target["subjects"]) == 3
         assert len(target["question_queue"]) == 6
         assert target["question_count"] == 6
+
+    def test_accepts_optional_extra_subjects_from_other_years(
+        self, student, bsed_program, year_level, course
+    ):
+        make_bsed_student(student, bsed_program=bsed_program, course=course)
+        year_subj = _make_subject_with_questions(
+            bsed_program, year_level, "Y1-FILL", count=3
+        )
+        year_subj.code = course.code
+        year_subj.save(update_fields=["code"])
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=97, defaults={"name": "Year 97"}
+        )
+        other = _make_subject_with_questions(
+            bsed_program, other_year, "Y97-EXTRA", count=3
+        )
+
+        form = ReviewSetupForm(
+            data={
+                "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
+                "extra_subjects": [other.pk],
+            },
+            student=student,
+        )
+        assert form.is_valid(), form.errors
+        codes = {s.code for s in form.get_auto_target()["subjects"]}
+        assert codes == {course.code, "Y97-EXTRA"}
+
+    def test_defaults_to_year_subjects_when_extra_empty(
+        self, student, bsed_program, year_level, course
+    ):
+        make_bsed_student(student, bsed_program=bsed_program, course=course)
+        year_subj = _make_subject_with_questions(
+            bsed_program, year_level, "Y1-ONLY", count=3
+        )
+        year_subj.code = course.code
+        year_subj.save(update_fields=["code"])
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=96, defaults={"name": "Year 96"}
+        )
+        _make_subject_with_questions(bsed_program, other_year, "Y96-SKIP", count=3)
+
+        form = ReviewSetupForm(
+            data={
+                "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
+            },
+            student=student,
+        )
+        assert form.is_valid(), form.errors
+        codes = {s.code for s in form.get_auto_target()["subjects"]}
+        assert codes == {course.code}
+
+    def test_skips_empty_year_subjects_when_building_exam(
+        self, student, bsed_program, year_level, course
+    ):
+        make_bsed_student(student, bsed_program=bsed_program, course=course)
+        _make_subject_with_questions(bsed_program, year_level, "FILL-1", count=3)
+        Subject.objects.create(
+            program=bsed_program,
+            code="EMPTY-Y",
+            name="Empty Year Subject",
+            year_level=year_level,
+            semester=1,
+        )
+
+        form = ReviewSetupForm(
+            data={
+                "difficulty": Question.Difficulty.EASY,
+                "question_type": [Question.QuestionType.MCQ],
+            },
+            student=student,
+        )
+        assert form.is_valid(), form.errors
+        assert [s.code for s in form.get_auto_target()["subjects"]] == ["FILL-1"]
 
     def test_mcq_only_excludes_other_question_types(
         self, student, subject, topic, mcq_question, bsed_program, year_level
@@ -188,7 +265,6 @@ class TestReviewSetupForm:
 
         form = ReviewSetupForm(
             data={
-                "subjects": [subject.pk],
                 "difficulty": Question.Difficulty.EASY,
                 "question_type": [Question.QuestionType.MCQ],
             },
@@ -216,7 +292,6 @@ class TestReviewSetupForm:
 
         form = ReviewSetupForm(
             data={
-                "subjects": [subject.pk],
                 "difficulty": Question.Difficulty.EASY,
                 "question_type": [Question.QuestionType.MCQ],
             },
@@ -224,7 +299,53 @@ class TestReviewSetupForm:
         )
         assert not form.is_valid()
         err = str(form.errors)
-        assert "Multiple Choice" in err or "No approved" in err
+        assert "No approved questions" in err
+
+
+@pytest.mark.django_db
+class TestSubjectsAvailableForStudent:
+    def test_filters_to_student_year_level(
+        self, student, bsed_program, subject, year_level
+    ):
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=98, defaults={"name": "Year 98"}
+        )
+        Subject.objects.create(
+            program=bsed_program,
+            code="OTH-Y",
+            name="Other Year Subject",
+            year_level=other_year,
+            semester=1,
+        )
+        qs = subjects_available_for_student(student)
+        assert subject.pk in qs.values_list("pk", flat=True)
+        assert not qs.filter(code="OTH-Y").exists()
+
+    def test_empty_without_year_level(self, student, subject, bsed_program):
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        student.year_level = None
+        student.save(update_fields=["year_level"])
+        assert not subjects_available_for_student(student).exists()
+        assert not other_subjects_available_for_student(student).exists()
+
+    def test_other_subjects_are_outside_student_year(
+        self, student, bsed_program, subject, year_level
+    ):
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=95, defaults={"name": "Year 95"}
+        )
+        Subject.objects.create(
+            program=bsed_program,
+            code="OUT-Y",
+            name="Outside Year",
+            year_level=other_year,
+            semester=1,
+        )
+        other = other_subjects_available_for_student(student)
+        assert other.filter(code="OUT-Y").exists()
+        assert not other.filter(pk=subject.pk).exists()
 
 
 @pytest.mark.django_db
@@ -256,7 +377,7 @@ class TestMultiSubjectQueue:
         assert MIN_QUESTIONS_PER_SUBJECT <= count <= MAX_QUESTIONS_SINGLE_SUBJECT
         assert len(target["question_queue"]) == count
 
-    def test_many_subjects_capped_at_70(self, student, bsed_program, year_level):
+    def test_many_subjects_capped_at_max_total(self, student, bsed_program, year_level):
         make_bsed_student(student, bsed_program=bsed_program)
         subjects = [
             _make_subject_with_questions(

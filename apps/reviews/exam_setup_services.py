@@ -19,7 +19,7 @@ QUESTIONS_PER_SUBJECT = 10
 MIN_EXAM_SUBJECTS = 1
 MIN_QUESTIONS_PER_SUBJECT = 3
 MAX_QUESTIONS_SINGLE_SUBJECT = 20
-MAX_TOTAL_QUESTIONS = 70
+MAX_TOTAL_QUESTIONS = 100
 
 
 def get_or_create_exam_setup(course) -> ExamSetup:
@@ -63,13 +63,22 @@ def get_or_create_program_exam_setup(program: Program | None = None) -> ProgramE
 def student_setup_eligibility(student: User) -> dict:
     """Return eligibility flags and messages for the exam setup page.
 
-    Eligibility checks only the program and available questions.
+    Eligibility checks program, year level, year-matched subjects, and questions.
     """
     if student.home_degree_program != User.HomeDegreeProgram.BSED_MATH:
         return {
             "eligible": False,
             "reason": "program",
             "message": "Exam practice is available for BSEd Mathematics students.",
+        }
+    if not student.year_level_id:
+        return {
+            "eligible": False,
+            "reason": "no_year_level",
+            "message": (
+                "Your year level is not set. Contact your department to update "
+                "your profile before starting an exam."
+            ),
         }
     try:
         setup = get_or_create_program_exam_setup()
@@ -81,11 +90,24 @@ def student_setup_eligibility(student: User) -> dict:
             "reason": "disabled",
             "message": "Exams are currently disabled by faculty. Check back later.",
         }
-    if not program_has_approved_questions():
+    year_subjects = subjects_available_for_student(student)
+    if not year_subjects.exists():
+        return {
+            "eligible": False,
+            "reason": "no_year_subjects",
+            "message": (
+                "No course subjects are available for your year level yet. "
+                "Check back later."
+            ),
+        }
+    if not year_has_approved_questions(student):
         return {
             "eligible": False,
             "reason": "no_questions",
-            "message": "No approved questions are available yet. Check back later.",
+            "message": (
+                "No approved questions are available for your year level yet. "
+                "Check back later."
+            ),
         }
     return {"eligible": True}
 
@@ -106,8 +128,8 @@ def get_or_create_section_exam_setup(section) -> SectionExamSetup:
     return setup
 
 
-def subjects_available_for_student(student: User | None = None):
-    """BSED Math subjects open for student exams (program exam setup)."""
+def _program_exam_subject_base():
+    """BSED Math subjects allowed by program exam setup (all years)."""
     base = (
         Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
         .select_related("year_level", "program")
@@ -125,9 +147,44 @@ def subjects_available_for_student(student: User | None = None):
     return base
 
 
+def subjects_available_for_student(student: User | None = None):
+    """BSED Math subjects open for student exams (program exam setup + year).
+
+    When a student is provided, only subjects matching that student's year
+    level are returned. Students without a year level get an empty queryset.
+    """
+    base = _program_exam_subject_base()
+    if student is not None:
+        if not student.year_level_id:
+            return base.none()
+        return base.filter(year_level_id=student.year_level_id)
+    return base
+
+
+def other_subjects_available_for_student(student: User | None = None):
+    """Program exam subjects outside the student's year level (optional add-ons)."""
+    base = _program_exam_subject_base()
+    if student is None or not student.year_level_id:
+        return base.none()
+    return base.exclude(year_level_id=student.year_level_id)
+
 def program_has_approved_questions() -> bool:
     return Question.objects.filter(
         topic__subject__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        status=Question.Status.APPROVED,
+        is_active=True,
+    ).exists()
+
+
+def year_has_approved_questions(student: User) -> bool:
+    """Whether approved questions exist for the student's year-scoped subjects."""
+    subject_ids = list(
+        subjects_available_for_student(student).values_list("pk", flat=True)
+    )
+    if not subject_ids:
+        return False
+    return Question.objects.filter(
+        topic__subject_id__in=subject_ids,
         status=Question.Status.APPROVED,
         is_active=True,
     ).exists()
@@ -315,7 +372,10 @@ def build_multi_subject_exam_target(
 
     subject_list = list(subjects)
     if len(subject_list) < MIN_EXAM_SUBJECTS:
-        raise ValueError(f"Select at least {MIN_EXAM_SUBJECTS} courses.")
+        raise ValueError(
+            f"At least {MIN_EXAM_SUBJECTS} course subject(s) must be available "
+            "for your year level."
+        )
 
     types = list(question_types or [])
     type_labels: list[str] = []
@@ -340,11 +400,11 @@ def build_multi_subject_exam_target(
         if type_label:
             raise ValueError(
                 f"No approved {type_label} questions at this difficulty for: {codes}. "
-                "Pick other courses, another difficulty, or other question types."
+                "Try another difficulty or other question types."
             )
         raise ValueError(
             f"No approved questions at this difficulty for: {codes}. "
-            "Pick other courses or another difficulty."
+            "Try another difficulty."
         )
 
     avail = [
@@ -393,7 +453,9 @@ def build_multi_subject_exam_target(
                 primary_topic = target["topic"]
 
     if not queue:
-        raise ValueError("No approved questions available for the selected courses.")
+        raise ValueError(
+            "No approved questions available for your year-level course subjects."
+        )
 
     random.shuffle(queue)
 
@@ -405,7 +467,7 @@ def build_multi_subject_exam_target(
     if primary_topic is None:
         primary_topic = topics_for_open_subject(first_subject).first()
     if primary_topic is None:
-        raise ValueError("Selected courses have no topics yet.")
+        raise ValueError("Your year-level course subjects have no topics yet.")
 
     return {
         "topic": primary_topic,

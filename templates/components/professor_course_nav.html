@@ -2,6 +2,8 @@
 <nav class="flex flex-wrap gap-2 mb-6" aria-label="Course navigation">
     <a href="{% url 'analytics_professor:question_list' course.pk %}"
        class="course-nav-link {% if active_tab == 'questions' %}course-nav-link-active{% endif %}">Saved Questions</a>
+    <a href="{% url 'analytics_professor:material_list' course.pk %}"
+       class="course-nav-link {% if active_tab == 'materials' %}course-nav-link-active{% endif %}">Learning materials</a>
     <a href="{% url 'analytics_professor:course_heatmap' course.pk %}"
        class="course-nav-link {% if active_tab == 'heatmap' or active_tab == 'overview' %}course-nav-link-active{% endif %}">Overview</a>
 </nav>

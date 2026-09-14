@@ -75,7 +75,9 @@ class QuestionListView(ProfessorCourseMixin, ListView):
     def get_queryset(self):
 
         course_subject = _subject_for_course(self.course)
-        queryset = Question.objects.select_related("topic", "topic__subject").annotate(
+        queryset = Question.objects.select_related(
+            "topic", "topic__subject", "validated_by"
+        ).annotate(
             mistake_count=Count("mistake_records")
         )
         if course_subject:
@@ -230,10 +232,23 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         self.object = form.save(commit=False)
         self.object.question_type = qtype
-        self.object.status = Question.Status.APPROVED
+        self.object.status = Question.Status.DRAFT
         self.object.proposed_by = self.request.user
+        self.object.explanation_status = "draft"
+        self.object.is_active = False
         if qtype != Question.QuestionType.MCQ:
             self.object.correct_answer = None
+
+        subject = _subject_for_course(self.course)
+        if subject is not None:
+            from apps.questions.services import assert_subject_bank_has_capacity
+
+            try:
+                assert_subject_bank_has_capacity(subject, additional=1)
+            except ValueError as exc:
+                messages.error(self.request, str(exc))
+                return self.form_invalid(form)
+
         self.object.save()
 
         if qtype == Question.QuestionType.MCQ:
@@ -244,6 +259,20 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         from apps.core.audit import log_audit_event
         from apps.core.models import AuditLog
+        from apps.questions.services import publish_question_as_faculty
+
+        if self.request.POST.get("faculty_attest") == "1":
+            publish_question_as_faculty(
+                self.object,
+                self.request.user,
+                approve_explanations=self.request.POST.get("approve_explanations") == "1",
+            )
+            messages.success(self.request, "Question attested and published for students.")
+        else:
+            messages.success(
+                self.request,
+                "Question saved as draft. Publish after faculty attestation when ready.",
+            )
 
         log_audit_event(
             self.request.user,
@@ -252,8 +281,6 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
             target_type="Question",
             target_id=self.object.pk,
         )
-
-        messages.success(self.request, "Question saved and published.")
 
         return redirect(self.get_success_url())
 
@@ -333,6 +360,7 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
         from apps.core.audit import log_audit_event
         from apps.core.models import AuditLog
+        from apps.questions.services import publish_question_as_faculty
 
         log_audit_event(
             self.request.user,
@@ -342,7 +370,23 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
             target_id=self.object.pk,
         )
 
-        messages.success(self.request, "Question updated.")
+        if self.request.POST.get("faculty_attest") == "1":
+            publish_question_as_faculty(
+                self.object,
+                self.request.user,
+                approve_explanations=self.request.POST.get("approve_explanations") == "1",
+            )
+            messages.success(self.request, "Question updated and published after faculty attestation.")
+        elif (
+            self.object.status == Question.Status.APPROVED
+            and self.request.POST.get("approve_explanations") == "1"
+        ):
+            from apps.questions.services import approve_question_explanations
+
+            approve_question_explanations(self.object, self.request.user)
+            messages.success(self.request, "Question updated; explanations approved.")
+        else:
+            messages.success(self.request, "Question updated.")
 
         return redirect(self.get_success_url())
 
@@ -388,36 +432,46 @@ class QuestionDeleteView(ProfessorCourseMixin, DeleteView):
 
 
 class QuestionToggleActiveView(ProfessorCourseMixin, View):
-    """Toggle question is_active without a confirmation page."""
-
     def post(self, request, course_pk, question_pk):
         question = get_object_or_404(
-            Question,
+            Question.objects.select_related("topic__subject"),
             pk=question_pk,
-            topic__subject__program=self.course.program,
+            topic__subject=_subject_for_course(self.course),
         )
-        was_active = question.is_active
-        if was_active:
+        if question.is_active:
             deactivate_question(question)
             messages.success(request, "Question deactivated.")
         else:
             activate_question(question)
-            messages.success(request, "Question reactivated.")
-        from apps.core.audit import log_audit_event
-        from apps.core.models import AuditLog
+            messages.success(request, "Question activated.")
+        return redirect("analytics_professor:question_list", course_pk=course_pk)
 
-        log_audit_event(
+
+class QuestionPublishView(ProfessorCourseMixin, View):
+    """Faculty expert attestation: publish a draft question for students."""
+
+    def post(self, request, course_pk, question_pk):
+        from apps.questions.services import publish_question_as_faculty
+
+        subject = _subject_for_course(self.course)
+        question = get_object_or_404(
+            Question.objects.select_related("topic__subject"),
+            pk=question_pk,
+            topic__subject=subject,
+        )
+        if request.POST.get("faculty_attest") != "1":
+            messages.error(
+                request,
+                "Confirm faculty attestation before publishing this question.",
+            )
+            return redirect("analytics_professor:question_edit", course_pk=course_pk, question_pk=question_pk)
+        publish_question_as_faculty(
+            question,
             request.user,
-            AuditLog.Action.QUESTION_TOGGLE,
-            message=f"{'Deactivated' if was_active else 'Reactivated'} question #{question.pk}",
-            target_type="Question",
-            target_id=question.pk,
+            approve_explanations=request.POST.get("approve_explanations") == "1",
         )
-        return redirect_preserving_filters(
-            request,
-            "analytics_professor:question_list",
-            course_pk=self.course.pk,
-        )
+        messages.success(request, "Question published after faculty attestation.")
+        return redirect("analytics_professor:question_list", course_pk=course_pk)
 
 
 class QuestionSuggestDifficultyView(ProfessorCourseMixin, View):
@@ -475,14 +529,20 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
     template_name = "professor/questions/batch_form.html"
 
     def get_context_data(self):
+        from apps.ai.material_services import ready_documents_for_course
+        from apps.questions.services import subject_bank_slots_remaining
+
         topics = topics_for_course_section(self.course, self.request.user)
         subject = _subject_for_course(self.course)
+        bank_slots = subject_bank_slots_remaining(subject) if subject else None
         return {
             "course": self.course,
             "active_tab": "questions",
             "form_title": "Add Questions",
             "topics": topics,
             "course_subject": subject,
+            "learning_documents": ready_documents_for_course(self.course.pk),
+            "bank_slots_remaining": bank_slots,
             "difficulty_choices": [
                 (Question.Difficulty.EASY, "Beginner"),
                 (Question.Difficulty.MEDIUM, "Intermediate"),
@@ -517,11 +577,32 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
         except (TypeError, ValueError):
             count = 0
 
+        subject = _subject_for_course(self.course)
         created = 0
         skipped_invalid = 0
         skipped_duplicates: list[str] = []
         seen_stems: set[str] = set()
         explanation_question_ids: list[int] = []
+        published_ids: list[int] = []
+
+        from apps.questions.services import (
+            assert_subject_bank_has_capacity,
+            publish_question_as_faculty,
+            subject_bank_slots_remaining,
+        )
+
+        if subject is not None:
+            try:
+                # Pre-check remaining slots (actual creates may be fewer after validation).
+                remaining = subject_bank_slots_remaining(subject)
+                if remaining <= 0:
+                    messages.error(
+                        request,
+                        "This subject has reached the 100-question bank limit.",
+                    )
+                    return render(request, self.template_name, self.get_context_data())
+            except Exception:
+                pass
 
         valid_difficulties = {c.value for c in Question.Difficulty}
         valid_types = {
@@ -593,6 +674,10 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
             steps_raw = request.POST.get(f"steps_{index}", "")
             solution_summary = request.POST.get(f"solution_summary_{index}", "")
+            faculty_attest = request.POST.get(f"faculty_attest_{index}") == "1"
+            approve_explanations = (
+                request.POST.get(f"approve_explanations_{index}") == "1"
+            )
             # AI drafts defer explanations to a background job; do not invent
             # steps from concept_tag alone.
             if skip_ai_gate and not steps_raw.strip() and not solution_summary.strip():
@@ -614,16 +699,31 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     if question_type != Question.QuestionType.MCQ
                     else ""
                 ),
-                "is_active": True,
-                "status": Question.Status.APPROVED,
+                "is_active": faculty_attest,
+                "status": Question.Status.DRAFT,
                 "proposed_by": request.user,
+                "explanation_status": "draft",
             }
+
+            if subject is not None:
+                try:
+                    assert_subject_bank_has_capacity(subject, additional=1)
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    break
 
             question = create_question(
                 question_payload,
                 choices_data if question_type == Question.QuestionType.MCQ else [],
                 steps,
             )
+            if faculty_attest:
+                publish_question_as_faculty(
+                    question,
+                    request.user,
+                    approve_explanations=approve_explanations or bool(steps),
+                )
+                published_ids.append(question.pk)
             if skip_ai_gate and not steps:
                 explanation_question_ids.append(question.pk)
             # ai_generated flag is client-side only (skip_ai_gate used at validate time)
@@ -668,9 +768,15 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     request,
                     f"Saved {created} question(s). Explanations are generating in the background.",
                 )
+            elif published_ids:
+                messages.success(
+                    request,
+                    f"Published {len(published_ids)} question(s) after faculty attestation.",
+                )
             else:
                 messages.success(
-                    request, f"Saved {created} question(s) to the question bank."
+                    request,
+                    f"Saved {created} draft question(s). Attest and publish when ready for students.",
                 )
             return redirect(
                 "analytics_professor:question_list", course_pk=self.course.pk
@@ -819,6 +925,8 @@ class QuestionAddHubView(ProfessorRequiredMixin, View):
                 ],
                 "course_options": course_options,
                 "selected_course_pk": None,
+                "learning_documents": [],
+                "bank_slots_remaining": None,
                 "ai_provider_label": get_ai_provider_label(),
             },
         )
@@ -828,7 +936,6 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
     """Enqueue AI question generation and return a job id for polling."""
 
     def post(self, request, course_pk):
-        from apps.ai.ingest import ingest_learning_upload
         from apps.ai.job_services import start_question_generation_job
         from apps.ai.retrieval import (
             retrieve_material_for_topic,
@@ -843,7 +950,10 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             count = int(request.POST.get("count") or 3)
         except (TypeError, ValueError):
             count = 3
-        count = max(1, min(count, 20))
+        from django.conf import settings as django_settings
+
+        max_count = getattr(django_settings, "AI_GENERATION_MAX_COUNT", 50)
+        count = max(1, min(count, max_count))
 
         subject = _subject_for_course(self.course)
         if not subject:
@@ -863,21 +973,41 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             )
 
         uploaded = request.FILES.get("source_file")
-        if not uploaded:
+        library_id = request.POST.get("learning_document_id") or request.POST.get("material")
+        document = None
+        if library_id:
+            from apps.ai.models import LearningDocument
+
+            document = LearningDocument.objects.filter(
+                pk=library_id,
+                course_id=self.course.pk,
+                status=LearningDocument.Status.READY,
+                is_archived=False,
+            ).first()
+            if document is None:
+                return JsonResponse(
+                    {"error": "Selected learning material was not found or is not ready."},
+                    status=400,
+                )
+        elif uploaded:
+            try:
+                from apps.ai.material_services import ingest_course_material
+
+                document = ingest_course_material(
+                    uploaded_file=uploaded,
+                    course_id=self.course.pk,
+                    user=request.user,
+                    subject=subject,
+                )
+            except SourceMaterialError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+        else:
             return JsonResponse(
                 {
-                    "error": "Upload a module or learning material file to generate questions."
+                    "error": "Upload a module or pick a saved learning material to generate questions."
                 },
                 status=400,
             )
-        try:
-            document = ingest_learning_upload(
-                uploaded_file=uploaded,
-                course_id=self.course.pk,
-                user=request.user,
-            )
-        except SourceMaterialError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
 
         sample = sample_material_for_relevance(document)
         relevance = assess_subject_relevance(sample, subject, topics)

@@ -6,7 +6,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Exam Setup" subtitle="Choose course subjects for student exams and set the per-question timer for each." %}
 
-<form method="post" class="exam-setup-form space-y-6" id="program-exam-setup-form">
+<form method="post" class="exam-setup-form program-exam-setup space-y-6" id="program-exam-setup-form">
     {% csrf_token %}
 
     <section class="bento-card p-6">

@@ -1,0 +1,13 @@
+{% if session_summary.calibration_rows %}
+<div class="calibration-matrix" role="group" aria-label="Confidence versus accuracy">
+    <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-3">Confidence × accuracy</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {% for row in session_summary.calibration_rows %}
+        <div class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between gap-2">
+            <span class="text-sm text-examiq-navy">{{ row.label }}</span>
+            <span class="text-sm font-semibold text-examiq-navy">{{ row.count }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

@@ -7,8 +7,10 @@ from django.utils import timezone
 
 from apps.ai.helpers import calibration_narrative_from_matrix
 from apps.analytics.confidence import (
+    STUDENT_CLASSIFICATION_LABELS,
     avg_confidence_scale_label,
     confidence_accuracy_matrix,
+    confidence_from_time_spent,
     confidence_tier_matrix,
 )
 from apps.analytics.models import MistakeRecord
@@ -25,6 +27,11 @@ def build_session_summary(session: ReviewSession) -> dict:
     avg_confidence = answers.aggregate(avg=Avg("confidence"))["avg"] or 0
     accuracy = session.accuracy
     calibration_gap = round(avg_confidence * 20 - accuracy, 1) if total else 0
+    seconds_per_question = session.seconds_per_question or 30
+    time_confidences = [
+        confidence_from_time_spent(time_spent or 0, seconds_per_question)
+        for time_spent in answers.values_list("time_spent_seconds", flat=True)
+    ]
 
     matrix = confidence_accuracy_matrix(answers)
     tier_matrix = confidence_tier_matrix(answers)
@@ -38,6 +45,14 @@ def build_session_summary(session: ReviewSession) -> dict:
         .annotate(mistake_count=Count("id"))
         .order_by("-mistake_count")[:3]
     )
+    calibration_rows = [
+        {
+            "key": key,
+            "label": label,
+            "count": matrix.get(key, 0),
+        }
+        for key, label in STUDENT_CLASSIFICATION_LABELS.items()
+    ]
 
     from apps.analytics.services import session_question_trends
 
@@ -47,8 +62,10 @@ def build_session_summary(session: ReviewSession) -> dict:
         "accuracy": accuracy,
         "avg_confidence": round(avg_confidence, 1),
         "avg_confidence_label": avg_confidence_scale_label(answer_confidences),
+        "avg_time_confidence_label": avg_confidence_scale_label(time_confidences),
         "calibration_gap": calibration_gap,
         "calibration_matrix": matrix,
+        "calibration_rows": calibration_rows,
         "calibration_tier_matrix": tier_matrix,
         "calibration_tier_max": tier_max,
         "narrative": calibration_narrative_from_matrix(matrix, session_mistakes),

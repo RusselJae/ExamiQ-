@@ -1,0 +1,101 @@
+{# Shared learning-materials library (faculty + student). #}
+<section class="materials-library bento-card" data-materials-library aria-labelledby="materials-library-title">
+    <div class="materials-library__toolbar">
+        <div class="materials-library__heading">
+            <h2 id="materials-library-title" class="materials-library__title">Library</h2>
+            <span class="materials-library__count" data-library-count>{{ library_count }} item{{ library_count|pluralize }}</span>
+        </div>
+        <div class="materials-library__controls">
+            <label class="sr-only" for="materials-library-search">Search library</label>
+            <input type="search"
+                   id="materials-library-search"
+                   class="materials-library__search"
+                   placeholder="Search library…"
+                   autocomplete="off"
+                   data-library-search>
+            <div class="materials-library__filters" role="group" aria-label="Filter by type">
+                <button type="button" class="materials-filter-chip is-active" data-library-filter="">All</button>
+                {% for value, label in material_types %}
+                <button type="button" class="materials-filter-chip" data-library-filter="{{ value }}">{{ label }}</button>
+                {% endfor %}
+            </div>
+            {% if faculty_mode %}
+            <label class="materials-library__archived">
+                {% if include_archived %}
+                <a href="?" class="materials-library__archived-link">Hide archived</a>
+                {% else %}
+                <a href="?archived=1" class="materials-library__archived-link">Show archived</a>
+                {% endif %}
+            </label>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if documents %}
+    <ul class="materials-library__list" data-library-list>
+        {% for doc in documents %}
+        <li class="materials-library__item{% if doc.is_archived %} materials-library__item--archived{% endif %}"
+            data-library-item
+            data-title="{{ doc.display_title|lower }}"
+            data-type="{{ doc.material_type }}"
+            data-status="{{ doc.status }}">
+            <div class="materials-library__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                </svg>
+            </div>
+            <div class="materials-library__body">
+                <div class="materials-library__meta-row">
+                    <span class="materials-status materials-status--{{ doc.status }}">{{ doc.get_status_display }}</span>
+                    {% if doc.is_archived %}
+                    <span class="materials-status materials-status--archived">Archived</span>
+                    {% endif %}
+                </div>
+                {% if faculty_mode and course %}
+                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}" class="materials-library__name">
+                    {{ doc.display_title }}
+                </a>
+                {% else %}
+                <p class="materials-library__name">{{ doc.display_title }}</p>
+                {% endif %}
+                <p class="materials-library__meta">
+                    <span>{{ doc.get_material_type_display }}</span>
+                    <span aria-hidden="true">·</span>
+                    {# Prefer original filename so multi-page PDFs read as full files #}
+                    <span>{{ doc.original_name|default:doc.display_title }}</span>
+                    {% if doc.page_count %}
+                    <span aria-hidden="true">·</span>
+                    <span>{{ doc.page_count }} page{{ doc.page_count|pluralize }} extracted</span>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="materials-library__actions">
+                {% if faculty_mode and course %}
+                <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
+                   class="materials-download-btn">Download</a>
+                {# Archive / restore inline — archived files stay hidden from students #}
+                <form method="post"
+                      action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
+                      class="materials-archive-form">
+                    {% csrf_token %}
+                    {% if doc.is_archived %}
+                    <input type="hidden" name="action" value="restore">
+                    <button type="submit" class="materials-archive-btn materials-archive-btn--restore">Restore</button>
+                    {% else %}
+                    <input type="hidden" name="action" value="archive">
+                    <button type="submit" class="materials-archive-btn">Archive</button>
+                    {% endif %}
+                </form>
+                {% elif download_url_name and subject %}
+                <a href="{% url download_url_name subject.pk doc.pk %}"
+                   class="materials-download-btn">Download</a>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="materials-library__empty-filter hidden" data-library-empty-filter>No materials match your filters.</p>
+    {% else %}
+    <p class="materials-library__empty">No learning materials yet{% if faculty_mode %}. Upload a module to get started{% endif %}.</p>
+    {% endif %}
+</section>

@@ -170,9 +170,12 @@ def _extract_pdf_pages(raw: bytes) -> list[dict]:
         # to the raw printable-byte scan as a last resort.
         ocr_page = _build_ocr_function()
         if ocr_page is not None:
+            # OCR every real page (capped), not a fixed 1-page stub
+            total_pages = _pdf_page_count(raw) or MAX_OCR_PAGES
+            limit = min(total_pages, MAX_OCR_PAGES)
             pages = []
             extracted_chars = 0
-            for index in range(1, MAX_OCR_PAGES + 1):
+            for index in range(1, limit + 1):
                 try:
                     text = (ocr_page(raw, index) or "").strip()
                 except Exception as exc:
@@ -183,6 +186,7 @@ def _extract_pdf_pages(raw: bytes) -> list[dict]:
             if extracted_chars >= 40:
                 return pages
 
+        # Last resort for AI text only — original multi-page file stays intact
         chunks = re.findall(rb"[\x20-\x7E]{6,}", raw)
         text = " ".join(c.decode("latin-1", errors="ignore") for c in chunks)
         return [{"page": 1, "text": text}]
@@ -206,6 +210,29 @@ def _extract_pdf_pages(raw: bytes) -> list[dict]:
                 logger.warning("OCR failed for PDF page %s: %s", index, exc)
         pages.append({"page": index, "text": text})
     return pages
+
+
+def _pdf_page_count(raw: bytes) -> int | None:
+    """Return PDF page count when a reader is available."""
+    try:
+        from pypdf import PdfReader
+
+        return len(PdfReader(io.BytesIO(raw)).pages)
+    except Exception:
+        pass
+    try:
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz
+
+        doc = fitz.open(stream=raw, filetype="pdf")
+        try:
+            return len(doc)
+        finally:
+            doc.close()
+    except Exception:
+        return None
 
 
 def _extract_pdf_text_pages(raw: bytes) -> list[str] | None:

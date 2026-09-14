@@ -38,6 +38,7 @@ def start_question_generation_job(
     question_type: str = "mcq",
 ) -> AIGenerationJob:
     qtype = coerce_generate_question_type(question_type)
+    max_count = getattr(settings, "AI_GENERATION_MAX_COUNT", 50)
     job = AIGenerationJob.objects.create(
         job_type=AIGenerationJob.JobType.QUESTION_GENERATE,
         status=AIGenerationJob.Status.PENDING,
@@ -45,7 +46,7 @@ def start_question_generation_job(
         course_id=course_id,
         topic_id=topic_id,
         difficulty=difficulty,
-        count=max(1, min(count, 20)),
+        count=max(1, min(count, max_count)),
         question_type=qtype,
         source_material=source_material or "",
         learning_document=learning_document,

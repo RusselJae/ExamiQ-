@@ -4,6 +4,7 @@ from apps.questions.models import Question, Subject
 from apps.reviews.exam_setup_services import (
     MIN_EXAM_SUBJECTS,
     build_multi_subject_exam_target,
+    other_subjects_available_for_student,
     student_setup_eligibility,
     subjects_available_for_student,
 )
@@ -40,23 +41,25 @@ SESSION_GOAL_CHOICES = [
 
 
 class ReviewSetupForm(forms.Form):
-    """Student picks course subjects + difficulty, then pre-exam wizard."""
+    """Year-level subjects by default; optional extra subjects from other years."""
 
-    subjects = forms.ModelMultipleChoiceField(
+    extra_subjects = forms.ModelMultipleChoiceField(
         queryset=Subject.objects.none(),
-        label="Course subject",
+        required=False,
+        label="Other course subjects",
         widget=forms.SelectMultiple(
             attrs={
                 "class": FORM_MULTISELECT_CLASS,
-                "id": "id_setup_subjects",
+                "id": "id_setup_extra_subjects",
                 "size": "8",
             }
         ),
-        help_text=f"Hold Ctrl/Cmd to select at least {MIN_EXAM_SUBJECTS} course subjects.",
+        help_text="Optional. Leave empty to use only your year-level course subjects.",
     )
     difficulty = forms.ChoiceField(
         choices=PILOT_DIFFICULTY_CHOICES,
         label="Difficulty",
+        initial=Question.Difficulty.EASY,
         widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}),
     )
     question_type = forms.MultipleChoiceField(
@@ -87,14 +90,24 @@ class ReviewSetupForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.student = student
         self._exam_target = None
-        qs = subjects_available_for_student(student)
-        self.fields["subjects"].queryset = qs
-        self.fields["subjects"].label_from_instance = (
-            lambda obj: f"{obj.code} — {obj.name}"
+        self.year_subjects = list(subjects_available_for_student(student))
+        self.other_subjects = list(other_subjects_available_for_student(student))
+        self.preselected_subject = preselected_subject
+
+        other_qs = other_subjects_available_for_student(student)
+        self.fields["extra_subjects"].queryset = other_qs
+        self.fields["extra_subjects"].label_from_instance = (
+            lambda obj: f"{obj.code} — {obj.name} ({obj.year_level.name})"
         )
-        if preselected_subject is not None and qs.filter(pk=preselected_subject.pk).exists():
-            self.fields["subjects"].initial = [preselected_subject.pk]
-            self.initial["subjects"] = [preselected_subject.pk]
+        if not other_qs.exists():
+            self.fields["extra_subjects"].disabled = True
+
+        # Student Start Exam omits Numeric Answer (professor generate may still use it).
+        self.fields["question_type"].choices = [
+            choice
+            for choice in Question.QuestionType.choices
+            if choice[0] != Question.QuestionType.NUMERIC
+        ]
 
     def clean(self):
         cleaned = super().clean()
@@ -105,21 +118,51 @@ class ReviewSetupForm(forms.Form):
         if not eligibility.get("eligible"):
             raise forms.ValidationError(eligibility["message"])
 
-        subjects = cleaned.get("subjects")
         difficulty = cleaned.get("difficulty")
-        question_types = list(cleaned.get("question_type") or [])
+        question_types = [
+            qt
+            for qt in list(cleaned.get("question_type") or [])
+            if qt != Question.QuestionType.NUMERIC
+        ]
         if Question.QuestionType.MCQ not in question_types:
             question_types.insert(0, Question.QuestionType.MCQ)
         cleaned["question_type"] = question_types
-        if not subjects or not difficulty:
+        if not difficulty:
             return cleaned
         if not question_types:
             self.add_error("question_type", "Select at least one question type.")
             return cleaned
 
-        if subjects.count() < MIN_EXAM_SUBJECTS:
+        from apps.questions.services import count_available_questions_for_subject
+
+        # Default: year-level subjects. Optional extras merge in when chosen.
+        selected = list(self.year_subjects)
+        extra = list(cleaned.get("extra_subjects") or [])
+        seen_ids = {s.pk for s in selected}
+        for subject in extra:
+            if subject.pk not in seen_ids:
+                selected.append(subject)
+                seen_ids.add(subject.pk)
+
+        subjects = [
+            subject
+            for subject in selected
+            if count_available_questions_for_subject(
+                subject, difficulty, question_types=question_types
+            )
+            >= 1
+        ]
+        cleaned["subjects"] = subjects
+
+        if len(subjects) < MIN_EXAM_SUBJECTS:
+            if extra:
+                raise forms.ValidationError(
+                    "No approved questions are available for the selected course "
+                    "subjects at this difficulty and question type."
+                )
             raise forms.ValidationError(
-                f"Select at least {MIN_EXAM_SUBJECTS} course subjects before starting."
+                "No approved questions are available for your year-level course "
+                "subjects at this difficulty and question type."
             )
 
         try:

@@ -53,7 +53,9 @@ class TestQuestionPartialView:
         content = response.content.decode()
         assert response.status_code == 200
         assert "High" in content
-        assert "Average Confidence" in content
+        assert "Confidence (time)" in content
+        assert "Confidence (answers)" in content
+        assert "Incorrect answers" not in content
 
     def test_non_htmx_redirects_to_session(self, client, student, topic, mcq_question):
         session = start_review_session(
@@ -169,10 +171,14 @@ class TestReviewSetupPage:
         response = client.get(reverse("reviews:setup"))
         content = response.content.decode()
         assert response.status_code == 200
-        assert "id_setup_subjects" in content
+        assert "id_setup_subjects" not in content
+        assert "Course subjects for your year" in content
         assert "id_setup_difficulty" in content
         assert "id_setup_question_type" in content
-        assert "data-search" in content
+        assert "How this works" in content
+        assert "up to 100 total" in content
+        assert "Numeric Answer" not in content
+        assert "exam-setup-summary" in content
         assert "pre-exam-step-goal" in content
         assert "pre-exam-step-warmup" not in content
         assert "review_window" not in content
@@ -181,7 +187,7 @@ class TestReviewSetupPage:
 
 @pytest.mark.django_db
 class TestReviewSetupPrefill:
-    def test_setup_shows_course_choices(
+    def test_setup_shows_year_course_subjects(
         self, client, student, topic, mcq_question, bsed_program
     ):
         from conftest import make_bsed_student
@@ -195,82 +201,12 @@ class TestReviewSetupPrefill:
         assert response.status_code == 200
         content = response.content.decode()
         assert topic.subject.code in content
-        assert "id_setup_subjects" in content
+        assert "id_setup_subjects" not in content
+        assert "Course subjects for your year" in content
+        assert "exam-subject-card" in content
         assert "id_setup_difficulty" in content
 
-    def test_setup_preselects_subject_from_query_param(
-        self, client, student, topic, mcq_question, bsed_program
-    ):
-        from conftest import make_bsed_student
-
-        make_bsed_student(
-            student, subject=topic.subject, bsed_program=bsed_program
-        )
-
-        client.force_login(student)
-        url = reverse("reviews:setup") + f"?subject={topic.subject_id}"
-        response = client.get(url)
-        assert response.status_code == 200
-        form = response.context["form"]
-        assert topic.subject_id in (form.fields["subjects"].initial or [])
-        content = response.content.decode()
-        import re
-
-        options = re.findall(
-            rf'<option[^>]*value="{topic.subject_id}"[^>]*>',
-            content,
-        )
-        assert options and "selected" in options[0]
-
-    def test_setup_preselects_subject_from_topic_param(
-        self, client, student, topic, mcq_question, bsed_program
-    ):
-        from conftest import make_bsed_student
-
-        make_bsed_student(
-            student, subject=topic.subject, bsed_program=bsed_program
-        )
-
-        client.force_login(student)
-        url = reverse("reviews:setup") + f"?topic={topic.pk}"
-        response = client.get(url)
-        assert response.status_code == 200
-        form = response.context["form"]
-        assert topic.subject_id in (form.fields["subjects"].initial or [])
-        content = response.content.decode()
-        import re
-
-        options = re.findall(
-            rf'<option[^>]*value="{topic.subject_id}"[^>]*>',
-            content,
-        )
-        assert options and "selected" in options[0]
-
-    def test_setup_ignores_unavailable_subject(
-        self, client, student, topic, mcq_question, bsed_program, year_level
-    ):
-        from apps.questions.models import Subject
-        from conftest import make_bsed_student
-
-        make_bsed_student(
-            student, subject=topic.subject, bsed_program=bsed_program
-        )
-        other = Subject.objects.create(
-            program=bsed_program,
-            code="OUT-99",
-            name="Unavailable",
-            year_level=year_level,
-            semester=1,
-        )
-
-        client.force_login(student)
-        url = reverse("reviews:setup") + f"?subject={other.pk}"
-        response = client.get(url)
-        assert response.status_code == 200
-        content = response.content.decode()
-        assert f'value="{other.pk}" selected' not in content.replace(" ", "")
-
-    def test_setup_lists_subjects_across_years(
+    def test_setup_lists_only_student_year_subjects(
         self, client, student, year_level, bsed_program, mcq_question, subject
     ):
         from apps.questions.models import Subject, Topic
@@ -293,8 +229,13 @@ class TestReviewSetupPrefill:
         response = client.get(reverse("reviews:setup"))
         assert response.status_code == 200
         content = response.content.decode()
+        assert subject.code in content
+        assert "Add subjects from other years" in content
         assert "OTH-101" in content
-
+        year_subjects = response.context["year_subjects"]
+        assert all(s.year_level_id == student.year_level_id for s in year_subjects)
+        other_subjects = response.context["other_subjects"]
+        assert any(s.code == "OTH-101" for s in other_subjects)
 
 @pytest.mark.django_db
 class TestSessionSummaryView:
@@ -325,6 +266,9 @@ class TestSessionSummaryView:
         assert response.status_code == 200
         assert "session-summary-score" in content or "exam-score-ring" in content
         assert "session-insight-bubble" in content
+        assert "Confidence (time)" in content
+        assert "Confidence (answers)" in content
+        assert "Incorrect answers" not in content
         assert "Confidence gap" not in content
         assert "session-strip-grid" in content
         assert "ai-tutor-modal" in content

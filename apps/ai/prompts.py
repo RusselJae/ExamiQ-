@@ -511,9 +511,20 @@ def build_question_generation_prompt(
             "Do NOT place the correct answer on the same letter for every question.\n"
         )
 
+    year_level = getattr(subject, "year_level", None)
+    year_label = year_level.name if year_level else "unspecified"
+    year_order = year_level.order if year_level else ""
+    year_hint = (
+        f"Year level: {year_label}"
+        + (f" (year {year_order})" if year_order != "" else "")
+        + ". Match college-level BSEd Mathematics expectations for this year — "
+        "not high school review and not graduate-level depth.\n"
+    )
+
     user_prompt = (
         f"Generate exactly {count} {type_label} questions.\n"
         f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
+        f"{year_hint}"
         f"Difficulty: {label} ({difficulty})\n"
         f"Question type: {qtype}\n"
         f"{guidance}\n"

@@ -1,0 +1,47 @@
+{% if action_plan %}
+<div class="bento-card p-5 border border-amber-200 bg-amber-50/40 space-y-3" id="retake-action-plan">
+    <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-amber-800">Action plan required</p>
+        <h3 class="text-lg font-semibold text-examiq-navy mt-1">Review before another attempt</h3>
+        <p class="text-sm text-examiq-slate mt-1">
+            You’ve completed {{ action_plan.attempt_count }} attempts. Finish this plan, then confirm to unlock another exam.
+        </p>
+    </div>
+    {% if action_plan.payload.actions %}
+    <ul class="list-disc list-inside text-sm text-examiq-navy space-y-1">
+        {% for item in action_plan.payload.actions %}
+        <li>{{ item }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if action_plan.payload.materials %}
+    <div>
+        <p class="text-xs font-semibold uppercase text-examiq-slate mb-1">Related materials</p>
+        <ul class="text-sm text-examiq-navy space-y-1">
+            {% for doc in action_plan.payload.materials %}
+            <li>{{ doc.title }} <span class="text-examiq-slate">({{ doc.material_type }})</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% if action_plan.payload.repeated_mistakes %}
+    <div>
+        <p class="text-xs font-semibold uppercase text-examiq-slate mb-1">Repeated misses</p>
+        <ul class="text-sm text-examiq-navy space-y-1">
+            {% for row in action_plan.payload.repeated_mistakes %}
+            <li>{{ row.topic_name }} — {{ row.times }}×</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+        <a href="{% url 'reviews:summary' session.pk %}?open_tutor=1" class="btn-secondary btn-primary-sm">AI Tutor</a>
+        {% if acknowledge_url %}
+        <form method="post" action="{{ acknowledge_url }}">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary btn-primary-sm">I’ve completed this review</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

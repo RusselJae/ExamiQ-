@@ -11,6 +11,10 @@
         <span class="text-xs text-examiq-slate">{{ answer.answered_at|date:"M d, Y g:i A" }}</span>
     </div>
 
+    <div class="mb-3">
+        {% include "components/validation_source_badge.html" with question=answer.question %}
+    </div>
+
     <p class="text-examiq-navy font-medium mb-4">{{ answer.question.stem|linebreaks }}</p>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
@@ -64,6 +68,7 @@
         <div class="feedback-card__body rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
             <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Why you missed it</p>
             <div class="feedback-step-list text-sm text-examiq-navy leading-relaxed whitespace-pre-line">{{ answer.mistake_record.ai_feedback|plain_feedback }}</div>
+            {% include "components/ai_feedback_disclaimer.html" %}
         </div>
         {% elif answer.mistake_record %}
         <button type="button"
@@ -72,12 +77,13 @@
                 data-answer-id="{{ answer.pk }}">
             Generate feedback
         </button>
+        {% include "components/ai_feedback_disclaimer.html" %}
         {% endif %}
     </div>
     {% endif %}
 
     {% with steps=answer.question.explanation_steps.all %}
-    {% if steps %}
+    {% if answer.question.explanation_status == "faculty_approved" and steps %}
     <div class="mt-4 rounded-xl bg-examiq-bg border border-slate-100 p-4">
         <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-2">Step-by-step solution</p>
         <ol class="feedback-step-list space-y-2 list-decimal list-inside text-sm text-examiq-navy">
@@ -85,6 +91,10 @@
             <li class="leading-relaxed">{{ step.content }}</li>
             {% endfor %}
         </ol>
+    </div>
+    {% elif not answer.is_correct and steps %}
+    <div class="mt-4 rounded-xl bg-slate-50 border border-slate-100 p-4">
+        <p class="text-sm text-examiq-slate">Solution pending faculty review.</p>
     </div>
     {% endif %}
     {% endwith %}

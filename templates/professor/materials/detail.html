@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.display_title }} — Materials{% endblock %}
+
+{% block content %}
+<div class="materials-page materials-page--detail">
+    <div>
+        <a href="{% url 'analytics_professor:material_list' course.pk %}" class="materials-page__back">&larr; Back to materials</a>
+        <h1 class="materials-page__title">{{ document.display_title }}</h1>
+        <p class="materials-page__subtitle">{{ document.original_name }} · {{ document.get_status_display }} · {{ document.chunk_count }} chunks</p>
+    </div>
+
+    <div class="materials-detail-actions">
+        {% if document.file %}
+        <a href="{% url 'analytics_professor:material_download' course.pk document.pk %}" class="btn-primary btn-primary-sm">Download</a>
+        {% endif %}
+        {% if document.status == "ready" %}
+        <a href="{% url 'analytics_professor:question_create' course.pk %}?material={{ document.pk }}" class="btn-secondary btn-primary-sm">Use for AI Generate</a>
+        {% endif %}
+    </div>
+
+    <div class="bento-card p-5 space-y-4">
+        <form method="post" class="space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save">
+            <div>
+                <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1" for="title">Title</label>
+                <input id="title" name="title" value="{{ document.title }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1" for="material_type">Type</label>
+                <select id="material_type" name="material_type" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                    {% for value, label in material_types %}
+                    <option value="{{ value }}" {% if document.material_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn-primary btn-primary-sm">Save</button>
+        </form>
+        <form method="post" class="pt-2 border-t border-slate-100">
+            {% csrf_token %}
+            {% if document.is_archived %}
+            <input type="hidden" name="action" value="restore">
+            <button type="submit" class="btn-secondary btn-primary-sm">Restore</button>
+            {% else %}
+            <input type="hidden" name="action" value="archive">
+            <button type="submit" class="btn-outline btn-primary-sm">Archive</button>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if document.error_message %}
+    <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{{ document.error_message }}</div>
+    {% endif %}
+
+    <div class="bento-card p-5">
+        <h2 class="text-lg font-semibold text-examiq-navy mb-3">Text preview</h2>
+        {% if chunks_preview %}
+        <div class="space-y-3 text-sm text-examiq-slate">
+            {% for chunk in chunks_preview %}
+            <p class="leading-relaxed">{{ chunk.text|truncatechars:280 }}</p>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-examiq-slate">No extracted text available.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

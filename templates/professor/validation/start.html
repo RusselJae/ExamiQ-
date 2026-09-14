@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Validate questions — {{ course.code }}{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_header.html" with course=course page_label="Validate questions" %}
+{% include "components/professor_course_nav.html" with course=course active_tab="validation" %}
+
+<div class="max-w-xl mx-auto space-y-6">
+    <div>
+        <h1 class="text-2xl font-bold text-examiq-navy">Random question check</h1>
+        <p class="text-sm text-examiq-slate mt-1">Sample 10–20 published questions for a focused faculty review.</p>
+    </div>
+    {% if not subject %}
+    <p class="text-amber-800 text-sm">Link a subject to this course before starting validation.</p>
+    {% else %}
+    <form method="post" class="bento-card p-5 space-y-4">
+        {% csrf_token %}
+        <div>
+            <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1" for="topic">Topic (optional)</label>
+            <select id="topic" name="topic" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="">All topics in {{ subject.code }}</option>
+                {% for t in topics %}
+                <option value="{{ t.pk }}">{{ t.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1" for="size">Sample size (10–20)</label>
+            <input id="size" name="size" type="number" min="10" max="20" value="{{ default_size }}" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        </div>
+        <button type="submit" class="btn-primary btn-primary-sm">Start session</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

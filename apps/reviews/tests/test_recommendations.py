@@ -39,6 +39,9 @@ class TestRecommendations:
         assert summary["accuracy"] == 100.0
         assert "calibration_matrix" in summary
         assert summary["narrative"]
+        assert "avg_time_confidence_label" in summary
+        assert "avg_confidence_label" in summary
+        assert summary["avg_confidence_label"] == "High"
 
     def test_misconception_triggers_high_priority_recommendation(self, student, course, topic):
         session = start_review_session(

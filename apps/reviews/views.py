@@ -7,12 +7,13 @@ from django.views import View
 from django.views.generic import DetailView
 
 from apps.core.mixins import StudentRequiredMixin
-from apps.questions.models import Question, Subject, Topic
+from apps.questions.models import Question, Topic
 from apps.questions.services import count_available_questions, get_adaptive_questions_for_session
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
 from apps.reviews.exam_setup_services import (
     assignment_for_student_subject,
     exam_seconds_per_question,
+    other_subjects_available_for_student,
     student_setup_eligibility,
     subjects_available_for_student,
 )
@@ -94,6 +95,8 @@ def _answer_reveal_context(session, question, answer, **extra):
 def _exam_results_context(session):
     import math
 
+    from apps.reviews.retake_services import can_start_retake, get_or_create_action_plan
+
     session_summary = build_session_summary(session)
     total = session_summary["total_questions"]
     incorrect = max(0, total - session_summary["correct_count"])
@@ -103,6 +106,34 @@ def _exam_results_context(session):
     if incorrect:
         suggestions.append("Review your mistakes before retaking")
     suggestions.append("Retake the exam once you feel confident")
+
+    subject = session.topic.subject if session.topic_id else None
+    allowed, open_plan = can_start_retake(
+        session.student,
+        course=session.course,
+        subject=subject,
+        difficulty=session.difficulty or "",
+    )
+    action_plan = None
+    acknowledge_url = None
+    if not allowed:
+        action_plan = open_plan or get_or_create_action_plan(
+            session.student,
+            course=session.course,
+            subject=subject,
+            difficulty=session.difficulty or "",
+        )
+        acknowledge_url = reverse(
+            "reviews:acknowledge_action_plan", kwargs={"pk": action_plan.pk}
+        )
+
+    incorrect_answers = (
+        session.answers.filter(is_correct=False)
+        .select_related("question", "selected_choice", "mistake_record")
+        .prefetch_related("question__choices", "question__explanation_steps")
+        .order_by("answered_at")
+    )
+
     return {
         "session": session,
         "session_summary": session_summary,
@@ -110,6 +141,12 @@ def _exam_results_context(session):
         "score_ring_dasharray": f"{circumference:.2f}",
         "score_ring_dashoffset": f"{circumference * (1 - fraction):.2f}",
         "suggestions": suggestions,
+        "retake_allowed": allowed,
+        "action_plan": action_plan,
+        "acknowledge_url": acknowledge_url,
+        "incorrect_answers": incorrect_answers,
+        "setup_retake_url": reverse("reviews:setup")
+        + (f"?topic={session.topic_id}" if session.topic_id else ""),
     }
 
 
@@ -161,22 +198,6 @@ def _next_question_response(request, session):
     )
 
 
-def _setup_preselected_subject(request) -> Subject | None:
-    """Resolve ?subject= or ?topic= deep-link to an available course subject."""
-    raw_subject = (request.GET.get("subject") or "").strip()
-    raw_topic = (request.GET.get("topic") or "").strip()
-    subject_id: int | None = None
-    if raw_subject.isdigit():
-        subject_id = int(raw_subject)
-    elif raw_topic.isdigit():
-        topic = Topic.objects.filter(pk=int(raw_topic)).select_related("subject").first()
-        if topic is not None:
-            subject_id = topic.subject_id
-    if subject_id is None:
-        return None
-    return subjects_available_for_student(request.user).filter(pk=subject_id).first()
-
-
 class ReviewSetupView(StudentRequiredMixin, View):
     """Start a timed exam — multi-course + difficulty; wizard collects readiness."""
 
@@ -184,26 +205,117 @@ class ReviewSetupView(StudentRequiredMixin, View):
 
     def _setup_context(self, form, **extra):
         eligibility = student_setup_eligibility(self.request.user)
-        no_exams = eligibility.get("reason") == "no_questions"
+        no_exams = eligibility.get("reason") in {
+            "no_questions",
+            "no_year_subjects",
+            "no_year_level",
+        }
+        year_subjects = list(subjects_available_for_student(self.request.user))
+        other_subjects = list(other_subjects_available_for_student(self.request.user))
+
+        from apps.reviews.exam_setup_services import (
+            MIN_QUESTIONS_PER_SUBJECT,
+            MAX_TOTAL_QUESTIONS,
+            get_or_create_program_exam_setup,
+        )
+
+        try:
+            estimate_seconds = get_or_create_program_exam_setup().seconds_per_question or 30
+        except ValueError:
+            estimate_seconds = 30
+
+        selected_extra_ids: set[int] = set()
+        if form.is_bound:
+            raw = form.data.getlist("extra_subjects")
+            selected_extra_ids = {int(pk) for pk in raw if str(pk).isdigit()}
+        show_extra_subjects = bool(selected_extra_ids) or bool(
+            getattr(form, "errors", None) and form.errors.get("extra_subjects")
+        )
+
+        selected_question_types = list(
+            form.data.getlist("question_type")
+            if form.is_bound
+            else form.fields["question_type"].initial or ["mcq"]
+        )
+        if "mcq" not in selected_question_types:
+            selected_question_types.insert(0, "mcq")
+
+        selected_difficulty = (
+            form.data.get("difficulty")
+            if form.is_bound
+            else form.fields["difficulty"].initial or "easy"
+        ) or "easy"
+
+        subject_count = len(year_subjects) + len(selected_extra_ids)
+        estimate_questions = min(
+            MAX_TOTAL_QUESTIONS,
+            max(subject_count, 1) * MIN_QUESTIONS_PER_SUBJECT,
+        )
+        estimate_minutes = max(
+            1, (estimate_questions * estimate_seconds + 59) // 60
+        )
+
         return {
             "form": form,
             "setup_eligibility": eligibility,
             "no_exams_available": no_exams,
+            "year_subjects": year_subjects,
+            "other_subjects": other_subjects,
+            "selected_extra_ids": selected_extra_ids,
+            "show_extra_subjects": show_extra_subjects,
+            "selected_question_types": selected_question_types,
+            "selected_difficulty": selected_difficulty,
+            "estimate_min_per_subject": MIN_QUESTIONS_PER_SUBJECT,
+            "estimate_seconds": estimate_seconds,
+            "estimate_questions": estimate_questions,
+            "estimate_minutes": estimate_minutes,
+            "max_total_questions": MAX_TOTAL_QUESTIONS,
             **extra,
         }
 
     def get(self, request):
-        subject = _setup_preselected_subject(request)
-        form = ReviewSetupForm(
-            student=request.user,
-            preselected_subject=subject,
-        )
+        form = ReviewSetupForm(student=request.user)
         return render(request, self.template_name, self._setup_context(form))
 
     def post(self, request):
         form = ReviewSetupForm(request.POST, student=request.user)
         if form.is_valid():
+            from apps.reviews.retake_services import can_start_retake
+
             target = form.get_auto_target()
+            subjects = list(target.get("subjects") or [])
+            subject = subjects[0] if subjects else None
+            if subject is None and target.get("topic"):
+                subject = target["topic"].subject
+            # Multi-subject exams gate on course + difficulty to avoid per-subject drift.
+            allowed, open_plan = can_start_retake(
+                request.user,
+                course=target.get("course"),
+                subject=None if len(subjects) > 1 else subject,
+                difficulty=target.get("difficulty") or "",
+            )
+            if not allowed:
+                messages.warning(
+                    request,
+                    "Complete your action plan before starting another attempt.",
+                )
+                return render(
+                    request,
+                    self.template_name,
+                    self._setup_context(
+                        form,
+                        action_plan=open_plan,
+                        acknowledge_url=(
+                            reverse(
+                                "reviews:acknowledge_action_plan",
+                                kwargs={"pk": open_plan.pk},
+                            )
+                            if open_plan
+                            else None
+                        ),
+                        session=None,
+                    ),
+                )
             session = start_review_session(
                 student=request.user,
                 topic=target["topic"],
@@ -408,6 +520,8 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         import math
 
+        from apps.reviews.retake_services import can_start_retake, get_or_create_action_plan
+
         context = super().get_context_data(**kwargs)
         session_summary = build_session_summary(self.object)
         incorrect = max(
@@ -427,7 +541,52 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
         context["tutor_history_url"] = reverse("reviews:tutor_history", kwargs={"pk": self.object.pk})
         context["tutor_chat_url"] = reverse("reviews:tutor_chat", kwargs={"pk": self.object.pk})
         context["open_tutor"] = self.request.GET.get("open_tutor") == "1"
+        context["incorrect_answers"] = (
+            self.object.answers.filter(is_correct=False)
+            .select_related("question", "selected_choice", "mistake_record")
+            .prefetch_related("question__choices", "question__explanation_steps")
+            .order_by("answered_at")
+        )
+        subject = self.object.topic.subject if self.object.topic_id else None
+        allowed, open_plan = can_start_retake(
+            self.request.user,
+            course=self.object.course,
+            subject=subject,
+            difficulty=self.object.difficulty or "",
+        )
+        context["retake_allowed"] = allowed
+        context["action_plan"] = None
+        context["acknowledge_url"] = None
+        if not allowed:
+            plan = open_plan or get_or_create_action_plan(
+                self.request.user,
+                course=self.object.course,
+                subject=subject,
+                difficulty=self.object.difficulty or "",
+            )
+            context["action_plan"] = plan
+            context["acknowledge_url"] = reverse(
+                "reviews:acknowledge_action_plan", kwargs={"pk": plan.pk}
+            )
+        context["setup_retake_url"] = reverse("reviews:setup") + (
+            f"?topic={self.object.topic_id}" if self.object.topic_id else ""
+        )
         return context
+
+
+class AcknowledgeActionPlanView(StudentRequiredMixin, View):
+    """Mark a retake action plan complete so another attempt can start."""
+
+    def post(self, request, pk):
+        from apps.reviews.models import RetakeActionPlan
+        from apps.reviews.retake_services import acknowledge_action_plan
+
+        plan = get_object_or_404(RetakeActionPlan, pk=pk, student=request.user)
+        acknowledge_action_plan(plan)
+        messages.success(request, "Action plan marked complete. You can start another attempt.")
+        if plan.subject_id:
+            return redirect(f"{reverse('reviews:setup')}?subject={plan.subject_id}")
+        return redirect("reviews:setup")
 
 
 class SessionGenerateFeedbackView(StudentRequiredMixin, View):

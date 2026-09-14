@@ -75,11 +75,30 @@ class LearningDocument(models.Model):
         READY = "ready", "Ready"
         FAILED = "failed", "Failed"
 
+    class MaterialType(models.TextChoices):
+        MODULE = "module", "Module"
+        REVIEWER = "reviewer", "Reviewer"
+        RESOURCE = "resource", "Learning resource"
+        EXAM_PRINT = "exam_print", "Printed examination material"
+
     course_id = models.PositiveIntegerField(db_index=True)
+    subject = models.ForeignKey(
+        "questions.Subject",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="learning_documents",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="learning_documents",
+    )
+    title = models.CharField(max_length=255, blank=True, default="")
+    material_type = models.CharField(
+        max_length=20,
+        choices=MaterialType.choices,
+        default=MaterialType.MODULE,
     )
     original_name = models.CharField(max_length=255, blank=True, default="")
     file = models.FileField(upload_to="learning_modules/%Y/%m/", blank=True)
@@ -88,6 +107,7 @@ class LearningDocument(models.Model):
         choices=Status.choices,
         default=Status.PENDING,
     )
+    is_archived = models.BooleanField(default=False)
     page_count = models.PositiveIntegerField(default=0)
     chunk_count = models.PositiveIntegerField(default=0)
     error_message = models.TextField(blank=True, default="")
@@ -100,7 +120,11 @@ class LearningDocument(models.Model):
         ordering = ["-created"]
 
     def __str__(self) -> str:
-        return self.original_name or f"Document #{self.pk}"
+        return self.title or self.original_name or f"Document #{self.pk}"
+
+    @property
+    def display_title(self) -> str:
+        return self.title or self.original_name or f"Document #{self.pk}"
 
 
 class LearningChunk(models.Model):

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ subject.code }} materials - EXAMIQ+{% endblock %}
+
+{% block content %}
+<div class="materials-page">
+    <header class="materials-page__header">
+        <div>
+            <a href="{% url 'analytics_student:materials_hub' %}" class="materials-page__back">&larr; All subjects</a>
+            <h1 class="materials-page__title">{{ subject.code }} — {{ subject.name }}</h1>
+            <p class="materials-page__subtitle">
+                Download ready learning modules and resources for this subject.
+            </p>
+        </div>
+    </header>
+
+    {% include "components/materials_library.html" with documents=documents library_count=library_count material_types=material_types faculty_mode=False subject=subject download_url_name="analytics_student:materials_download" %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/materials-library.js' %}"></script>
+{% endblock %}

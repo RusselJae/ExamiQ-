@@ -295,91 +295,127 @@ def grade_answer(
 
 
 def submit_question_for_review(question: "Question", user) -> "Question":
-
-    """Mark a professor's question edit as pending chairperson approval."""
-
+    """Keep a draft/pending copy owned by the faculty author (no chairperson)."""
     from apps.questions.models import Question
 
-
-
-    question.status = Question.Status.PENDING
-
+    question.status = Question.Status.DRAFT
     question.proposed_by = user
-
-    question.reviewed_by = None
-
-    question.reviewed_at = None
-
+    question.validated_by = None
+    question.validated_at = None
     question.rejection_note = ""
-
     question.save(
-
         update_fields=[
-
             "status",
-
             "proposed_by",
-
-            "reviewed_by",
-
-            "reviewed_at",
-
+            "validated_by",
+            "validated_at",
             "rejection_note",
-
         ]
-
     )
-
     return question
 
 
+def publish_question_as_faculty(
+    question: "Question",
+    faculty,
+    *,
+    approve_explanations: bool = True,
+) -> "Question":
+    """Faculty expert attestation: publish question for student exams."""
+    from apps.questions.models import Question
 
+    question.status = Question.Status.APPROVED
+    question.is_active = True
+    question.proposed_by = question.proposed_by or faculty
+    question.validated_by = faculty
+    question.validated_at = timezone.now()
+    question.reviewed_by = faculty
+    question.reviewed_at = timezone.now()
+    question.rejection_note = ""
+    if approve_explanations and question.explanation_steps.exists():
+        question.explanation_status = "faculty_approved"
+    update_fields = [
+        "status",
+        "is_active",
+        "proposed_by",
+        "validated_by",
+        "validated_at",
+        "reviewed_by",
+        "reviewed_at",
+        "rejection_note",
+        "explanation_status",
+    ]
+    question.save(update_fields=update_fields)
+    return question
 
 
 def approve_question(question: "Question", reviewer) -> "Question":
-
-    from apps.questions.models import Question
-
-
-
-    question.status = Question.Status.APPROVED
-
-    question.is_active = True
-
-    question.reviewed_by = reviewer
-
-    question.reviewed_at = timezone.now()
-
-    question.rejection_note = ""
-
-    question.save(
-
-        update_fields=["status", "is_active", "reviewed_by", "reviewed_at", "rejection_note"]
-
-    )
-
-    return question
-
-
-
+    """Alias for faculty publish (legacy name kept for imports)."""
+    return publish_question_as_faculty(question, reviewer)
 
 
 def reject_question(question: "Question", reviewer, note: str = "") -> "Question":
-
     from apps.questions.models import Question
 
-
-
-    question.status = Question.Status.REJECTED
-
+    question.status = Question.Status.DRAFT
+    question.is_active = False
     question.reviewed_by = reviewer
-
     question.reviewed_at = timezone.now()
-
+    question.validated_by = None
+    question.validated_at = None
+    question.explanation_status = "draft"
     question.rejection_note = note
+    question.save(
+        update_fields=[
+            "status",
+            "is_active",
+            "reviewed_by",
+            "reviewed_at",
+            "validated_by",
+            "validated_at",
+            "explanation_status",
+            "rejection_note",
+        ]
+    )
+    return question
 
-    question.save(update_fields=["status", "reviewed_by", "reviewed_at", "rejection_note"])
 
+def count_bank_questions_for_subject(subject) -> int:
+    """Count non-rejected questions counting toward the per-subject bank cap."""
+    from apps.questions.models import Question
+
+    return Question.objects.filter(
+        topic__subject=subject,
+    ).exclude(status=Question.Status.REJECTED).count()
+
+
+def subject_bank_slots_remaining(subject) -> int:
+    from django.conf import settings
+
+    cap = getattr(settings, "MAX_QUESTIONS_PER_SUBJECT", 100)
+    return max(0, cap - count_bank_questions_for_subject(subject))
+
+
+def assert_subject_bank_has_capacity(subject, *, additional: int = 1) -> None:
+    """Raise ValueError when adding ``additional`` questions would exceed the cap."""
+    from django.conf import settings
+
+    cap = getattr(settings, "MAX_QUESTIONS_PER_SUBJECT", 100)
+    remaining = subject_bank_slots_remaining(subject)
+    if additional > remaining:
+        raise ValueError(
+            f"This subject already has {count_bank_questions_for_subject(subject)} "
+            f"questions (max {cap}). Free space or archive questions before adding more."
+        )
+
+
+def approve_question_explanations(question: "Question", faculty) -> "Question":
+    question.explanation_status = "faculty_approved"
+    question.validated_by = question.validated_by or faculty
+    question.validated_at = question.validated_at or timezone.now()
+    question.save(
+        update_fields=["explanation_status", "validated_by", "validated_at"]
+    )
     return question
 
 

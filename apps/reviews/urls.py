@@ -30,6 +30,11 @@ urlpatterns = [
     path("review/<int:pk>/summary/", views.SessionSummaryView.as_view(), name="summary"),
     path("review/<int:pk>/results/", views.ExamResultsPartialView.as_view(), name="exam_results"),
     path(
+        "review/action-plan/<int:pk>/acknowledge/",
+        views.AcknowledgeActionPlanView.as_view(),
+        name="acknowledge_action_plan",
+    ),
+    path(
         "review/<int:pk>/generate-feedback/",
         views.SessionGenerateFeedbackView.as_view(),
         name="session_generate_feedback",

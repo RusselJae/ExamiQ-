@@ -83,12 +83,35 @@
         {% if form.expected_answer.errors %}<p class="text-red-600 text-xs mt-1">{{ form.expected_answer.errors.0 }}</p>{% endif %}
     </div>
 
-    <div class="bento-card p-4 shadow-sm flex items-center justify-between">
-        <label for="{{ form.is_active.id_for_label }}" class="inline-flex items-center gap-2 text-sm text-examiq-navy cursor-pointer">
-            {{ form.is_active }}
-            <span>Active in question bank</span>
+    <div class="bento-card p-5 shadow-sm space-y-3">
+        <h2 class="text-base font-semibold text-examiq-navy">Faculty expert attestation</h2>
+        {% if is_edit and question.status == "approved" %}
+        <p class="text-sm text-examiq-slate">Published for students. Saving updates the live question.</p>
+        <label class="flex items-start gap-2 text-sm text-examiq-navy">
+            <input type="checkbox" name="approve_explanations" value="1" class="mt-1 rounded border-slate-300"
+                   {% if question.explanation_status == "faculty_approved" %}checked{% endif %}>
+            <span>Keep / approve step-by-step explanations for student review.</span>
         </label>
-        <button type="submit" class="btn-primary">Save question</button>
+        {% else %}
+        <p class="text-sm text-examiq-slate">Confirm correctness and difficulty before students can see this question.</p>
+        <label class="flex items-start gap-2 text-sm text-examiq-navy">
+            <input type="checkbox" name="faculty_attest" value="1" class="mt-1 rounded border-slate-300">
+            <span>I attest this question is mathematically correct, choices are sound, and difficulty is confirmed.</span>
+        </label>
+        <label class="flex items-start gap-2 text-sm text-examiq-navy">
+            <input type="checkbox" name="approve_explanations" value="1" class="mt-1 rounded border-slate-300">
+            <span>Approve step-by-step explanations for student review.</span>
+        </label>
+        {% endif %}
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <label for="{{ form.is_active.id_for_label }}" class="inline-flex items-center gap-2 text-sm text-examiq-navy cursor-pointer">
+                {{ form.is_active }}
+                <span>Active in question bank</span>
+            </label>
+            <button type="submit" class="btn-primary">
+                {% if is_edit and question.status == "approved" %}Save question{% else %}Save / publish{% endif %}
+            </button>
+        </div>
     </div>
 </form>
 {% endblock %}

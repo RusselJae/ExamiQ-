@@ -46,4 +46,19 @@ urlpatterns = [
         views_student.TopicAnswerReviewView.as_view(),
         name="topic_answer_review",
     ),
+    path(
+        "materials/",
+        views_student.StudentMaterialHubView.as_view(),
+        name="materials_hub",
+    ),
+    path(
+        "materials/<int:subject_pk>/",
+        views_student.StudentMaterialListView.as_view(),
+        name="materials_list",
+    ),
+    path(
+        "materials/<int:subject_pk>/download/<int:pk>/",
+        views_student.StudentMaterialDownloadView.as_view(),
+        name="materials_download",
+    ),
 ]

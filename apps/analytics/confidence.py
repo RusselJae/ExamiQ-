@@ -25,6 +25,15 @@ CLASSIFICATION_LABELS = {
     CLASSIFICATION_UNCERTAIN: "Uncertain",
 }
 
+# Student-facing copy for confidence × accuracy quadrants.
+STUDENT_CLASSIFICATION_LABELS = {
+    CLASSIFICATION_MASTERY: "Strong understanding",
+    CLASSIFICATION_MISCONCEPTION: "Possible overconfidence",
+    CLASSIFICATION_LUCKY_GUESS: "Possible underconfidence",
+    CLASSIFICATION_EXPECTED_GAP: "Needs further review",
+    CLASSIFICATION_UNCERTAIN: "Uncertain",
+}
+
 CONFIDENCE_TIER_NONE = "none"
 CONFIDENCE_TIER_LOW = "low"
 CONFIDENCE_TIER_AVERAGE = "average"

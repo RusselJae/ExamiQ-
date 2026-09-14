@@ -8,6 +8,7 @@ from apps.ai.job_services import (
     _chunk_sizes,
     run_explanation_generation_job,
     run_question_generation_job,
+    start_question_generation_job,
 )
 from apps.ai.models import AIGenerationJob
 from apps.ai.normalize import normalize_generated_questions
@@ -66,6 +67,20 @@ class TestChunkSizes:
 
 @pytest.mark.django_db
 class TestQuestionGenerationJob:
+    @override_settings(AI_GENERATION_MAX_COUNT=50)
+    def test_start_job_clamps_count_to_max(self, professor, course, topic):
+        with patch("apps.ai.job_services.threading.Thread") as thread_cls:
+            thread_cls.return_value = MagicMock()
+            job = start_question_generation_job(
+                user=professor,
+                course_id=course.pk,
+                topic_id=topic.pk,
+                difficulty="easy",
+                count=99,
+                source_material="Module text",
+            )
+        assert job.count == 50
+
     @override_settings(AI_GENERATION_BATCH_SIZE=5, AI_GENERATION_MAX_ATTEMPTS=3)
     def test_batches_generation_calls(self, professor, course, topic):
         generator = MagicMock()

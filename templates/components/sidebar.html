@@ -23,6 +23,13 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <span class="sidebar-label">Start Review</span>
                 </a>
+                {# Primary student destination for modules — kept under Main, not Insights #}
+                <a href="{% url 'analytics_student:materials_hub' %}" title="Learning materials"
+                   class="sidebar-link {% if 'materials' in request.resolver_match.url_name %}sidebar-link-active{% endif %}"
+                   aria-label="Learning Materials">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                    <span class="sidebar-label">Learning Materials</span>
+                </a>
 
                 <p class="sidebar-section-label">Insights</p>
                 <a href="{% url 'analytics_student:session_history' %}" title="Session History"
@@ -45,11 +52,11 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                     <span class="sidebar-label">Overview</span>
                 </a>
-                <a href="{% url 'analytics_professor:course_list' %}" title="Course subjects"
+                <a href="{% url 'analytics_professor:course_list' %}" title="Course Subjects"
                    class="sidebar-link {% if request.resolver_match.url_name == 'course_list' or request.resolver_match.url_name == 'course_create' or 'topic' in request.resolver_match.url_name or request.resolver_match.url_name == 'question_list' or request.resolver_match.url_name == 'course_heatmap' %}sidebar-link-active{% endif %}"
                    aria-label="Course subjects">
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                    <span class="sidebar-label">Course subjects</span>
+                    <span class="sidebar-label">Course Subjects</span>
                 </a>
                 <a href="{% url 'analytics_professor:students' %}" title="Students"
                    class="sidebar-link {% if request.resolver_match.url_name == 'students' or request.resolver_match.url_name == 'professor_student_detail' or request.resolver_match.url_name == 'session_review' %}sidebar-link-active{% endif %}"
@@ -77,6 +84,8 @@
                 <nav class="sidebar-subnav" aria-label="Course navigation">
                     <a href="{% url 'analytics_professor:question_list' sidebar_course.pk %}"
                        class="sidebar-subnav-link {% if request.resolver_match.url_name == 'question_list' %}sidebar-subnav-link-active{% endif %}">Saved Questions</a>
+                    <a href="{% url 'analytics_professor:material_list' sidebar_course.pk %}"
+                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'material_list' or request.resolver_match.url_name == 'material_detail' %}sidebar-subnav-link-active{% endif %}">Learning Materials</a>
                     <a href="{% url 'analytics_professor:course_heatmap' sidebar_course.pk %}"
                        class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_heatmap' %}sidebar-subnav-link-active{% endif %}">Overview</a>
                 </nav>

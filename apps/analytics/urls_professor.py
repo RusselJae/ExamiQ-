@@ -1,7 +1,9 @@
 from django.urls import path
 
 from apps.analytics import views_professor
+from apps.questions import views_materials as material_views
 from apps.questions import views_professor as question_views
+from apps.questions import views_validation as validation_views
 from apps.reviews import views_professor as review_views
 from apps.reviews import views_professor_feedback
 from apps.users import views_professor as course_views
@@ -155,6 +157,41 @@ urlpatterns = [
         name="window_delete",
     ),
     path("courses/<int:course_pk>/topics/", question_views.TopicListView.as_view(), name="topic_list"),
+    path(
+        "courses/<int:course_pk>/materials/",
+        material_views.MaterialListView.as_view(),
+        name="material_list",
+    ),
+    path(
+        "courses/<int:course_pk>/materials/upload/",
+        material_views.MaterialUploadView.as_view(),
+        name="material_upload",
+    ),
+    path(
+        "courses/<int:course_pk>/materials/<int:pk>/",
+        material_views.MaterialDetailView.as_view(),
+        name="material_detail",
+    ),
+    path(
+        "courses/<int:course_pk>/materials/<int:pk>/download/",
+        material_views.MaterialDownloadView.as_view(),
+        name="material_download",
+    ),
+    path(
+        "courses/<int:course_pk>/validation/",
+        validation_views.ValidationSessionStartView.as_view(),
+        name="validation_start",
+    ),
+    path(
+        "courses/<int:course_pk>/validation/<int:session_pk>/",
+        validation_views.ValidationSessionDetailView.as_view(),
+        name="validation_detail",
+    ),
+    path(
+        "courses/<int:course_pk>/questions/<int:question_pk>/publish/",
+        question_views.QuestionPublishView.as_view(),
+        name="question_publish",
+    ),
     path(
         "courses/<int:course_pk>/topics/create/",
         question_views.TopicCreateView.as_view(),

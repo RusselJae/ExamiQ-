@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Learning materials — {{ course.code }}{% endblock %}
+
+{% block content %}
+{% include "components/professor_section_header.html" with course=course page_label="Learning materials" %}
+{% include "components/professor_course_nav.html" with course=course active_tab="materials" %}
+
+<div class="materials-page">
+    <header class="materials-page__header">
+        <div>
+            <h1 class="materials-page__title">Learning materials</h1>
+            <p class="materials-page__subtitle">
+                Upload complete modules and resources (multi-page PDFs included).
+                Students download the original full file.
+            </p>
+        </div>
+    </header>
+
+    <section class="materials-upload bento-card" aria-labelledby="materials-upload-title">
+        <h2 id="materials-upload-title" class="materials-upload__title">Upload material</h2>
+        <p class="materials-upload__hint">
+            Supported: TXT, MD, CSV, PDF, DOCX. Upload the whole file — not a single page —
+            so students can download the complete document.
+        </p>
+        <form method="post"
+              action="{% url 'analytics_professor:material_upload' course.pk %}"
+              enctype="multipart/form-data"
+              class="materials-upload__form">
+            {% csrf_token %}
+            <div class="materials-upload__fields">
+                <div class="materials-field">
+                    <label class="materials-field__label" for="material-title">Title</label>
+                    <input id="material-title" name="title" type="text" class="materials-field__input" placeholder="Optional title" autocomplete="off">
+                </div>
+                <div class="materials-field">
+                    <label class="materials-field__label" for="material-type">Type</label>
+                    <select id="material-type" name="material_type" class="materials-field__input">
+                        {% for value, label in material_types %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="materials-field materials-field--file">
+                    <label class="materials-field__label" for="material-file">File</label>
+                    <label class="materials-file-drop" for="material-file">
+                        <span class="materials-file-drop__btn">Choose file</span>
+                        <span class="materials-file-drop__name" data-file-name>No file chosen</span>
+                        <input id="material-file" name="source_file" type="file" required accept=".txt,.md,.csv,.pdf,.docx" class="sr-only">
+                    </label>
+                </div>
+            </div>
+            <button type="submit" class="btn-primary materials-upload__submit">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                Upload
+            </button>
+        </form>
+    </section>
+
+    {% include "components/materials_library.html" with documents=documents library_count=library_count material_types=material_types include_archived=include_archived course=course faculty_mode=True %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/materials-library.js' %}"></script>
+{% endblock %}

@@ -144,7 +144,7 @@ class Question(TimeStampedModel):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.APPROVED,
+        default=Status.DRAFT,
     )
     proposed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -162,6 +162,24 @@ class Question(TimeStampedModel):
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
     rejection_note = models.TextField(blank=True)
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="validated_questions",
+        help_text="Faculty member who attested this question as mathematically sound.",
+    )
+    validated_at = models.DateTimeField(null=True, blank=True)
+    explanation_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("draft", "Draft"),
+            ("faculty_approved", "Faculty approved"),
+        ],
+        default="draft",
+        help_text="Whether step-by-step solutions are faculty-approved for students.",
+    )
 
     class Meta:
         verbose_name = "Question"
@@ -224,3 +242,81 @@ class ExplanationStep(models.Model):
 
     def __str__(self) -> str:
         return f"Step {self.order} for Q#{self.question_id}"
+
+
+class QuestionValidationSession(models.Model):
+    """Faculty random QA sample of bank questions for periodic checking."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+
+    faculty = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="question_validation_sessions",
+    )
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.CASCADE,
+        related_name="validation_sessions",
+    )
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="validation_sessions",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    size = models.PositiveSmallIntegerField(default=15)
+    created = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Question validation session"
+        verbose_name_plural = "Question validation sessions"
+        ordering = ["-created"]
+
+    def __str__(self) -> str:
+        return f"Validation #{self.pk} ({self.subject.code})"
+
+
+class QuestionValidationItem(models.Model):
+    class Outcome(models.TextChoices):
+        PENDING = "pending", "Pending"
+        OK = "ok", "OK"
+        NEEDS_EDIT = "needs_edit", "Needs edit"
+        UNPUBLISH = "unpublish", "Unpublish"
+
+    session = models.ForeignKey(
+        QuestionValidationSession,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.CASCADE,
+        related_name="validation_items",
+    )
+    order = models.PositiveSmallIntegerField(default=0)
+    outcome = models.CharField(
+        max_length=20,
+        choices=Outcome.choices,
+        default=Outcome.PENDING,
+    )
+    notes = models.TextField(blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Question validation item"
+        verbose_name_plural = "Question validation items"
+        ordering = ["session_id", "order"]
+        unique_together = [["session", "question"]]
+
+    def __str__(self) -> str:
+        return f"Item {self.order} Q#{self.question_id} ({self.outcome})"

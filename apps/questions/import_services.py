@@ -367,9 +367,22 @@ def import_questions_from_csv(
 
         seen_stems.add(stem_key)
 
-        status = (row.get("status") or Question.Status.APPROVED).strip().casefold()
+        status = (row.get("status") or Question.Status.DRAFT).strip().casefold()
         if status not in VALID_STATUSES:
-            status = Question.Status.APPROVED
+            status = Question.Status.DRAFT
+
+        subject = getattr(topic, "subject", None)
+        if subject is not None:
+            from apps.questions.services import assert_subject_bank_has_capacity
+
+            try:
+                assert_subject_bank_has_capacity(subject, additional=1)
+            except ValueError as exc:
+                summary.skipped_invalid += 1
+                summary.row_errors.append(
+                    ImportRowError(offset, stem_preview, str(exc))
+                )
+                break
 
         question_payload = {
             "topic": topic,
@@ -380,9 +393,10 @@ def import_questions_from_csv(
             "expected_answer": (
                 expected_answer if question_type != Question.QuestionType.MCQ else ""
             ),
-            "is_active": _parse_bool(row.get("is_active", ""), default=True),
+            "is_active": _parse_bool(row.get("is_active", ""), default=False),
             "status": status,
             "proposed_by": professor,
+            "explanation_status": "draft",
         }
         create_question(question_payload, choices_data, _explanation_steps(row))
         summary.created += 1

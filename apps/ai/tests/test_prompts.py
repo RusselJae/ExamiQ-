@@ -40,6 +40,8 @@ class TestQuestionGenerationPrompt:
         assert "ExamiQ+" in system
         assert topic.name in user
         assert topic.subject.code in user
+        assert "Year level" in user
+        assert topic.subject.year_level.name in user
         assert "omit explanation_steps" in user
         assert "Do NOT include explanation" in system
         assert "randomize" in system.lower() or "correct_label" in system.lower()

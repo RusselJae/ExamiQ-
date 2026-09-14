@@ -83,11 +83,16 @@ class TestExamSetupViews:
         course.code = subjects[0].code
         course.save(update_fields=["code"])
 
+        from apps.reviews.exam_setup_services import get_or_create_program_exam_setup
+
+        program_setup = get_or_create_program_exam_setup(bsed_program)
+        program_setup.subjects.set(subjects)
+
         response = client.post(
             reverse("reviews:setup"),
             {
-                "subjects": [s.pk for s in subjects],
                 "difficulty": question.difficulty,
+                "question_type": [QModel.QuestionType.MCQ],
             },
         )
         assert response.status_code == 302

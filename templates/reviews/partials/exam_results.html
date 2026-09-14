@@ -35,14 +35,36 @@
             <span class="exam-results-kpi__label">Incorrect</span>
         </div>
         <div class="exam-results-kpi">
-            <span class="exam-results-kpi__value">{{ session_summary.accuracy|floatformat:0 }}%</span>
-            <span class="exam-results-kpi__label">Average Score</span>
+            <span class="exam-results-kpi__value">{{ session_summary.avg_time_confidence_label }}</span>
+            <span class="exam-results-kpi__label">Confidence (time)</span>
         </div>
         <div class="exam-results-kpi">
             <span class="exam-results-kpi__value">{{ session_summary.avg_confidence_label }}</span>
-            <span class="exam-results-kpi__label">Average Confidence</span>
+            <span class="exam-results-kpi__label">Confidence (answers)</span>
         </div>
     </div>
+
+    {% if session_summary.narrative %}
+    <div class="exam-results-suggestions" role="note">
+        <p class="exam-results-suggestions__title">Performance story</p>
+        <p class="text-sm text-examiq-navy">{{ session_summary.narrative }}</p>
+    </div>
+    {% endif %}
+
+    <div class="mt-4">
+        {% include "components/calibration_matrix.html" %}
+    </div>
+
+    {% if session_summary.weak_topics %}
+    <div class="exam-results-suggestions mt-4" role="note">
+        <p class="exam-results-suggestions__title">Topics to revisit</p>
+        <ul class="exam-results-suggestions__list">
+            {% for topic in session_summary.weak_topics %}
+            <li>{{ topic.topic__name }} ({{ topic.mistake_count }} miss{{ topic.mistake_count|pluralize }})</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 
     {% if suggestions %}
     <div class="exam-results-suggestions" role="note">
@@ -55,8 +77,14 @@
     </div>
     {% endif %}
 
+    {% include "components/retake_action_plan.html" %}
+
     <div class="exam-results-actions">
         <a href="{% url 'reviews:summary' session.pk %}?open_tutor=1" class="btn-primary exam-results-actions__primary">AI Tutor</a>
-        <a href="{% url 'reviews:setup' %}?topic={{ session.topic_id }}" class="btn-secondary exam-results-actions__secondary">Retake exam</a>
+        {% if retake_allowed %}
+        <a href="{{ setup_retake_url }}" class="btn-secondary exam-results-actions__secondary">Retake exam</a>
+        {% else %}
+        <a href="{% url 'reviews:summary' session.pk %}" class="btn-secondary exam-results-actions__secondary">Open action plan</a>
+        {% endif %}
     </div>
 </div>

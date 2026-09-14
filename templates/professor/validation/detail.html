@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Validation session #{{ session.pk }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <div>
+        <a href="{% url 'analytics_professor:validation_start' course.pk %}" class="text-sm text-examiq-cyan">&larr; New session</a>
+        <h1 class="text-2xl font-bold text-examiq-navy mt-2">Validation session</h1>
+        <p class="text-sm text-examiq-slate">{{ session.subject.code }} · {{ session.get_status_display }} · {{ session.size }} questions</p>
+    </div>
+
+    {% for item in items %}
+    <div class="bento-card p-5 space-y-3">
+        <div class="flex justify-between gap-3">
+            <h2 class="font-semibold text-examiq-navy">Q{{ forloop.counter }} · {{ item.question.get_difficulty_display }}</h2>
+            <span class="text-xs uppercase font-semibold text-examiq-slate">{{ item.get_outcome_display }}</span>
+        </div>
+        <p class="text-sm text-examiq-navy">{{ item.question.stem }}</p>
+        {% if item.question.question_type == "mcq" %}
+        <ul class="text-sm text-examiq-slate space-y-1">
+            {% for choice in item.question.choices.all %}
+            <li>{% if choice.is_correct %}<strong>{{ choice.label }}.</strong>{% else %}{{ choice.label }}.{% endif %} {{ choice.text }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if item.question.explanation_steps.all %}
+        <div class="text-sm border-t border-slate-100 pt-3">
+            <p class="font-semibold text-examiq-navy mb-1">Steps</p>
+            <ol class="list-decimal ml-5 space-y-1 text-examiq-slate">
+                {% for step in item.question.explanation_steps.all %}
+                <li>{{ step.content }}</li>
+                {% endfor %}
+            </ol>
+        </div>
+        {% endif %}
+        {% if item.outcome == "pending" and session.status == "active" %}
+        <form method="post" class="flex flex-wrap gap-2 items-end border-t border-slate-100 pt-3">
+            {% csrf_token %}
+            <input type="hidden" name="item_id" value="{{ item.pk }}">
+            <div class="flex-1 min-w-[12rem]">
+                <label class="block text-xs font-semibold uppercase text-examiq-slate mb-1">Notes</label>
+                <input name="notes" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Optional">
+            </div>
+            <button name="outcome" value="ok" type="submit" class="btn-primary btn-primary-sm">OK</button>
+            <button name="outcome" value="needs_edit" type="submit" class="btn-secondary btn-primary-sm">Needs edit</button>
+            <button name="outcome" value="unpublish" type="submit" class="btn-outline btn-primary-sm">Unpublish</button>
+        </form>
+        {% endif %}
+    </div>
+    {% empty %}
+    <p class="text-sm text-examiq-slate">No items in this session.</p>
+    {% endfor %}
+</div>
+{% endblock %}

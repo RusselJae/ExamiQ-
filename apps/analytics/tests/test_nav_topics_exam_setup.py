@@ -332,5 +332,8 @@ class TestStudentMultiSelectSetup:
         response = client.get(reverse("reviews:setup"))
         assert response.status_code == 200
         content = response.content.decode()
-        assert "data-multi-select" in content
-        assert "id_setup_subjects" in content
+        assert "exam-pill" in content
+        assert "id_setup_subjects" not in content
+        assert "Course subjects for your year" in content
+        assert "id_setup_question_type" in content
+        assert "exam-setup-summary" in content

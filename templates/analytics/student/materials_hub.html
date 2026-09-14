@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Learning materials - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Learning materials" subtitle="Browse modules and resources for each course subject, then download what you need." %}
+
+{# Same table + filter pattern as faculty Course subjects — clear hierarchy, one Open action #}
+<div class="course-subjects-toolbar mb-4">
+    <div class="course-subjects-toolbar__filters">
+        <label class="sr-only" for="materials-subject-search">Search</label>
+        <input
+            type="search"
+            id="materials-subject-search"
+            class="course-subjects-toolbar__search"
+            placeholder="Search code or name…"
+            autocomplete="off"
+        >
+        <label class="sr-only" for="materials-subject-year">Year level</label>
+        <select id="materials-subject-year" class="course-subjects-toolbar__select">
+            <option value="">All year levels</option>
+            {% for yl in year_levels %}
+            <option value="{{ yl.pk }}">{{ yl.name }}</option>
+            {% endfor %}
+        </select>
+        <label class="sr-only" for="materials-subject-semester">Semester</label>
+        <select id="materials-subject-semester" class="course-subjects-toolbar__select">
+            <option value="">All semesters</option>
+            {% for value, label in semester_choices %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+{% if subject_cards %}
+<div class="data-table-wrap shadow-sm">
+    <table class="data-table" id="materials-subjects-table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Year / Sem</th>
+                <th class="text-right">Files</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card in subject_cards %}
+            <tr
+                class="materials-subject-row"
+                data-code="{{ card.subject.code|lower }}"
+                data-name="{{ card.subject.name|lower }}"
+                data-year="{{ card.subject.year_level_id }}"
+                data-semester="{{ card.subject.semester }}"
+            >
+                <td class="font-semibold">{{ card.subject.code }}</td>
+                <td>{{ card.subject.name }}</td>
+                <td class="text-examiq-slate">
+                    {{ card.subject.year_level.name }} · {{ card.subject.get_semester_display }}
+                </td>
+                <td class="text-right font-medium">{{ card.document_count }}</td>
+                <td class="text-right whitespace-nowrap">
+                    <a href="{% url 'analytics_student:materials_list' card.subject.pk %}"
+                       class="text-link text-sm font-medium">Open</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p id="materials-subjects-empty-filter" class="hidden p-8 text-center text-examiq-slate text-sm">No subjects match your filters.</p>
+</div>
+{% else %}
+<div class="bento-card p-8 text-center text-examiq-slate">
+    No course subjects are available for your account yet.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // Client-side filters mirror faculty course subjects for a familiar feel
+    var search = document.getElementById("materials-subject-search");
+    var year = document.getElementById("materials-subject-year");
+    var semester = document.getElementById("materials-subject-semester");
+    var rows = Array.prototype.slice.call(document.querySelectorAll(".materials-subject-row"));
+    var empty = document.getElementById("materials-subjects-empty-filter");
+    if (!rows.length) return;
+
+    function applyFilter() {
+        var q = (search && search.value || "").trim().toLowerCase();
+        var y = year && year.value || "";
+        var s = semester && semester.value || "";
+        var visible = 0;
+        rows.forEach(function (row) {
+            var matchQ = !q || (row.dataset.code || "").indexOf(q) >= 0 || (row.dataset.name || "").indexOf(q) >= 0;
+            var matchY = !y || String(row.dataset.year) === String(y);
+            var matchS = !s || String(row.dataset.semester) === String(s);
+            var show = matchQ && matchY && matchS;
+            row.classList.toggle("hidden", !show);
+            if (show) visible += 1;
+        });
+        if (empty) empty.classList.toggle("hidden", visible > 0);
+    }
+
+    if (search) search.addEventListener("input", applyFilter);
+    if (year) year.addEventListener("change", applyFilter);
+    if (semester) semester.addEventListener("change", applyFilter);
+})();
+</script>
+{% endblock %}

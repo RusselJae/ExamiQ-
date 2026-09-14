@@ -444,3 +444,40 @@ class TutorMessage(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.role} message in conversation #{self.conversation_id}"
+
+
+class RetakeActionPlan(TimeStampedModel):
+    """Gate further retakes after the configured attempt threshold."""
+
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="retake_action_plans",
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="retake_action_plans",
+    )
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="retake_action_plans",
+    )
+    difficulty = models.CharField(max_length=20, blank=True, default="")
+    attempt_count = models.PositiveSmallIntegerField(default=3)
+    acknowledged = models.BooleanField(default=False)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Retake action plan"
+        verbose_name_plural = "Retake action plans"
+        ordering = ["-created"]
+
+    def __str__(self) -> str:
+        return f"Action plan for {self.student_id} ({self.attempt_count} attempts)"
