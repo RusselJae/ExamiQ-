@@ -210,9 +210,12 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
             context["choice_formset"] = SimplifiedQuestionChoiceFormSet(
                 self.request.POST
             )
-
+            context["step_formset"] = ExplanationStepFormSet(
+                self.request.POST, prefix="steps"
+            )
         else:
             context["choice_formset"] = SimplifiedQuestionChoiceFormSet()
+            context["step_formset"] = ExplanationStepFormSet(prefix="steps")
 
         context["active_tab"] = "questions"
 
@@ -222,6 +225,10 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         context["mistake_count"] = 0
 
+        from apps.questions.services import clean_adaptive_explanation
+
+        context["adaptive_explanation"] = clean_adaptive_explanation({})
+
         return context
 
     def form_valid(self, form):
@@ -229,13 +236,15 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
         context = self.get_context_data()
 
         choice_formset = context["choice_formset"]
+        step_formset = context["step_formset"]
         qtype = form.cleaned_data.get("question_type") or Question.QuestionType.MCQ
 
-        if qtype == Question.QuestionType.MCQ:
-            if not choice_formset.is_valid():
-                return self.form_invalid(form)
-        elif not form.is_valid():
+        if qtype == Question.QuestionType.MCQ and not choice_formset.is_valid():
             return self.form_invalid(form)
+        if not step_formset.is_valid():
+            return self.form_invalid(form)
+
+        from apps.questions.services import adaptive_explanation_from_post
 
         self.object = form.save(commit=False)
         self.object.question_type = qtype
@@ -245,6 +254,9 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
         self.object.is_active = False
         if qtype != Question.QuestionType.MCQ:
             self.object.correct_answer = None
+        self.object.adaptive_explanation = adaptive_explanation_from_post(
+            self.request.POST
+        )
 
         self.object.save()
 
@@ -254,22 +266,16 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
         else:
             self.object.choices.all().delete()
 
+        step_formset.instance = self.object
+        step_formset.save()
+
         from apps.core.audit import log_audit_event
         from apps.core.models import AuditLog
-        from apps.questions.services import publish_question_as_faculty
 
-        if self.request.POST.get("faculty_attest") == "1":
-            publish_question_as_faculty(
-                self.object,
-                self.request.user,
-                approve_explanations=self.request.POST.get("approve_explanations") == "1",
-            )
-            messages.success(self.request, "Question attested and published for students.")
-        else:
-            messages.success(
-                self.request,
-                "Question saved as draft. Publish after faculty attestation when ready.",
-            )
+        messages.success(
+            self.request,
+            "Question saved as draft. Publish it from the question list when ready.",
+        )
 
         log_audit_event(
             self.request.user,
@@ -412,7 +418,10 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
                 "Question updated; adaptive explanation and steps saved.",
             )
         else:
-            messages.success(self.request, "Question updated.")
+            messages.success(
+                self.request,
+                "Draft updated. Adaptive explanation and steps saved.",
+            )
 
         return redirect(self.get_success_url())
 

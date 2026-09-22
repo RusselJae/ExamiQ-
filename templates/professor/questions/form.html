@@ -10,23 +10,23 @@
 </div>
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-{% if is_edit %}
-<div class="mb-4 rounded-xl border {% if needs_revision %}border-amber-300 bg-amber-50{% else %}border-sky-200 bg-sky-50/80{% endif %} px-4 py-3 text-sm text-examiq-navy space-y-1"
-     data-question-edit-banner
-     data-needs-revision="{% if needs_revision %}1{% else %}0{% endif %}"
-     data-original-stem="{{ question.stem|escape }}">
-    <p>
-        {{ mistake_count }} recorded mistake{{ mistake_count|pluralize }}
-        from {{ distinct_student_mistake_count }} distinct student{{ distinct_student_mistake_count|pluralize }}.
-        <a href="{% url 'analytics_professor:feedback_list' course.pk %}" class="text-link font-medium ml-1">View student concerns &rarr;</a>
-    </p>
-    {% if needs_revision %}
-    <p class="font-semibold text-amber-900">
-        This question should be revised — {{ mistake_student_threshold }}+ distinct students are missing it.
-    </p>
+    {% if is_edit %}
+    <div class="mb-4 rounded-xl border {% if needs_revision %}border-amber-300 bg-amber-50{% else %}border-sky-200 bg-sky-50/80{% endif %} px-4 py-3 text-sm text-examiq-navy space-y-1"
+         data-question-edit-banner
+         data-needs-revision="{% if needs_revision %}1{% else %}0{% endif %}"
+         data-original-stem="{{ question.stem|escape }}">
+        <p>
+            {{ mistake_count }} recorded mistake{{ mistake_count|pluralize }}
+            from {{ distinct_student_mistake_count }} distinct student{{ distinct_student_mistake_count|pluralize }}.
+            <a href="{% url 'analytics_professor:feedback_list' course.pk %}" class="text-link font-medium ml-1">View student concerns &rarr;</a>
+        </p>
+        {% if needs_revision %}
+        <p class="font-semibold text-amber-900">
+            This question should be revised — {{ mistake_student_threshold }}+ distinct students are missing it.
+        </p>
+        {% endif %}
+    </div>
     {% endif %}
-</div>
-{% endif %}
 
 <form method="post" class="space-y-6" id="question-edit-form"
       {% if is_edit and needs_revision %}data-confirm-unchanged-stem="1"{% endif %}>
@@ -105,12 +105,12 @@
         {% if form.expected_answer.errors %}<p class="text-red-600 text-xs mt-1">{{ form.expected_answer.errors.0 }}</p>{% endif %}
     </div>
 
-    {% if is_edit %}
     <div class="bento-card bento-card--elevated p-6 shadow-sm space-y-4">
         <div>
             <h2 class="text-lg font-semibold text-examiq-navy">Adaptive explanation</h2>
             <p class="text-xs text-examiq-slate mt-1">
-                Structured feedback shown when students miss this question. Prefills from the latest AI sample when empty.
+                Structured feedback shown when students miss this question. Editable on drafts and published questions.
+                {% if is_edit %}Prefills from the latest AI sample when empty.{% endif %}
             </p>
         </div>
         <div class="space-y-4">
@@ -140,7 +140,7 @@
     <div class="bento-card bento-card--elevated p-6 shadow-sm space-y-4">
         <div>
             <h2 class="text-lg font-semibold text-examiq-navy">Step-by-step</h2>
-            <p class="text-xs text-examiq-slate mt-1">Ordered solution steps for student review.</p>
+            <p class="text-xs text-examiq-slate mt-1">Ordered solution steps for student review. Editable while the question is still a draft.</p>
         </div>
         {{ step_formset.management_form }}
         {% if step_formset.non_form_errors %}
@@ -175,7 +175,6 @@
             {% endfor %}
         </div>
     </div>
-    {% endif %}
 
     <div class="bento-card p-5 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -183,12 +182,10 @@
                 {{ form.is_active }}
                 <span>Active in question bank</span>
             </label>
-            <button type="submit" class="btn-primary">
-                {% if is_edit and question.status == "approved" %}Save question{% else %}Save question{% endif %}
-            </button>
+            <button type="submit" class="btn-primary">Save question</button>
         </div>
         {% if not is_edit %}
-        <p class="text-xs text-examiq-slate mt-3">Drafts stay unpublished until you use Publish on the question list.</p>
+        <p class="text-xs text-examiq-slate mt-3">Saved as a draft until you Publish from the question list.</p>
         {% elif question.status != "approved" %}
         <p class="text-xs text-examiq-slate mt-3">This question is a draft. Publish it from the question list when ready.</p>
         {% endif %}

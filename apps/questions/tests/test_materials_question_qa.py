@@ -315,6 +315,145 @@ class TestQuestionAdaptiveExplanationEdit:
         assert "Rewrite the expression" in step.content
         assert question.explanation_status == "faculty_approved"
 
+    def test_draft_edit_saves_adaptive_explanation_and_steps(
+        self, client, professor, subject, mcq_question
+    ):
+        from apps.questions.models import ExplanationStep, Question
+
+        question, _choice = mcq_question
+        question.status = Question.Status.DRAFT
+        question.is_active = False
+        question.save(update_fields=["status", "is_active"])
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+
+        get_response = client.get(
+            reverse(
+                "analytics_professor:question_edit",
+                kwargs={"course_pk": course.pk, "question_pk": question.pk},
+            )
+        )
+        assert get_response.status_code == 200
+        content = get_response.content.decode()
+        assert "Adaptive explanation" in content
+        assert "Step-by-step" in content
+
+        choices = list(question.choices.order_by("label"))
+        post_data = {
+            "topic": question.topic_id,
+            "difficulty": question.difficulty,
+            "question_type": question.question_type,
+            "stem": question.stem,
+            "concept_tag": question.concept_tag or "",
+            "expected_answer": "",
+            "adaptive_what_went_wrong": "Draft wrong path.",
+            "adaptive_why": "Draft why text.",
+            "adaptive_quick_check": "Draft check.",
+            "adaptive_remember": "Draft hook.",
+            "adaptive_worked_example": "Draft example.",
+            "choices-TOTAL_FORMS": str(len(choices)),
+            "choices-INITIAL_FORMS": str(len(choices)),
+            "choices-MIN_NUM_FORMS": "0",
+            "choices-MAX_NUM_FORMS": "4",
+            "steps-TOTAL_FORMS": "1",
+            "steps-INITIAL_FORMS": "0",
+            "steps-MIN_NUM_FORMS": "0",
+            "steps-MAX_NUM_FORMS": "1000",
+            "steps-0-order": "1",
+            "steps-0-content": "Draft step one.",
+            "steps-0-professor_note": "",
+            "steps-0-DELETE": "",
+        }
+        for index, choice in enumerate(choices):
+            post_data[f"choices-{index}-id"] = str(choice.pk)
+            post_data[f"choices-{index}-text"] = choice.text
+            post_data[f"choices-{index}-error_type"] = ""
+            if choice.is_correct:
+                post_data[f"choices-{index}-is_correct"] = "on"
+
+        response = client.post(
+            reverse(
+                "analytics_professor:question_edit",
+                kwargs={"course_pk": course.pk, "question_pk": question.pk},
+            ),
+            post_data,
+        )
+        assert response.status_code == 302, response.content.decode()[:500]
+        question.refresh_from_db()
+        assert question.status == Question.Status.DRAFT
+        assert question.adaptive_explanation["what_went_wrong"] == "Draft wrong path."
+        assert ExplanationStep.objects.filter(
+            question=question, content__contains="Draft step"
+        ).exists()
+
+    def test_create_form_shows_and_saves_adaptive_fields(
+        self, client, professor, subject, topic
+    ):
+        from apps.questions.models import ExplanationStep, Question
+
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+
+        get_response = client.get(
+            reverse(
+                "analytics_professor:question_create_single",
+                kwargs={"course_pk": course.pk},
+            )
+        )
+        assert get_response.status_code == 200
+        assert "Adaptive explanation" in get_response.content.decode()
+        assert "Step-by-step" in get_response.content.decode()
+
+        post_data = {
+            "topic": topic.pk,
+            "difficulty": Question.Difficulty.EASY,
+            "question_type": Question.QuestionType.MCQ,
+            "stem": "What is 2 + 2?",
+            "concept_tag": "addition",
+            "expected_answer": "",
+            "adaptive_what_went_wrong": "Added instead of multiplied.",
+            "adaptive_why": "The operation is addition.",
+            "adaptive_quick_check": "2+2=4",
+            "adaptive_remember": "Plus means add.",
+            "adaptive_worked_example": "2 + 2 = 4.",
+            "choices-TOTAL_FORMS": "4",
+            "choices-INITIAL_FORMS": "0",
+            "choices-MIN_NUM_FORMS": "0",
+            "choices-MAX_NUM_FORMS": "4",
+            "choices-0-text": "3",
+            "choices-0-error_type": "",
+            "choices-1-text": "4",
+            "choices-1-is_correct": "on",
+            "choices-1-error_type": "",
+            "choices-2-text": "5",
+            "choices-2-error_type": "",
+            "choices-3-text": "22",
+            "choices-3-error_type": "",
+            "steps-TOTAL_FORMS": "1",
+            "steps-INITIAL_FORMS": "0",
+            "steps-MIN_NUM_FORMS": "0",
+            "steps-MAX_NUM_FORMS": "1000",
+            "steps-0-order": "1",
+            "steps-0-content": "Add the ones place.",
+            "steps-0-professor_note": "",
+            "steps-0-DELETE": "",
+        }
+        response = client.post(
+            reverse(
+                "analytics_professor:question_create_single",
+                kwargs={"course_pk": course.pk},
+            ),
+            post_data,
+        )
+        assert response.status_code == 302, response.content.decode()[:800]
+        question = Question.objects.filter(stem="What is 2 + 2?").latest("pk")
+        assert question.status == Question.Status.DRAFT
+        assert question.adaptive_explanation["remember"] == "Plus means add."
+        assert ExplanationStep.objects.filter(
+            question=question, content__contains="ones place"
+        ).exists()
+
+
 
 @pytest.mark.django_db
 class TestMistakeThresholdNotification:
