@@ -315,6 +315,13 @@ class TestQuestionAdaptiveExplanationEdit:
         assert "Rewrite the expression" in step.content
         assert question.explanation_status == "faculty_approved"
 
+        from apps.questions.services import faculty_adaptive_feedback_json
+        import json
+
+        payload = json.loads(faculty_adaptive_feedback_json(question))
+        assert "Rewrite the expression" in (payload.get("solution_steps") or [""])[0]
+        assert payload["what_went_wrong"] == "Sign error on the second term."
+
     def test_draft_edit_saves_adaptive_explanation_and_steps(
         self, client, professor, subject, mcq_question
     ):

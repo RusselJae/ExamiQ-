@@ -500,7 +500,8 @@
                       return String(s || "").trim();
                   })
                 : [];
-        var steps = facultySteps.length ? facultySteps : aiSteps;
+        // Prefer expanded AI solution_steps when present; fall back to faculty steps.
+        var steps = aiSteps.length ? aiSteps : facultySteps;
         var finalAnswer =
             (item && (item.final_answer || item.correct_answer)) || "";
         if (!steps.length && !finalAnswer) {

@@ -82,7 +82,7 @@ def test_normalize_varies_batch_positions():
     assert len(set(labels)) > 1
 
 
-def test_normalize_strips_explanation_fields():
+def test_normalize_keeps_explanation_fields():
     questions = [
         {
             "stem": "Q1",
@@ -93,13 +93,23 @@ def test_normalize_strips_explanation_fields():
                 {"label": "C", "text": "w2", "is_correct": False},
                 {"label": "D", "text": "w3", "is_correct": False},
             ],
-            "explanation_steps": ["Do not keep this."],
-            "solution_summary": "Do not keep this either.",
+            "explanation_steps": [" Keep this step. ", "", "And this one."],
+            "solution_summary": " Final answer: B ",
+            "what_went_wrong": " Missed a condition. ",
+            "why": " The rule applies. ",
+            "quick_check": " Check B. ",
+            "remember": " Condition first. ",
+            "worked_example": " Example here. ",
         }
     ]
     result = normalize_generated_questions(questions, rng=random.Random(0))
-    assert "explanation_steps" not in result[0]
-    assert "solution_summary" not in result[0]
+    assert result[0]["explanation_steps"] == ["Keep this step.", "And this one."]
+    assert result[0]["solution_summary"] == "Final answer: B"
+    assert result[0]["what_went_wrong"] == "Missed a condition."
+    assert result[0]["why"] == "The rule applies."
+    assert result[0]["quick_check"] == "Check B."
+    assert result[0]["remember"] == "Condition first."
+    assert result[0]["worked_example"] == "Example here."
 
 
 def test_normalize_non_mcq_payload_coerces_to_mcq():

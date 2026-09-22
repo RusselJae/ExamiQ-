@@ -24,6 +24,25 @@ logger = logging.getLogger(__name__)
 _STUB_LABELS = ("B", "C", "D")
 
 
+def _stub_explanation_fields(topic_name: str, answer_hint: str) -> dict:
+    """Shared explanation + adaptive fields for stub-generated questions."""
+    return {
+        "explanation_steps": [
+            f"Identify the key idea for {topic_name}.",
+            "Apply the rule that matches the stem.",
+            f"Arrive at: {answer_hint}.",
+        ],
+        "solution_summary": f"Answer: {answer_hint}.",
+        "what_went_wrong": (
+            "A common miss is choosing a familiar distractor that skips a key condition."
+        ),
+        "why": f"The correct answer follows the core idea for {topic_name}.",
+        "quick_check": f"Quick check: does the result match {answer_hint}?",
+        "remember": "Check the defining condition first.",
+        "worked_example": "",
+    }
+
+
 class StubQuestionGenerator(QuestionGenerator):
     def generate(
         self,
@@ -44,34 +63,41 @@ class StubQuestionGenerator(QuestionGenerator):
         qtype = coerce_generate_question_type(question_type)
         items = []
         prefix = "[From module] " if source_material else "[Stub] "
+        topic_name = topic.name
         for i in range(min(count, 3)):
             if qtype == "true_false":
+                answer = "True" if i % 2 == 0 else "False"
                 items.append({
                     "question_type": qtype,
-                    "stem": f"{prefix}Sample {difficulty} statement about {topic.name}. ({i + 1})",
-                    "concept_tag": f"Concept: {topic.name}",
-                    "expected_answer": "True" if i % 2 == 0 else "False",
+                    "stem": f"{prefix}Sample {difficulty} statement about {topic_name}. ({i + 1})",
+                    "concept_tag": f"Concept: {topic_name}",
+                    "expected_answer": answer,
+                    **_stub_explanation_fields(topic_name, answer),
                 })
             elif qtype == "identification":
+                answer = f"Term {i + 1}"
                 items.append({
                     "question_type": qtype,
-                    "stem": f"{prefix}Name the key term for {topic.name}. ({i + 1})",
-                    "concept_tag": f"Concept: {topic.name}",
-                    "expected_answer": f"Term {i + 1}",
+                    "stem": f"{prefix}Name the key term for {topic_name}. ({i + 1})",
+                    "concept_tag": f"Concept: {topic_name}",
+                    "expected_answer": answer,
+                    **_stub_explanation_fields(topic_name, answer),
                 })
             elif qtype == "enumeration":
+                answer = f"Item {i + 1}\nItem {i + 2}"
                 items.append({
                     "question_type": qtype,
-                    "stem": f"{prefix}List sample items for {topic.name}. ({i + 1})",
-                    "concept_tag": f"Concept: {topic.name}",
-                    "expected_answer": f"Item {i + 1}\nItem {i + 2}",
+                    "stem": f"{prefix}List sample items for {topic_name}. ({i + 1})",
+                    "concept_tag": f"Concept: {topic_name}",
+                    "expected_answer": answer,
+                    **_stub_explanation_fields(topic_name, "the listed items"),
                 })
             else:
                 label = _STUB_LABELS[i % len(_STUB_LABELS)]
                 items.append({
                     "question_type": "mcq",
-                    "stem": f"{prefix}Sample {difficulty} question about {topic.name}? ({i + 1})",
-                    "concept_tag": f"Concept: {topic.name}",
+                    "stem": f"{prefix}Sample {difficulty} question about {topic_name}? ({i + 1})",
+                    "concept_tag": f"Concept: {topic_name}",
                     "correct_label": label,
                     "choices": [
                         {"label": "A", "text": "Distractor A", "is_correct": label == "A"},
@@ -79,6 +105,7 @@ class StubQuestionGenerator(QuestionGenerator):
                         {"label": "C", "text": "Distractor C", "is_correct": label == "C"},
                         {"label": "D", "text": "Distractor D", "is_correct": label == "D"},
                     ],
+                    **_stub_explanation_fields(topic_name, f"choice {label}"),
                 })
         return normalize_generated_questions(items, question_type=qtype)
 

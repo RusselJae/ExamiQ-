@@ -3,6 +3,8 @@
 
 {% block title %}Edit Question {{ question_number }} - EXAMIQ+{% endblock %}
 
+{% block main_class %}question-edit-page{% endblock %}
+
 {% block content %}
 {% include "components/professor_section_header.html" with course=course page_label="Edit question" %}
 {% include "components/professor_course_nav.html" with course=course active_tab="questions" %}

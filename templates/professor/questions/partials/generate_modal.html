@@ -34,6 +34,11 @@
                            data-difficulty="{{ difficulty }}"
                            data-expected="{{ variation.expected_answer|default:''|escape }}"
                            data-solution="{{ variation.solution_summary|default:''|escape }}"
+                           data-what-went-wrong="{{ variation.what_went_wrong|default:''|escape }}"
+                           data-why="{{ variation.why|default:''|escape }}"
+                           data-quick-check="{{ variation.quick_check|default:''|escape }}"
+                           data-remember="{{ variation.remember|default:''|escape }}"
+                           data-worked-example="{{ variation.worked_example|default:''|escape }}"
                            {% if variation.explanation_steps %}data-steps="{% for step in variation.explanation_steps %}{{ step|escape }}{% if not forloop.last %}|||{% endif %}{% endfor %}"{% endif %}
                            {% for choice in variation.choices %}
                            data-choice-{{ choice.label|lower }}="{{ choice.text|escape }}"

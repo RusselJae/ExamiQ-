@@ -638,12 +638,21 @@ def prefill_adaptive_explanation(question) -> dict:
     return clean_adaptive_explanation({})
 
 
+def question_explanation_step_texts(question) -> list[str]:
+    """Ordered non-empty explanation step strings for tutor / feedback serving."""
+    rows = question.explanation_steps.order_by("order").values_list(
+        "content", flat=True
+    )
+    return [str(content).strip() for content in rows if str(content or "").strip()]
+
+
 def faculty_adaptive_feedback_json(question) -> str:
     """Serialize faculty adaptive_explanation for student feedback serving."""
     from apps.ai.normalize import adaptive_feedback_to_json, parse_adaptive_feedback
 
     data = clean_adaptive_explanation(getattr(question, "adaptive_explanation", None))
-    if not adaptive_explanation_has_content(data):
+    steps = question_explanation_step_texts(question)
+    if not adaptive_explanation_has_content(data) and not steps:
         return ""
 
     payload = {
@@ -652,7 +661,7 @@ def faculty_adaptive_feedback_json(question) -> str:
         "quick_check": data.get("quick_check") or data.get("worked_example") or None,
         "remember": data.get("remember") or "",
         "follow_ups": [],
-        "solution_steps": None,
+        "solution_steps": steps or None,
     }
     if data.get("worked_example") and not payload["quick_check"]:
         payload["quick_check"] = data["worked_example"]
@@ -662,6 +671,8 @@ def faculty_adaptive_feedback_json(question) -> str:
     if parsed:
         if data.get("worked_example"):
             parsed["worked_example"] = data["worked_example"]
+        if steps and not parsed.get("solution_steps"):
+            parsed["solution_steps"] = steps
         return adaptive_feedback_to_json(parsed)
 
     import json

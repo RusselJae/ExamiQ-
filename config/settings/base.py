@@ -175,7 +175,7 @@ GEMINI_FALLBACK_MODELS = env.list(
         "gemini-2.0-flash-lite",
     ],
 )
-GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=2048)
+GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=8192)
 AI_GENERATION_BATCH_SIZE = env.int("AI_GENERATION_BATCH_SIZE", default=5)
 AI_GENERATION_MAX_ATTEMPTS = env.int("AI_GENERATION_MAX_ATTEMPTS", default=3)
 # Legacy env keys retained so existing .env files keep loading; no longer enforced.

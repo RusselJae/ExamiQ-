@@ -1276,6 +1276,13 @@
                     ),
                     solution_summary: cb.dataset.solution || "",
                     steps: steps,
+                    adaptive_explanation: {
+                        what_went_wrong: cb.dataset.whatWentWrong || "",
+                        why: cb.dataset.why || "",
+                        quick_check: cb.dataset.quickCheck || "",
+                        remember: cb.dataset.remember || "",
+                        worked_example: cb.dataset.workedExample || "",
+                    },
                     choices: {},
                     question_type: normalizeQuestionType(
                         cb.dataset.questionType || (questionTypeSelect ? questionTypeSelect.value : "mcq")

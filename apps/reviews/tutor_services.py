@@ -110,14 +110,30 @@ def format_question_correct_text(question: Question) -> str:
 def _question_context(answer: Answer | None) -> dict:
     if not answer:
         return {}
-    return {
-        "stem": answer.question.stem,
+    from apps.questions.services import (
+        adaptive_explanation_has_content,
+        clean_adaptive_explanation,
+        question_explanation_step_texts,
+    )
+
+    question = answer.question
+    steps = question_explanation_step_texts(question)
+    adaptive = clean_adaptive_explanation(
+        getattr(question, "adaptive_explanation", None)
+    )
+    ctx = {
+        "stem": question.stem,
         "user_answer": _answer_user_response(answer),
         "correct_answer": _answer_correct_response(answer),
         "is_correct": answer.is_correct,
         "timed_out": answer.timed_out,
-        "difficulty": answer.question.difficulty,
+        "difficulty": question.difficulty,
     }
+    if steps:
+        ctx["explanation_steps"] = steps
+    if adaptive_explanation_has_content(adaptive):
+        ctx["adaptive_explanation"] = adaptive
+    return ctx
 
 
 def _exam_context(session: ReviewSession, answer: Answer | None = None) -> dict:

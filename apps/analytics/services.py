@@ -141,12 +141,14 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
         adaptive_explanation_has_content,
         clean_adaptive_explanation,
         faculty_adaptive_feedback_json,
+        question_explanation_step_texts,
     )
 
     shared_base = clean_adaptive_explanation(
         getattr(question, "adaptive_explanation", None)
     )
     has_shared = adaptive_explanation_has_content(shared_base)
+    faculty_steps = question_explanation_step_texts(question)
     faculty_source = (
         getattr(question, "adaptive_explanation_source", "") or ""
     ).strip() == "faculty"
@@ -173,6 +175,10 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
                 elif answer.confidence >= 4:
                     confidence = "high"
 
+            shared_for_prompt = dict(shared_base) if has_shared else {}
+            if faculty_steps:
+                shared_for_prompt["solution_steps"] = faculty_steps
+
             ai_feedback = get_adaptive_feedback_generator().generate(
                 topic=question.topic.name,
                 question=question.stem,
@@ -184,15 +190,17 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
                 difficulty=question.get_difficulty_display(),
                 is_correct=False,
                 unanswered=answer_is_unanswered(answer),
-                shared_base=shared_base if has_shared else None,
+                shared_base=shared_for_prompt or None,
             )
             validated = validate_adaptive_feedback(ai_feedback)
             if validated:
+                if faculty_steps and not validated.get("solution_steps"):
+                    validated["solution_steps"] = faculty_steps
                 ai_feedback = adaptive_feedback_to_json(validated)
     except Exception:
         ai_feedback = ""
 
-    if not ai_feedback and has_shared:
+    if not ai_feedback and (has_shared or faculty_steps):
         # Prefer shared base (faculty or AI) over empty failure.
         ai_feedback = faculty_adaptive_feedback_json(question)
 
@@ -204,7 +212,7 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
             ai_feedback = normalize_feedback_text(ai_feedback)
         mistake_record.ai_feedback = ai_feedback
         mistake_record.save(update_fields=["ai_feedback"])
-    elif faculty_source and has_shared:
+    elif (faculty_source and has_shared) or faculty_steps:
         ai_feedback = faculty_adaptive_feedback_json(question)
         if ai_feedback:
             mistake_record.ai_feedback = ai_feedback

@@ -6,7 +6,7 @@
 <div class="materials-page materials-page--detail materials-page--detail-full">
     <div class="materials-page__header">
         <div>
-            <a href="{{ back_url|default:course.get_absolute_url }}" class="materials-page__back">&larr; Back to materials</a>
+            <a href="{{ back_url }}" class="materials-page__back">&larr; Back to materials</a>
             <h1 class="materials-page__title">{{ document.display_title }}</h1>
             <p class="materials-page__subtitle">{{ document.original_name }} · {{ document.get_status_display }} · {{ document.chunk_count }} chunks</p>
         </div>

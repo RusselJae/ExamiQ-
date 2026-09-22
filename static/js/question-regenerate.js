@@ -22,6 +22,56 @@
         );
     }
 
+    function applyAdaptive(variation) {
+        var keys = [
+            "what_went_wrong",
+            "why",
+            "quick_check",
+            "remember",
+            "worked_example",
+        ];
+        keys.forEach(function (key) {
+            var el = document.getElementById("id_adaptive_" + key);
+            if (!el) return;
+            var value = variation[key];
+            if (value == null && variation.adaptive_explanation) {
+                value = variation.adaptive_explanation[key];
+            }
+            if (value != null) el.value = String(value);
+        });
+    }
+
+    function applySteps(variation) {
+        var steps = variation.explanation_steps || variation.steps || [];
+        if (!Array.isArray(steps)) steps = [];
+        steps = steps
+            .map(function (step) {
+                return String(step || "").trim();
+            })
+            .filter(Boolean);
+
+        var contents = Array.prototype.slice.call(
+            document.querySelectorAll('textarea[name^="steps-"][name$="-content"]')
+        );
+        var orders = Array.prototype.slice.call(
+            document.querySelectorAll('input[name^="steps-"][name$="-order"]')
+        );
+        var deletes = Array.prototype.slice.call(
+            document.querySelectorAll('input[name^="steps-"][name$="-DELETE"]')
+        );
+
+        for (var i = 0; i < contents.length; i++) {
+            if (i < steps.length) {
+                contents[i].value = steps[i];
+                if (orders[i]) orders[i].value = String(i + 1);
+                if (deletes[i]) deletes[i].checked = false;
+            } else {
+                contents[i].value = "";
+                if (deletes[i]) deletes[i].checked = true;
+            }
+        }
+    }
+
     function applyVariation(variation) {
         var stem = document.getElementById("id_stem");
         var concept = document.getElementById("id_concept_tag");
@@ -46,6 +96,9 @@
                     (variation.correct_label || "").toUpperCase() === label;
             }
         });
+
+        applyAdaptive(variation);
+        applySteps(variation);
     }
 
     function closeModal() {

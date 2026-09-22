@@ -503,10 +503,32 @@ def _normalize_enumeration_answer(value) -> str:
     return "\n".join(items)
 
 
+def _normalize_explanation_fields(item: dict) -> None:
+    """Keep cleaned explanation + adaptive fields on a generated item."""
+    from apps.questions.services import clean_adaptive_explanation
+
+    steps_raw = item.get("explanation_steps")
+    steps: list[str] = []
+    if isinstance(steps_raw, list):
+        for part in steps_raw:
+            text = _coerce_text(part)
+            if text:
+                steps.append(text)
+    elif steps_raw is not None:
+        text = _coerce_text(steps_raw)
+        if text:
+            steps.append(text)
+    item["explanation_steps"] = steps
+    item["solution_summary"] = _coerce_text(item.get("solution_summary"))
+
+    adaptive = clean_adaptive_explanation(item)
+    for key, value in adaptive.items():
+        item[key] = value
+
+
 def _normalize_generated_item(raw: dict, rng: random.Random) -> dict:
     item = dict(raw)
-    item.pop("explanation_steps", None)
-    item.pop("solution_summary", None)
+    _normalize_explanation_fields(item)
 
     qtype = coerce_generate_question_type(item.get("question_type"))
     item["question_type"] = qtype

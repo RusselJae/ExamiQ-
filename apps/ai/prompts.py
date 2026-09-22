@@ -90,6 +90,10 @@ RULES:
 - NEVER return a plain numbered prose list for solve requests — always use type solution JSON.
 - Solution steps: 3–6 steps, action titles only (never "Step N"), one operation per step, \
 highlight changed terms, each line follows the previous, end with a check when possible.
+- When faculty / curated solution steps are provided in context, expand them into fuller \
+solution JSON (more intermediate equations, clearer why) — never drop key math or shorten them.
+- When a curated adaptive explanation is provided, weave its why / remember / worked_example \
+into a clearer, more detailed reply without inventing a different correct answer.
 - If the message is vague, tie it to the active question in the first step, then help.
 - Use $...$ / $$...$$ for math (KaTeX).
 - Do not put LaTeX commands in "title" or "operation"."""
@@ -146,28 +150,57 @@ QUESTION_VALIDATION_JSON_SCHEMA = (
     '"suggested_concept_tag": "short label"}'
 )
 
+_GENERATION_EXPLAIN_SCHEMA = (
+    '"explanation_steps":["Identify the key idea.","Work the decisive step.",'
+    '"State the final answer."],'
+    '"solution_summary":"Final answer line",'
+    '"what_went_wrong":"Common miss students make on this item",'
+    '"why":"Why the correct answer follows from the rule",'
+    '"quick_check":"Tiny check that confirms the answer",'
+    '"remember":"Short rule to remember",'
+    '"worked_example":""'
+)
+
 QUESTION_JSON_SCHEMA = (
     '[{"question_type":"mcq","stem":"short question text","concept_tag":"2-4 word tag",'
     '"correct_label":"B",'
     '"choices":[{"label":"A","text":"plausible distractor","is_correct":false},'
     '{"label":"B","text":"the one correct answer","is_correct":true},'
     '{"label":"C","text":"plausible distractor","is_correct":false},'
-    '{"label":"D","text":"plausible distractor","is_correct":false}]}'
+    '{"label":"D","text":"plausible distractor","is_correct":false}],'
+    + _GENERATION_EXPLAIN_SCHEMA
+    + "}]"
 )
 
 TRUE_FALSE_JSON_SCHEMA = (
     '[{"question_type":"true_false","stem":"A clear true or false statement.",'
-    '"concept_tag":"2-4 word tag","expected_answer":"True"}]'
+    '"concept_tag":"2-4 word tag","expected_answer":"True",'
+    + _GENERATION_EXPLAIN_SCHEMA
+    + "}]"
 )
 
 IDENTIFICATION_JSON_SCHEMA = (
     '[{"question_type":"identification","stem":"Name the property used here.",'
-    '"concept_tag":"2-4 word tag","expected_answer":"commutative property"}]'
+    '"concept_tag":"2-4 word tag","expected_answer":"commutative property",'
+    + _GENERATION_EXPLAIN_SCHEMA
+    + "}]"
 )
 
 ENUMERATION_JSON_SCHEMA = (
     '[{"question_type":"enumeration","stem":"List the three measures of central tendency.",'
-    '"concept_tag":"2-4 word tag","expected_answer":"mean\\nmedian\\nmode"}]'
+    '"concept_tag":"2-4 word tag","expected_answer":"mean\\nmedian\\nmode",'
+    + _GENERATION_EXPLAIN_SCHEMA
+    + "}]"
+)
+
+_GENERATION_EXPLAIN_RULES = (
+    "- Include explanation_steps (4-6 detailed teaching steps), solution_summary, and adaptive "
+    "fields (what_went_wrong, why, quick_check, remember, worked_example) on every item.\n"
+    "- explanation_steps must teach the full solution: name the rule/formula, show intermediate "
+    "work, and end with a check — not vague lines like 'apply the formula'.\n"
+    "- adaptive fields coach a student who missed it; keep what_went_wrong about the common "
+    "confusion, why about the correct reasoning, and quick_check as a tiny numeric check when useful.\n"
+    "- worked_example may be an empty string when not useful.\n"
 )
 
 EXPLANATION_JSON_SCHEMA = (
@@ -290,11 +323,13 @@ def coerce_generate_question_type(value: str | None) -> str:
 
 
 def question_generation_max_tokens(count: int, difficulty: str = "") -> int:
-    """Budget for MCQ-only generation (explanations are a separate call)."""
+    """Budget for MCQ generation including explanation + adaptive fields."""
     from django.conf import settings
 
-    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
-    base = max(900, 220 * count)
+    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 8192)
+    # Explanations inflate output; keep a higher effective ceiling for this call.
+    cap = max(cap, 8192)
+    base = max(1600, 700 * count)
     if difficulty == Question.Difficulty.HARD:
         base = int(base * 1.35)
     return min(cap, base)
@@ -372,7 +407,7 @@ QUESTION_GENERATION_SYSTEM_MCQ = (
     "- Stems ≤50 words; choice text ≤120 characters; difficulty must match requested level.\n"
     "- Distractors plausible but definitively wrong to a subject expert.\n"
     "- Solve each problem yourself before marking the answer; verify correctness.\n"
-    "- Do NOT include explanation_steps or solution_summary — questions only.\n"
+    f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
     "- No trailing commas. Escape double quotes inside strings.\n"
@@ -385,7 +420,7 @@ QUESTION_GENERATION_SYSTEM_TRUE_FALSE = (
     "- Each item is a True or False statement (not a question with choices).\n"
     "- expected_answer must be exactly True or False.\n"
     "- Stems ≤50 words; difficulty must match requested level.\n"
-    "- Do NOT include explanation_steps or solution_summary.\n"
+    f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
     "- No trailing commas. Escape double quotes inside strings."
@@ -398,7 +433,7 @@ QUESTION_GENERATION_SYSTEM_IDENTIFICATION = (
     "- expected_answer must be concise and unambiguous (case does not matter for grading).\n"
     "- Avoid answers that depend on capitalization unless the concept requires it.\n"
     "- Stems ≤50 words; difficulty must match requested level.\n"
-    "- Do NOT include explanation_steps or solution_summary.\n"
+    f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
     "- No trailing commas. Escape double quotes inside strings."
@@ -410,7 +445,7 @@ QUESTION_GENERATION_SYSTEM_ENUMERATION = (
     "- Each item asks the student to list at least two related items.\n"
     "- expected_answer must list items one per line (use \\n between items).\n"
     "- Stems ≤50 words; difficulty must match requested level.\n"
-    "- Do NOT include explanation_steps or solution_summary.\n"
+    f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
     "- No trailing commas. Escape double quotes inside strings."
@@ -420,13 +455,16 @@ EXPLANATION_GENERATION_SYSTEM = (
     f"You are {EXAMIQ_PERSONA} solution writer. Return valid JSON only — no markdown, no prose.\n"
     "Rules:\n"
     "- Provide a complete worked solution matched to the question type (see user prompt).\n"
-    "- explanation_steps: 4-6 substantive steps for multi-step work; 3-4 for simpler items.\n"
-    "- Each step may be 1-2 sentences OR one math line — teach the reasoning, not just the answer.\n"
+    "- explanation_steps: 4-6 substantive steps for multi-step work; 3-5 for simpler items.\n"
+    "- Each step is 1-3 sentences OR a clear math line plus a short reason — teach deeply.\n"
     "- Start instructional steps with an action verb (Identify, Set up, Substitute, Solve, Check).\n"
-    "- Name the rule, formula, or concept when it helps the student understand why.\n"
+    "- Name the rule, formula, or concept; show intermediate values; never skip the 'why'.\n"
     "- Use plain, direct language a student can follow after missing the question.\n"
     "- Avoid vague lines like 'do the calculation' or 'apply the formula' without showing what.\n"
+    "- End with a check or reasonableness step when the problem allows it.\n"
     "- solution_summary is one clear line stating the final answer.\n"
+    "- Adaptive fields (what_went_wrong, why, quick_check, remember, worked_example) must be "
+    "specific to THIS item — not generic filler.\n"
     "- For math-heavy subjects you may use KaTeX-friendly $...$ in steps.\n"
     "- For non-math subjects use plain English only.\n"
     "JSON output rules:\n"
@@ -548,7 +586,7 @@ def build_question_generation_prompt(
         f"Reference (optional): {ref}\n\n"
         f"{material_block}"
         f"{extra}"
-        "Return questions only — omit explanation_steps and solution_summary.\n"
+        "Include explanation_steps, solution_summary, and adaptive fields on every item.\n"
         f"JSON array schema:\n{schema}"
     )
     if ref != "none":
@@ -568,7 +606,7 @@ def build_question_generation_prompt(
             f"Reference question to improve upon:\n{ref}\n\n"
             f"{material_block}"
             f"{extra}"
-            "Return questions only — omit explanation_steps and solution_summary.\n"
+            "Include explanation_steps, solution_summary, and adaptive fields on every item.\n"
             f"JSON array schema:\n{schema}"
         )
     return system, user_prompt, question_generation_max_tokens(count, difficulty)
@@ -700,6 +738,34 @@ def format_question_context(question_context: dict[str, Any] | None) -> str:
         parts.append("Student timed out on this question.")
     if question_context.get("difficulty"):
         parts.append(f"Difficulty: {question_context['difficulty']}")
+    steps = question_context.get("explanation_steps") or []
+    if isinstance(steps, list) and steps:
+        numbered = "\n".join(
+            f"  {index}. {step}" for index, step in enumerate(steps, start=1)
+        )
+        parts.append(
+            "Faculty / curated solution steps (expand these into richer teaching when "
+            "the student asks for help or a full solution — do not shorten them):\n"
+            f"{numbered}"
+        )
+    adaptive = question_context.get("adaptive_explanation") or {}
+    if isinstance(adaptive, dict) and any(str(adaptive.get(k) or "").strip() for k in adaptive):
+        adaptive_lines = []
+        for key in (
+            "what_went_wrong",
+            "why",
+            "quick_check",
+            "remember",
+            "worked_example",
+        ):
+            value = str(adaptive.get(key) or "").strip()
+            if value:
+                adaptive_lines.append(f"  {key}: {value}")
+        if adaptive_lines:
+            parts.append(
+                "Curated adaptive explanation (build on this; make replies more detailed):\n"
+                + "\n".join(adaptive_lines)
+            )
     if not parts:
         return ""
     return "Active question context:\n" + "\n".join(f"- {p}" for p in parts) + "\n\n"
@@ -839,6 +905,11 @@ def build_adaptive_feedback_prompt(
             f"{_json.dumps(shared_base, ensure_ascii=False)}\n"
             "- Prefer adapting what_went_wrong to their selected option.\n"
             "- Keep why / remember / quick_check aligned with the shared base unless wrong.\n"
+            "- If solution_steps are present, EXPAND each into a more detailed teaching step "
+            "(name the rule, show intermediate work, add a check). Never drop or shorten them; "
+            "return the improved list as solution_steps.\n"
+            "- If solution_steps are missing but the problem is multi-step, invent detailed "
+            "solution_steps for THIS stem.\n"
         )
 
     user_prompt = f"""\
@@ -851,7 +922,7 @@ def build_adaptive_feedback_prompt(
 - No filler like "double-check your work", "great try", or "remember to".
 - Each text field (except solution_steps) is 1 to 2 sentences. If you have nothing useful for quick_check, return null.
 - Do NOT use "Step 1." / "Step 2." patterns in what_went_wrong, why, quick_check, or remember.
-- solution_steps: for calculation-heavy items, return an ordered list of detailed steps that solve THIS problem (Step-N wording is allowed only here). For purely conceptual items, return null.
+- solution_steps: return an ordered list of detailed steps that solve THIS problem (4-6 for multi-step work; Step-N wording is allowed only here). Prefer non-null whenever calculation or multi-step reasoning is involved. For purely one-line conceptual items only, return null.
 - Do NOT invent options that were not provided.
 {unanswered_note}{shared_block}
 ### JSON SCHEMA

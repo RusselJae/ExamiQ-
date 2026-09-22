@@ -4051,8 +4051,32 @@
 
 /* Question edit / batch draft tabs */
 .question-edit-shell {
+    max-width: none !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.app-content.question-edit-page {
     max-width: none;
     width: 100%;
+}
+
+.question-edit-page .question-edit-shell,
+.question-edit-page .question-edit-tabs,
+.question-edit-page .question-edit-panels,
+.question-edit-page .question-edit-panel,
+.question-edit-page .question-edit-footer {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+.question-edit-page .question-edit-panel textarea,
+.question-edit-page .question-edit-panel input[type="text"],
+.question-edit-page .question-edit-panel select {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
 }
 
 .question-edit-tabs {

@@ -26,8 +26,8 @@ class TestQuestionGenerationPrompt:
     def test_token_budget_scales_with_count(self, topic):
         _, _, tokens_five = build_question_generation_prompt(topic, "easy", 5)
         _, _, tokens_three = build_question_generation_prompt(topic, "easy", 3)
-        assert tokens_five == 1100
-        assert tokens_three == 900
+        assert tokens_five == 3500
+        assert tokens_three == 2100
         assert tokens_five > tokens_three
 
     @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
@@ -43,8 +43,8 @@ class TestQuestionGenerationPrompt:
         assert topic.subject.code in user
         assert "Year level" in user
         assert topic.subject.year_level.name in user
-        assert "omit explanation_steps" in user
-        assert "Do NOT include explanation" in system
+        assert "Include explanation_steps" in user
+        assert "explanation_steps" in system
         assert "randomize" in system.lower() or "correct_label" in system.lower()
 
     def test_hard_difficulty_includes_advanced_guidance(self, topic):
@@ -95,6 +95,32 @@ class TestLegacyTutorPrompts:
         assert "never include step numbers" in system.lower() or "never" in user.lower()
         assert "highlight" in system.lower()
         assert "check step" in system.lower() or "check when possible" in user.lower()
+
+    def test_tutor_chat_includes_faculty_steps_for_expansion(self):
+        _, user = build_tutor_chat_prompt(
+            "algebra",
+            "Show the full solution",
+            question_context={
+                "stem": "Solve 2x + 3 = 11",
+                "user_answer": "x = 3",
+                "correct_answer": "x = 4",
+                "is_correct": False,
+                "explanation_steps": [
+                    "Subtract 3 from both sides.",
+                    "Divide by 2 to get x = 4.",
+                ],
+                "adaptive_explanation": {
+                    "what_went_wrong": "Arithmetic slip when isolating x.",
+                    "why": "2x = 8 so x = 4.",
+                    "remember": "Undo addition first.",
+                },
+            },
+        )
+        assert "Subtract 3 from both sides" in user
+        assert "expand these into richer teaching" in user.lower()
+        assert "Arithmetic slip" in user
+        assert "build on this" in user.lower()
+        assert "expand them into fuller" in user.lower()
 
     def test_tutor_intro_format(self):
         _, user = build_tutor_intro_prompt("Calculus")
@@ -228,7 +254,7 @@ class TestTopicDetectionPrompt:
 class TestTokenHelpers:
     @override_settings(GEMINI_QUESTION_MAX_OUTPUT_TOKENS=2048)
     def test_question_generation_max_tokens_floor(self):
-        assert question_generation_max_tokens(1) == 900
+        assert question_generation_max_tokens(1) == 1600
 
     def test_coerce_generate_question_type_defaults_to_mcq(self):
         assert coerce_generate_question_type(None) == Question.QuestionType.MCQ

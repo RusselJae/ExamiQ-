@@ -198,7 +198,7 @@ ExplanationStepFormSet = inlineformset_factory(
     Question,
     ExplanationStep,
     fields=["order", "content", "professor_note"],
-    extra=2,
+    extra=6,
     can_delete=True,
     widgets={
         "order": forms.NumberInput(attrs={"class": INPUT_CLASS}),
