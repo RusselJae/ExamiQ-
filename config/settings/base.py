@@ -80,14 +80,20 @@ DATABASES = {
     #     "NAME": BASE_DIR / "db.sqlite3",
     # },
     # Railway / PostgreSQL (commented out for local SQLite development):
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "railway",
-        "USER": "postgres",
-        "PASSWORD": "eFpJQNkaXixKdZKyTIcjvRbBRFPXLFIy",
-        "HOST": "tokaido.proxy.rlwy.net",
-        "PORT": "11132",
-    },
+    # "default": {
+    #     "ENGINE": "django.db.backends.postgresql",
+    #     "NAME": "railway",
+    #     "USER": "postgres",
+    #     "PASSWORD": "eFpJQNkaXixKdZKyTIcjvRbBRFPXLFIy",
+    #     "HOST": "tokaido.proxy.rlwy.net",
+    #     "PORT": "11132",
+    # },
+
+    "default": env.db(
+        "DATABASE_URL",
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+    )
+
 }
 
 AUTH_PASSWORD_VALIDATORS = [
