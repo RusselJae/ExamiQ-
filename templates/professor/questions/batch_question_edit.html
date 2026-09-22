@@ -8,40 +8,109 @@
 {% include "components/professor_course_nav.html" with course=course active_tab="questions" %}
 
 <p class="text-sm text-examiq-slate mb-4">
-    Update this Multiple Choice draft before submitting the batch.
+    Update this Multiple Choice draft before submitting the batch. Use the tabs to edit details, answers, explanation, and steps without long scrolling.
 </p>
 
-<form id="batch-edit-form" class="space-y-6">
-    <div class="bento-card bento-card--elevated p-6 shadow-sm space-y-4">
-        <input type="hidden" id="edit-question-type" value="mcq">
-        <div>
-            <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
-            <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="Short concept label">
-        </div>
-        <div>
-            <label for="edit-stem" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
-            <textarea id="edit-stem" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm" placeholder="Enter question text..."></textarea>
-        </div>
-        <div id="edit-mcq-fields" class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {% for letter in "ABCD" %}
-                <div>
-                    <label for="edit-choice-{{ letter }}" class="block text-sm font-medium text-examiq-slate mb-1">Choice {{ letter }}</label>
-                    <input type="text" id="edit-choice-{{ letter }}" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
-                </div>
-                {% endfor %}
+<form id="batch-edit-form" class="question-edit-shell space-y-4" data-question-edit-tabs>
+    <input type="hidden" id="edit-question-type" value="mcq">
+
+    <nav class="question-edit-tabs" role="tablist" aria-label="Draft editor sections">
+        <button type="button" class="question-edit-tab is-active" role="tab" aria-selected="true" data-tab-target="details" id="tab-details">1 Details</button>
+        <button type="button" class="question-edit-tab" role="tab" aria-selected="false" data-tab-target="answers" id="tab-answers">2 Answers</button>
+        <button type="button" class="question-edit-tab" role="tab" aria-selected="false" data-tab-target="explanation" id="tab-explanation">3 Explanation</button>
+        <button type="button" class="question-edit-tab" role="tab" aria-selected="false" data-tab-target="steps" id="tab-steps">4 Steps</button>
+    </nav>
+
+    <div class="question-edit-panels">
+        <section class="question-edit-panel is-active bento-card bento-card--elevated p-6 shadow-sm space-y-4"
+                 role="tabpanel" data-tab-panel="details" aria-labelledby="tab-details">
+            <div>
+                <h2 class="text-lg font-semibold text-examiq-navy">Question details</h2>
+                <p class="text-xs text-examiq-slate mt-1">Concept tag and question stem.</p>
             </div>
             <div>
-                <label for="edit-correct" class="block text-sm font-medium text-examiq-slate mb-1">Correct Answer (A–D)</label>
-                <select id="edit-correct" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
-                    {% for letter in "ABCD" %}
-                    <option value="{{ letter }}">{{ letter }}</option>
-                    {% endfor %}
-                </select>
+                <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
+                <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="Short concept label">
             </div>
-        </div>
+            <div>
+                <label for="edit-stem" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
+                <textarea id="edit-stem" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm" placeholder="Enter question text..."></textarea>
+            </div>
+        </section>
+
+        <section class="question-edit-panel bento-card bento-card--elevated p-6 shadow-sm space-y-4 hidden"
+                 role="tabpanel" data-tab-panel="answers" aria-labelledby="tab-answers" hidden>
+            <div>
+                <h2 class="text-lg font-semibold text-examiq-navy">Answer choices</h2>
+                <p class="text-xs text-examiq-slate mt-1">Select the correct option (A–D).</p>
+            </div>
+            <div id="edit-mcq-fields" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {% for letter in "ABCD" %}
+                    <div>
+                        <label for="edit-choice-{{ letter }}" class="block text-sm font-medium text-examiq-slate mb-1">Choice {{ letter }}</label>
+                        <input type="text" id="edit-choice-{{ letter }}" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
+                    </div>
+                    {% endfor %}
+                </div>
+                <div>
+                    <label for="edit-correct" class="block text-sm font-medium text-examiq-slate mb-1">Correct Answer (A–D)</label>
+                    <select id="edit-correct" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
+                        {% for letter in "ABCD" %}
+                        <option value="{{ letter }}">{{ letter }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <section class="question-edit-panel bento-card bento-card--elevated p-6 shadow-sm space-y-4 hidden"
+                 role="tabpanel" data-tab-panel="explanation" aria-labelledby="tab-explanation" hidden>
+            <div>
+                <h2 class="text-lg font-semibold text-examiq-navy">Adaptive explanation</h2>
+                <p class="text-xs text-examiq-slate mt-1">
+                    Structured feedback shown when students miss this question. Saved with the draft until you submit the batch.
+                </p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label for="edit-adaptive-what-went-wrong" class="block text-sm font-medium text-examiq-slate mb-1">What went wrong</label>
+                    <textarea id="edit-adaptive-what-went-wrong" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
+                </div>
+                <div>
+                    <label for="edit-adaptive-why" class="block text-sm font-medium text-examiq-slate mb-1">Why</label>
+                    <textarea id="edit-adaptive-why" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
+                </div>
+                <div>
+                    <label for="edit-adaptive-quick-check" class="block text-sm font-medium text-examiq-slate mb-1">Quick check</label>
+                    <textarea id="edit-adaptive-quick-check" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
+                </div>
+                <div>
+                    <label for="edit-adaptive-remember" class="block text-sm font-medium text-examiq-slate mb-1">Remember</label>
+                    <textarea id="edit-adaptive-remember" rows="1" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
+                </div>
+                <div>
+                    <label for="edit-adaptive-worked-example" class="block text-sm font-medium text-examiq-slate mb-1">Worked example</label>
+                    <textarea id="edit-adaptive-worked-example" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <section class="question-edit-panel bento-card bento-card--elevated p-6 shadow-sm space-y-4 hidden"
+                 role="tabpanel" data-tab-panel="steps" aria-labelledby="tab-steps" hidden>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-examiq-navy">Step-by-step</h2>
+                    <p class="text-xs text-examiq-slate mt-1">Ordered solution steps for student review.</p>
+                </div>
+                <button type="button" id="edit-add-step" class="btn-secondary btn-primary-sm">+ Add step</button>
+            </div>
+            <div id="edit-steps-list" class="space-y-3"></div>
+            <p id="edit-steps-empty" class="text-sm text-examiq-slate hidden">No steps yet. Add one or leave empty for now.</p>
+        </section>
     </div>
-    <div class="flex flex-wrap gap-3">
+
+    <div class="question-edit-footer flex flex-wrap gap-3">
         <button type="submit" class="btn-primary">Save changes</button>
         <a href="{% url 'analytics_professor:question_create' course.pk %}" class="btn-secondary">Cancel</a>
     </div>
@@ -50,21 +119,86 @@
 
 {% block extra_js %}
 <script src="{% static 'js/batch-questions.js' %}"></script>
+<script src="{% static 'js/question-edit-tabs.js' %}"></script>
 <script>
 (function() {
     const coursePk = "{{ course.pk }}";
     const questionIndex = {{ question_index }};
+    const ADAPTIVE_KEYS = [
+        "what_went_wrong",
+        "why",
+        "quick_check",
+        "remember",
+        "worked_example",
+    ];
+
     if (!window.ExamiQBatch) {
         if (window.showToast) {
             window.showToast("Could not load draft helpers. Refresh and try again.", "error");
         }
         return;
     }
+
     const draft = window.ExamiQBatch.loadDraft(coursePk);
     const data = draft.questions[questionIndex] || {
         stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
-        question_type: "mcq", expected_answer: "", ai_generated: false
+        question_type: "mcq", expected_answer: "", ai_generated: false,
+        steps: [], adaptive_explanation: {}
     };
+
+    function normalizeSteps(raw) {
+        if (!Array.isArray(raw)) return [];
+        return raw.map(function(item) {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object") return String(item.content || item.text || "").trim();
+            return String(item || "").trim();
+        }).filter(Boolean);
+    }
+
+    function normalizeAdaptive(raw) {
+        const source = raw && typeof raw === "object" ? raw : {};
+        const out = {};
+        ADAPTIVE_KEYS.forEach(function(key) {
+            out[key] = String(source[key] || "").trim();
+        });
+        return out;
+    }
+
+    function renderSteps(steps) {
+        const list = document.getElementById("edit-steps-list");
+        const empty = document.getElementById("edit-steps-empty");
+        list.innerHTML = "";
+        const items = steps.length ? steps : [""];
+        items.forEach(function(text, index) {
+            const row = document.createElement("div");
+            row.className = "rounded-xl border border-slate-200 p-4 bg-white shadow-sm space-y-2";
+            row.innerHTML =
+                '<div class="flex items-center justify-between gap-2">' +
+                '<label class="block text-xs font-medium text-examiq-slate" for="edit-step-' + index + '">Step ' + (index + 1) + '</label>' +
+                '<button type="button" class="text-xs text-examiq-slate hover:text-red-600" data-remove-step="' + index + '">Remove</button>' +
+                "</div>" +
+                '<textarea id="edit-step-' + index + '" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" data-step-input></textarea>';
+            list.appendChild(row);
+            row.querySelector("[data-step-input]").value = text;
+        });
+        empty.classList.toggle("hidden", items.some(function(t) { return String(t || "").trim(); }) || items.length > 1);
+    }
+
+    function collectSteps() {
+        return Array.prototype.map.call(
+            document.querySelectorAll("[data-step-input]"),
+            function(el) { return el.value.trim(); }
+        ).filter(Boolean);
+    }
+
+    function collectAdaptive() {
+        const out = {};
+        ADAPTIVE_KEYS.forEach(function(key) {
+            const el = document.getElementById("edit-adaptive-" + key.replace(/_/g, "-"));
+            out[key] = el ? el.value.trim() : "";
+        });
+        return out;
+    }
 
     document.getElementById("edit-stem").value = data.stem || "";
     document.getElementById("edit-correct").value = data.correct || "A";
@@ -72,6 +206,30 @@
     ["A","B","C","D"].forEach(function(letter) {
         document.getElementById("edit-choice-" + letter).value =
             (data.choices && data.choices[letter]) || "";
+    });
+
+    const adaptive = normalizeAdaptive(data.adaptive_explanation);
+    ADAPTIVE_KEYS.forEach(function(key) {
+        const el = document.getElementById("edit-adaptive-" + key.replace(/_/g, "-"));
+        if (el) el.value = adaptive[key] || "";
+    });
+    renderSteps(normalizeSteps(data.steps));
+
+    document.getElementById("edit-add-step").addEventListener("click", function() {
+        const steps = collectSteps();
+        steps.push("");
+        renderSteps(steps);
+    });
+
+    document.getElementById("edit-steps-list").addEventListener("click", function(event) {
+        const btn = event.target.closest("[data-remove-step]");
+        if (!btn) return;
+        const steps = collectSteps();
+        const index = parseInt(btn.getAttribute("data-remove-step"), 10);
+        if (!Number.isNaN(index)) {
+            steps.splice(index, 1);
+            renderSteps(steps);
+        }
     });
 
     document.getElementById("batch-edit-form").addEventListener("submit", function(e) {
@@ -83,7 +241,8 @@
             question_type: "mcq",
             expected_answer: "",
             ai_generated: !!data.ai_generated,
-            steps: data.steps || [],
+            steps: collectSteps(),
+            adaptive_explanation: collectAdaptive(),
             solution_summary: data.solution_summary || "",
             difficulty: data.difficulty || "medium",
             choices: {},
@@ -96,7 +255,7 @@
         while (draft.questions.length <= questionIndex) {
             draft.questions.push({
                 stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
-                question_type: "mcq", expected_answer: ""
+                question_type: "mcq", expected_answer: "", steps: [], adaptive_explanation: {}
             });
         }
         draft.questions[questionIndex] = updated;

@@ -77,6 +77,7 @@
                 concept: "",
                 choices: { A: "", B: "", C: "", D: "" },
                 steps: [],
+                adaptive_explanation: {},
                 solution_summary: "",
                 validation: null,
                 question_type: "mcq",

@@ -508,6 +508,7 @@
                 '<textarea name="expected_answer_' + index + '"></textarea>' +
                 '<input type="hidden" name="ai_generated_' + index + '" value="0">' +
                 '<input type="hidden" name="steps_' + index + '" value="">' +
+                '<input type="hidden" name="adaptive_explanation_' + index + '" value="">' +
                 '<input type="hidden" name="solution_summary_' + index + '" value="">' +
                 '<input type="hidden" name="faculty_attest_' + index + '" value="0">';
             fieldsStore.appendChild(wrapper);
@@ -521,6 +522,24 @@
             attest.name = "faculty_attest_" + index;
             attest.value = "0";
             wrapper.appendChild(attest);
+        }
+        if (!getField("adaptive_explanation_" + index)) {
+            const adaptive = document.createElement("input");
+            adaptive.type = "hidden";
+            adaptive.name = "adaptive_explanation_" + index;
+            adaptive.value = "";
+            wrapper.appendChild(adaptive);
+        }
+    }
+
+    function parseAdaptiveExplanation(raw) {
+        if (!raw) return {};
+        if (typeof raw === "object") return raw;
+        try {
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (e) {
+            return {};
         }
     }
 
@@ -541,6 +560,9 @@
             solution_summary: getField("solution_summary_" + index).value || "",
             faculty_attest: getField("faculty_attest_" + index).value === "1",
             steps: Array.isArray(steps) ? steps : [],
+            adaptive_explanation: parseAdaptiveExplanation(
+                getField("adaptive_explanation_" + index).value
+            ),
             choices: {},
             validation: validationState[index] || null,
         };
@@ -568,6 +590,9 @@
         getField("solution_summary_" + index).value = data.solution_summary || "";
         getField("faculty_attest_" + index).value = data.faculty_attest ? "1" : "0";
         getField("steps_" + index).value = JSON.stringify(data.steps || []);
+        getField("adaptive_explanation_" + index).value = JSON.stringify(
+            data.adaptive_explanation || {}
+        );
         ["A", "B", "C", "D"].forEach(function(letter) {
             getField("choice_" + index + "_" + letter).value =
                 (data.choices && data.choices[letter]) || "";

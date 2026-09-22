@@ -4049,6 +4049,55 @@
     background: #f8fbf8;
 }
 
+/* Question edit / batch draft tabs */
+.question-edit-shell {
+    max-width: 56rem;
+}
+
+.question-edit-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+}
+
+.question-edit-tab {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #64748b;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.55rem 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.question-edit-tab:hover {
+    color: #0f172a;
+    background: #fff;
+}
+
+.question-edit-tab.is-active {
+    color: #0f172a;
+    background: #fff;
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.question-edit-panel[hidden],
+.question-edit-panel.hidden {
+    display: none !important;
+}
+
+.question-edit-footer {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 5;
+}
+
 .profile-dropdown-trigger {
     display: flex;
     align-items: center;

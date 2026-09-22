@@ -679,6 +679,19 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             steps_raw = request.POST.get(f"steps_{index}", "")
             solution_summary = request.POST.get(f"solution_summary_{index}", "")
             faculty_attest = request.POST.get(f"faculty_attest_{index}") == "1"
+            adaptive_raw = request.POST.get(f"adaptive_explanation_{index}", "")
+            from apps.questions.services import clean_adaptive_explanation
+
+            adaptive_explanation: dict = {}
+            if adaptive_raw.strip():
+                import json
+
+                try:
+                    parsed = json.loads(adaptive_raw)
+                    if isinstance(parsed, dict):
+                        adaptive_explanation = clean_adaptive_explanation(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    adaptive_explanation = {}
             # AI drafts defer explanations to a background job; do not invent
             # steps from concept_tag alone.
             if skip_ai_gate and not steps_raw.strip() and not solution_summary.strip():
@@ -704,6 +717,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 "status": Question.Status.DRAFT,
                 "proposed_by": request.user,
                 "explanation_status": "draft",
+                "adaptive_explanation": adaptive_explanation,
             }
 
             question = create_question(

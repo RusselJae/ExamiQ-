@@ -401,8 +401,12 @@ class TestQuestionAdaptiveExplanationEdit:
             )
         )
         assert get_response.status_code == 200
-        assert "Adaptive explanation" in get_response.content.decode()
-        assert "Step-by-step" in get_response.content.decode()
+        content = get_response.content.decode()
+        assert "Adaptive explanation" in content
+        assert "Step-by-step" in content
+        assert "1 Details" in content
+        assert "3 Explanation" in content
+        assert 'data-question-edit-tabs' in content
 
         post_data = {
             "topic": topic.pk,
@@ -452,6 +456,26 @@ class TestQuestionAdaptiveExplanationEdit:
         assert ExplanationStep.objects.filter(
             question=question, content__contains="ones place"
         ).exists()
+
+    def test_batch_draft_edit_shows_explanation_tabs(
+        self, client, professor, subject
+    ):
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:question_batch_edit",
+                kwargs={"course_pk": course.pk, "question_index": 0},
+            )
+        )
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "1 Details" in content
+        assert "3 Explanation" in content
+        assert "4 Steps" in content
+        assert "What went wrong" in content
+        assert "edit-adaptive-what-went-wrong" in content
+        assert "edit-steps-list" in content
 
 
 
