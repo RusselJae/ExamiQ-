@@ -3,10 +3,10 @@ from django import template
 register = template.Library()
 
 CONFIDENCE_LABELS = {
-    None: "No Confidence",
-    1: "Low Confidence",
-    3: "Average Confidence",
-    5: "High Confidence",
+    None: "No ratings",
+    1: "Guessing",
+    3: "Not sure",
+    5: "Sure",
 }
 
 DIFFICULTY_LABELS = {

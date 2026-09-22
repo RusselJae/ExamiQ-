@@ -4,7 +4,10 @@ from django.urls import reverse
 
 from apps.users.assignment_services import get_professor_course_queryset
 from apps.users.models import Course, User
-from apps.users.notification_services import unread_notification_count
+from apps.users.notification_services import (
+    recent_notifications,
+    unread_notification_count,
+)
 
 
 def navigation_context(request):
@@ -18,6 +21,7 @@ def navigation_context(request):
         "sidebar_subject": None,
         "summary_courses": [],
         "unread_notification_count": 0,
+        "recent_notifications": [],
         "pending_concern_count": 0,
         "chat_inbox_url": "",
         "chat_concerns_url": "",
@@ -25,6 +29,9 @@ def navigation_context(request):
         "chat_note_url_base": "",
         "chat_message_url": "",
         "chat_concern_url_template": "",
+        "faculty_chat_conversations_url": "",
+        "faculty_chat_message_url": "",
+        "faculty_chat_note_url_base": "",
         "show_chat_modal": False,
         "show_ai_tutor_modal": False,
         "tutor_url_templates": {},
@@ -38,6 +45,7 @@ def navigation_context(request):
         return context
 
     context["unread_notification_count"] = unread_notification_count(user)
+    context["recent_notifications"] = recent_notifications(user, limit=8)
     context["chat_self_name"] = user.get_full_name() or user.email
     context["chat_self_initials"] = user.initials
     if user.profile_photo:
@@ -98,6 +106,15 @@ def navigation_context(request):
     context["chat_concerns_url"] = context["chat_conversations_url"]
     context["chat_note_url_base"] = reverse(
         "analytics_professor:chat_faculty_message", kwargs={"conversation_pk": 0}
+    )
+    context["faculty_chat_conversations_url"] = reverse(
+        "analytics_professor:faculty_chat_conversations_api"
+    )
+    context["faculty_chat_message_url"] = reverse(
+        "analytics_professor:faculty_chat_message_start"
+    )
+    context["faculty_chat_note_url_base"] = reverse(
+        "analytics_professor:faculty_chat_message", kwargs={"conversation_pk": 0}
     )
     context["show_chat_modal"] = True
 

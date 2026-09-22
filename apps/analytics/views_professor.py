@@ -354,6 +354,60 @@ class ProfessorSessionReviewView(ProfessorRequiredMixin, DetailView):
             kwargs={"student_pk": session.student_id},
         )
         context["back_label"] = "Back to student"
+        # Placeholder 0 is swapped by session-question-strip.js on click.
+        context["answer_url_template"] = reverse(
+            "analytics_professor:professor_answer_detail",
+            kwargs={"student_pk": session.student_id, "answer_pk": 0},
+        )
+        return context
+
+
+class ProfessorAnswerDetailView(ProfessorRequiredMixin, DetailView):
+    """Faculty read-only view of a student's answer (same card as student review)."""
+
+    model = Answer
+    template_name = "analytics/professor/answer_detail.html"
+    context_object_name = "answer"
+    pk_url_kwarg = "answer_pk"
+
+    def get_queryset(self):
+        return (
+            Answer.objects.filter(session__student_id=self.kwargs["student_pk"])
+            .select_related(
+                "session",
+                "session__student",
+                "question",
+                "question__topic",
+                "selected_choice",
+                "mistake_record",
+                "mistake_record__error_type",
+            )
+            .prefetch_related("question__choices", "question__explanation_steps")
+        )
+
+    def get_object(self, queryset=None):
+        answer = super().get_object(queryset)
+        if not professor_can_view_session(self.request.user, answer.session):
+            from django.http import Http404
+
+            raise Http404()
+        return answer
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        answer = self.object
+        student = answer.session.student
+        context["student"] = student
+        context["student_initials"] = _student_initials(student)
+        context["answer_owner_label"] = "Student answer"
+        context["back_url"] = reverse(
+            "analytics_professor:session_review",
+            kwargs={
+                "student_pk": student.pk,
+                "session_pk": answer.session_id,
+            },
+        )
+        context["back_label"] = "Back to session review"
         return context
 
 

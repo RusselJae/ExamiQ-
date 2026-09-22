@@ -17,8 +17,6 @@ from apps.ai.interfaces import (
     QuestionValidator,
 )
 from apps.ai.prompts import (
-    adaptive_feedback_max_tokens,
-    build_adaptive_feedback_prompt,
     build_calibration_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
@@ -29,7 +27,6 @@ from apps.ai.prompts import (
 )
 from apps.ai.providers import gemini_client
 from apps.ai.stubs import (
-    StubAdaptiveFeedbackGenerator,
     StubCalibrationAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
@@ -247,26 +244,35 @@ class GeminiAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         correct_answer: str,
         confidence: str = "medium",
         question_type: str = "",
+        *,
+        choices: list[str] | None = None,
+        difficulty: str = "",
+        is_correct: bool = False,
+        unanswered: bool = False,
     ) -> str:
-        stub = StubAdaptiveFeedbackGenerator()
-        system, prompt = build_adaptive_feedback_prompt(
-            topic,
-            question,
-            user_answer,
-            correct_answer,
-            confidence,
+        from apps.ai.feedback_services import generate_validated_adaptive_feedback
+
+        def chat_json(system: str, prompt: str, max_tokens: int) -> str | None:
+            result = gemini_client.chat_with_fallback(
+                prompt,
+                system=system,
+                max_output_tokens=max_tokens,
+                json_mode=True,
+            )
+            return result.text
+
+        return generate_validated_adaptive_feedback(
+            chat_json=chat_json,
+            topic=topic,
+            question=question,
+            user_answer=user_answer,
+            correct_answer=correct_answer,
+            confidence=confidence,
             question_type=question_type,
-        )
-        result = _chat(
-            prompt, system=system, max_output_tokens=adaptive_feedback_max_tokens()
-        )
-        return result or stub.generate(
-            topic,
-            question,
-            user_answer,
-            correct_answer,
-            confidence,
-            question_type=question_type,
+            choices=choices,
+            difficulty=difficulty,
+            is_correct=is_correct,
+            unanswered=unanswered,
         )
 
 

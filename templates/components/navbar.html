@@ -41,14 +41,49 @@
         </button>
         {% endif %}
 
-        <a href="{% url 'users:notifications' %}" class="relative p-2 text-examiq-slate hover:text-examiq-navy" aria-label="Notifications">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-            </svg>
-            {% if unread_notification_count %}
-            <span class="absolute top-1 right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-examiq-coral text-white text-[10px] font-bold flex items-center justify-center">{{ unread_notification_count }}</span>
-            {% endif %}
-        </a>
+        <div class="notifications-dropdown" data-notifications-dropdown>
+            <button type="button"
+                    class="relative p-2 text-examiq-slate hover:text-examiq-navy"
+                    data-notifications-toggle
+                    aria-expanded="false"
+                    aria-haspopup="true"
+                    aria-label="Notifications">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+                {% if unread_notification_count %}
+                <span class="absolute top-1 right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-examiq-coral text-white text-[10px] font-bold flex items-center justify-center">{{ unread_notification_count }}</span>
+                {% endif %}
+            </button>
+            <div class="notifications-dropdown-panel hidden" data-notifications-menu role="menu">
+                <div class="notifications-dropdown-header">
+                    <p class="font-semibold text-examiq-navy text-sm">Notifications</p>
+                    {% if unread_notification_count %}
+                    <span class="text-xs text-examiq-slate">{{ unread_notification_count }} unread</span>
+                    {% endif %}
+                </div>
+                <ul class="notifications-dropdown-list">
+                    {% for notification in recent_notifications %}
+                    <li class="notifications-dropdown-item {% if not notification.is_read %}is-unread{% endif %}">
+                        {% if notification.link %}
+                        <a href="{% url 'users:notification_open' notification.pk %}" class="notifications-dropdown-link" role="menuitem">
+                            <span class="notifications-dropdown-message">{{ notification.message }}</span>
+                            <span class="notifications-dropdown-meta">{{ notification.created_at|timesince }} ago</span>
+                        </a>
+                        {% else %}
+                        <div class="notifications-dropdown-link" role="menuitem">
+                            <span class="notifications-dropdown-message">{{ notification.message }}</span>
+                            <span class="notifications-dropdown-meta">{{ notification.created_at|timesince }} ago</span>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% empty %}
+                    <li class="notifications-dropdown-empty">No notifications yet.</li>
+                    {% endfor %}
+                </ul>
+                <a href="{% url 'users:notifications' %}" class="notifications-dropdown-footer" role="menuitem">View all</a>
+            </div>
+        </div>
 
         <div class="profile-dropdown" data-dropdown>
             <button type="button" class="profile-dropdown-trigger" data-dropdown-toggle aria-expanded="false" aria-haspopup="true">

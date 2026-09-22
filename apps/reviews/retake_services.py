@@ -157,23 +157,5 @@ def can_start_retake(
     subject=None,
     difficulty: str = "",
 ) -> tuple[bool, RetakeActionPlan | None]:
-    if not requires_action_plan(
-        student, course=course, subject=subject, difficulty=difficulty
-    ):
-        return True, None
-    open_plan = (
-        RetakeActionPlan.objects.filter(
-            student=student,
-            course=course,
-            subject=subject,
-            difficulty=difficulty or "",
-            acknowledged=False,
-        )
-        .order_by("-created")
-        .first()
-    )
-    if open_plan is None:
-        open_plan = get_or_create_action_plan(
-            student, course=course, subject=subject, difficulty=difficulty
-        )
-    return False, open_plan
+    """Temporarily allow all retakes (action-plan gate disabled)."""
+    return True, None

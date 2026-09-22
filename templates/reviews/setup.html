@@ -6,17 +6,11 @@
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Start a timed exam" subtitle="Your year-level subjects load automatically. Optionally add subjects from other years, then choose question types and difficulty." %}
+{% include "components/page_header.html" with title="Start a timed exam" subtitle="Choose course subjects for your year (and optionally other years), then pick difficulty." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
 <div class="bento-card p-6 mb-6">
     <p class="text-examiq-slate">{{ setup_eligibility.message }}</p>
-</div>
-{% endif %}
-
-{% if action_plan %}
-<div class="mb-6">
-    {% include "components/retake_action_plan.html" %}
 </div>
 {% endif %}
 
@@ -42,20 +36,42 @@
 
     <div class="exam-setup-how" role="note">
         <p class="exam-setup-how__title">How this works</p>
-        <ol class="exam-setup-how__list">
-            <li>
-                <span class="exam-setup-how__num" aria-hidden="true">1</span>
-                <span>Year-level subjects are included automatically.</span>
-            </li>
-            <li>
-                <span class="exam-setup-how__num" aria-hidden="true">2</span>
-                <span>Optionally add subjects from other years.</span>
-            </li>
-            <li>
-                <span class="exam-setup-how__num" aria-hidden="true">3</span>
-                <span>About 3+ questions per subject (randomized), up to {{ max_total_questions }} total — timed.</span>
-            </li>
-        </ol>
+        <div class="exam-setup-how__columns">
+            <div class="exam-setup-how__col">
+                <p class="exam-setup-how__col-title">Before you start</p>
+                <ol class="exam-setup-how__list">
+                    <li>
+                        <span class="exam-setup-how__num" aria-hidden="true">1</span>
+                        <span>Select course subjects for your year (all selected by default).</span>
+                    </li>
+                    <li>
+                        <span class="exam-setup-how__num" aria-hidden="true">2</span>
+                        <span>Optionally add subjects from other years.</span>
+                    </li>
+                    <li>
+                        <span class="exam-setup-how__num" aria-hidden="true">3</span>
+                        <span>About 3+ questions per subject (randomized), up to {{ max_total_questions }} total — timed.</span>
+                    </li>
+                </ol>
+            </div>
+            <div class="exam-setup-how__col">
+                <p class="exam-setup-how__col-title">While answering</p>
+                <ol class="exam-setup-how__list">
+                    <li>
+                        <span class="exam-setup-how__num" aria-hidden="true">1</span>
+                        <span>Each question is timed — submit before the clock runs out.</span>
+                    </li>
+                    <li>
+                        <span class="exam-setup-how__num" aria-hidden="true">2</span>
+                        <span>Choose one answer only (MCQ) or enter a single numeric response.</span>
+                    </li>
+                    <li>
+                        <span class="exam-setup-how__num" aria-hidden="true">3</span>
+                        <span>Rate confidence with Guessing / Not sure / Sure after you answer — it doesn’t use exam time.</span>
+                    </li>
+                </ol>
+            </div>
+        </div>
     </div>
 
     <section class="exam-setup-section" aria-labelledby="year-subjects-heading">
@@ -67,7 +83,13 @@
         {% if year_subjects %}
         <div class="exam-subject-grid" id="year-subjects-grid">
             {% for subject in year_subjects %}
-            <div class="exam-subject-card is-selected is-locked" data-year-subject>
+            <label class="exam-subject-card is-selected" data-year-subject-card>
+                <input type="checkbox"
+                       class="sr-only"
+                       name="year_subjects"
+                       value="{{ subject.pk }}"
+                       data-year-subject
+                       checked>
                 <span class="exam-subject-card__check" aria-hidden="true">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>
                 </span>
@@ -75,9 +97,12 @@
                     <span class="exam-subject-card__code">{{ subject.code }}</span>
                     <span class="exam-subject-card__name">{{ subject.name }}</span>
                 </span>
-            </div>
+            </label>
             {% endfor %}
         </div>
+        {% if form.year_subjects.errors %}
+        <p class="student-setup-field__error">{{ form.year_subjects.errors.0 }}</p>
+        {% endif %}
         {% else %}
         <p class="student-setup-field__error">No course subjects are configured for your year level.</p>
         {% endif %}
@@ -138,36 +163,7 @@
         {% endif %}
     </section>
 
-    <section class="exam-setup-section" aria-labelledby="question-type-label">
-        <h2 id="question-type-label" class="exam-setup-section__title">Question types</h2>
-        <select name="question_type" id="id_setup_question_type" class="sr-only" multiple tabindex="-1" aria-hidden="true">
-            {% for value, label in form.fields.question_type.choices %}
-            <option value="{{ value }}"
-                    {% if value == "mcq" or value in selected_question_types %}selected{% endif %}>
-                {{ label }}
-            </option>
-            {% endfor %}
-        </select>
-        <div class="exam-pill-group exam-pill-group--wrap"
-             role="group"
-             aria-labelledby="question-type-label"
-             data-setup-pills
-             data-pill-target="id_setup_question_type"
-             data-pill-multiple
-             data-locked-values="mcq">
-            {% for value, label in form.fields.question_type.choices %}
-            <button type="button"
-                    class="exam-pill{% if value == "mcq" or value in selected_question_types %} is-selected{% endif %}"
-                    data-pill-value="{{ value }}"
-                    aria-pressed="{% if value == "mcq" or value in selected_question_types %}true{% else %}false{% endif %}">
-                {{ label }}{% if value == "mcq" %}<span class="exam-pill__badge">default</span>{% endif %}
-            </button>
-            {% endfor %}
-        </div>
-        {% if form.question_type.errors %}
-        <p class="student-setup-field__error">{{ form.question_type.errors.0 }}</p>
-        {% endif %}
-    </section>
+    <input type="hidden" name="question_type" value="mcq" id="id_setup_question_type">
 
     <section class="exam-setup-section" aria-labelledby="difficulty-label">
         <h2 id="difficulty-label" class="exam-setup-section__title">Difficulty</h2>

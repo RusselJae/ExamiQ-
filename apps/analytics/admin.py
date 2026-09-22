@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from apps.analytics.models import (
     ErrorType,
+    FacultyConversation,
+    FacultyMessage,
     MistakeConcernMessage,
     MistakeRecord,
     StudentFacultyConversation,
@@ -47,4 +49,22 @@ class StudentFacultyConversationAdmin(admin.ModelAdmin):
     search_fields = ["student__email", "student__first_name", "student__last_name"]
     filter_horizontal = ["participating_faculty"]
     inlines = [StudentFacultyMessageInline]
+    ordering = ["-last_message_at", "-created_at"]
+
+
+class FacultyMessageInline(admin.TabularInline):
+    model = FacultyMessage
+    extra = 0
+    readonly_fields = ["author", "body", "image", "created_at"]
+    can_delete = False
+
+
+@admin.register(FacultyConversation)
+class FacultyConversationAdmin(admin.ModelAdmin):
+    list_display = ["participant_low", "participant_high", "last_message_at", "created_at"]
+    search_fields = [
+        "participant_low__email",
+        "participant_high__email",
+    ]
+    inlines = [FacultyMessageInline]
     ordering = ["-last_message_at", "-created_at"]

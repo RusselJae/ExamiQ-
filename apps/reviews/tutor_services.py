@@ -133,7 +133,7 @@ def _exam_context(session: ReviewSession, answer: Answer | None = None) -> dict:
 
 def session_answer_items(session: ReviewSession) -> list[dict]:
     """Build tutor item payloads without blocking on LLM calls."""
-    from apps.analytics.confidence import confidence_tier_key
+    from apps.analytics.confidence import answer_is_unanswered, confidence_tier_key
     from apps.analytics.services import get_answer_feedback_quick
 
     items = []
@@ -172,6 +172,10 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
             question=answer.question,
         ).first()
         feedback, needs_ai = get_answer_feedback_quick(answer)
+        from apps.ai.normalize import parse_any_adaptive_feedback
+
+        structured = parse_any_adaptive_feedback(feedback)
+        unanswered = answer_is_unanswered(answer)
         items.append(
             {
                 "answer_id": answer.pk,
@@ -179,10 +183,13 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "session_id": session.pk,
                 "mistake_id": mistake.pk if mistake else None,
                 "stem": answer.question.stem,
-                "is_correct": answer.is_correct,
+                "is_correct": bool(answer.is_correct) and not unanswered,
                 "timed_out": answer.timed_out,
+                "unanswered": unanswered,
+                "no_selection": unanswered,
                 "confidence_tier": confidence_tier_key(answer.confidence),
                 "feedback": feedback,
+                "structured_feedback": structured,
                 "needs_ai": needs_ai,
                 "correction_steps": steps,
                 "faculty_notes": faculty_notes,
@@ -244,6 +251,17 @@ def coerce_plain_solution(text: str) -> dict | None:
     answer = ""
     current: dict | None = None
 
+    def _action_title(body: str, fallback: str) -> str:
+        cleaned = re.sub(r"^step\s*\d+\s*[:.\-]\s*", "", body or "", flags=re.I).strip()
+        if not cleaned:
+            return fallback
+        if _looks_like_math_line(cleaned):
+            return fallback
+        words = cleaned.split()
+        if len(words) > 8:
+            cleaned = " ".join(words[:8])
+        return cleaned[:48].rstrip(".,;:")
+
     def flush() -> None:
         nonlocal current
         if current and (current.get("operation") or current.get("equations")):
@@ -266,14 +284,18 @@ def coerce_plain_solution(text: str) -> dict | None:
             flush()
             body = match.group(2).strip()
             current = {
-                "title": f"Step {match.group(1)}",
+                "title": _action_title(body, "Continue"),
                 "operation": "",
                 "equations": [],
+                "highlight": "",
+                "note": "",
+                "why": "",
             }
             if _looks_like_math_line(body):
                 current["equations"].append(body)
+                current["title"] = "Continue"
             else:
-                current["operation"] = body
+                current["title"] = _action_title(body, "Continue")
             continue
 
         if current is None:

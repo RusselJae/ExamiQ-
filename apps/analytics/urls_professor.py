@@ -24,6 +24,11 @@ urlpatterns = [
         views_professor.ProfessorSessionReviewView.as_view(),
         name="session_review",
     ),
+    path(
+        "students/<int:student_pk>/answers/<int:answer_pk>/",
+        views_professor.ProfessorAnswerDetailView.as_view(),
+        name="professor_answer_detail",
+    ),
     path("chat/", views_professor_feedback.GlobalChatInboxView.as_view(), name="chat_inbox"),
     path(
         "chat/conversations/",
@@ -44,6 +49,21 @@ urlpatterns = [
         "chat/<int:conversation_pk>/note/",
         views_professor_feedback.GlobalChatFacultyMessageView.as_view(),
         name="chat_faculty_note",
+    ),
+    path(
+        "chat/faculty/conversations/",
+        views_professor_feedback.FacultyPeerConversationsApiView.as_view(),
+        name="faculty_chat_conversations_api",
+    ),
+    path(
+        "chat/faculty/message/",
+        views_professor_feedback.FacultyPeerMessageView.as_view(),
+        name="faculty_chat_message_start",
+    ),
+    path(
+        "chat/faculty/<int:conversation_pk>/message/",
+        views_professor_feedback.FacultyPeerMessageView.as_view(),
+        name="faculty_chat_message",
     ),
     path(
         "exam-setup/",
@@ -158,6 +178,11 @@ urlpatterns = [
     ),
     path("courses/<int:course_pk>/topics/", question_views.TopicListView.as_view(), name="topic_list"),
     path(
+        "materials/",
+        material_views.MaterialHubView.as_view(),
+        name="materials_hub",
+    ),
+    path(
         "courses/<int:course_pk>/materials/",
         material_views.MaterialListView.as_view(),
         name="material_list",
@@ -262,6 +287,11 @@ urlpatterns = [
         "courses/<int:course_pk>/questions/<int:question_pk>/edit/",
         question_views.QuestionUpdateView.as_view(),
         name="question_edit",
+    ),
+    path(
+        "courses/<int:course_pk>/questions/<int:question_pk>/regenerate/",
+        question_views.QuestionRegenerateView.as_view(),
+        name="question_regenerate",
     ),
     path(
         "courses/<int:course_pk>/questions/<int:question_pk>/delete/",

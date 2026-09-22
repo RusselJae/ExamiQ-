@@ -1,5 +1,5 @@
 /**
- * Global Chat inbox modal — one thread per student with assigned faculty.
+ * Global Chat inbox modal — student–faculty threads, plus faculty–faculty DMs.
  */
 (function () {
     "use strict";
@@ -7,9 +7,11 @@
     var state = {
         items: [],
         activeConversationId: null,
+        activePeerId: null,
         loaded: false,
         sending: false,
         filter: "",
+        tab: "students",
     };
 
     function config() {
@@ -20,6 +22,10 @@
         return config().role === "professor";
     }
 
+    function isFacultyTab() {
+        return isFaculty() && state.tab === "faculty";
+    }
+
     function escapeHtml(text) {
         var div = document.createElement("div");
         div.textContent = text || "";
@@ -27,15 +33,48 @@
     }
 
     function messageUrl(conversationId) {
+        if (isFacultyTab()) {
+            if (conversationId) {
+                return (config().facultyNoteUrlBase || "").replace(
+                    "/0/",
+                    "/" + conversationId + "/"
+                );
+            }
+            return config().facultyMessageUrl || "";
+        }
         if (isFaculty()) {
             return (config().noteUrlBase || "").replace("/0/", "/" + conversationId + "/");
         }
         return config().messageUrl || "";
     }
 
+    function conversationsUrl() {
+        if (isFacultyTab()) {
+            return config().facultyConversationsUrl || "";
+        }
+        return config().concernsUrl || config().conversationsUrl || "";
+    }
+
+    function itemKey(item) {
+        if (item.conversation_id) return "c:" + item.conversation_id;
+        if (item.peer_id) return "p:" + item.peer_id;
+        return "";
+    }
+
     function activeItem() {
         return state.items.find(function (item) {
-            return item.conversation_id === state.activeConversationId;
+            if (state.activeConversationId && item.conversation_id === state.activeConversationId) {
+                return true;
+            }
+            if (
+                !state.activeConversationId &&
+                state.activePeerId &&
+                item.peer_id === state.activePeerId &&
+                !item.conversation_id
+            ) {
+                return true;
+            }
+            return false;
         });
     }
 
@@ -86,6 +125,9 @@
     }
 
     function listItemName(item) {
+        if (isFacultyTab() || item.thread_type === "faculty") {
+            return item.peer_name || item.student_name || "Faculty";
+        }
         if (isFaculty()) {
             return item.student_name || "Student";
         }
@@ -93,6 +135,12 @@
     }
 
     function listItemAvatar(item) {
+        if (isFacultyTab() || item.thread_type === "faculty") {
+            return {
+                url: item.peer_avatar_url || item.student_avatar_url,
+                initials: item.peer_initials || item.student_initials || "?",
+            };
+        }
         if (isFaculty()) {
             return {
                 url: item.student_avatar_url,
@@ -113,12 +161,28 @@
                 item.student_name,
                 item.student_email,
                 item.peer_name,
+                item.peer_email,
                 item.preview,
             ]
                 .join(" ")
                 .toLowerCase();
             return hay.indexOf(q) !== -1;
         });
+    }
+
+    function isActiveListItem(item) {
+        if (item.conversation_id && item.conversation_id === state.activeConversationId) {
+            return true;
+        }
+        if (
+            !item.conversation_id &&
+            item.peer_id &&
+            item.peer_id === state.activePeerId &&
+            !state.activeConversationId
+        ) {
+            return true;
+        }
+        return false;
     }
 
     function renderList() {
@@ -128,16 +192,18 @@
         var items = filteredItems();
         if (!items.length) {
             list.innerHTML = "";
-            if (empty) empty.classList.remove("hidden");
+            if (empty) {
+                empty.textContent = isFacultyTab()
+                    ? "No faculty colleagues found."
+                    : "No conversations yet.";
+                empty.classList.remove("hidden");
+            }
             return;
         }
         if (empty) empty.classList.add("hidden");
         list.innerHTML = items
             .map(function (item) {
-                var active =
-                    item.conversation_id === state.activeConversationId
-                        ? " examiq-chat-item--active"
-                        : "";
+                var active = isActiveListItem(item) ? " examiq-chat-item--active" : "";
                 var badge = "";
                 if (isFaculty() && item.needs_faculty_reply) {
                     badge = '<span class="examiq-chat-item__dot" title="Needs reply"></span>';
@@ -145,15 +211,21 @@
                     badge = '<span class="examiq-chat-item__dot" title="New reply"></span>';
                 }
                 var av = listItemAvatar(item);
+                var attrs =
+                    ' data-item-key="' +
+                    escapeHtml(itemKey(item)) +
+                    '"' +
+                    (item.conversation_id
+                        ? ' data-conversation-id="' + item.conversation_id + '"'
+                        : "") +
+                    (item.peer_id ? ' data-peer-id="' + item.peer_id + '"' : "");
                 return (
                     '<button type="button" class="examiq-chat-item' +
                     active +
-                    '" data-conversation-id="' +
-                    item.conversation_id +
-                    '" role="option" aria-selected="' +
-                    (item.conversation_id === state.activeConversationId
-                        ? "true"
-                        : "false") +
+                    '"' +
+                    attrs +
+                    ' role="option" aria-selected="' +
+                    (isActiveListItem(item) ? "true" : "false") +
                     '">' +
                     avatarHtml(av.url, av.initials, "examiq-chat-item__avatar") +
                     '<div class="examiq-chat-item__body">' +
@@ -192,6 +264,10 @@
     }
 
     function messageSide(msg) {
+        var selfId = config().selfUserId;
+        if (selfId && msg.author_id) {
+            return msg.author_id === selfId ? "out" : "in";
+        }
         var isStudentMsg = msg.author_role === "student";
         var isOwnMessage = isFaculty() ? !isStudentMsg : isStudentMsg;
         return isOwnMessage ? "out" : "in";
@@ -225,6 +301,18 @@
         el.textContent = initials || "?";
     }
 
+    function updateTabUi() {
+        document.querySelectorAll("[data-chat-tab]").forEach(function (btn) {
+            var active = btn.getAttribute("data-chat-tab") === state.tab;
+            btn.classList.toggle("examiq-chat-modal__tab--active", active);
+            btn.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        var search = document.getElementById("examiq-chat-search");
+        if (search) {
+            search.placeholder = isFacultyTab() ? "Search faculty…" : "Search students…";
+        }
+    }
+
     function renderThread() {
         var thread = document.getElementById("examiq-chat-thread");
         var avatar = document.getElementById("examiq-chat-peer-avatar");
@@ -253,7 +341,9 @@
         setPeerAvatar(avatar, peerAv.url, peerAv.initials);
         if (nameEl) nameEl.textContent = listItemName(item);
         if (metaEl) {
-            metaEl.textContent = isFaculty() ? item.student_email || "" : "";
+            metaEl.textContent = isFaculty()
+                ? item.peer_email || item.student_email || ""
+                : "";
         }
         if (input) input.disabled = false;
         if (send) send.disabled = false;
@@ -312,14 +402,14 @@
     }
 
     async function loadItems(preferredId, studentId) {
-        var url = config().concernsUrl || config().conversationsUrl;
+        var url = conversationsUrl();
         if (!url) return;
         var sep = url.indexOf("?") >= 0 ? "&" : "?";
         if (preferredId) {
             url += sep + "conversation_id=" + encodeURIComponent(preferredId);
             sep = "&";
         }
-        if (studentId) {
+        if (studentId && !isFacultyTab()) {
             url += sep + "student_id=" + encodeURIComponent(studentId);
         }
         var res = await fetch(url, {
@@ -332,11 +422,33 @@
         state.activeConversationId =
             preferredId ||
             data.active_conversation_id ||
-            (state.items[0] && state.items[0].conversation_id) ||
             null;
+        state.activePeerId = null;
+        if (!state.activeConversationId) {
+            var first = state.items[0];
+            if (first) {
+                if (first.conversation_id) {
+                    state.activeConversationId = first.conversation_id;
+                } else if (first.peer_id) {
+                    state.activePeerId = first.peer_id;
+                }
+            }
+        }
         state.loaded = true;
         renderList();
         renderThread();
+    }
+
+    async function setTab(tab, options) {
+        options = options || {};
+        state.tab = tab === "faculty" ? "faculty" : "students";
+        state.filter = "";
+        state.activeConversationId = options.conversationId || null;
+        state.activePeerId = options.peerId || null;
+        var search = document.getElementById("examiq-chat-search");
+        if (search) search.value = "";
+        updateTabUi();
+        await loadItems(state.activeConversationId, options.studentId || null);
     }
 
     async function sendMessage(event) {
@@ -351,11 +463,12 @@
         if (!body && !imageFile) return;
 
         var conversationId = item ? item.conversation_id : state.activeConversationId;
-        if (isFaculty() && !conversationId) return;
+        var peerId = item ? item.peer_id : state.activePeerId;
 
-        var url = isFaculty()
-            ? messageUrl(conversationId)
-            : config().messageUrl;
+        if (isFaculty() && !isFacultyTab() && !conversationId) return;
+        if (isFacultyTab() && !conversationId && !peerId) return;
+
+        var url = messageUrl(conversationId);
         if (!url) return;
 
         state.sending = true;
@@ -366,6 +479,9 @@
             var fd = new FormData();
             fd.append("body", body);
             if (imageFile) fd.append("image", imageFile);
+            if (isFacultyTab() && !conversationId && peerId) {
+                fd.append("peer_id", String(peerId));
+            }
             var res = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -389,15 +505,26 @@
                 if (imageName) imageName.classList.add("hidden");
             }
             if (data.item) {
+                var newKey = itemKey(data.item);
                 var idx = state.items.findIndex(function (i) {
-                    return i.conversation_id === data.item.conversation_id;
+                    return itemKey(i) === newKey || i.peer_id === data.item.peer_id;
                 });
                 if (idx >= 0) {
                     state.items[idx] = data.item;
                 } else {
-                    state.items = [data.item];
+                    state.items.unshift(data.item);
+                }
+                // Drop placeholder peer rows once a real thread exists.
+                if (data.item.conversation_id && data.item.peer_id) {
+                    state.items = state.items.filter(function (i) {
+                        return !(
+                            !i.conversation_id &&
+                            i.peer_id === data.item.peer_id
+                        );
+                    });
                 }
                 state.activeConversationId = data.item.conversation_id;
+                state.activePeerId = null;
                 renderList();
                 renderThread();
             } else {
@@ -418,10 +545,17 @@
         options = options || {};
         openModal();
         try {
-            await loadItems(
-                options.conversationId || null,
-                options.studentId || null
-            );
+            if (options.tab === "faculty" || options.chatTab === "faculty") {
+                await setTab("faculty", {
+                    conversationId: options.conversationId || null,
+                    peerId: options.peerId || null,
+                });
+            } else {
+                await setTab("students", {
+                    conversationId: options.conversationId || null,
+                    studentId: options.studentId || null,
+                });
+            }
         } catch (err) {
             var thread = document.getElementById("examiq-chat-thread");
             if (thread) {
@@ -442,21 +576,27 @@
             el.addEventListener("click", function (event) {
                 event.preventDefault();
                 var studentId = el.getAttribute("data-student-id");
-                openChat({ studentId: studentId });
+                openChat({ studentId: studentId, tab: "students" });
             });
         });
         document.querySelectorAll("[data-dismiss-chat-modal]").forEach(function (el) {
             el.addEventListener("click", closeModal);
         });
+        document.querySelectorAll("[data-chat-tab]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var tab = btn.getAttribute("data-chat-tab") || "students";
+                setTab(tab).catch(function () {});
+            });
+        });
         var list = document.getElementById("examiq-chat-list");
         if (list) {
             list.addEventListener("click", function (event) {
-                var btn = event.target.closest("[data-conversation-id]");
+                var btn = event.target.closest("[data-item-key]");
                 if (!btn) return;
-                state.activeConversationId = parseInt(
-                    btn.getAttribute("data-conversation-id"),
-                    10
-                );
+                var convId = btn.getAttribute("data-conversation-id");
+                var peerId = btn.getAttribute("data-peer-id");
+                state.activeConversationId = convId ? parseInt(convId, 10) : null;
+                state.activePeerId = peerId && !convId ? parseInt(peerId, 10) : null;
                 renderList();
                 renderThread();
             });
@@ -493,6 +633,7 @@
     document.addEventListener("DOMContentLoaded", function () {
         if (!document.getElementById("examiq-chat-modal")) return;
         bind();
+        updateTabUi();
         window.ExamiQChat = window.ExamiQChat || {};
         window.ExamiQChat.open = openChat;
         window.ExamiQChat.close = closeModal;
@@ -506,6 +647,7 @@
             openChat({
                 conversationId: params.get("conversation_id"),
                 studentId: params.get("student_id"),
+                tab: params.get("chat_tab") || "students",
             });
         }
     });

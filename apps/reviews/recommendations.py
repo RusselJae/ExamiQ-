@@ -56,13 +56,54 @@ def build_session_summary(session: ReviewSession) -> dict:
 
     from apps.analytics.services import session_question_trends
 
+    question_trends = session_question_trends(session)
+    quick_count = question_trends.get("quick_count", 0)
+    quick_missed = question_trends.get("quick_missed", 0)
+    avg_time_label = avg_confidence_scale_label(time_confidences)
+
+    if accuracy < 50:
+        status_label = "Needs review"
+    elif accuracy < 75:
+        status_label = "Getting there"
+    else:
+        status_label = "On track"
+
+    if quick_missed >= 3:
+        topic_hint = (
+            session_mistakes[0]["topic__name"]
+            if session_mistakes
+            else "the topics you missed"
+        )
+        pace_insight_title = (
+            f"{quick_missed} question{'s' if quick_missed != 1 else ''} "
+            "were answered quickly and missed"
+        )
+        pace_insight_body = (
+            "Fast answers with wrong results often mean a topic feels familiar "
+            f"but isn't solid yet. Try slowing down on {topic_hint}."
+        )
+    else:
+        pace_insight_title = ""
+        pace_insight_body = ""
+
     return {
         "total_questions": total,
         "correct_count": session.correct_count,
         "accuracy": accuracy,
+        "status_label": status_label,
         "avg_confidence": round(avg_confidence, 1),
         "avg_confidence_label": avg_confidence_scale_label(answer_confidences),
-        "avg_time_confidence_label": avg_confidence_scale_label(time_confidences),
+        "avg_time_confidence_label": avg_time_label,
+        "quick_count": quick_count,
+        "quick_missed": quick_missed,
+        "unanswered_count": question_trends.get("unanswered_count", 0),
+        "pace_insight_title": pace_insight_title,
+        "pace_insight_body": pace_insight_body,
+        "estimated_confidence_subtext": (
+            "Based on your Guessing / Not sure / Sure ratings."
+            if total
+            else "No answers yet."
+        ),
         "calibration_gap": calibration_gap,
         "calibration_matrix": matrix,
         "calibration_rows": calibration_rows,
@@ -70,7 +111,7 @@ def build_session_summary(session: ReviewSession) -> dict:
         "calibration_tier_max": tier_max,
         "narrative": calibration_narrative_from_matrix(matrix, session_mistakes),
         "weak_topics": session_mistakes,
-        "question_trends": session_question_trends(session),
+        "question_trends": question_trends,
     }
 
 

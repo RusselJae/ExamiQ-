@@ -28,15 +28,21 @@
                         <th>Status</th>
                         <th>Validated</th>
                         <th>Mistakes</th>
+                        <th>Students</th>
                         <th>Active</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for question in questions %}
-                    <tr>
+                    <tr class="{% if question.distinct_student_mistake_count >= mistake_student_threshold %}bg-amber-50/70{% endif %}">
                         <td class="text-examiq-slate font-semibold">{{ question.q_label }}</td>
-                        <td class="max-w-xs truncate">{{ question.stem|truncatechars:60 }}</td>
+                        <td class="max-w-xs truncate">
+                            {{ question.stem|truncatechars:60 }}
+                            {% if question.distinct_student_mistake_count >= mistake_student_threshold %}
+                            <span class="block text-xs font-semibold text-amber-800 mt-1">Needs revision</span>
+                            {% endif %}
+                        </td>
                         <td class="text-examiq-slate">{{ question.topic.subject.name }}</td>
                         <td class="text-examiq-slate">{{ question.topic.name }}</td>
                         <td>{% include "components/difficulty_pill.html" with difficulty=question.difficulty %}</td>
@@ -61,6 +67,9 @@
                             {% endif %}
                         </td>
                         <td class="text-examiq-mistake font-medium">{{ question.mistake_count }}</td>
+                        <td class="{% if question.distinct_student_mistake_count >= mistake_student_threshold %}text-amber-800 font-semibold{% else %}text-examiq-slate{% endif %}">
+                            {{ question.distinct_student_mistake_count }}
+                        </td>
                         <td>{% if question.is_active %}Yes{% else %}No{% endif %}</td>
                         <td class="text-right space-x-2 whitespace-nowrap">
                             <a href="{% url 'analytics_professor:question_edit' course.pk question.pk %}" class="text-link">Edit</a>

@@ -47,12 +47,25 @@
     function initFileName() {
         var input = document.getElementById("material-file");
         var label = document.querySelector("[data-file-name]");
-        if (!input || !label) return;
+        var nameInput = document.querySelector("[data-original-name]");
+        if (!input) return;
         input.addEventListener("change", function () {
-            label.textContent = input.files && input.files[0]
-                ? input.files[0].name
-                : "No file chosen";
+            var fileName = input.files && input.files[0] ? input.files[0].name : "";
+            if (label) {
+                label.textContent = fileName || "No file chosen";
+            }
+            if (nameInput && fileName) {
+                if (!nameInput.value.trim() || nameInput.dataset.autoFilled === "1") {
+                    nameInput.value = fileName;
+                    nameInput.dataset.autoFilled = "1";
+                }
+            }
         });
+        if (nameInput) {
+            nameInput.addEventListener("input", function () {
+                nameInput.dataset.autoFilled = "0";
+            });
+        }
     }
 
     function init() {

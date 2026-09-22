@@ -52,6 +52,19 @@
         });
     }
 
+    function initYearCards() {
+        document.querySelectorAll("[data-year-subject]").forEach(function (input) {
+            var card = input.closest(".exam-subject-card");
+            if (!card) return;
+            function sync() {
+                card.classList.toggle("is-selected", input.checked);
+                updateSummary();
+            }
+            input.addEventListener("change", sync);
+            sync();
+        });
+    }
+
     function initExtraCards() {
         document.querySelectorAll("[data-extra-subject]").forEach(function (input) {
             var card = input.closest(".exam-subject-card");
@@ -149,10 +162,10 @@
     function updateSummary() {
         var form = document.getElementById("review-setup-form");
         if (!form) return;
-        var yearCount = parseIntAttr(form, "data-year-count", 0);
         var minQ = parseIntAttr(form, "data-min-questions", 3);
         var seconds = parseIntAttr(form, "data-seconds", 30);
         var maxQ = parseIntAttr(form, "data-max-questions", 100);
+        var yearCount = form.querySelectorAll("[data-year-subject]:checked").length;
         var extraCount = form.querySelectorAll("[data-extra-subject]:checked").length;
         var subjects = yearCount + extraCount;
         var questions = Math.min(maxQ, Math.max(subjects, 1) * minQ);
@@ -170,6 +183,7 @@
 
     function init() {
         initExtraToggle();
+        initYearCards();
         initExtraCards();
         initSelectAllExtras();
         initPills();

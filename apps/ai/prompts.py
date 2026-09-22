@@ -42,15 +42,18 @@ Text reply (conceptual / short follow-ups):
 Solution reply (step-by-step solve):
 {
   "type": "solution",
+  "problem": "optional restatement of the problem in plain text, or null",
   "steps": [
     {
-      "title": "short step title",
-      "operation": "what rule you applied (e.g. divide both sides by 3)",
-      "equations": ["$3x = 12$", "$x = 4$"],
-      "highlight": "optional term that changed"
+      "title": "Expand the brackets",
+      "operation": "multiply 3 by each term",
+      "equations": ["$3(x - 2) = 2x + 5$", "$3x - 6 = 2x + 5$"],
+      "highlight": "3x - 6",
+      "note": "optional short note under the math card, or null",
+      "why": "optional one-sentence reason shown under a Why? link, or null"
     }
   ],
-  "answer": "$x = 4$",
+  "answer": "$x = 11$",
   "chart": null
 }
 
@@ -63,10 +66,20 @@ Optional chart (ONLY when a diagram clarifies optimization, geometry, or motion 
 }
 
 Rules for solution steps:
-- Stack equations aligned conceptually (each transformation on its own line).
-- Annotate the operation; do not dump paragraph prose.
+- Use 3 to 6 steps, with one operation per step.
+- Write titles as actions (verbs), and never include step numbers in the text \
+(no "Step 1", "Step 2", etc.).
+- Mark exactly which terms changed on each line using "highlight" \
+(the substring that changed from the previous equation).
+- Every equation line must follow from the line before it \
+(show the before line then the after line when a transform happens).
+- End with a check step whenever the problem allows one \
+(title like "Check" or "Check it makes sense").
+- Put the short transform label in "operation" (shown beside the math); \
+do not dump paragraph prose there.
 - Put the final result in "answer" separately from scratch work.
-- Keep "title" and "operation" in plain English; put all math in "equations" and "answer" wrapped in $...$."""
+- Keep "title", "operation", "note", and "why" in plain English; \
+put all math in "equations" and "answer" wrapped in $...$."""
 
 TUTOR_CHAT_RULES = """\
 RULES:
@@ -75,7 +88,9 @@ RULES:
 - Short conceptual questions → {"type": "text", "content": "..."}.
 - Requests to solve, show steps, or show the complete solution → {"type": "solution", "steps": [...], "answer": "..."}.
 - NEVER return a plain numbered prose list for solve requests — always use type solution JSON.
-- If the message is vague, tie it to the active question in step 1, then help.
+- Solution steps: 3–6 steps, action titles only (never "Step N"), one operation per step, \
+highlight changed terms, each line follows the previous, end with a check when possible.
+- If the message is vague, tie it to the active question in the first step, then help.
 - Use $...$ / $$...$$ for math (KaTeX).
 - Do not put LaTeX commands in "title" or "operation"."""
 
@@ -257,15 +272,12 @@ def format_conversation_history(history: list[dict[str, str]] | None) -> str:
 GENERATABLE_QUESTION_TYPES = frozenset(
     {
         Question.QuestionType.MCQ,
-        Question.QuestionType.TRUE_FALSE,
-        Question.QuestionType.IDENTIFICATION,
-        Question.QuestionType.ENUMERATION,
     }
 )
 
 
 def coerce_generate_question_type(value: str | None) -> str:
-    """Return a supported generate type; default to MCQ."""
+    """Return a supported generate type; default to MCQ (MCQ-only generation)."""
     key = (value or "").strip().lower()
     if key in GENERATABLE_QUESTION_TYPES:
         return key
@@ -534,6 +546,26 @@ def build_question_generation_prompt(
         "Return questions only — omit explanation_steps and solution_summary.\n"
         f"JSON array schema:\n{schema}"
     )
+    if ref != "none":
+        user_prompt = (
+            f"Regenerate {count} replacement {type_label} question(s) for a high-mistake item.\n"
+            f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
+            f"{year_hint}"
+            f"Difficulty: {label} ({difficulty}) — KEEP THIS SAME DIFFICULTY BAND.\n"
+            f"Question type: {qtype}\n"
+            f"{guidance}\n"
+            "Rules:\n"
+            "- Test the same core concept as the reference question.\n"
+            "- Use a different scenario, numbers, or example — do not copy the stem.\n"
+            "- Prefer clearer wording and less tricky distractors while staying at the "
+            "same difficulty.\n"
+            "- Must differ materially from the reference stem.\n\n"
+            f"Reference question to improve upon:\n{ref}\n\n"
+            f"{material_block}"
+            f"{extra}"
+            "Return questions only — omit explanation_steps and solution_summary.\n"
+            f"JSON array schema:\n{schema}"
+        )
     return system, user_prompt, question_generation_max_tokens(count, difficulty)
 
 
@@ -741,11 +773,20 @@ def build_tutor_qa_prompt(topic: str, question: str) -> tuple[str, str]:
 # Adaptive per-answer feedback (legacy: buildAdaptivePrompt) — during review
 # ---------------------------------------------------------------------------
 
+ADAPTIVE_FEEDBACK_JSON_SCHEMA = """\
+{
+  "what_went_wrong": "string, 1-2 sentences, names the specific confusion",
+  "why": "string, the reason behind the correct answer",
+  "quick_check": "string or null, a small example with numbers",
+  "remember": "string, max 10 words",
+  "follow_ups": ["string", "string", "string"],
+  "solution_steps": ["string", "..."] or null
+}"""
+
 ADAPTIVE_FEEDBACK_SYSTEM = (
-    f"You are {EXAMIQ_PERSONA}, an adaptive, friendly, and flexible tutor.\n"
+    f"You are {EXAMIQ_PERSONA}, a sharp math tutor who diagnoses mistakes precisely.\n"
     f"{MATH_NOTATION_RULES}\n{ADAPTIVE_TOPIC_RESTRICTION}\n"
-    f"{CONFIDENCE_ADAPTIVE_RULES}\n"
-    "Reply in plain sentences only — no JSON, no markdown code fences."
+    "Return ONLY valid JSON matching the schema. No markdown fences, no prose outside JSON."
 )
 
 
@@ -757,41 +798,179 @@ def build_adaptive_feedback_prompt(
     confidence: str = "medium",
     patterns: list[str] | None = None,
     question_type: str = "",
+    *,
+    choices: list[str] | None = None,
+    difficulty: str = "",
+    unanswered: bool = False,
 ) -> tuple[str, str]:
+    """Build structured adaptive feedback prompt (JSON fields for the tutor UI)."""
     pattern_text = format_pattern_text(patterns)
+    choices_block = "\n".join(f"- {c}" for c in (choices or [])) or "(not provided)"
+    # Confidence may be passed for logging; never instruct the model to comment on it.
+    _ = confidence
+    unanswered_note = ""
+    if unanswered or (user_answer or "").strip().lower() in {
+        "no answer",
+        "timed out",
+        "",
+    }:
+        unanswered_note = (
+            "\nNote: The student did not select an answer "
+            "(timed out or skipped). Diagnose the gap from the correct option, "
+            "not from a wrong choice.\n"
+        )
+
     user_prompt = f"""\
-### DYNAMIC FEEDBACK RULES
-When the student is incorrect:
-- In 3-5 sentences, explain what went wrong and why the correct approach works.
-- Name the concept or rule they should remember; give a short hint toward the solution.
-- You may reference the worked-solution steps, but still teach the idea here — do not say only "see the solution tab."
-- If confidence is LOW, use simpler wording and smaller steps.
+### RULES
+- Diagnose the specific mistake from the option they chose, not a generic "you mixed things up".
+- Explain WHY the correct answer is true, not just restate the definition.
+- Include one tiny worked example with real numbers when the topic allows it; otherwise set quick_check to null.
+- End with a memory hook of 10 words or fewer in "remember".
+- Do not comment on the student's confidence, effort, or feelings.
+- No filler like "double-check your work", "great try", or "remember to".
+- Each text field (except solution_steps) is 1 to 2 sentences. If you have nothing useful for quick_check, return null.
+- Do NOT use "Step 1." / "Step 2." patterns in what_went_wrong, why, quick_check, or remember.
+- solution_steps: for calculation-heavy items, return an ordered list of detailed steps that solve THIS problem (Step-N wording is allowed only here). For purely conceptual items, return null.
+- Do NOT invent options that were not provided.
+{unanswered_note}
+### JSON SCHEMA
+Return ONLY a JSON object with this shape:
+{ADAPTIVE_FEEDBACK_JSON_SCHEMA}
 
-Use plain language. Avoid decorative symbols unless the question uses math notation.
+### GOOD EXAMPLE (copy this tone and specificity)
+Question: If matrix A has a determinant of 0, what can be concluded about A?
+Options: A: A is invertible · B: A is non-singular · C: A has full rank · D: A is singular
+Student chose: B: A is non-singular
+Correct: D: A is singular
+{{
+  "what_went_wrong": "'Non-singular' means the matrix is invertible, and that needs det(A) ≠ 0. Here det(A) = 0, so A is singular.",
+  "why": "The inverse is A^{{-1}} = adj(A) / det(A). With det(A) = 0 you'd be dividing by zero, so no inverse exists.",
+  "quick_check": "A 2×2 matrix [[1, 2], [2, 4]] has det = 1·4 − 2·2 = 0. Row 2 is just 2 × row 1, so it can't be inverted.",
+  "remember": "Singular = det 0 = no inverse.",
+  "follow_ups": [
+    "Why does det = 0 mean dependent rows?",
+    "Try a 3×3 example",
+    "Quiz me on this"
+  ],
+  "solution_steps": null
+}}
 
-### PERFORMANCE PATTERNS
+### BAD EXAMPLE (do NOT write like this — too generic, no reason, contains filler)
+{{
+  "what_went_wrong": "You mixed things up. Great try — double-check your work next time.",
+  "why": "The correct answer is D because A is singular by definition.",
+  "quick_check": "Remember to review the definition of singular matrices.",
+  "remember": "Since you have high confidence, slow down and carefully verify each step before submitting.",
+  "follow_ups": ["Study more", "Practice", "Ask faculty"],
+  "solution_steps": null
+}}
+
+### PERFORMANCE PATTERNS (optional context; do not invent confidence claims)
 {pattern_text}
-
-Keep the whole reply under ~250 words. No long practice-recommendation blocks.
-
----
 
 ### STUDENT DATA
 Topic: {topic}
+Difficulty: {difficulty or "unspecified"}
 Question Type: {question_type or "General"}
 Question: {question}
-Student Answer: {user_answer}
-Correct Answer: {correct_answer}
-Confidence Level: {confidence}
+All options:
+{choices_block}
+Student choice: {user_answer}
+Correct answer: {correct_answer}
 
-Tailor feedback to the question type (multiple choice, true/false, identification, enumeration, or numeric).
-
----
-
-Generate adaptive feedback based on the rules above.
-For MCQ mention the correct letter; for enumeration list required items; for true/false state True or False clearly.
-Return only the feedback text — not JSON."""
+Do not mention confidence. Use only the data above.
+Return ONLY the JSON object."""
     return ADAPTIVE_FEEDBACK_SYSTEM, user_prompt
+
+
+CORRECT_ADAPTIVE_FEEDBACK_JSON_SCHEMA = """\
+{
+  "why_it_works": "string, 1-2 sentences explaining why the correct answer holds",
+  "remember": "string, max 10 words",
+  "worked_example": "string or null, a tiny numeric example when the topic allows it",
+  "follow_ups": ["string", "string", "string"]
+}"""
+
+CORRECT_ADAPTIVE_FEEDBACK_SYSTEM = (
+    f"You are {EXAMIQ_PERSONA}, a sharp math tutor who reinforces correct reasoning.\n"
+    f"{MATH_NOTATION_RULES}\n{ADAPTIVE_TOPIC_RESTRICTION}\n"
+    "Return ONLY valid JSON matching the schema. No markdown fences, no prose outside JSON."
+)
+
+
+def build_correct_adaptive_feedback_prompt(
+    topic: str,
+    question: str,
+    user_answer: str,
+    correct_answer: str,
+    confidence: str = "medium",
+    patterns: list[str] | None = None,
+    question_type: str = "",
+    *,
+    choices: list[str] | None = None,
+    difficulty: str = "",
+) -> tuple[str, str]:
+    """Build structured adaptive feedback for a correct answer."""
+    pattern_text = format_pattern_text(patterns)
+    choices_block = "\n".join(f"- {c}" for c in (choices or [])) or "(not provided)"
+    _ = confidence
+
+    user_prompt = f"""\
+### RULES
+- The student answered correctly. Reinforce WHY the answer works — do not congratulate.
+- Explain the underlying reason, not just restate the definition.
+- Include one tiny worked example with real numbers when the topic allows it; otherwise set worked_example to null.
+- End with a memory hook of 10 words or fewer in "remember".
+- Do not comment on the student's confidence, effort, or feelings.
+- No filler like "great job", "well done", "keep it up", or "double-check your work".
+- Each text field is 1 to 2 sentences. If you have nothing useful for worked_example, return null.
+- Do NOT use "Step 1." / "Step 2." patterns.
+- Do NOT invent options that were not provided.
+
+### JSON SCHEMA
+Return ONLY a JSON object with this shape:
+{CORRECT_ADAPTIVE_FEEDBACK_JSON_SCHEMA}
+
+### GOOD EXAMPLE (copy this tone and specificity)
+Question: If matrix A has a determinant of 0, what can be concluded about A?
+Options: A: A is invertible · B: A is non-singular · C: A has full rank · D: A is singular
+Student chose: D: A is singular
+Correct: D: A is singular
+{{
+  "why_it_works": "The inverse needs division by det(A). When det(A) = 0 that's impossible, so A has no inverse and is singular.",
+  "remember": "Singular = det 0 = no inverse.",
+  "worked_example": "A 2×2 matrix [[1, 2], [2, 4]] has det = 1·4 − 2·2 = 0, so it is singular.",
+  "follow_ups": [
+    "Why does det = 0 mean dependent rows?",
+    "Try a 3×3 example",
+    "Quiz me on this"
+  ]
+}}
+
+### BAD EXAMPLE (do NOT write like this — filler, no reason, confidence talk)
+{{
+  "why_it_works": "Great job! You picked the right answer. Keep up the good work.",
+  "remember": "Since you have high confidence, always trust your first instinct on these.",
+  "worked_example": "Remember to review singular matrices.",
+  "follow_ups": ["Study more", "Practice", "Ask faculty"]
+}}
+
+### PERFORMANCE PATTERNS (optional context; do not invent confidence claims)
+{pattern_text}
+
+### STUDENT DATA
+Topic: {topic}
+Difficulty: {difficulty or "unspecified"}
+Question Type: {question_type or "General"}
+Question: {question}
+All options:
+{choices_block}
+Student choice: {user_answer}
+Correct answer: {correct_answer}
+
+Do not mention confidence. Use only the data above.
+Return ONLY the JSON object."""
+    return CORRECT_ADAPTIVE_FEEDBACK_SYSTEM, user_prompt
 
 
 # ---------------------------------------------------------------------------

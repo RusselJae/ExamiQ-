@@ -1,0 +1,98 @@
+{# Shared answer-review summary + optional pace grid. #}
+{# Expects: session_summary. Optional: id_prefix, clickable, show_answer_grid (default true). #}
+{% with prefix=id_prefix|default:"answer-review" %}
+<div class="answer-review" data-answer-review data-id-prefix="{{ prefix }}">
+    <div class="answer-review__summary">
+        <div class="answer-review__card">
+            <p class="answer-review__card-label">Exam result</p>
+            <div class="answer-review__score-row">
+                <span class="answer-review__score">{{ session_summary.accuracy|floatformat:0 }}%</span>
+                <span class="answer-review__badge {% if session_summary.accuracy < 50 %}answer-review__badge--warn{% elif session_summary.accuracy < 75 %}answer-review__badge--mid{% else %}answer-review__badge--good{% endif %}">
+                    {{ session_summary.status_label }}
+                </span>
+            </div>
+            <p class="answer-review__card-sub">
+                {{ session_summary.correct_count }} of {{ session_summary.total_questions }} correct
+            </p>
+        </div>
+        <div class="answer-review__card">
+            <p class="answer-review__card-label">Average confidence</p>
+            <p class="answer-review__confidence">{{ session_summary.avg_confidence_label }}</p>
+            <p class="answer-review__card-sub">{{ session_summary.estimated_confidence_subtext }}</p>
+        </div>
+    </div>
+
+    {% if session_summary.pace_insight_title %}
+    <div class="answer-review__insight" role="note">
+        <span class="answer-review__insight-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+        </span>
+        <div>
+            <p class="answer-review__insight-title">{{ session_summary.pace_insight_title }}</p>
+            <p class="answer-review__insight-body">{{ session_summary.pace_insight_body }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if show_answer_grid != False %}
+    <div class="answer-review__section">
+        <div class="answer-review__section-header">
+            <h3 class="answer-review__section-title">Answer review</h3>
+            <div class="answer-review__toggle" role="group" aria-label="Answer review display mode">
+                <button type="button"
+                        class="answer-review__toggle-btn is-active"
+                        data-review-mode="pace"
+                        id="{{ prefix }}-mode-pace"
+                        aria-pressed="true">Result + pace</button>
+                <button type="button"
+                        class="answer-review__toggle-btn"
+                        data-review-mode="result"
+                        id="{{ prefix }}-mode-result"
+                        aria-pressed="false">Result only</button>
+            </div>
+        </div>
+
+        <div id="{{ prefix }}-legend" class="answer-review__legend" aria-hidden="false">
+            <span class="answer-review__legend-item">
+                <i class="answer-review__swatch answer-review__swatch--missed" aria-hidden="true"></i> Missed
+            </span>
+            <span class="answer-review__legend-item">
+                <i class="answer-review__swatch answer-review__swatch--correct" aria-hidden="true"></i> Correct
+            </span>
+            <span class="answer-review__legend-item answer-review__legend-item--pace">
+                <span class="answer-review__pace-bars" aria-hidden="true">
+                    <i class="is-on"></i><i class="is-on"></i><i class="is-on"></i>
+                </span> Quick
+            </span>
+            <span class="answer-review__legend-item answer-review__legend-item--pace">
+                <span class="answer-review__pace-bars" aria-hidden="true">
+                    <i class="is-on"></i><i class="is-on"></i><i></i>
+                </span> Steady
+            </span>
+            <span class="answer-review__legend-item answer-review__legend-item--pace">
+                <span class="answer-review__pace-bars" aria-hidden="true">
+                    <i class="is-on"></i><i></i><i></i>
+                </span> Slow
+            </span>
+            <span class="answer-review__legend-item">
+                <i class="answer-review__swatch answer-review__swatch--unanswered" aria-hidden="true"></i> Unanswered
+            </span>
+        </div>
+
+        <div id="{{ prefix }}-wrap">
+            <div id="{{ prefix }}-grid"
+                 class="answer-review__grid"
+                 role="list"
+                 aria-label="Answer review by question"></div>
+        </div>
+        <div id="{{ prefix }}-empty" class="chart-empty-state hidden">
+            <p class="empty-state-title">No answers in this session</p>
+            <p class="empty-state-body">Question-level results appear after you answer items.</p>
+        </div>
+        <p class="answer-review__hint">{{ review_hint|default:"Click a question to review your answer." }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endwith %}

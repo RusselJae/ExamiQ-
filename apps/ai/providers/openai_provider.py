@@ -9,8 +9,6 @@ from django.conf import settings
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
 from apps.ai.prompts import (
-    adaptive_feedback_max_tokens,
-    build_adaptive_feedback_prompt,
     build_calibration_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
@@ -30,7 +28,6 @@ from apps.ai.interfaces import (
     QuestionValidator,
 )
 from apps.ai.stubs import (
-    StubAdaptiveFeedbackGenerator,
     StubCalibrationAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
@@ -57,18 +54,23 @@ def _chat(
     prompt: str,
     system: str = "You are a concise educational analytics assistant.",
     max_output_tokens: int = 500,
+    *,
+    json_mode: bool = False,
 ) -> str | None:
     try:
         client = _get_client()
-        response = client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=[
+        kwargs: dict = {
+            "model": settings.OPENAI_MODEL,
+            "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.3,
-            max_tokens=max_output_tokens,
-        )
+            "temperature": 0.3,
+            "max_tokens": max_output_tokens,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = client.chat.completions.create(**kwargs)
         return response.choices[0].message.content.strip()
     except Exception as exc:
         logger.warning("OpenAI API call failed: %s", exc)
@@ -253,26 +255,34 @@ class OpenAIAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         correct_answer: str,
         confidence: str = "medium",
         question_type: str = "",
+        *,
+        choices: list[str] | None = None,
+        difficulty: str = "",
+        is_correct: bool = False,
+        unanswered: bool = False,
     ) -> str:
-        stub = StubAdaptiveFeedbackGenerator()
-        system, prompt = build_adaptive_feedback_prompt(
-            topic,
-            question,
-            user_answer,
-            correct_answer,
-            confidence,
+        from apps.ai.feedback_services import generate_validated_adaptive_feedback
+
+        def chat_json(system: str, prompt: str, max_tokens: int) -> str | None:
+            return _chat(
+                prompt,
+                system=system,
+                max_output_tokens=max_tokens,
+                json_mode=True,
+            )
+
+        return generate_validated_adaptive_feedback(
+            chat_json=chat_json,
+            topic=topic,
+            question=question,
+            user_answer=user_answer,
+            correct_answer=correct_answer,
+            confidence=confidence,
             question_type=question_type,
-        )
-        result = _chat(
-            prompt, system=system, max_output_tokens=adaptive_feedback_max_tokens()
-        )
-        return result or stub.generate(
-            topic,
-            question,
-            user_answer,
-            correct_answer,
-            confidence,
-            question_type=question_type,
+            choices=choices,
+            difficulty=difficulty,
+            is_correct=is_correct,
+            unanswered=unanswered,
         )
 
 

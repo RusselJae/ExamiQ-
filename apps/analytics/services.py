@@ -6,9 +6,13 @@ from django.db.models.functions import TruncDate, TruncMonth, TruncWeek, TruncYe
 
 from apps.analytics.confidence import (
     CLASSIFICATION_LABELS,
+    PACE_BAR_COUNTS,
+    PACE_QUICK,
+    answer_is_unanswered,
     confidence_accuracy_matrix,
     confidence_tier_matrix,
     misconception_topics,
+    pace_from_answer,
 )
 from apps.analytics.models import MistakeRecord
 from apps.questions.models import Question, Subject, Topic
@@ -29,9 +33,17 @@ def log_mistake(
     generate_ai: bool = False,
 ) -> MistakeRecord:
     """Create a mistake record when a student answers incorrectly."""
+    from apps.questions.services import (
+        distinct_student_mistake_count,
+        mistake_student_threshold,
+    )
+
     error_type = None
     if answer.selected_choice_id and answer.selected_choice.error_type_id:
         error_type = answer.selected_choice.error_type
+
+    prior_unique = distinct_student_mistake_count(question)
+    already_counted = question.mistake_records.filter(student=student).exists()
 
     ai_feedback = ""
     record = MistakeRecord.objects.create(
@@ -45,7 +57,71 @@ def log_mistake(
     if generate_ai:
         generate_mistake_feedback(record)
         record.refresh_from_db()
+
+    threshold = mistake_student_threshold()
+    unique_after = prior_unique if already_counted else prior_unique + 1
+    if unique_after >= threshold and prior_unique < threshold:
+        notify_faculty_mistake_threshold(question)
+
     return record
+
+
+def notify_faculty_mistake_threshold(question: Question) -> None:
+    """Notify faculty when distinct-student mistakes cross the revision threshold."""
+    from django.urls import reverse
+
+    from apps.questions.services import mistake_student_threshold
+    from apps.users.assignment_services import get_or_create_catalog_course
+    from apps.users.models import Course, Notification, TeachingAssignment, User
+    from apps.users.notification_services import create_notification
+
+    subject = question.topic.subject
+    threshold = mistake_student_threshold()
+    message = f"{subject.code}: {threshold}+ students missed a question — revise it"
+
+    recipients: dict[int, tuple[User, Course]] = {}
+
+    for course in Course.objects.filter(
+        code=subject.code,
+        program=subject.program,
+        is_archived=False,
+        professor__isnull=False,
+    ).select_related("professor"):
+        professor = course.professor
+        if professor and professor.role == User.Role.PROFESSOR:
+            recipients[professor.pk] = (professor, course)
+
+    for assignment in TeachingAssignment.objects.filter(subject=subject).select_related(
+        "professor"
+    ):
+        professor = assignment.professor
+        if (
+            not professor
+            or professor.role != User.Role.PROFESSOR
+            or professor.pk in recipients
+        ):
+            continue
+        course = get_or_create_catalog_course(professor, subject)
+        recipients[professor.pk] = (professor, course)
+
+    for professor, course in recipients.values():
+        link = reverse(
+            "analytics_professor:question_edit",
+            kwargs={"course_pk": course.pk, "question_pk": question.pk},
+        )
+        if Notification.objects.filter(
+            user=professor, link=link, read_at__isnull=True
+        ).exists():
+            continue
+        create_notification(professor, message, link=link)
+
+
+def _question_choice_labels(question) -> list[str]:
+    """Format MCQ options as 'A: text' lines for the adaptive feedback prompt."""
+    choices = list(question.choices.order_by("label"))
+    if not choices:
+        return []
+    return [f"{c.label}: {c.text}" for c in choices]
 
 
 def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
@@ -61,12 +137,25 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
             mistake_record.error_type = error_type
             mistake_record.save(update_fields=["error_type"])
 
+    from apps.questions.services import faculty_adaptive_feedback_json
+
+    faculty_feedback = faculty_adaptive_feedback_json(question)
+    if faculty_feedback:
+        mistake_record.ai_feedback = faculty_feedback
+        mistake_record.save(update_fields=["ai_feedback"])
+        return faculty_feedback
+
     ai_feedback = ""
     try:
         from django.conf import settings
 
         if settings.AI_ENABLED:
             from apps.ai.factory import get_adaptive_feedback_generator
+            from apps.ai.normalize import (
+                adaptive_feedback_to_json,
+                validate_adaptive_feedback,
+            )
+            from apps.analytics.confidence import answer_is_unanswered
 
             user_answer = format_answer_user_text(answer)
             correct_answer = format_question_correct_text(question)
@@ -85,14 +174,23 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
                 correct_answer=correct_answer or "Unknown",
                 confidence=confidence,
                 question_type=question.get_question_type_display(),
+                choices=_question_choice_labels(question),
+                difficulty=question.get_difficulty_display(),
+                is_correct=False,
+                unanswered=answer_is_unanswered(answer),
             )
+            validated = validate_adaptive_feedback(ai_feedback)
+            if validated:
+                ai_feedback = adaptive_feedback_to_json(validated)
     except Exception:
         ai_feedback = ""
 
     if ai_feedback:
-        from apps.ai.normalize import normalize_feedback_text
+        from apps.ai.normalize import normalize_feedback_text, validate_adaptive_feedback
 
-        ai_feedback = normalize_feedback_text(ai_feedback)
+        # Keep structured JSON when valid; otherwise store plain text.
+        if not validate_adaptive_feedback(ai_feedback):
+            ai_feedback = normalize_feedback_text(ai_feedback)
         mistake_record.ai_feedback = ai_feedback
         mistake_record.save(update_fields=["ai_feedback"])
     return ai_feedback
@@ -174,31 +272,79 @@ def get_answer_feedback_quick(answer) -> tuple[str, bool]:
     """
     from django.conf import settings
 
-    from apps.ai.normalize import normalize_feedback_text
+    from apps.ai.normalize import (
+        normalize_feedback_text,
+        parse_any_adaptive_feedback,
+        validate_adaptive_feedback,
+        validate_correct_adaptive_feedback,
+    )
+    from apps.questions.services import faculty_adaptive_feedback_json
+
+    faculty_feedback = faculty_adaptive_feedback_json(answer.question)
+    if faculty_feedback and not answer.is_correct:
+        return faculty_feedback, False
 
     mistake_record = _get_answer_mistake_record(answer)
     if mistake_record and mistake_record.ai_feedback:
-        return normalize_feedback_text(mistake_record.ai_feedback), False
+        raw = mistake_record.ai_feedback
+        # Preserve structured JSON for the tutor UI when present.
+        if validate_adaptive_feedback(raw):
+            return raw, False
+        return normalize_feedback_text(raw), False
+
+    # Correct answers cache structured JSON on Answer.ai_feedback.
+    cached = (getattr(answer, "ai_feedback", None) or "").strip()
+    if cached:
+        if validate_correct_adaptive_feedback(cached) or validate_adaptive_feedback(
+            cached
+        ):
+            return cached, False
+        if parse_any_adaptive_feedback(cached):
+            return cached, False
+        return normalize_feedback_text(cached), False
 
     rule = _rule_based_answer_feedback(answer)
-    if answer.is_correct:
-        return rule, False
     needs_ai = bool(settings.AI_ENABLED)
     return rule, needs_ai
 
 
 def generate_answer_feedback(answer) -> str:
     """Generate and return feedback for a session answer."""
-    from apps.ai.normalize import normalize_feedback_text
+    from apps.ai.normalize import (
+        adaptive_feedback_to_json,
+        correct_adaptive_feedback_to_json,
+        normalize_feedback_text,
+        validate_adaptive_feedback,
+        validate_correct_adaptive_feedback,
+    )
+    from apps.analytics.confidence import answer_is_unanswered
+    from apps.questions.services import faculty_adaptive_feedback_json
+
+    faculty_feedback = faculty_adaptive_feedback_json(answer.question)
+    if faculty_feedback and not answer.is_correct:
+        return faculty_feedback
 
     mistake_record = _get_answer_mistake_record(answer)
     if mistake_record and mistake_record.ai_feedback:
-        return normalize_feedback_text(mistake_record.ai_feedback)
+        raw = mistake_record.ai_feedback
+        if validate_adaptive_feedback(raw):
+            return raw
+        return normalize_feedback_text(raw)
+
+    cached = (getattr(answer, "ai_feedback", None) or "").strip()
+    if cached:
+        if validate_correct_adaptive_feedback(cached) or validate_adaptive_feedback(
+            cached
+        ):
+            return cached
+        return normalize_feedback_text(cached)
 
     if mistake_record:
         try:
             ai_feedback = generate_mistake_feedback(mistake_record)
             if ai_feedback:
+                if validate_adaptive_feedback(ai_feedback):
+                    return ai_feedback
                 return normalize_feedback_text(ai_feedback)
         except Exception:
             pass
@@ -215,9 +361,8 @@ def generate_answer_feedback(answer) -> str:
         question = answer.question
         user_answer = format_answer_user_text(answer)
         correct_answer = format_question_correct_text(question)
-
-        if answer.is_correct:
-            return _rule_based_answer_feedback(answer)
+        unanswered = answer_is_unanswered(answer)
+        is_correct = bool(answer.is_correct) and not unanswered
 
         confidence = "high" if answer.confidence and answer.confidence >= 4 else "medium"
         ai_feedback = get_adaptive_feedback_generator().generate(
@@ -227,8 +372,28 @@ def generate_answer_feedback(answer) -> str:
             correct_answer=correct_answer or "Unknown",
             confidence=confidence,
             question_type=question.get_question_type_display(),
+            choices=_question_choice_labels(question),
+            difficulty=question.get_difficulty_display(),
+            is_correct=is_correct,
+            unanswered=unanswered,
         )
         if ai_feedback:
+            if is_correct:
+                validated = validate_correct_adaptive_feedback(ai_feedback)
+                if validated:
+                    stored = correct_adaptive_feedback_to_json(validated)
+                    Answer.objects.filter(pk=answer.pk).update(ai_feedback=stored)
+                    answer.ai_feedback = stored
+                    return stored
+                return normalize_feedback_text(ai_feedback)
+
+            validated = validate_adaptive_feedback(ai_feedback)
+            if validated:
+                stored = adaptive_feedback_to_json(validated)
+                # Incorrect without a MistakeRecord still persists on the answer.
+                Answer.objects.filter(pk=answer.pk).update(ai_feedback=stored)
+                answer.ai_feedback = stored
+                return stored
             return normalize_feedback_text(ai_feedback)
     except Exception:
         pass
@@ -238,7 +403,8 @@ def generate_answer_feedback(answer) -> str:
 
 def generate_session_feedback(session) -> list[dict]:
     """Generate feedback for every answer in a completed session."""
-    from apps.analytics.confidence import confidence_tier_key
+    from apps.analytics.confidence import answer_is_unanswered, confidence_tier_key
+    from apps.ai.normalize import parse_any_adaptive_feedback
 
     results = []
     answers = (
@@ -249,14 +415,18 @@ def generate_session_feedback(session) -> list[dict]:
     for answer in answers:
         feedback = generate_answer_feedback(answer)
         tier_key = confidence_tier_key(answer.confidence)
+        unanswered = answer_is_unanswered(answer)
         results.append(
             {
                 "answer_id": answer.pk,
                 "stem": answer.question.stem,
-                "is_correct": answer.is_correct,
+                "is_correct": bool(answer.is_correct) and not unanswered,
                 "timed_out": answer.timed_out,
+                "unanswered": unanswered,
+                "no_selection": unanswered,
                 "confidence_tier": tier_key,
                 "feedback": feedback,
+                "structured_feedback": parse_any_adaptive_feedback(feedback),
             }
         )
     return results
@@ -322,11 +492,10 @@ def _ordinal_label(n: int) -> str:
 
 
 def student_dashboard_trends(student: User) -> dict:
-    """Flat trend series for the student dashboard line chart.
+    """Flat confidence trend series for the student dashboard.
 
-    - confidence: average mapped 0–3 confidence per completed session
-    - mistakes: mistake count per completed session
-    Labels use ordinal session order with date, e.g. 1st (10-09-2026).
+    Stacked Sure / Not sure / Guessing / No ratings shares per session
+    plus correct_pct for the accuracy overlay.
     """
     from django.utils import timezone
 
@@ -344,12 +513,11 @@ def student_dashboard_trends(student: User) -> dict:
     answers_by_session: dict[int, list] = {sid: [] for sid in session_ids}
     if session_ids:
         for answer in Answer.objects.filter(session_id__in=session_ids).only(
-            "session_id", "confidence"
+            "session_id", "confidence", "is_correct"
         ):
             answers_by_session.setdefault(answer.session_id, []).append(answer)
 
     confidence_points = []
-    mistake_points = []
     for index, session in enumerate(sessions, start=1):
         ordinal = _ordinal_label(index)
         if session.started_at:
@@ -358,40 +526,41 @@ def student_dashboard_trends(student: User) -> dict:
         else:
             label = ordinal
         session_answers = answers_by_session.get(session.pk, [])
-        if session_answers:
-            mapped = [
-                confidence_to_scale_0_3(a.confidence) for a in session_answers
-            ]
-            avg_conf = round(sum(mapped) / len(mapped), 2)
-        else:
-            avg_conf = 0.0
-        confidence_points.append({"label": label, "value": avg_conf})
-
-        total = getattr(session, "session_answer_count", None)
-        if total is None:
-            total = session.total_questions
-        correct = getattr(session, "session_correct_count", None)
-        if correct is None:
-            correct = session.correct_count
-        mistakes = max(0, int(total or 0) - int(correct or 0))
-        mistake_points.append({"label": label, "value": mistakes})
+        confidence_points.append(_confidence_share_point(label, session_answers))
 
     return {
         "confidence": confidence_points,
-        "mistakes": mistake_points,
+        "confidence_insight": build_confidence_insight(confidence_points),
     }
 
 
 def session_question_trends(session: ReviewSession) -> dict:
-    """Per-question series for session summary heatmap strips."""
+    """Per-question series for session summary heatmap / answer-review grids."""
     answers = (
-        session.answers.select_related("question")
+        session.answers.select_related("question", "selected_choice")
         .order_by("answered_at", "id")
     )
+    seconds_per_question = session.seconds_per_question or 30
     confidence_points = []
     mistake_points = []
+    review_points = []
+    quick_count = 0
+    quick_missed = 0
+    unanswered_count = 0
+
     for index, answer in enumerate(answers, start=1):
         label = str(index)
+        unanswered = answer_is_unanswered(answer)
+        pace = pace_from_answer(answer, seconds_per_question)
+        # Unanswered cells are always treated as incorrect in the review grid.
+        is_correct = bool(answer.is_correct) and not unanswered
+        if pace == PACE_QUICK:
+            quick_count += 1
+            if not is_correct:
+                quick_missed += 1
+        if unanswered:
+            unanswered_count += 1
+
         confidence_points.append(
             {
                 "label": label,
@@ -402,13 +571,28 @@ def session_question_trends(session: ReviewSession) -> dict:
         mistake_points.append(
             {
                 "label": label,
-                "value": 0 if answer.is_correct else 1,
+                "value": 0 if is_correct else 1,
                 "answer_id": answer.pk,
             }
         )
+        review_points.append(
+            {
+                "label": label,
+                "answer_id": answer.pk,
+                "is_correct": is_correct,
+                "unanswered": unanswered,
+                "pace": pace,
+                "pace_bars": PACE_BAR_COUNTS.get(pace, 0),
+            }
+        )
+
     return {
         "confidence": confidence_points,
         "mistakes": mistake_points,
+        "review": review_points,
+        "quick_count": quick_count,
+        "quick_missed": quick_missed,
+        "unanswered_count": unanswered_count,
     }
 
 
@@ -451,6 +635,36 @@ def enrolled_bsed_student_count() -> int:
         home_degree_program=User.HomeDegreeProgram.BSED_MATH,
         is_active=True,
     ).count()
+
+
+def enrolled_bsed_students_by_year_level() -> list[dict]:
+    """Active BSED Math students grouped by year level."""
+    from django.db.models import Count
+
+    from apps.questions.models import YearLevel
+
+    # Counts keyed by year_level_id (None for students without a year level).
+    raw = (
+        User.objects.filter(
+            role=User.Role.STUDENT,
+            home_degree_program=User.HomeDegreeProgram.BSED_MATH,
+            is_active=True,
+        )
+        .values("year_level_id")
+        .annotate(count=Count("id"))
+    )
+    counts_by_id = {row["year_level_id"]: row["count"] for row in raw}
+
+    rows: list[dict] = []
+    for yl in YearLevel.objects.order_by("order"):
+        rows.append(
+            {
+                "name": yl.name,
+                "order": yl.order,
+                "count": counts_by_id.get(yl.pk, 0),
+            }
+        )
+    return rows
 
 
 def professor_overview_summary(professor: User) -> dict:
@@ -506,6 +720,7 @@ def professor_overview_summary(professor: User) -> dict:
         "course_count": subject_count,
         "subject_count": subject_count,
         "expected_students": enrolled_bsed_student_count(),
+        "students_by_year_level": enrolled_bsed_students_by_year_level(),
         "student_count": ReviewSession.objects.filter(
             course__professor=professor,
             course__program__slug=User.HomeDegreeProgram.BSED_MATH,
@@ -606,6 +821,96 @@ def _confidence_scale_0_3_annotation():
     )
 
 
+def _confidence_share_point(label: str, answers) -> dict:
+    """Build a stacked confidence share point for one session or bucket."""
+    total = len(answers)
+    if total == 0:
+        return {
+            "label": label,
+            "value": 0.0,
+            "sure": 0.0,
+            "not_sure": 0.0,
+            "guessing": 0.0,
+            "none": 100.0,
+            "correct_pct": 0.0,
+        }
+
+    sure = not_sure = guessing = none = correct = 0
+    mapped_sum = 0
+    for answer in answers:
+        conf = getattr(answer, "confidence", None)
+        mapped_sum += confidence_to_scale_0_3(conf)
+        if conf is None:
+            none += 1
+        elif conf >= 5:
+            sure += 1
+        elif conf >= 3:
+            not_sure += 1
+        else:
+            guessing += 1
+        if getattr(answer, "is_correct", False):
+            correct += 1
+
+    def pct(count: int) -> float:
+        return round(100.0 * count / total, 1)
+
+    return {
+        "label": label,
+        "value": round(mapped_sum / total, 2),
+        "sure": pct(sure),
+        "not_sure": pct(not_sure),
+        "guessing": pct(guessing),
+        "none": pct(none),
+        "correct_pct": round(100.0 * correct / total, 1),
+    }
+
+
+def build_confidence_insight(confidence_points: list[dict]) -> str:
+    """Short callout comparing Sure share vs correct % across sessions/buckets."""
+    rated = [
+        p
+        for p in confidence_points
+        if (p.get("sure", 0) + p.get("not_sure", 0) + p.get("guessing", 0)) > 0
+    ]
+    if not rated:
+        return (
+            "Rate Guessing, Not sure, or Sure after each question to unlock "
+            "confidence trends."
+        )
+
+    ahead = [
+        p
+        for p in rated
+        if p.get("sure", 0) > (p.get("correct_pct", 0) + 8)
+    ]
+    latest = rated[-1]
+    sure = latest.get("sure", 0)
+    correct = latest.get("correct_pct", 0)
+    if abs(sure - correct) <= 5:
+        return (
+            f"In your latest session they met: {sure:.0f}% Sure, "
+            f"{correct:.0f}% correct."
+        )
+    if ahead:
+        peak = max(ahead, key=lambda p: p.get("sure", 0) - p.get("correct_pct", 0))
+        return (
+            "Your confidence ran ahead of your results for several sessions. "
+            f"Sure reached {peak.get('sure', 0):.0f}% while about "
+            f"{peak.get('correct_pct', 0):.0f}% of your answers were correct. "
+            f"In your latest session: {sure:.0f}% Sure, {correct:.0f}% correct."
+        )
+    if sure + 8 < correct:
+        return (
+            f"Your results ran ahead of your Sure ratings recently "
+            f"({correct:.0f}% correct vs {sure:.0f}% Sure). "
+            "Trust the work you are already doing."
+        )
+    return (
+        f"Latest session: {sure:.0f}% Sure and {correct:.0f}% correct. "
+        "Keep rating after each question to track calibration."
+    )
+
+
 def professor_overview_trends(professor: User) -> dict:
     """Bucketed trend series for the professor overview line chart.
 
@@ -703,14 +1008,13 @@ def professor_overview_trends(professor: User) -> dict:
         points = []
         for start in _bucket_starts(cfg):
             k = cfg["key"](start)
-            bucket = conf_map.get(k, {})
-            points.append(
-                {
-                    "label": cfg["label"](start),
-                    "value": bucket.get("value", 0),
-                    "student_count": bucket.get("student_count", 0),
-                }
-            )
+            bucket = conf_map.get(k)
+            if bucket:
+                points.append(dict(bucket, label=cfg["label"](start)))
+            else:
+                point = _confidence_share_point(cfg["label"](start), [])
+                point["student_count"] = 0
+                points.append(point)
         return points
 
     def _fill_scores(scores_map, cfg):
@@ -784,33 +1088,50 @@ def professor_overview_trends(professor: User) -> dict:
             Answer.objects.filter(
                 answer_filter,
                 answered_at__gte=earliest,
-                confidence__isnull=False,
             )
-            .annotate(
-                mapped_conf=_confidence_scale_0_3_annotation(),
-                bucket=trunc_fn("answered_at"),
-            )
-            .values("bucket")
-            .annotate(
-                value=Avg("mapped_conf"),
-                student_count=Count("session__student_id", distinct=True),
-            )
-            .order_by("bucket")
+            .annotate(bucket=trunc_fn("answered_at"))
+            .values_list("bucket", "confidence", "is_correct")
         )
-        confidence_map = {}
-        for row in conf_rows:
-            if not row["bucket"]:
+        answers_by_bucket: dict[str, list] = {}
+        for bucket, confidence, is_correct in conf_rows:
+            if not bucket:
                 continue
-            k = cfg["key"](row["bucket"])
-            confidence_map[k] = {
-                "value": round(float(row["value"] or 0), 2),
-                "student_count": row["student_count"] or 0,
-            }
+            k = cfg["key"](bucket)
+            answers_by_bucket.setdefault(k, []).append(
+                type(
+                    "Row",
+                    (),
+                    {"confidence": confidence, "is_correct": is_correct},
+                )()
+            )
 
+        student_rows = (
+            Answer.objects.filter(
+                answer_filter,
+                answered_at__gte=earliest,
+            )
+            .annotate(bucket=trunc_fn("answered_at"))
+            .values("bucket")
+            .annotate(student_count=Count("session__student_id", distinct=True))
+        )
+        student_count_map = {
+            cfg["key"](row["bucket"]): row["student_count"] or 0
+            for row in student_rows
+            if row["bucket"]
+        }
+
+        confidence_map = {}
+        for k, bucket_answers in answers_by_bucket.items():
+            point = _confidence_share_point(k, bucket_answers)
+            point["student_count"] = student_count_map.get(k, 0)
+            confidence_map[k] = point
+
+        confidence_points = _fill_confidence(confidence_map, cfg)
         result[range_key] = {
             "students": _fill(students_map, cfg),
             "scores": _fill_scores(scores_map, cfg),
-            "confidence": _fill_confidence(confidence_map, cfg),
+            "confidence": confidence_points,
+            "confidence_insight": build_confidence_insight(confidence_points),
         }
 
     return result
@@ -1043,10 +1364,10 @@ def _confidence_label_short(avg_confidence: float | None) -> str:
         return "—"
     rounded = round(avg_confidence)
     if rounded <= 2:
-        return "Low"
+        return "Guessing"
     if rounded <= 4:
-        return "Average"
-    return "High"
+        return "Not sure"
+    return "Sure"
 
 
 def _session_review_status_label(accuracy: float) -> str:
@@ -1874,7 +2195,7 @@ def _build_student_activity_summary(
 
     from django.utils import timezone
 
-    dashboard_trends = {"confidence": [], "mistakes": []}
+    dashboard_trends = {"confidence": [], "mistakes": [], "confidence_insight": ""}
     for index, session in enumerate(reversed(session_list), start=1):
         ordinal = _ordinal_label(index)
         if session.started_at:
@@ -1882,13 +2203,16 @@ def _build_student_activity_summary(
             label = f"{ordinal} ({date_part})"
         else:
             label = ordinal
-        session_answers = session.answers.all()
-        mapped = [confidence_to_scale_0_3(a.confidence) for a in session_answers]
-        avg_conf = round(sum(mapped) / len(mapped), 2) if mapped else 0.0
-        dashboard_trends["confidence"].append({"label": label, "value": avg_conf})
+        session_answers = list(session.answers.all())
+        dashboard_trends["confidence"].append(
+            _confidence_share_point(label, session_answers)
+        )
         dashboard_trends["mistakes"].append(
             {"label": label, "value": mistake_counts_by_session.get(session.pk, 0)}
         )
+    dashboard_trends["confidence_insight"] = build_confidence_insight(
+        dashboard_trends["confidence"]
+    )
 
     return {
         "sessions_completed": sessions.count(),

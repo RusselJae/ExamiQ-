@@ -129,11 +129,55 @@ class StubAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         correct_answer,
         confidence="medium",
         question_type="",
+        *,
+        choices=None,
+        difficulty="",
+        is_correct=False,
+        unanswered=False,
     ):
+        from apps.ai.normalize import (
+            adaptive_feedback_to_json,
+            correct_adaptive_feedback_to_json,
+        )
+
         type_hint = f" ({question_type})" if question_type else ""
-        return (
-            f"You answered '{user_answer}' but the correct answer is '{correct_answer}'{type_hint}. "
-            f"Review the core concept for {topic} and try similar practice questions."
+        if is_correct:
+            return correct_adaptive_feedback_to_json(
+                {
+                    "why_it_works": (
+                        f"'{correct_answer}' is right for {topic}{type_hint} "
+                        "because it matches the definition behind the options."
+                    ),
+                    "remember": "Match the definition to the option.",
+                    "worked_example": None,
+                    "follow_ups": [
+                        f"Why is '{correct_answer}' correct?",
+                        "Show a small example",
+                        "Quiz me on this",
+                    ],
+                }
+            )
+
+        _ = unanswered
+        return adaptive_feedback_to_json(
+            {
+                "what_went_wrong": (
+                    f"You answered '{user_answer}'{type_hint}, which does not "
+                    f"match '{correct_answer}'."
+                ),
+                "why": (
+                    f"For {topic}, the correct choice is '{correct_answer}' "
+                    "based on the definition and options shown."
+                ),
+                "quick_check": None,
+                "remember": "Match the definition to the option.",
+                "follow_ups": [
+                    f"Why is '{correct_answer}' correct?",
+                    "Show a small example",
+                    "Quiz me on this",
+                ],
+                "solution_steps": None,
+            }
         )
 
 

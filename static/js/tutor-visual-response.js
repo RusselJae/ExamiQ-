@@ -55,6 +55,12 @@
             try {
                 var data = JSON.parse(candidates[i]);
                 if (data && typeof data === "object") {
+                    if (data.what_went_wrong || data.why) {
+                        return [data.what_went_wrong, data.why]
+                            .filter(Boolean)
+                            .join(" ")
+                            .trim();
+                    }
                     if (data.feedback) return String(data.feedback).trim();
                     if (data.why_wrong) return String(data.why_wrong).trim();
                     if (data.message) return String(data.message).trim();
@@ -67,20 +73,105 @@
         return text;
     }
 
+    function parseAdaptiveFeedback(raw) {
+        var data = typeof raw === "object" && raw ? raw : null;
+        if (!data) {
+            var text = String(raw || "").trim();
+            if (!text) return null;
+            if (text.charAt(0) === "`") {
+                text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+            }
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                var match = text.match(/\{[\s\S]*\}/);
+                if (!match) return null;
+                try {
+                    data = JSON.parse(match[0]);
+                } catch (err) {
+                    return null;
+                }
+            }
+        }
+        if (!data || typeof data !== "object") return null;
+
+        // Correct-answer schema: why_it_works / remember / worked_example.
+        if (data.why_it_works) {
+            var worked = data.worked_example;
+            if (
+                worked == null ||
+                String(worked).trim() === "" ||
+                String(worked).toLowerCase() === "null"
+            ) {
+                worked = null;
+            } else {
+                worked = String(worked).trim();
+            }
+            var correctFollowUps = Array.isArray(data.follow_ups)
+                ? data.follow_ups
+                      .map(String)
+                      .map(function (s) {
+                          return s.trim();
+                      })
+                      .filter(Boolean)
+                      .slice(0, 3)
+                : [];
+            return {
+                kind: "correct",
+                why_it_works: String(data.why_it_works || "").trim(),
+                remember: String(data.remember || "").trim(),
+                worked_example: worked,
+                follow_ups: correctFollowUps,
+            };
+        }
+
+        if (!(data.what_went_wrong || data.why || data.remember)) return null;
+        var quick = data.quick_check;
+        if (quick == null || String(quick).trim() === "" || String(quick).toLowerCase() === "null") {
+            quick = null;
+        } else {
+            quick = String(quick).trim();
+        }
+        var followUps = Array.isArray(data.follow_ups)
+            ? data.follow_ups.map(String).map(function (s) {
+                  return s.trim();
+              }).filter(Boolean).slice(0, 3)
+            : [];
+        return {
+            kind: "incorrect",
+            what_went_wrong: String(data.what_went_wrong || "").trim(),
+            why: String(data.why || "").trim(),
+            quick_check: quick,
+            remember: String(data.remember || "").trim(),
+            follow_ups: followUps,
+        };
+    }
+
+    function actionTitle(text, fallback) {
+        var t = String(text || "")
+            .replace(/^step\s*\d+\s*[:.\-]?\s*/i, "")
+            .trim();
+        if (!t) return fallback || "Continue";
+        if (/^step\s*\d+$/i.test(t)) return fallback || "Continue";
+        return shortTitle(t, fallback || "Continue");
+    }
+
     function normalizeSteps(data) {
         if (!data) return [];
         if (Array.isArray(data.steps) && data.steps.length) {
-            return data.steps.map(function (step, index) {
+            return data.steps.map(function (step) {
                 if (typeof step === "string") {
                     return {
-                        title: "Step " + (index + 1),
+                        title: actionTitle(step, "Continue"),
                         operation: "",
-                        equations: [step],
+                        equations: looksLikeMathLine(step) ? [step] : [],
                         highlight: "",
+                        note: looksLikeMathLine(step) ? "" : step,
+                        why: "",
                     };
                 }
                 return {
-                    title: step.title || "Step " + (index + 1),
+                    title: actionTitle(step.title, "Continue"),
                     operation: step.operation || "",
                     equations: Array.isArray(step.equations)
                         ? step.equations
@@ -88,6 +179,8 @@
                           ? [step.equation]
                           : [],
                     highlight: step.highlight || "",
+                    note: step.note || "",
+                    why: step.why || "",
                 };
             });
         }
@@ -147,10 +240,12 @@
         function ensureStep() {
             if (!current) {
                 current = {
-                    title: "Step " + (steps.length + 1),
+                    title: "Continue",
                     operation: "",
                     equations: [],
                     highlight: "",
+                    note: "",
+                    why: "",
                 };
             }
         }
@@ -170,19 +265,15 @@
                     flush();
                     var rest = (numbered[1] || "").trim();
                     current = {
-                        title: "Step " + (steps.length + 1),
-                        operation: looksLikeMathLine(rest) ? "" : rest,
+                        title: actionTitle(rest, "Continue"),
+                        operation: "",
                         equations: looksLikeMathLine(rest) ? [rest] : [],
                         highlight: "",
+                        note: "",
+                        why: "",
                     };
-                    if (current.operation && !looksLikeMathLine(current.operation)) {
-                        current.title = shortTitle(
-                            current.operation,
-                            current.title
-                        );
-                        if (current.title === current.operation) {
-                            current.operation = "";
-                        }
+                    if (!looksLikeMathLine(rest) && rest) {
+                        current.title = actionTitle(rest, "Continue");
                     }
                     return;
                 }
@@ -197,19 +288,23 @@
                 flush();
                 if (colon > 0 && colon < 40) {
                     current = {
-                        title: line.slice(0, colon).trim(),
+                        title: actionTitle(line.slice(0, colon).trim(), "Continue"),
                         operation: line.slice(colon + 1).trim(),
                         equations: [],
                         highlight: "",
+                        note: "",
+                        why: "",
                     };
                     return;
                 }
 
                 current = {
-                    title: shortTitle(line, "Step " + (steps.length + 1)),
+                    title: actionTitle(line, "Continue"),
                     operation: line.length > 42 ? line : "",
                     equations: [],
                     highlight: "",
+                    note: "",
+                    why: "",
                 };
                 if (!current.operation && current.title !== line) {
                     current.operation = line;
@@ -219,15 +314,8 @@
 
         flush();
 
-        return steps.map(function (step, index) {
-            if (/^Step\s+\d+$/i.test(step.title) && step.operation) {
-                step.title = shortTitle(step.operation, "Step " + (index + 1));
-                if (step.title === step.operation) {
-                    step.operation = "";
-                }
-            } else if (/^Step\s+\d+$/i.test(step.title)) {
-                step.title = "Step " + (index + 1);
-            }
+        return steps.map(function (step) {
+            step.title = actionTitle(step.title, "Continue");
             return step;
         });
     }
@@ -354,19 +442,23 @@
                 });
                 if (text) {
                     cleaned.push({
-                        title: "Step " + (cleaned.length + 1),
-                        operation: text,
-                        equations: [],
+                        title: actionTitle(text, "Continue"),
+                        operation: "",
+                        equations: looksLikeMathLine(text) ? [text] : [],
                         highlight: "",
+                        note: looksLikeMathLine(text) ? "" : text,
+                        why: "",
                     });
                 }
                 return;
             }
             cleaned.push({
-                title: step.title,
+                title: actionTitle(step.title, "Continue"),
                 operation: stripInternalMetaContent(step.operation || ""),
                 equations: (step.equations || []).map(stripInternalMetaContent).filter(Boolean),
                 highlight: step.highlight || "",
+                note: step.note || "",
+                why: step.why || "",
             });
         });
         return cleaned;
@@ -429,6 +521,33 @@
         return isSolutionResponse(structured, raw);
     }
 
+    function highlightChangedTerms(equationHtml, highlight) {
+        var needle = String(highlight || "").trim();
+        if (!needle || !equationHtml) return equationHtml;
+        var escapedNeedle = escapeHtml(needle);
+        var idx = equationHtml.indexOf(escapedNeedle);
+        if (idx === -1) {
+            // Fallback: try bare text without $ wrappers
+            var bare = escapeHtml(needle.replace(/^\$|\$$/g, "").trim());
+            if (bare) idx = equationHtml.indexOf(bare);
+            if (idx === -1) return equationHtml;
+            escapedNeedle = bare;
+        }
+        return (
+            equationHtml.slice(0, idx) +
+            '<mark class="tutor-visual-mark">' +
+            equationHtml.slice(idx, idx + escapedNeedle.length) +
+            "</mark>" +
+            equationHtml.slice(idx + escapedNeedle.length)
+        );
+    }
+
+    function isCheckStep(step, index, total) {
+        var title = String((step && step.title) || "").toLowerCase();
+        if (/^check\b/.test(title) || /\bcheck\b/.test(title)) return true;
+        return index === total - 1 && total > 1 && /substitut|verify|makes sense/.test(title);
+    }
+
     function renderVisualResponse(host, options) {
         options = options || {};
         if (!host) return null;
@@ -442,21 +561,29 @@
             ? scrubInternalMetaSteps(normalizeSteps(structured))
             : [];
         if (!steps.length && options.correctionSteps) {
-            steps = stepsFromCorrectionList(options.correctionSteps);
+            steps = scrubInternalMetaSteps(
+                stepsFromCorrectionList(options.correctionSteps)
+            );
         }
         if (!steps.length && looksLikePlainMathSolution(options.raw)) {
-            steps = stepsFromCorrectionList(
-                String(options.raw || "")
-                    .split(/\n+/)
-                    .map(function (line) {
-                        return line.trim();
-                    })
-                    .filter(Boolean)
+            steps = scrubInternalMetaSteps(
+                stepsFromCorrectionList(
+                    String(options.raw || "")
+                        .split(/\n+/)
+                        .map(function (line) {
+                            return line.trim();
+                        })
+                        .filter(Boolean)
+                )
             );
         }
         var answer =
             (useStructured && structured && structured.answer) ||
             options.finalAnswer ||
+            "";
+        var problem =
+            options.problem ||
+            (useStructured && structured && structured.problem) ||
             "";
         var why = stripLatexDecorations(extractFeedbackText(options.why || ""));
         var progressive = options.progressive !== false;
@@ -476,6 +603,10 @@
             host.appendChild(whyBlock);
         }
 
+        var problemHost = document.createElement("div");
+        problemHost.className = "tutor-visual-problem";
+        host.appendChild(problemHost);
+
         var stepsHost = document.createElement("div");
         stepsHost.className = "tutor-visual-steps";
         host.appendChild(stepsHost);
@@ -493,45 +624,100 @@
         host.appendChild(answerHost);
 
         function paint() {
+            problemHost.innerHTML = "";
+            if (problem && String(problem).trim()) {
+                problemHost.innerHTML =
+                    '<p class="tutor-visual-problem__label">Problem</p>' +
+                    '<p class="tutor-visual-problem__text examiq-math-block">' +
+                    prepareMathField(String(problem).trim(), "equation") +
+                    "</p>" +
+                    '<p class="tutor-visual-problem__hint">Highlighted terms show what changed in each step.</p>';
+                problemHost.hidden = false;
+            } else if (steps.length) {
+                problemHost.innerHTML =
+                    '<p class="tutor-visual-problem__hint tutor-visual-problem__hint--solo">' +
+                    "Highlighted terms show what changed in each step.</p>";
+                problemHost.hidden = false;
+            } else {
+                problemHost.hidden = true;
+            }
+
             stepsHost.innerHTML = "";
             var visible = progressive ? revealed : steps.length;
+            var showAll = !progressive || revealed >= steps.length;
             steps.slice(0, visible).forEach(function (step, index) {
+                var isLastVisible = index === visible - 1;
+                var checkLike = isCheckStep(step, index, steps.length);
+                var active = showAll ? checkLike && index === steps.length - 1 : isLastVisible;
                 var card = document.createElement("div");
-                card.className = "tutor-visual-step";
+                card.className =
+                    "tutor-visual-step" +
+                    (active ? " tutor-visual-step--active" : "") +
+                    (checkLike ? " tutor-visual-step--check" : "");
+
                 var eqs = (step.equations || [])
-                    .map(function (eq) {
-                        var cls = "tutor-visual-eq";
-                        if (
-                            step.highlight &&
-                            String(eq).indexOf(String(step.highlight)) !== -1
-                        ) {
-                            cls += " tutor-visual-eq--highlight";
+                    .map(function (eq, eqIndex) {
+                        var mathHtml = prepareMathField(eq, "equation");
+                        // Highlight changed terms on the result line (last eq), or any matching line
+                        if (step.highlight) {
+                            mathHtml = highlightChangedTerms(mathHtml, step.highlight);
                         }
-                        return (
-                            '<div class="' +
-                            cls +
-                            ' examiq-math-block">' +
-                            prepareMathField(eq, "equation") +
-                            "</div>"
-                        );
+                        var row =
+                            '<div class="tutor-visual-eq-row">' +
+                            '<div class="tutor-visual-eq examiq-math-block">' +
+                            mathHtml +
+                            "</div>";
+                        if (step.operation && eqIndex === (step.equations.length - 1)) {
+                            row +=
+                                '<span class="tutor-visual-step__op">' +
+                                prepareMathField(step.operation, "label") +
+                                "</span>";
+                        }
+                        row += "</div>";
+                        return row;
                     })
                     .join("");
+
+                if (!eqs && step.operation) {
+                    eqs =
+                        '<div class="tutor-visual-eq-row">' +
+                        '<div class="tutor-visual-eq tutor-visual-eq--plain">' +
+                        prepareMathField(step.operation, "label") +
+                        "</div></div>";
+                }
+
+                var extras = "";
+                if (step.why) {
+                    extras +=
+                        '<p class="tutor-visual-why-link">' +
+                        '<span class="tutor-visual-why-link__label">Why?</span> ' +
+                        '<span class="tutor-visual-why-link__text examiq-math-block">' +
+                        prepareMathField(step.why, "label") +
+                        "</span></p>";
+                }
+                if (step.note) {
+                    extras +=
+                        '<p class="tutor-visual-step__note examiq-math-block">' +
+                        prepareMathField(step.note, "equation") +
+                        "</p>";
+                }
+
                 card.innerHTML =
-                    '<div class="tutor-visual-step__icon" aria-hidden="true">' +
+                    '<div class="tutor-visual-step__rail" aria-hidden="true">' +
+                    '<span class="tutor-visual-step__icon">' +
                     (index + 1) +
-                    "</div>" +
+                    "</span></div>" +
                     '<div class="tutor-visual-step__body">' +
                     '<p class="tutor-visual-step__title">' +
-                    prepareMathField(step.title || "Step " + (index + 1), "label") +
+                    prepareMathField(step.title || "Continue", "label") +
                     "</p>" +
-                    (step.operation
-                        ? '<p class="tutor-visual-step__op">' +
-                          prepareMathField(step.operation, "label") +
-                          "</p>"
+                    (eqs
+                        ? '<div class="tutor-visual-eq-card"><div class="tutor-visual-eq-stack">' +
+                          eqs +
+                          "</div></div>"
                         : "") +
-                    '<div class="tutor-visual-eq-stack">' +
-                    eqs +
-                    "</div></div>";
+                    extras +
+                    "</div>";
                 stepsHost.appendChild(card);
             });
 
@@ -563,10 +749,11 @@
                 answerHost.innerHTML =
                     '<div class="tutor-visual-answer">' +
                     '<span class="tutor-visual-answer__icon" aria-hidden="true">✓</span>' +
-                    '<div><span class="tutor-visual-answer__label">Answer</span>' +
-                    '<div class="tutor-visual-answer__value examiq-math-block">' +
+                    '<div class="tutor-visual-answer__content">' +
+                    '<span class="tutor-visual-answer__label">Answer</span> ' +
+                    '<span class="tutor-visual-answer__value examiq-math-block">' +
                     prepareMathField(answer, "equation") +
-                    "</div></div></div>";
+                    "</span></div></div>";
             }
 
             katexRender(host);
@@ -592,6 +779,7 @@
     window.ExamiQUI.renderTutorVisualResponse = renderVisualResponse;
     window.ExamiQUI.parseTutorStructured = parseStructured;
     window.ExamiQUI.extractFeedbackText = extractFeedbackText;
+    window.ExamiQUI.parseAdaptiveFeedback = parseAdaptiveFeedback;
     window.ExamiQUI.plainTutorText = plainTutorText;
     window.ExamiQUI.isRichTutorResponse = isRichTutorResponse;
     window.ExamiQUI.isSolutionResponse = isSolutionResponse;

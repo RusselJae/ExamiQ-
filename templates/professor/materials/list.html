@@ -8,16 +8,6 @@
 {% include "components/professor_course_nav.html" with course=course active_tab="materials" %}
 
 <div class="materials-page">
-    <header class="materials-page__header">
-        <div>
-            <h1 class="materials-page__title">Learning materials</h1>
-            <p class="materials-page__subtitle">
-                Upload complete modules and resources (multi-page PDFs included).
-                Students download the original full file.
-            </p>
-        </div>
-    </header>
-
     <section class="materials-upload bento-card" aria-labelledby="materials-upload-title">
         <h2 id="materials-upload-title" class="materials-upload__title">Upload material</h2>
         <p class="materials-upload__hint">
@@ -29,10 +19,22 @@
               enctype="multipart/form-data"
               class="materials-upload__form">
             {% csrf_token %}
-            <div class="materials-upload__fields">
+            <div class="materials-upload__fields materials-upload__fields--extended">
                 <div class="materials-field">
                     <label class="materials-field__label" for="material-title">Title</label>
                     <input id="material-title" name="title" type="text" class="materials-field__input" placeholder="Optional title" autocomplete="off">
+                </div>
+                <div class="materials-field">
+                    <label class="materials-field__label" for="material-subject">Course subject</label>
+                    <select id="material-subject" name="subject_id" class="materials-field__input" required>
+                        {% for item in subjects %}
+                        <option value="{{ item.pk }}" {% if subject and subject.pk == item.pk %}selected{% endif %}>
+                            {{ item.code }} — {{ item.name }}
+                        </option>
+                        {% empty %}
+                        <option value="">No subjects available</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="materials-field">
                     <label class="materials-field__label" for="material-type">Type</label>
@@ -42,6 +44,10 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div class="materials-field">
+                    <label class="materials-field__label" for="material-original-name">File name</label>
+                    <input id="material-original-name" name="original_name" type="text" class="materials-field__input" placeholder="Download file name" autocomplete="off" data-original-name>
+                </div>
                 <div class="materials-field materials-field--file">
                     <label class="materials-field__label" for="material-file">File</label>
                     <label class="materials-file-drop" for="material-file">
@@ -50,11 +56,11 @@
                         <input id="material-file" name="source_file" type="file" required accept=".txt,.md,.csv,.pdf,.docx" class="sr-only">
                     </label>
                 </div>
+                <button type="submit" class="btn-primary materials-upload__submit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                    Upload
+                </button>
             </div>
-            <button type="submit" class="btn-primary materials-upload__submit">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-                Upload
-            </button>
         </form>
     </section>
 

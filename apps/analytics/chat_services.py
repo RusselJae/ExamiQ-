@@ -148,6 +148,7 @@ def serialize_chat_message(message: StudentFacultyMessage) -> dict:
         initials = (name[:2] or "?").upper()
     return {
         "id": message.pk,
+        "author_id": author.pk,
         "author_role": role,
         "author_name": name,
         "author_initials": initials,
@@ -208,6 +209,7 @@ def serialize_conversation(
 
     return {
         "conversation_id": conversation.pk,
+        "thread_type": "student",
         "student_id": student.pk,
         "student_name": name,
         "student_email": student.email,

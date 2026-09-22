@@ -155,6 +155,9 @@
         const buttons = form.querySelectorAll(".confidence-btn");
         if (!hiddenInput || !buttons.length) return;
 
+        const isTimedGate = !!form.querySelector("[data-confidence-gate]");
+        const requirePick = isTimedGate || !!form.querySelector("[data-confidence-practice]");
+
         function selectButton(btn) {
             buttons.forEach(function (b) {
                 b.classList.remove("active-high", "active-medium", "active-low");
@@ -169,22 +172,50 @@
             btn.setAttribute("aria-pressed", "true");
         }
 
+        function submitForm() {
+            if (typeof htmx !== "undefined") {
+                htmx.trigger(form, "submit");
+            } else {
+                form.submit();
+            }
+        }
+
         buttons.forEach(function (btn) {
             if (btn.dataset.bound) return;
             btn.dataset.bound = "1";
             btn.addEventListener("click", function () {
                 selectButton(btn);
+                if (isTimedGate) {
+                    submitForm();
+                }
             });
         });
 
-        const initial = hiddenInput.value || "3";
-        hiddenInput.value = initial;
-        const preselected = form.querySelector('[data-confidence="' + initial + '"]');
-        if (preselected) {
-            selectButton(preselected);
-        } else if (buttons[2]) {
-            selectButton(buttons[2]);
+        if (!requirePick) {
+            const initial = hiddenInput.value || "3";
+            hiddenInput.value = initial;
+            const preselected = form.querySelector('[data-confidence="' + initial + '"]');
+            if (preselected) {
+                selectButton(preselected);
+            } else if (buttons[1]) {
+                selectButton(buttons[1]);
+            }
+        } else if (!isTimedGate && hiddenInput.value) {
+            const preselected = form.querySelector(
+                '[data-confidence="' + hiddenInput.value + '"]'
+            );
+            if (preselected) selectButton(preselected);
         }
+    }
+
+    function showConfidenceGate(form) {
+        if (!form) return;
+        const gate = form.querySelector("[data-confidence-gate]");
+        if (!gate) return;
+        gate.hidden = false;
+        form.classList.add("exam-answer-form--gate");
+        const firstBtn = gate.querySelector(".confidence-btn");
+        if (firstBtn) firstBtn.focus();
     }
 
     function initChoiceTiles(root) {
@@ -215,24 +246,20 @@
                 });
             }
 
-            function submitTimedChoice() {
+            function openTimedConfidenceGate() {
                 if (!isTimedExam || !form || formsWithSubmit.has(form)) return;
                 formsWithSubmit.add(form);
                 if (typeof window.stopQuestionTimer === "function") {
                     window.stopQuestionTimer();
                 }
                 lockChoices();
-                if (typeof htmx !== "undefined") {
-                    htmx.trigger(form, "submit");
-                } else {
-                    form.submit();
-                }
+                showConfidenceGate(form);
             }
 
             radio.addEventListener("change", function () {
                 syncSelected();
                 if (isTimedExam && radio.checked) {
-                    submitTimedChoice();
+                    openTimedConfidenceGate();
                 }
             });
 
@@ -243,7 +270,7 @@
                 radio.checked = true;
                 syncSelected();
                 if (isTimedExam) {
-                    submitTimedChoice();
+                    openTimedConfidenceGate();
                 }
             });
 
@@ -263,33 +290,29 @@
         numericInput.dataset.bound = "1";
 
         let debounceId = null;
-        let submitting = false;
+        let gated = false;
 
-        function trySubmit() {
-            if (submitting || !numericInput.value.trim()) return;
-            submitting = true;
+        function tryOpenGate() {
+            if (gated || !numericInput.value.trim()) return;
+            gated = true;
             if (typeof window.stopQuestionTimer === "function") {
                 window.stopQuestionTimer();
             }
             numericInput.readOnly = true;
             numericInput.classList.add("exam-numeric-input--locked");
-            if (typeof htmx !== "undefined") {
-                htmx.trigger(form, "submit");
-            } else {
-                form.submit();
-            }
+            showConfidenceGate(form);
         }
 
         numericInput.addEventListener("keydown", function (event) {
             if (event.key === "Enter") {
                 event.preventDefault();
-                trySubmit();
+                tryOpenGate();
             }
         });
 
         numericInput.addEventListener("input", function () {
             if (debounceId) clearTimeout(debounceId);
-            debounceId = setTimeout(trySubmit, 600);
+            debounceId = setTimeout(tryOpenGate, 600);
         });
     }
 

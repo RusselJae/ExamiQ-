@@ -36,9 +36,14 @@ def start_question_generation_job(
     source_material: str = "",
     learning_document=None,
     question_type: str = "mcq",
+    reference_stem: str = "",
+    reference_question_id: int | None = None,
 ) -> AIGenerationJob:
     qtype = coerce_generate_question_type(question_type)
-    max_count = getattr(settings, "AI_GENERATION_MAX_COUNT", 50)
+    max_count = int(getattr(settings, "AI_GENERATION_MAX_COUNT", 50) or 50)
+    clamped = max(1, int(count))
+    if max_count > 0:
+        clamped = min(clamped, max_count)
     job = AIGenerationJob.objects.create(
         job_type=AIGenerationJob.JobType.QUESTION_GENERATE,
         status=AIGenerationJob.Status.PENDING,
@@ -46,10 +51,12 @@ def start_question_generation_job(
         course_id=course_id,
         topic_id=topic_id,
         difficulty=difficulty,
-        count=max(1, min(count, max_count)),
+        count=clamped,
         question_type=qtype,
         source_material=source_material or "",
         learning_document=learning_document,
+        reference_stem=(reference_stem or "").strip(),
+        reference_question_id=reference_question_id,
     )
     thread = threading.Thread(
         target=run_question_generation_job,
@@ -138,10 +145,21 @@ def run_question_generation_job(job_id: int) -> None:
                             count=chunk,
                             source_material=source_material,
                             question_type=job.question_type,
+                            reference_stem=job.reference_stem or "",
                         ),
                         question_type=job.question_type,
                     )
-                    variations.extend(batch)
+                    seen_stems = {
+                        (v.get("stem") or "").strip().casefold()
+                        for v in variations
+                        if (v.get("stem") or "").strip()
+                    }
+                    for item in batch:
+                        stem_key = (item.get("stem") or "").strip().casefold()
+                        if not stem_key or stem_key in seen_stems:
+                            continue
+                        seen_stems.add(stem_key)
+                        variations.append(item)
                     job.result = {"variations": variations[: job.count]}
                     job.save(update_fields=["result", "updated"])
                     break

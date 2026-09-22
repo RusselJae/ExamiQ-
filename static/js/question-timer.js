@@ -77,6 +77,17 @@
             intervalId = null;
             if (timedOutInput) timedOutInput.value = "true";
             if (timeSpentInput) timeSpentInput.value = total;
+            form.querySelectorAll(".choice-tile").forEach(function (t) {
+                t.classList.add("exam-choice-tile--locked");
+            });
+            var gate = form.querySelector("[data-confidence-gate]");
+            if (gate) {
+                gate.hidden = false;
+                form.classList.add("exam-answer-form--gate");
+                var firstBtn = gate.querySelector(".confidence-btn");
+                if (firstBtn) firstBtn.focus();
+                return;
+            }
             if (typeof htmx !== "undefined") {
                 htmx.trigger(form, "submit");
             } else {

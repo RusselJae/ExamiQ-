@@ -68,7 +68,8 @@ class TestChunkSizes:
 @pytest.mark.django_db
 class TestQuestionGenerationJob:
     @override_settings(AI_GENERATION_MAX_COUNT=50)
-    def test_start_job_clamps_count_to_max(self, professor, course, topic):
+    def test_start_job_clamps_large_count(self, professor, course, topic):
+        """Generation count is capped by AI_GENERATION_MAX_COUNT."""
         with patch("apps.ai.job_services.threading.Thread") as thread_cls:
             thread_cls.return_value = MagicMock()
             job = start_question_generation_job(

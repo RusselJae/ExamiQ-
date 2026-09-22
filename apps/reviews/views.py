@@ -20,7 +20,6 @@ from apps.reviews.exam_setup_services import (
 from apps.reviews.recommendations import build_session_summary, get_review_recommendations
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
 from apps.reviews.models import Answer, ReviewSession
-from apps.analytics.confidence import confidence_from_time_spent
 from apps.reviews.services import (
     SessionExpiredError,
     complete_session,
@@ -95,8 +94,6 @@ def _answer_reveal_context(session, question, answer, **extra):
 def _exam_results_context(session):
     import math
 
-    from apps.reviews.retake_services import can_start_retake, get_or_create_action_plan
-
     session_summary = build_session_summary(session)
     total = session_summary["total_questions"]
     incorrect = max(0, total - session_summary["correct_count"])
@@ -106,26 +103,6 @@ def _exam_results_context(session):
     if incorrect:
         suggestions.append("Review your mistakes before retaking")
     suggestions.append("Retake the exam once you feel confident")
-
-    subject = session.topic.subject if session.topic_id else None
-    allowed, open_plan = can_start_retake(
-        session.student,
-        course=session.course,
-        subject=subject,
-        difficulty=session.difficulty or "",
-    )
-    action_plan = None
-    acknowledge_url = None
-    if not allowed:
-        action_plan = open_plan or get_or_create_action_plan(
-            session.student,
-            course=session.course,
-            subject=subject,
-            difficulty=session.difficulty or "",
-        )
-        acknowledge_url = reverse(
-            "reviews:acknowledge_action_plan", kwargs={"pk": action_plan.pk}
-        )
 
     incorrect_answers = (
         session.answers.filter(is_correct=False)
@@ -141,9 +118,9 @@ def _exam_results_context(session):
         "score_ring_dasharray": f"{circumference:.2f}",
         "score_ring_dashoffset": f"{circumference * (1 - fraction):.2f}",
         "suggestions": suggestions,
-        "retake_allowed": allowed,
-        "action_plan": action_plan,
-        "acknowledge_url": acknowledge_url,
+        "retake_allowed": True,
+        "action_plan": None,
+        "acknowledge_url": None,
         "incorrect_answers": incorrect_answers,
         "setup_retake_url": reverse("reviews:setup")
         + (f"?topic={session.topic_id}" if session.topic_id else ""),
@@ -280,42 +257,7 @@ class ReviewSetupView(StudentRequiredMixin, View):
     def post(self, request):
         form = ReviewSetupForm(request.POST, student=request.user)
         if form.is_valid():
-            from apps.reviews.retake_services import can_start_retake
-
             target = form.get_auto_target()
-            subjects = list(target.get("subjects") or [])
-            subject = subjects[0] if subjects else None
-            if subject is None and target.get("topic"):
-                subject = target["topic"].subject
-            # Multi-subject exams gate on course + difficulty to avoid per-subject drift.
-            allowed, open_plan = can_start_retake(
-                request.user,
-                course=target.get("course"),
-                subject=None if len(subjects) > 1 else subject,
-                difficulty=target.get("difficulty") or "",
-            )
-            if not allowed:
-                messages.warning(
-                    request,
-                    "Complete your action plan before starting another attempt.",
-                )
-                return render(
-                    request,
-                    self.template_name,
-                    self._setup_context(
-                        form,
-                        action_plan=open_plan,
-                        acknowledge_url=(
-                            reverse(
-                                "reviews:acknowledge_action_plan",
-                                kwargs={"pk": open_plan.pk},
-                            )
-                            if open_plan
-                            else None
-                        ),
-                        session=None,
-                    ),
-                )
             session = start_review_session(
                 student=request.user,
                 topic=target["topic"],
@@ -446,7 +388,7 @@ class SubmitAnswerView(StudentRequiredMixin, View):
         form = AnswerForm(request.POST, question=question, timed_exam=timed_exam)
         timed_out = request.POST.get("timed_out") == "true"
 
-        if not timed_out and not form.is_valid():
+        if not form.is_valid():
             return render(
                 request,
                 "reviews/partials/question.html",
@@ -454,17 +396,12 @@ class SubmitAnswerView(StudentRequiredMixin, View):
             )
 
         time_spent = int(request.POST.get("time_spent_seconds", 0) or 0)
-        confidence = None
-        if timed_exam:
-            if timed_out:
-                time_spent = session.seconds_per_question
-            confidence = confidence_from_time_spent(time_spent, session.seconds_per_question)
-        elif not timed_out and form.is_valid():
-            conf = form.cleaned_data.get("confidence")
-            confidence = int(conf) if conf else None
+        if timed_exam and timed_out:
+            time_spent = session.seconds_per_question
 
-        selected_choice = form.cleaned_data.get("selected_choice") if form.is_valid() else None
-        numeric_response = form.cleaned_data.get("numeric_response", "") if form.is_valid() else ""
+        confidence = int(form.cleaned_data["confidence"])
+        selected_choice = form.cleaned_data.get("selected_choice")
+        numeric_response = form.cleaned_data.get("numeric_response", "") or ""
 
         answer = submit_answer(
             session=session,
@@ -520,8 +457,6 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         import math
 
-        from apps.reviews.retake_services import can_start_retake, get_or_create_action_plan
-
         context = super().get_context_data(**kwargs)
         session_summary = build_session_summary(self.object)
         incorrect = max(
@@ -547,27 +482,9 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
             .prefetch_related("question__choices", "question__explanation_steps")
             .order_by("answered_at")
         )
-        subject = self.object.topic.subject if self.object.topic_id else None
-        allowed, open_plan = can_start_retake(
-            self.request.user,
-            course=self.object.course,
-            subject=subject,
-            difficulty=self.object.difficulty or "",
-        )
-        context["retake_allowed"] = allowed
+        context["retake_allowed"] = True
         context["action_plan"] = None
         context["acknowledge_url"] = None
-        if not allowed:
-            plan = open_plan or get_or_create_action_plan(
-                self.request.user,
-                course=self.object.course,
-                subject=subject,
-                difficulty=self.object.difficulty or "",
-            )
-            context["action_plan"] = plan
-            context["acknowledge_url"] = reverse(
-                "reviews:acknowledge_action_plan", kwargs={"pk": plan.pk}
-            )
         context["setup_retake_url"] = reverse("reviews:setup") + (
             f"?topic={self.object.topic_id}" if self.object.topic_id else ""
         )
@@ -622,6 +539,8 @@ class SessionGenerateFeedbackView(StudentRequiredMixin, View):
                     {"error": "Feedback generation failed."},
                     status=500,
                 )
+            from apps.ai.normalize import parse_adaptive_feedback
+
             return JsonResponse(
                 {
                     "items": [
@@ -632,6 +551,7 @@ class SessionGenerateFeedbackView(StudentRequiredMixin, View):
                             "timed_out": answer.timed_out,
                             "confidence_tier": confidence_tier_key(answer.confidence),
                             "feedback": feedback,
+                            "structured_feedback": parse_adaptive_feedback(feedback),
                             "needs_ai": False,
                         }
                     ]

@@ -75,7 +75,7 @@
             stepper.dataset.bound = "1";
             var input = stepper.querySelector("input[type='number']");
             var min = parseInt(stepper.getAttribute("data-stepper-min") || "1", 10);
-            var max = parseInt(stepper.getAttribute("data-stepper-max") || "50", 10);
+            var max = parseInt(stepper.getAttribute("data-stepper-max") || "999", 10);
             if (!input) return;
 
             function clamp(n) {

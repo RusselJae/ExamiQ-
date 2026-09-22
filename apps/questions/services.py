@@ -380,35 +380,6 @@ def reject_question(question: "Question", reviewer, note: str = "") -> "Question
     return question
 
 
-def count_bank_questions_for_subject(subject) -> int:
-    """Count non-rejected questions counting toward the per-subject bank cap."""
-    from apps.questions.models import Question
-
-    return Question.objects.filter(
-        topic__subject=subject,
-    ).exclude(status=Question.Status.REJECTED).count()
-
-
-def subject_bank_slots_remaining(subject) -> int:
-    from django.conf import settings
-
-    cap = getattr(settings, "MAX_QUESTIONS_PER_SUBJECT", 100)
-    return max(0, cap - count_bank_questions_for_subject(subject))
-
-
-def assert_subject_bank_has_capacity(subject, *, additional: int = 1) -> None:
-    """Raise ValueError when adding ``additional`` questions would exceed the cap."""
-    from django.conf import settings
-
-    cap = getattr(settings, "MAX_QUESTIONS_PER_SUBJECT", 100)
-    remaining = subject_bank_slots_remaining(subject)
-    if additional > remaining:
-        raise ValueError(
-            f"This subject already has {count_bank_questions_for_subject(subject)} "
-            f"questions (max {cap}). Free space or archive questions before adding more."
-        )
-
-
 def approve_question_explanations(question: "Question", faculty) -> "Question":
     question.explanation_status = "faculty_approved"
     question.validated_by = question.validated_by or faculty
@@ -559,4 +530,143 @@ def build_steps_from_post(steps_raw: str, concept_tag: str = "", solution_summar
     if not steps and concept_tag.strip():
         steps.append({"order": 1, "content": concept_tag.strip()})
     return steps
+
+
+def mistake_student_threshold() -> int:
+    """Distinct students who must miss a question before revision is urged."""
+    from django.conf import settings
+
+    return int(getattr(settings, "QUESTION_MISTAKE_STUDENT_THRESHOLD", 15) or 15)
+
+
+def distinct_student_mistake_count(question) -> int:
+    """Count unique students with at least one MistakeRecord for this question."""
+    return question.mistake_records.values("student_id").distinct().count()
+
+
+def question_needs_revision(question) -> bool:
+    """True when enough distinct students have missed this question."""
+    return distinct_student_mistake_count(question) >= mistake_student_threshold()
+
+
+def question_feedback_summary(question, *, sample_limit: int = 5) -> dict:
+    """Aggregate mistake stats and sample student AI feedback for faculty review."""
+    from apps.ai.normalize import normalize_feedback_text
+
+    records = list(
+        question.mistake_records.exclude(ai_feedback="")
+        .order_by("-occurred_at")
+        .only("ai_feedback", "student_id", "occurred_at")[:40]
+    )
+    samples: list[dict] = []
+    seen: set[str] = set()
+    for record in records:
+        text = normalize_feedback_text(record.ai_feedback or "")
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        samples.append({"text": text, "occurred_at": record.occurred_at})
+        if len(samples) >= sample_limit:
+            break
+
+    unique_students = distinct_student_mistake_count(question)
+    total_mistakes = question.mistake_records.count()
+    threshold = mistake_student_threshold()
+    return {
+        "unique_students": unique_students,
+        "total_mistakes": total_mistakes,
+        "threshold": threshold,
+        "needs_revision": unique_students >= threshold,
+        "sample_feedback": samples,
+    }
+
+
+ADAPTIVE_EXPLANATION_FIELD_KEYS = (
+    "what_went_wrong",
+    "why",
+    "quick_check",
+    "remember",
+    "worked_example",
+)
+
+
+def adaptive_explanation_has_content(data: dict | None) -> bool:
+    """True when any curated adaptive-explanation field is non-empty."""
+    if not isinstance(data, dict):
+        return False
+    return any(str(data.get(key) or "").strip() for key in ADAPTIVE_EXPLANATION_FIELD_KEYS)
+
+
+def clean_adaptive_explanation(data: dict | None) -> dict:
+    """Normalize faculty adaptive-explanation POST/JSON into a storage dict."""
+    source = data if isinstance(data, dict) else {}
+    cleaned: dict[str, str] = {}
+    for key in ADAPTIVE_EXPLANATION_FIELD_KEYS:
+        value = str(source.get(key) or "").strip()
+        cleaned[key] = value
+    return cleaned
+
+
+def adaptive_explanation_from_post(post) -> dict:
+    """Build adaptive_explanation JSON from form POST fields."""
+    return clean_adaptive_explanation(
+        {key: post.get(f"adaptive_{key}", "") for key in ADAPTIVE_EXPLANATION_FIELD_KEYS}
+    )
+
+
+def prefill_adaptive_explanation(question) -> dict:
+    """Prefill edit form from saved JSON, else latest mistake AI feedback."""
+    stored = clean_adaptive_explanation(getattr(question, "adaptive_explanation", None))
+    if adaptive_explanation_has_content(stored):
+        return stored
+
+    from apps.ai.normalize import parse_adaptive_feedback
+
+    for raw in question.mistake_records.exclude(ai_feedback="").order_by(
+        "-occurred_at"
+    ).values_list("ai_feedback", flat=True)[:10]:
+        parsed = parse_adaptive_feedback(raw)
+        if not parsed:
+            continue
+        filled = clean_adaptive_explanation(parsed)
+        worked = parsed.get("quick_check")
+        if worked and not filled.get("worked_example"):
+            filled["worked_example"] = str(worked).strip()
+        if adaptive_explanation_has_content(filled):
+            return filled
+    return clean_adaptive_explanation({})
+
+
+def faculty_adaptive_feedback_json(question) -> str:
+    """Serialize faculty adaptive_explanation for student feedback serving."""
+    from apps.ai.normalize import adaptive_feedback_to_json, parse_adaptive_feedback
+
+    data = clean_adaptive_explanation(getattr(question, "adaptive_explanation", None))
+    if not adaptive_explanation_has_content(data):
+        return ""
+
+    payload = {
+        "what_went_wrong": data.get("what_went_wrong") or "",
+        "why": data.get("why") or "",
+        "quick_check": data.get("quick_check") or data.get("worked_example") or None,
+        "remember": data.get("remember") or "",
+        "follow_ups": [],
+        "solution_steps": None,
+    }
+    if data.get("worked_example") and not payload["quick_check"]:
+        payload["quick_check"] = data["worked_example"]
+
+    # Prefer validated shape when possible; otherwise store curated fields as-is.
+    parsed = parse_adaptive_feedback(payload)
+    if parsed:
+        if data.get("worked_example"):
+            parsed["worked_example"] = data["worked_example"]
+        return adaptive_feedback_to_json(parsed)
+
+    import json
+
+    if data.get("worked_example"):
+        payload["worked_example"] = data["worked_example"]
+    return json.dumps(payload, ensure_ascii=False)
 

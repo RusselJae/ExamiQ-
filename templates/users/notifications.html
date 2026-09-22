@@ -16,14 +16,21 @@
     <div class="mb-4">
         <button type="submit" class="btn-secondary btn-primary-sm">Mark all as read</button>
     </div>
-    <ul class="space-y-3">
+    <ul class="space-y-3 notifications-list">
         {% for notification in notifications %}
-        <li class="bento-card p-4 {% if not notification.is_read %}border-l-4 border-examiq-green{% endif %}">
-            <p class="text-sm text-examiq-navy">{{ notification.message }}</p>
-            <p class="text-xs text-examiq-slate mt-1">{{ notification.created_at|date:"M d, Y g:i A" }}</p>
-            {% if notification.link %}
-            <a href="{% url 'users:notification_open' notification.pk %}" class="text-sm text-examiq-green hover:underline mt-1 inline-block">View</a>
-            {% endif %}
+        <li class="bento-card p-4 notifications-list-card {% if not notification.is_read %}is-unread{% endif %}">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0 flex-1 space-y-1">
+                    <p class="text-sm font-medium text-examiq-navy">{{ notification.message }}</p>
+                    <p class="text-xs text-examiq-slate">{{ notification.created_at|date:"M d, Y g:i A" }}</p>
+                </div>
+                {% if notification.link %}
+                <a href="{% url 'users:notification_open' notification.pk %}"
+                   class="btn-primary btn-primary-sm shrink-0">
+                    {{ notification.cta_label|default:"Open" }}
+                </a>
+                {% endif %}
+            </div>
         </li>
         {% endfor %}
     </ul>

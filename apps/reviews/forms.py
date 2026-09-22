@@ -43,6 +43,13 @@ SESSION_GOAL_CHOICES = [
 class ReviewSetupForm(forms.Form):
     """Year-level subjects by default; optional extra subjects from other years."""
 
+    year_subjects = forms.ModelMultipleChoiceField(
+        queryset=Subject.objects.none(),
+        required=False,
+        label="Course subjects for your year",
+        widget=forms.CheckboxSelectMultiple(),
+        help_text="Uncheck any year-level subjects you want to skip.",
+    )
     extra_subjects = forms.ModelMultipleChoiceField(
         queryset=Subject.objects.none(),
         required=False,
@@ -63,17 +70,18 @@ class ReviewSetupForm(forms.Form):
         widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}),
     )
     question_type = forms.MultipleChoiceField(
-        choices=Question.QuestionType.choices,
+        choices=Question.AUTHORABLE_QUESTION_TYPE_CHOICES,
         initial=[Question.QuestionType.MCQ],
         label="Question types",
+        required=False,
         widget=forms.SelectMultiple(
             attrs={
                 "class": FORM_MULTISELECT_CLASS,
                 "id": "id_setup_question_type",
-                "size": "5",
+                "size": "1",
             }
         ),
-        help_text="Select one or more question types.",
+        help_text="Exams use Multiple Choice questions.",
     )
     pre_session_confidence = forms.ChoiceField(
         choices=PRE_SESSION_CONFIDENCE_CHOICES,
@@ -94,6 +102,14 @@ class ReviewSetupForm(forms.Form):
         self.other_subjects = list(other_subjects_available_for_student(student))
         self.preselected_subject = preselected_subject
 
+        year_qs = subjects_available_for_student(student)
+        self.fields["year_subjects"].queryset = year_qs
+        self.fields["year_subjects"].label_from_instance = (
+            lambda obj: f"{obj.code} — {obj.name}"
+        )
+        if not self.is_bound:
+            self.fields["year_subjects"].initial = list(year_qs.values_list("pk", flat=True))
+
         other_qs = other_subjects_available_for_student(student)
         self.fields["extra_subjects"].queryset = other_qs
         self.fields["extra_subjects"].label_from_instance = (
@@ -102,12 +118,10 @@ class ReviewSetupForm(forms.Form):
         if not other_qs.exists():
             self.fields["extra_subjects"].disabled = True
 
-        # Student Start Exam omits Numeric Answer (professor generate may still use it).
-        self.fields["question_type"].choices = [
-            choice
-            for choice in Question.QuestionType.choices
-            if choice[0] != Question.QuestionType.NUMERIC
-        ]
+        # Student Start Exam is Multiple Choice only.
+        self.fields["question_type"].choices = list(
+            Question.AUTHORABLE_QUESTION_TYPE_CHOICES
+        )
 
     def clean(self):
         cleaned = super().clean()
@@ -119,14 +133,8 @@ class ReviewSetupForm(forms.Form):
             raise forms.ValidationError(eligibility["message"])
 
         difficulty = cleaned.get("difficulty")
-        question_types = [
-            qt
-            for qt in list(cleaned.get("question_type") or [])
-            if qt != Question.QuestionType.NUMERIC
-        ]
-        if Question.QuestionType.MCQ not in question_types:
-            question_types.insert(0, Question.QuestionType.MCQ)
-        cleaned["question_type"] = question_types
+        cleaned["question_type"] = [Question.QuestionType.MCQ]
+        question_types = cleaned["question_type"]
         if not difficulty:
             return cleaned
         if not question_types:
@@ -135,14 +143,19 @@ class ReviewSetupForm(forms.Form):
 
         from apps.questions.services import count_available_questions_for_subject
 
-        # Default: year-level subjects. Optional extras merge in when chosen.
-        selected = list(self.year_subjects)
+        # Posted year-level selection + optional extras (no longer force all year subjects).
+        selected = list(cleaned.get("year_subjects") or [])
         extra = list(cleaned.get("extra_subjects") or [])
         seen_ids = {s.pk for s in selected}
         for subject in extra:
             if subject.pk not in seen_ids:
                 selected.append(subject)
                 seen_ids.add(subject.pk)
+
+        if not selected:
+            raise forms.ValidationError(
+                "Select at least one course subject to start an exam."
+            )
 
         subjects = [
             subject
@@ -155,13 +168,8 @@ class ReviewSetupForm(forms.Form):
         cleaned["subjects"] = subjects
 
         if len(subjects) < MIN_EXAM_SUBJECTS:
-            if extra:
-                raise forms.ValidationError(
-                    "No approved questions are available for the selected course "
-                    "subjects at this difficulty and question type."
-                )
             raise forms.ValidationError(
-                "No approved questions are available for your year-level course "
+                "No approved questions are available for the selected course "
                 "subjects at this difficulty and question type."
             )
 
@@ -183,13 +191,17 @@ class ReviewSetupForm(forms.Form):
 
 
 class AnswerForm(forms.Form):
-    CONFIDENCE_CHOICES = [(i, str(i)) for i in range(1, 6)]
+    # Guessing / Not sure / Sure map onto the stored 1 / 3 / 5 scale.
+    CONFIDENCE_CHOICES = [
+        (1, "Guessing"),
+        (3, "Not sure"),
+        (5, "Sure"),
+    ]
     TRUE_FALSE_CHOICES = [("True", "True"), ("False", "False")]
 
     confidence = forms.ChoiceField(
         choices=CONFIDENCE_CHOICES,
         required=False,
-        initial="3",
         widget=forms.HiddenInput(attrs={"id": "confidence-input"}),
     )
     numeric_response = forms.CharField(
@@ -247,10 +259,10 @@ class AnswerForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        if not cleaned.get("confidence"):
+            raise forms.ValidationError("Please select how sure you were.")
         if cleaned.get("timed_out"):
             return cleaned
-        if not self.timed_exam and not cleaned.get("confidence"):
-            raise forms.ValidationError("Please select your confidence level.")
         if not cleaned.get("selected_choice") and not cleaned.get("numeric_response"):
             if "selected_choice" in self.fields or "numeric_response" in self.fields:
                 raise forms.ValidationError("Please select an answer.")

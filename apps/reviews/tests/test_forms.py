@@ -14,6 +14,23 @@ from apps.users.models import Program, User
 from conftest import make_bsed_student
 
 
+def _setup_data(student, *, difficulty=None, extra_subjects=None, year_subjects=None):
+    """Build valid ReviewSetupForm POST data with year subjects selected."""
+    difficulty = difficulty or Question.Difficulty.EASY
+    if year_subjects is None:
+        year_subjects = list(
+            subjects_available_for_student(student).values_list("pk", flat=True)
+        )
+    data = {
+        "difficulty": difficulty,
+        "question_type": [Question.QuestionType.MCQ],
+        "year_subjects": year_subjects,
+    }
+    if extra_subjects is not None:
+        data["extra_subjects"] = extra_subjects
+    return data
+
+
 def _make_subject_with_questions(bsed_program, year_level, code, *, count=3, difficulty=None):
     difficulty = difficulty or Question.Difficulty.EASY
     subject = Subject.objects.create(
@@ -84,10 +101,7 @@ class TestReviewSetupForm:
         student.save(update_fields=["year_level"])
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert not form.is_valid()
@@ -109,10 +123,7 @@ class TestReviewSetupForm:
             QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert form.is_valid(), form.errors
@@ -131,10 +142,7 @@ class TestReviewSetupForm:
         )
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert not form.is_valid()
@@ -151,10 +159,7 @@ class TestReviewSetupForm:
         s1.save(update_fields=["code"])
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert form.is_valid(), form.errors
@@ -181,16 +186,30 @@ class TestReviewSetupForm:
         )
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-                "extra_subjects": [other.pk],
-            },
+            data=_setup_data(student, extra_subjects=[other.pk]),
             student=student,
         )
         assert form.is_valid(), form.errors
         codes = {s.code for s in form.get_auto_target()["subjects"]}
         assert codes == {course.code, "Y97-EXTRA"}
+
+    def test_allows_unselecting_some_year_subjects(
+        self, student, bsed_program, year_level, course
+    ):
+        make_bsed_student(student, bsed_program=bsed_program, course=course)
+        keep = _make_subject_with_questions(bsed_program, year_level, "KEEP-Y", count=3)
+        keep.code = course.code
+        keep.save(update_fields=["code"])
+        drop = _make_subject_with_questions(bsed_program, year_level, "DROP-Y", count=3)
+
+        form = ReviewSetupForm(
+            data=_setup_data(student, year_subjects=[keep.pk]),
+            student=student,
+        )
+        assert form.is_valid(), form.errors
+        codes = {s.code for s in form.get_auto_target()["subjects"]}
+        assert codes == {course.code}
+        assert drop.code not in codes
 
     def test_defaults_to_year_subjects_when_extra_empty(
         self, student, bsed_program, year_level, course
@@ -207,10 +226,7 @@ class TestReviewSetupForm:
         _make_subject_with_questions(bsed_program, other_year, "Y96-SKIP", count=3)
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert form.is_valid(), form.errors
@@ -231,10 +247,7 @@ class TestReviewSetupForm:
         )
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert form.is_valid(), form.errors
@@ -264,10 +277,7 @@ class TestReviewSetupForm:
         )
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert form.is_valid(), form.errors
@@ -291,10 +301,7 @@ class TestReviewSetupForm:
         )
 
         form = ReviewSetupForm(
-            data={
-                "difficulty": Question.Difficulty.EASY,
-                "question_type": [Question.QuestionType.MCQ],
-            },
+            data=_setup_data(student),
             student=student,
         )
         assert not form.is_valid()

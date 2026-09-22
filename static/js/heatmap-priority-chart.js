@@ -146,7 +146,7 @@
         function confidenceDatasets(slice) {
             return [
                 {
-                    label: "No Confidence",
+                    label: "No ratings",
                     data: slice.map(function (q) {
                         return q.none || 0;
                     }),
@@ -154,7 +154,7 @@
                     borderRadius: 2,
                 },
                 {
-                    label: "Low Confidence",
+                    label: "Guessing",
                     data: slice.map(function (q) {
                         return q.low || 0;
                     }),
@@ -162,7 +162,7 @@
                     borderRadius: 2,
                 },
                 {
-                    label: "Average Confidence",
+                    label: "Not sure",
                     data: slice.map(function (q) {
                         return q.average || 0;
                     }),
@@ -170,7 +170,7 @@
                     borderRadius: 2,
                 },
                 {
-                    label: "High Confidence",
+                    label: "Sure",
                     data: slice.map(function (q) {
                         return q.high || 0;
                     }),

@@ -27,79 +27,29 @@
 <div class="bento-grid mb-6">
     <div class="span-full">
         <div class="bento-card p-6 session-strip-card session-strip-card--full">
-            <div class="session-summary-score-row mb-6">
-                <div class="exam-results-score session-summary-score">
-                    <div class="exam-score-ring {% if session_summary.accuracy < 50 %}exam-score-ring--low{% elif session_summary.accuracy < 75 %}exam-score-ring--mid{% else %}exam-score-ring--good{% endif %}" style="--score-percent: {{ session_summary.accuracy }};">
-                        <svg class="exam-score-ring__svg" viewBox="0 0 100 100" aria-hidden="true">
-                            <circle class="exam-score-ring__track" cx="50" cy="50" r="42"></circle>
-                            <circle class="exam-score-ring__progress" cx="50" cy="50" r="42"
-                                    transform="rotate(-90 50 50)"
-                                    stroke-dasharray="{{ score_ring_dasharray }}"
-                                    stroke-dashoffset="{{ score_ring_dashoffset }}"></circle>
-                        </svg>
-                        <div class="exam-score-ring__label">
-                            <span class="exam-score-ring__percent">{{ session_summary.accuracy|floatformat:0 }}%</span>
-                            <span class="exam-score-ring__fraction">{{ session_summary.correct_count }} / {{ session_summary.total_questions }} correct</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="exam-results-kpis session-summary-kpis">
-                    <div class="exam-results-kpi">
-                        <span class="exam-results-kpi__value exam-results-kpi__value--good">{{ session_summary.correct_count }}</span>
-                        <span class="exam-results-kpi__label">Correct</span>
-                    </div>
-                    <div class="exam-results-kpi">
-                        <span class="exam-results-kpi__value exam-results-kpi__value--bad">{{ incorrect_count }}</span>
-                        <span class="exam-results-kpi__label">Incorrect</span>
-                    </div>
-                </div>
-                <div class="session-insight-bubble" role="note">
-                    <p class="session-insight-bubble__text">{{ session_summary.narrative }}</p>
-                </div>
-            </div>
-
-            <div class="session-strip-header">
-                <div class="overview-trends-filter">
-                    <label for="session-strip-metric" class="overview-trends-filter__label">Metric</label>
-                    <select id="session-strip-metric" class="overview-trends-filter__select">
-                        <option value="confidence">Confidence per question</option>
-                        <option value="mistakes">Mistakes per question</option>
-                    </select>
-                </div>
-                <div class="session-strip-meta">
-                    <span id="session-strip-count" class="session-strip-count"></span>
-                </div>
-            </div>
-            <div id="session-strip-legend" class="session-strip-legend" aria-hidden="true"></div>
-            <div id="session-strip-wrap">
-                <div id="session-strip-grid" class="session-strip-grid" role="list" aria-label="Question heatmap"></div>
-            </div>
-            <div id="session-strip-empty" class="chart-empty-state hidden">
-                <p class="empty-state-title">No answers in this session</p>
-                <p class="empty-state-body">Question-level confidence and mistakes appear after the student answers items.</p>
-            </div>
+            {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" review_hint="Click a question to review the student's answer." show_answer_grid=True %}
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-{{ session_summary.question_trends|json_script:"session-strip-data" }}
-<script src="{% static 'js/session-question-strip.js' %}"></script>
+{{ session_summary.question_trends|json_script:"answer-review-data" }}
+<script src="{% static 'js/session-answer-review.js' %}"></script>
 <script>
 (function () {
-    var el = document.getElementById("session-strip-data");
-    if (el && window.ExamiQUI && window.ExamiQUI.renderSessionQuestionStrip) {
-        window.ExamiQUI.renderSessionQuestionStrip({
-            grid: "session-strip-grid",
-            metricSelect: "session-strip-metric",
-            legend: "session-strip-legend",
-            countEl: "session-strip-count",
-            emptyEl: "session-strip-empty",
-            wrapEl: "session-strip-wrap",
+    var el = document.getElementById("answer-review-data");
+    if (el && window.ExamiQUI && window.ExamiQUI.renderSessionAnswerReview) {
+        window.ExamiQUI.renderSessionAnswerReview({
+            grid: "answer-review-grid",
+            wrapEl: "answer-review-wrap",
+            emptyEl: "answer-review-empty",
+            legend: "answer-review-legend",
+            toggleButtons: "[data-answer-review] [data-review-mode]",
             data: JSON.parse(el.textContent),
-            defaultMetric: "confidence",
-            clickable: false,
+            defaultMode: "pace",
+            clickable: true,
+            answerUrlTemplate: "{{ answer_url_template|escapejs }}",
         });
     }
 })();

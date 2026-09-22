@@ -32,7 +32,7 @@ def course_with_subject(course, subject):
 
 @pytest.mark.django_db
 class TestImportQuestionsFromCsv:
-    def test_imports_mcq_and_non_mcq_rows(self, professor, subject, topic):
+    def test_imports_mcq_rows_only(self, professor, subject, topic):
         subject.code = "BSEM 22"
         subject.save(update_fields=["code"])
         topic.name = "College and Advanced Algebra"
@@ -41,8 +41,6 @@ class TestImportQuestionsFromCsv:
         uploaded = _csv_file(
             "BSEM 22,College and Advanced Algebra,easy,mcq,Solve 2x + 7 = 15?,x=3,x=4,x=5,x=6,B,,Linear,Subtract 7.,Divide by 2.,,approved,true\n",
             "BSEM 22,College and Advanced Algebra,easy,true_false,The empty set is a subset of every set.,,,,,,TRUE,Sets,By definition.,,approved,true\n",
-            "BSEM 22,College and Advanced Algebra,easy,identification,Value of 5!,,,,,,120,Factorial,5!=120.,,approved,true\n",
-            "BSEM 22,College and Advanced Algebra,easy,enumeration,List roots of x^2 = 25.,,,,,,5|-5,Quadratic,Take square root.,,approved,true\n",
         )
 
         summary = import_questions_from_csv(
@@ -51,21 +49,12 @@ class TestImportQuestionsFromCsv:
             professor=professor,
         )
 
-        assert summary.created == 4
-        assert summary.skipped_invalid == 0
-        assert Question.objects.filter(topic=topic).count() == 4
-        assert ExplanationStep.objects.filter(question__topic=topic).count() >= 4
-
-        tf = Question.objects.get(
-            topic=topic, question_type=Question.QuestionType.TRUE_FALSE
-        )
-        assert tf.expected_answer == "True"
-
-        enum_q = Question.objects.get(
-            topic=topic, question_type=Question.QuestionType.ENUMERATION
-        )
-        assert "5" in enum_q.expected_answer
-        assert "-5" in enum_q.expected_answer
+        assert summary.created == 1
+        assert summary.skipped_invalid >= 1
+        assert Question.objects.filter(topic=topic).count() == 1
+        q = Question.objects.get(topic=topic)
+        assert q.question_type == Question.QuestionType.MCQ
+        assert ExplanationStep.objects.filter(question=q).count() >= 1
 
     def test_rejects_wrong_subject_code(self, professor, subject, topic):
         subject.code = "BSEM 22"

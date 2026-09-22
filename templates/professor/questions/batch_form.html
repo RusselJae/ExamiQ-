@@ -100,24 +100,7 @@
                 </div>
             </div>
 
-            <div class="batch-settings-field">
-                <span class="batch-setup-label" id="question-type-label">Question type</span>
-                <select id="settings-question-type" class="sr-only" aria-labelledby="question-type-label" tabindex="-1">
-                    {% for value, label in question_type_choices %}
-                    <option value="{{ value }}"{% if forloop.first %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <div class="batch-pill-group batch-pill-group--wrap" role="group" aria-labelledby="question-type-label" data-pill-group data-pill-target="settings-question-type">
-                    {% for value, label in question_type_choices %}
-                    <button type="button"
-                            class="batch-pill{% if forloop.first %} is-selected{% endif %}"
-                            data-pill-value="{{ value }}"
-                            aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">
-                        {{ label }}
-                    </button>
-                    {% endfor %}
-                </div>
-            </div>
+            <input type="hidden" id="settings-question-type" value="mcq">
 
             <div class="batch-source-section" data-source-tabs>
                 <div class="batch-source-divider" role="separator">
@@ -175,16 +158,9 @@
                                 accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                 class="sr-only"
                             >
-                            <div class="batch-dropzone__icon" aria-hidden="true">
-                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-                                    <path d="M12 16V6"/>
-                                    <path d="M8 9l4-4 4 4"/>
-                                    <path d="M4 18h16"/>
-                                </svg>
-                            </div>
+                            <button type="button" class="batch-dropzone__choose" data-dropzone-choose>Choose file</button>
                             <p class="batch-dropzone__text">
-                                Drop a syllabus, textbook chapter, or notes — or
-                                <button type="button" class="batch-dropzone__choose" data-dropzone-choose>Choose file</button>
+                                Drop a syllabus, textbook chapter, or notes here
                             </p>
                             <p class="batch-dropzone__filename text-xs text-examiq-slate hidden" data-dropzone-filename></p>
                         </div>
@@ -253,6 +229,9 @@
                 <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1">0 questions</span>
                 <button type="button" id="validate-all-btn" class="btn-secondary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Validate All
+                </button>
+                <button type="button" id="publish-all-btn" class="btn-secondary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                    Publish All
                 </button>
                 <button type="submit" class="btn-primary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Submit all
@@ -338,6 +317,7 @@
     const addQuestionInlineBtn = document.getElementById("add-question-inline-btn");
     const emptyAddManualBtn = document.getElementById("empty-add-manual-btn");
     const validateAllBtn = document.getElementById("validate-all-btn");
+    const publishAllBtn = document.getElementById("publish-all-btn");
     const batchForm = document.getElementById("batch-question-form");
     const sourceInput = document.getElementById("ai-source-file");
     const librarySelect = document.getElementById("ai-library-document");
@@ -477,9 +457,6 @@
     };
     const TYPE_LABELS = {
         mcq: "Multiple Choice",
-        true_false: "True or False",
-        identification: "Identification",
-        enumeration: "Enumeration",
     };
 
     function normalizeDifficulty(value) {
@@ -489,9 +466,7 @@
     }
 
     function normalizeQuestionType(value) {
-        const key = String(value || "").toLowerCase();
-        if (TYPE_LABELS[key]) return key;
-        return (questionTypeSelect && questionTypeSelect.value) || "mcq";
+        return "mcq";
     }
 
     function difficultyPillHtml(difficulty) {
@@ -534,8 +509,7 @@
                 '<input type="hidden" name="ai_generated_' + index + '" value="0">' +
                 '<input type="hidden" name="steps_' + index + '" value="">' +
                 '<input type="hidden" name="solution_summary_' + index + '" value="">' +
-                '<input type="hidden" name="faculty_attest_' + index + '" value="0">' +
-                '<input type="hidden" name="approve_explanations_' + index + '" value="0">';
+                '<input type="hidden" name="faculty_attest_' + index + '" value="0">';
             fieldsStore.appendChild(wrapper);
             return;
         }
@@ -547,13 +521,6 @@
             attest.name = "faculty_attest_" + index;
             attest.value = "0";
             wrapper.appendChild(attest);
-        }
-        if (!getField("approve_explanations_" + index)) {
-            const approve = document.createElement("input");
-            approve.type = "hidden";
-            approve.name = "approve_explanations_" + index;
-            approve.value = "0";
-            wrapper.appendChild(approve);
         }
     }
 
@@ -573,7 +540,6 @@
             ai_generated: getField("ai_generated_" + index).value === "1",
             solution_summary: getField("solution_summary_" + index).value || "",
             faculty_attest: getField("faculty_attest_" + index).value === "1",
-            approve_explanations: getField("approve_explanations_" + index).value === "1",
             steps: Array.isArray(steps) ? steps : [],
             choices: {},
             validation: validationState[index] || null,
@@ -601,7 +567,6 @@
         getField("ai_generated_" + index).value = data.ai_generated ? "1" : "0";
         getField("solution_summary_" + index).value = data.solution_summary || "";
         getField("faculty_attest_" + index).value = data.faculty_attest ? "1" : "0";
-        getField("approve_explanations_" + index).value = data.approve_explanations ? "1" : "0";
         getField("steps_" + index).value = JSON.stringify(data.steps || []);
         ["A", "B", "C", "D"].forEach(function(letter) {
             getField("choice_" + index + "_" + letter).value =
@@ -621,11 +586,6 @@
             '<input type="checkbox" class="batch-row-validate__input" data-faculty-attest="' + index + '"' +
             (data.faculty_attest ? " checked" : "") + ">" +
             "<span>Validated by faculty (publish)</span>" +
-            "</label>" +
-            '<label class="batch-row-validate__row">' +
-            '<input type="checkbox" class="batch-row-validate__input" data-approve-explanations="' + index + '"' +
-            (data.approve_explanations ? " checked" : "") + ">" +
-            "<span>Approve explanations</span>" +
             "</label>" +
             "</div>"
         );
@@ -863,6 +823,41 @@
     if (validateAllBtn) {
         validateAllBtn.addEventListener("click", function () {
             validateAllPending();
+        });
+    }
+
+    function publishAllQuestions() {
+        let count = 0;
+        for (let i = 0; i < questionIndex; i++) {
+            const data = getQuestionData(i);
+            if (!data.stem.trim()) continue;
+            ensureFieldsForIndex(i);
+            getField("faculty_attest_" + i).value = "1";
+            const attestBox = tableBody.querySelector(
+                '[data-faculty-attest="' + i + '"]'
+            );
+            if (attestBox) attestBox.checked = true;
+            count += 1;
+        }
+        if (!count) {
+            if (window.showToast) {
+                window.showToast("Add questions before marking for publish.", "info");
+            }
+            return;
+        }
+        markDirty();
+        window.ExamiQBatch.persist(batchConfig);
+        if (window.showToast) {
+            window.showToast(
+                "Marked " + count + " question(s) for publish on submit.",
+                "success"
+            );
+        }
+    }
+
+    if (publishAllBtn) {
+        publishAllBtn.addEventListener("click", function () {
+            publishAllQuestions();
         });
     }
 
@@ -1219,27 +1214,36 @@
             window.ExamiQBatch.persist(batchConfig);
             return;
         }
-        const approve = e.target.closest("[data-approve-explanations]");
-        if (approve) {
-            const index = parseInt(approve.getAttribute("data-approve-explanations"), 10);
-            ensureFieldsForIndex(index);
-            getField("approve_explanations_" + index).value = approve.checked ? "1" : "0";
-            markDirty();
-            window.ExamiQBatch.persist(batchConfig);
-        }
     });
 
+    let applyInFlight = false;
     document.addEventListener("click", function(e) {
         if (e.target.id === "apply-generated-btn") {
+            if (applyInFlight) return;
+            applyInFlight = true;
             const checked = document.querySelectorAll('input[name="selected_variation"]:checked');
+            const existingStems = {};
+            for (let i = 0; i < questionIndex; i++) {
+                const key = normalizeStem(getQuestionData(i).stem);
+                if (key) existingStems[key] = true;
+            }
             let nextIndex = findNextEmptyIndex();
+            let applied = 0;
+            let skipped = 0;
             checked.forEach(function(cb) {
                 let steps = [];
                 if (cb.dataset.steps) {
                     steps = cb.dataset.steps.split("|||").map(function(s) { return s.trim(); }).filter(Boolean);
                 }
+                const stem = cb.dataset.stem || "";
+                const stemKey = normalizeStem(stem);
+                if (stemKey && existingStems[stemKey]) {
+                    skipped += 1;
+                    return;
+                }
+                if (stemKey) existingStems[stemKey] = true;
                 const data = {
-                    stem: cb.dataset.stem || "",
+                    stem: stem,
                     concept: cb.dataset.concept || "",
                     correct: cb.dataset.correct || "A",
                     difficulty: normalizeDifficulty(
@@ -1249,7 +1253,7 @@
                     steps: steps,
                     choices: {},
                     question_type: normalizeQuestionType(
-                        cb.dataset.questionType || questionTypeSelect.value
+                        cb.dataset.questionType || (questionTypeSelect ? questionTypeSelect.value : "mcq")
                     ),
                     expected_answer: cb.dataset.expected || "",
                     ai_generated: true,
@@ -1265,12 +1269,24 @@
                     addQuestion(data, false);
                     nextIndex = questionIndex;
                 }
+                applied += 1;
             });
             clearGenerateModal();
             window.ExamiQBatch.persist(batchConfig);
-            if (window.showToast && checked.length) {
-                window.showToast("Applied " + checked.length + " question(s) to the form.", "success");
+            applyInFlight = false;
+            if (window.showToast) {
+                if (applied && skipped) {
+                    window.showToast(
+                        "Applied " + applied + " question(s); skipped " + skipped + " duplicate(s).",
+                        "success"
+                    );
+                } else if (applied) {
+                    window.showToast("Applied " + applied + " question(s) to the form.", "success");
+                } else if (skipped) {
+                    window.showToast("Skipped " + skipped + " duplicate question(s).", "info");
+                }
             }
+            return;
         }
         if (e.target.id === "cancel-generate-modal") {
             abortGeneratePoll = true;

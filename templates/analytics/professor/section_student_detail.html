@@ -17,6 +17,27 @@
 <script src="{% static 'js/overview-trends-chart.js' %}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    function bindOverviewPills(root) {
+        if (!root) return;
+        root.querySelectorAll("[data-pill-target]").forEach(function (group) {
+            var select = document.getElementById(group.getAttribute("data-pill-target"));
+            if (!select) return;
+            group.querySelectorAll("[data-pill-value]").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var value = btn.getAttribute("data-pill-value");
+                    select.value = value;
+                    group.querySelectorAll("[data-pill-value]").forEach(function (other) {
+                        var on = other === btn;
+                        other.classList.toggle("is-selected", on);
+                        other.setAttribute("aria-pressed", on ? "true" : "false");
+                    });
+                    select.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+            });
+        });
+    }
+    bindOverviewPills(document.getElementById("student-detail-trends-filters"));
+
     var el = document.getElementById("student-detail-trends-data");
     if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
     window.ExamiQUI.renderOverviewTrendsChart({
@@ -27,7 +48,7 @@ document.addEventListener("DOMContentLoaded", function() {
         pageSize: 10,
         defaultMetric: "confidence",
         metricLabels: {
-            confidence: "Average confidence (0–3)",
+            confidence: "Confidence share (%)",
             mistakes: "Mistakes per session",
         },
         pageLabel: "student-detail-trends-page-label",
@@ -35,6 +56,7 @@ document.addEventListener("DOMContentLoaded", function() {
         nextBtn: "student-detail-trends-next",
         emptyEl: "student-detail-trends-empty",
         wrapEl: "student-detail-trends-wrap",
+        insightEl: "student-detail-trends-insight",
     });
 });
 </script>

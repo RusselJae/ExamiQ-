@@ -17,32 +17,66 @@
     </span>
 </div>
 
-<div class="overview-kpi-grid mb-8">
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course subjects" icon="book" variant="neutral" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students practicing" icon="users" variant="neutral" %}</div>
+    <div class="overview-kpi-grid mb-8">
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course subjects" icon="book" variant="teal" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}</div>
 </div>
 
+{% if overview.students_by_year_level %}
+<section class="overview-year-levels mb-8" aria-labelledby="overview-year-levels-heading">
+    <h2 id="overview-year-levels-heading" class="overview-year-levels__title">Students by year level · Active BSED Math enrollment</h2>
+    <ul class="overview-year-levels__list">
+        {% for row in overview.students_by_year_level %}
+        <li class="overview-year-levels__item">
+            <span class="overview-year-levels__count">{{ row.count }}</span>
+            <span class="overview-year-levels__name">{{ row.name }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
 <div class="bento-card p-6 overview-trends-card">
-    <div class="overview-trends-filters" id="overview-trends-filters">
+    <div class="overview-trends-card__intro">
+        <h2 class="overview-trends-card__title">Confidence over time</h2>
+        <p class="overview-trends-card__subtitle">Share of answers at each confidence level, with results overlaid when Confidence is selected.</p>
+    </div>
+    <div class="overview-trends-filters" id="overview-trends-filters" data-overview-pills>
         <div class="overview-trends-filter">
-            <label for="overview-trend-metric" class="overview-trends-filter__label">Metric</label>
-            <select id="overview-trend-metric" class="overview-trends-filter__select">
-                <option value="students">Students participating</option>
-                <option value="scores">Average scores</option>
-                <option value="confidence">Confidence level</option>
+            <span class="overview-trends-filter__label" id="overview-metric-label">Metric</span>
+            <select id="overview-trend-metric" class="sr-only" tabindex="-1" aria-labelledby="overview-metric-label">
+                <option value="students" selected>Students participating</option>
+                <option value="confidence">Confidence share</option>
             </select>
+            <div class="overview-pill-group" role="group" aria-labelledby="overview-metric-label" data-pill-target="overview-trend-metric">
+                <button type="button" class="overview-pill is-selected" data-pill-value="students" aria-pressed="true">Students</button>
+                <button type="button" class="overview-pill" data-pill-value="confidence" aria-pressed="false">Confidence</button>
+            </div>
         </div>
         <div class="overview-trends-filter">
-            <label for="overview-trend-range" class="overview-trends-filter__label">Range</label>
-            <select id="overview-trend-range" class="overview-trends-filter__select">
-                <option value="weekly">Weekly</option>
+            <span class="overview-trends-filter__label" id="overview-range-label">Range</span>
+            <select id="overview-trend-range" class="sr-only" tabindex="-1" aria-labelledby="overview-range-label">
+                <option value="weekly" selected>Weekly</option>
                 <option value="monthly">Monthly</option>
                 <option value="yearly">Yearly</option>
             </select>
+            <div class="overview-pill-group" role="group" aria-labelledby="overview-range-label" data-pill-target="overview-trend-range">
+                <button type="button" class="overview-pill is-selected" data-pill-value="weekly" aria-pressed="true">Weekly</button>
+                <button type="button" class="overview-pill" data-pill-value="monthly" aria-pressed="false">Monthly</button>
+                <button type="button" class="overview-pill" data-pill-value="yearly" aria-pressed="false">Yearly</button>
+            </div>
         </div>
     </div>
     <div class="overview-trends-chart-wrap" id="overviewTrendsChartWrap">
         <canvas id="overviewTrendsChart" aria-label="Overview trend chart"></canvas>
+    </div>
+    <div class="overview-confidence-insight" id="overview-trends-insight" hidden>
+        <span class="overview-confidence-insight__icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+        </span>
+        <p class="overview-confidence-insight__body" data-confidence-insight-body></p>
     </div>
 </div>
 {% endblock %}
@@ -52,6 +86,27 @@
 <script src="{% static 'js/overview-trends-chart.js' %}"></script>
 <script>
 (function () {
+    function bindOverviewPills(root) {
+        if (!root) return;
+        root.querySelectorAll("[data-pill-target]").forEach(function (group) {
+            var select = document.getElementById(group.getAttribute("data-pill-target"));
+            if (!select) return;
+            group.querySelectorAll("[data-pill-value]").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var value = btn.getAttribute("data-pill-value");
+                    select.value = value;
+                    group.querySelectorAll("[data-pill-value]").forEach(function (other) {
+                        var on = other === btn;
+                        other.classList.toggle("is-selected", on);
+                        other.setAttribute("aria-pressed", on ? "true" : "false");
+                    });
+                    select.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+            });
+        });
+    }
+    bindOverviewPills(document.getElementById("overview-trends-filters"));
+
     var el = document.getElementById("overview-trends-data");
     if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
     window.ExamiQUI.renderOverviewTrendsChart({
@@ -60,6 +115,12 @@
         rangeSelect: "overview-trend-range",
         expectedStudents: {{ overview.expected_students|default:0 }},
         data: JSON.parse(el.textContent),
+        insightEl: "overview-trends-insight",
+        metricLabels: {
+            students: "Students participating",
+            confidence: "Confidence share (%)",
+        },
+        defaultMetric: "students",
     });
 })();
 </script>

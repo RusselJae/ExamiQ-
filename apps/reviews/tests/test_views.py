@@ -52,9 +52,8 @@ class TestQuestionPartialView:
         response = client.get(url, HTTP_HX_REQUEST="true")
         content = response.content.decode()
         assert response.status_code == 200
-        assert "High" in content
-        assert "Confidence (time)" in content
-        assert "Confidence (answers)" in content
+        assert "Sure" in content
+        assert "Average confidence" in content
         assert "Incorrect answers" not in content
 
     def test_non_htmx_redirects_to_session(self, client, student, topic, mcq_question):
@@ -124,7 +123,7 @@ class TestQuestionPartialView:
         assert "Mathematics in the Modern World" in content
         assert "Enumeration" in content
 
-    def test_timed_exam_hides_confidence_buttons(self, client, student, topic, mcq_question):
+    def test_timed_exam_shows_confidence_gate(self, client, student, topic, mcq_question):
         session = start_review_session(
             student=student,
             topic=topic,
@@ -136,7 +135,10 @@ class TestQuestionPartialView:
         response = client.get(url, HTTP_HX_REQUEST="true")
         content = response.content.decode()
         assert response.status_code == 200
-        assert "confidence-btn" not in content
+        assert "exam-confidence-gate" in content
+        assert "Guessing" in content
+        assert "Not sure" in content
+        assert "Sure" in content
         assert "question-timer-display" in content
 
 
@@ -239,7 +241,7 @@ class TestReviewSetupPrefill:
 
 @pytest.mark.django_db
 class TestSessionSummaryView:
-    def test_summary_shows_calibration_and_ai_tutor_modal(
+    def test_summary_shows_answer_review_and_ai_tutor_modal(
         self, client, student, topic, mcq_question
     ):
         question, _ = mcq_question
@@ -264,21 +266,22 @@ class TestSessionSummaryView:
         response = client.get(reverse("reviews:summary", kwargs={"pk": session.pk}))
         content = response.content.decode()
         assert response.status_code == 200
-        assert "session-summary-score" in content or "exam-score-ring" in content
-        assert "session-insight-bubble" in content
-        assert "Confidence (time)" in content
-        assert "Confidence (answers)" in content
+        assert "answer-review" in content
+        assert "Exam result" in content
+        assert "Average confidence" in content
+        assert "Sure" in content or "Not sure" in content or "Guessing" in content
         assert "Incorrect answers" not in content
         assert "Confidence gap" not in content
-        assert "session-strip-grid" in content
+        assert "calibration-matrix" not in content
+        assert "Topics to revisit" not in content
+        assert "Answer review" in content
+        assert "Result + pace" in content
+        assert "answer-review-grid" in content
         assert "ai-tutor-modal" in content
         assert "ai-tutor-modal.js" in content
         assert "tutor-visual-response.js" in content
         assert "open-ai-tutor-btn" in content
-        assert "Solution" in content or "Worked solution" in content
-        assert "AI conversation" in content
-        assert "Faculty Conversation" not in content
-        assert "ai-tutor-solution-collapsible" in content
+        assert "ai-tutor-correct-banner" in content
         assert "openOnLoad: false" in content
         assert "studentName:" in content
 
@@ -290,7 +293,7 @@ class TestSessionSummaryView:
 
 @pytest.mark.django_db
 class TestSubmitAnswerView:
-    def test_timed_exam_derives_high_confidence_from_fast_response(
+    def test_timed_exam_stores_posted_sure_confidence(
         self, client, student, topic, mcq_question
     ):
         question, correct = mcq_question
@@ -306,6 +309,7 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
+                "confidence": "5",
                 "time_spent_seconds": "5",
                 "timed_out": "false",
             },
@@ -335,6 +339,7 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
+                "confidence": "3",
                 "time_spent_seconds": "5",
                 "timed_out": "false",
             },
@@ -345,7 +350,9 @@ class TestSubmitAnswerView:
         assert "data-exam-reveal" in content
         assert "data-results-url" in content
 
-    def test_timed_exam_derives_average_confidence(self, client, student, topic, mcq_question):
+    def test_timed_exam_stores_posted_not_sure_confidence(
+        self, client, student, topic, mcq_question
+    ):
         question, correct = mcq_question
         session = start_review_session(
             student=student,
@@ -359,6 +366,7 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
+                "confidence": "3",
                 "time_spent_seconds": "15",
                 "timed_out": "false",
             },
@@ -368,7 +376,7 @@ class TestSubmitAnswerView:
         assert response.status_code in (200, 204)
         assert session.answers.get().confidence == 3
 
-    def test_timed_exam_derives_low_confidence_on_timeout(
+    def test_timed_exam_requires_confidence_on_timeout(
         self, client, student, topic, mcq_question
     ):
         question, correct = mcq_question
@@ -385,6 +393,7 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
+                "confidence": "1",
                 "time_spent_seconds": "30",
                 "timed_out": "true",
             },
@@ -394,7 +403,7 @@ class TestSubmitAnswerView:
         assert response.status_code in (200, 204)
         assert session.answers.get().confidence == 1
 
-    def test_scaled_confidence_with_longer_per_question_timer(
+    def test_timed_exam_rejects_submit_without_confidence(
         self, client, student, topic, mcq_question
     ):
         question, correct = mcq_question
@@ -416,8 +425,9 @@ class TestSubmitAnswerView:
             },
             HTTP_HX_REQUEST="true",
         )
-        assert response.status_code in (200, 204)
-        assert session.answers.get().confidence == 5
+        assert response.status_code == 200
+        assert session.answers.count() == 0
+        assert "exam-form-error" in response.content.decode()
 
 
 @pytest.mark.django_db

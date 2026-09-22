@@ -40,17 +40,17 @@ CONFIDENCE_TIER_AVERAGE = "average"
 CONFIDENCE_TIER_HIGH = "high"
 
 CONFIDENCE_TIER_LABELS = {
-    CONFIDENCE_TIER_NONE: "No Confidence",
-    CONFIDENCE_TIER_LOW: "Low Confidence",
-    CONFIDENCE_TIER_AVERAGE: "Average Confidence",
-    CONFIDENCE_TIER_HIGH: "High Confidence",
+    CONFIDENCE_TIER_NONE: "No ratings",
+    CONFIDENCE_TIER_LOW: "Guessing",
+    CONFIDENCE_TIER_AVERAGE: "Not sure",
+    CONFIDENCE_TIER_HIGH: "Sure",
 }
 
 CONFIDENCE_SCALE_0_3_LABELS = {
-    0: "No Confidence",
-    1: "Low",
-    2: "Average",
-    3: "High",
+    0: "No ratings",
+    1: "Guessing",
+    2: "Not sure",
+    3: "Sure",
 }
 
 
@@ -91,6 +91,41 @@ def confidence_from_time_spent(seconds: int, seconds_per_question: int = 30) -> 
     if capped <= avg_max:
         return CONFIDENCE_MEDIUM
     return CONFIDENCE_LOW
+
+
+PACE_QUICK = "quick"
+PACE_STEADY = "steady"
+PACE_SLOW = "slow"
+PACE_UNANSWERED = "unanswered"
+
+PACE_BAR_COUNTS = {
+    PACE_QUICK: 3,
+    PACE_STEADY: 2,
+    PACE_SLOW: 1,
+    PACE_UNANSWERED: 0,
+}
+
+
+def answer_is_unanswered(answer) -> bool:
+    """True when the student left no choice and no numeric response."""
+    has_choice = bool(getattr(answer, "selected_choice_id", None))
+    numeric = str(getattr(answer, "numeric_response", None) or "").strip()
+    return not has_choice and not numeric
+
+
+def pace_from_answer(answer, seconds_per_question: int = 30) -> str:
+    """Classify response pace: quick / steady / slow / unanswered."""
+    if answer_is_unanswered(answer):
+        return PACE_UNANSWERED
+    tier = confidence_from_time_spent(
+        int(getattr(answer, "time_spent_seconds", 0) or 0),
+        seconds_per_question,
+    )
+    if tier == CONFIDENCE_HIGH:
+        return PACE_QUICK
+    if tier == CONFIDENCE_MEDIUM:
+        return PACE_STEADY
+    return PACE_SLOW
 
 
 def confidence_tier_key(confidence: int | None) -> str:

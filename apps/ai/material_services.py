@@ -42,6 +42,7 @@ def ingest_course_material(
     title: str = "",
     material_type: str = LearningDocument.MaterialType.MODULE,
     subject=None,
+    original_name: str = "",
 ) -> LearningDocument:
     """Upload + extract, then attach library metadata."""
     document = ingest_learning_upload(
@@ -49,12 +50,17 @@ def ingest_course_material(
         course_id=course_id,
         user=user,
     )
+    cleaned_name = (original_name or "").strip()
+    if cleaned_name:
+        document.original_name = cleaned_name
     document.title = (title or "").strip() or document.original_name
     if material_type in LearningDocument.MaterialType.values:
         document.material_type = material_type
     if subject is not None:
         document.subject = subject
-    document.save(update_fields=["title", "material_type", "subject", "updated"])
+    document.save(
+        update_fields=["title", "material_type", "subject", "original_name", "updated"]
+    )
     return document
 
 
@@ -63,10 +69,16 @@ def update_document_metadata(
     *,
     title: str | None = None,
     material_type: str | None = None,
+    original_name: str | None = None,
     subject=None,
     clear_subject: bool = False,
 ) -> LearningDocument:
     fields: list[str] = ["updated"]
+    if original_name is not None:
+        cleaned_name = original_name.strip()
+        if cleaned_name:
+            document.original_name = cleaned_name
+            fields.append("original_name")
     if title is not None:
         document.title = title.strip() or document.original_name
         fields.append("title")

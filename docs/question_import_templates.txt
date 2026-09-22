@@ -12,31 +12,13 @@ Shared rules
 - subject_code must match the course subject you import into (e.g. BSEM 22).
 - topic_name must already exist under that subject in ExamiQ.
 - difficulty: easy | medium | hard
-- question_type: mcq | true_false | identification | enumeration
+- question_type: mcq (Multiple Choice only)
 - status: approved (recommended)
 - is_active: true | false
 - Wrap fields that contain commas in double quotes.
-- For non-MCQ rows, leave choice_a–choice_d and correct_label empty.
-  Use six commas before expected_answer:
-  stem,,,,,,expected_answer,concept_tag,...
+- Fill choice_a–choice_d and correct_label (A–D). Leave expected_answer empty for MCQ.
 
 MCQ example
 -----------
 subject_code,topic_name,difficulty,question_type,stem,choice_a,choice_b,choice_c,choice_d,correct_label,expected_answer,concept_tag,explanation_step_1,explanation_step_2,explanation_step_3,status,is_active
 BSEM 22,College and Advanced Algebra,easy,mcq,Solve for x: 2x + 7 = 15?,x = 3,x = 4,x = 5,x = 6,B,,Linear Equations,Subtract 7 from both sides.,Divide both sides by 2.,,approved,true
-
-True/False example
-------------------
-BSEM 22,College and Advanced Algebra,easy,true_false,The empty set is a subset of every set.,,,,,,True,,Sets,By definition.,,,approved,true
-
-Identification example
-----------------------
-BSEM 22,College and Advanced Algebra,easy,identification,What is the value of 5! (5 factorial)?,,,,,,120,Factorial,5! = 120.,,,approved,true
-
-Enumeration example (use | or ; between items, or one item per line in the cell)
---------------------------------------------------------------------------------
-BSEM 22,College and Advanced Algebra,easy,enumeration,List the two real solutions to x^2 = 25.,,,,,,5|-5,Quadratic,Take the square root of both sides.,,,approved,true
-
-Import location
----------------
-Professor → Add Questions → select course subject → Import CSV → choose file → Import questions

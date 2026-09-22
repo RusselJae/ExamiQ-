@@ -11,9 +11,25 @@ from apps.questions.models import Question
 
 LABELS = ("A", "B", "C", "D")
 _BATCH_ROTATION = ("B", "C", "D", "A")
-_FEEDBACK_JSON_KEYS = ("feedback", "why_wrong", "message", "text")
+_FEEDBACK_JSON_KEYS = (
+    "feedback",
+    "why_wrong",
+    "what_went_wrong",
+    "why",
+    "message",
+    "text",
+)
 
-
+_STEP_PATTERN_RE = re.compile(r"\bStep\s*\d+\s*[.:)\-]", re.IGNORECASE)
+_FILLER_RE = re.compile(
+    r"\b(great try|double-?check your work|remember to|since you have|"
+    r"high confidence|low confidence|keep practicing|you'?ve got this)\b",
+    re.IGNORECASE,
+)
+_FIELD_MAX_CHARS = 420
+_SOLUTION_STEP_MAX_CHARS = 800
+_SOLUTION_STEPS_MAX = 12
+_REMEMBER_MAX_WORDS = 10
 _LABEL_PREFIX_RE = re.compile(
     r"^(query|focus|redirect|instruction|note|context|metadata|system|response type)\s*:\s*",
     re.IGNORECASE,
@@ -30,33 +46,303 @@ def _strip_internal_meta_prefixes(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def normalize_feedback_text(raw: str) -> str:
-    """Return plain feedback text, stripping JSON wrappers when present."""
+def _extract_json_object(raw: str) -> dict | None:
     text = (raw or "").strip()
     if not text:
-        return ""
-
+        return None
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
         text = re.sub(r"\s*```$", "", text).strip()
-
     candidates = [text]
     match = re.search(r"\{[\s\S]*\}", text)
     if match:
         candidates.append(match.group(0))
-
     for candidate in candidates:
         try:
             data = json.loads(candidate)
         except json.JSONDecodeError:
             continue
         if isinstance(data, dict):
-            for key in _FEEDBACK_JSON_KEYS:
-                value = data.get(key)
-                if value:
-                    return _strip_internal_meta_prefixes(str(value).strip())
+            return data
+    return None
+
+
+def normalize_feedback_text(raw: str) -> str:
+    """Return plain feedback text, stripping JSON wrappers when present."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+
+    data = _extract_json_object(text)
+    if data:
+        # Prefer structured adaptive fields when present.
+        structured = parse_adaptive_feedback(data)
+        if structured:
+            parts = [
+                structured.get("what_went_wrong") or "",
+                structured.get("why") or "",
+            ]
+            joined = " ".join(p for p in parts if p).strip()
+            if joined:
+                return _strip_internal_meta_prefixes(joined)
+        correct = parse_correct_adaptive_feedback(data)
+        if correct:
+            parts = [
+                correct.get("why_it_works") or "",
+                correct.get("remember") or "",
+            ]
+            joined = " ".join(p for p in parts if p).strip()
+            if joined:
+                return _strip_internal_meta_prefixes(joined)
+        for key in _FEEDBACK_JSON_KEYS:
+            value = data.get(key)
+            if value:
+                return _strip_internal_meta_prefixes(str(value).strip())
 
     return _strip_internal_meta_prefixes(text)
+
+
+def parse_adaptive_feedback(raw: str | dict | None) -> dict | None:
+    """Parse and lightly normalize structured adaptive feedback, or return None."""
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        data = _extract_json_object(str(raw or ""))
+    if not data:
+        return None
+    if not any(k in data for k in ("what_went_wrong", "why", "remember")):
+        return None
+
+    quick = data.get("quick_check")
+    if quick is None or str(quick).strip().lower() in {"", "null", "none"}:
+        quick_check = None
+    else:
+        quick_check = str(quick).strip()
+
+    follow_ups_raw = data.get("follow_ups") or []
+    follow_ups: list[str] = []
+    if isinstance(follow_ups_raw, list):
+        for item in follow_ups_raw:
+            text = str(item or "").strip()
+            if text:
+                follow_ups.append(text)
+    follow_ups = follow_ups[:3]
+
+    solution_steps = _parse_solution_steps(data.get("solution_steps"))
+
+    return {
+        "what_went_wrong": str(data.get("what_went_wrong") or "").strip(),
+        "why": str(data.get("why") or "").strip(),
+        "quick_check": quick_check,
+        "remember": str(data.get("remember") or "").strip(),
+        "follow_ups": follow_ups,
+        "solution_steps": solution_steps,
+    }
+
+
+def _parse_solution_steps(raw: object | None) -> list[str] | None:
+    """Normalize optional solution_steps list; null/empty → None."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text or text.lower() in {"null", "none"}:
+            return None
+        return [text]
+    if not isinstance(raw, list):
+        return None
+    steps: list[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if text:
+            steps.append(text)
+        if len(steps) >= _SOLUTION_STEPS_MAX:
+            break
+    return steps or None
+
+
+def validate_adaptive_feedback(raw: str | dict | None) -> dict | None:
+    """
+    Validate structured adaptive feedback.
+
+    Rejects empty required fields, Step-N patterns (except in solution_steps),
+    filler, overlong fields, or a remember hook longer than 10 words.
+    Returns a cleaned dict or None.
+    """
+    parsed = parse_adaptive_feedback(raw)
+    if not parsed:
+        return None
+
+    required = ("what_went_wrong", "why", "remember")
+    for key in required:
+        value = parsed.get(key) or ""
+        if not value:
+            return None
+        if len(value) > _FIELD_MAX_CHARS:
+            return None
+        if _STEP_PATTERN_RE.search(value) or _FILLER_RE.search(value):
+            return None
+
+    quick = parsed.get("quick_check")
+    if quick is not None:
+        if not quick or len(quick) > _FIELD_MAX_CHARS:
+            return None
+        if _STEP_PATTERN_RE.search(quick) or _FILLER_RE.search(quick):
+            return None
+
+    remember_words = [w for w in parsed["remember"].split() if w]
+    if len(remember_words) > _REMEMBER_MAX_WORDS:
+        return None
+
+    follow_ups = parsed.get("follow_ups") or []
+    if len(follow_ups) < 1:
+        return None
+    cleaned_follow_ups = []
+    for item in follow_ups:
+        if len(item) > 120 or _FILLER_RE.search(item):
+            continue
+        cleaned_follow_ups.append(item)
+    if len(cleaned_follow_ups) < 1:
+        return None
+    parsed["follow_ups"] = cleaned_follow_ups[:3]
+
+    steps = parsed.get("solution_steps")
+    if steps is not None:
+        cleaned_steps: list[str] = []
+        for step in steps:
+            if not step or len(step) > _SOLUTION_STEP_MAX_CHARS:
+                continue
+            if _FILLER_RE.search(step):
+                continue
+            cleaned_steps.append(step)
+            if len(cleaned_steps) >= _SOLUTION_STEPS_MAX:
+                break
+        parsed["solution_steps"] = cleaned_steps or None
+    return parsed
+
+
+def adaptive_feedback_to_json(data: dict) -> str:
+    """Serialize validated adaptive feedback for storage."""
+    if data.get("kind") == "correct" or "why_it_works" in data:
+        return correct_adaptive_feedback_to_json(data)
+    payload = {
+        "what_went_wrong": data.get("what_went_wrong") or "",
+        "why": data.get("why") or "",
+        "quick_check": data.get("quick_check"),
+        "remember": data.get("remember") or "",
+        "follow_ups": list(data.get("follow_ups") or [])[:3],
+        "solution_steps": data.get("solution_steps"),
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def parse_correct_adaptive_feedback(raw: str | dict | None) -> dict | None:
+    """Parse structured correct-answer adaptive feedback, or return None."""
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        data = _extract_json_object(str(raw or ""))
+    if not data or "why_it_works" not in data:
+        return None
+
+    worked = data.get("worked_example")
+    if worked is None or str(worked).strip().lower() in {"", "null", "none"}:
+        worked_example = None
+    else:
+        worked_example = str(worked).strip()
+
+    follow_ups_raw = data.get("follow_ups") or []
+    follow_ups: list[str] = []
+    if isinstance(follow_ups_raw, list):
+        for item in follow_ups_raw:
+            text = str(item or "").strip()
+            if text:
+                follow_ups.append(text)
+    follow_ups = follow_ups[:3]
+
+    why = str(data.get("why_it_works") or "").strip()
+    remember = str(data.get("remember") or "").strip()
+    if not why and not remember:
+        return None
+
+    return {
+        "kind": "correct",
+        "why_it_works": why,
+        "remember": remember,
+        "worked_example": worked_example,
+        "follow_ups": follow_ups,
+    }
+
+
+def validate_correct_adaptive_feedback(raw: str | dict | None) -> dict | None:
+    """Validate correct-answer adaptive feedback; return cleaned dict or None."""
+    parsed = parse_correct_adaptive_feedback(raw)
+    if not parsed:
+        return None
+
+    for key in ("why_it_works", "remember"):
+        value = parsed.get(key) or ""
+        if not value:
+            return None
+        if len(value) > _FIELD_MAX_CHARS:
+            return None
+        if _STEP_PATTERN_RE.search(value) or _FILLER_RE.search(value):
+            return None
+
+    worked = parsed.get("worked_example")
+    if worked is not None:
+        if not worked or len(worked) > _FIELD_MAX_CHARS:
+            return None
+        if _STEP_PATTERN_RE.search(worked) or _FILLER_RE.search(worked):
+            return None
+
+    remember_words = [w for w in parsed["remember"].split() if w]
+    if len(remember_words) > _REMEMBER_MAX_WORDS:
+        return None
+
+    follow_ups = parsed.get("follow_ups") or []
+    if len(follow_ups) < 1:
+        return None
+    cleaned_follow_ups = []
+    for item in follow_ups:
+        if len(item) > 120 or _FILLER_RE.search(item):
+            continue
+        cleaned_follow_ups.append(item)
+    if len(cleaned_follow_ups) < 1:
+        return None
+    parsed["follow_ups"] = cleaned_follow_ups[:3]
+    return parsed
+
+
+def correct_adaptive_feedback_to_json(data: dict) -> str:
+    """Serialize validated correct adaptive feedback for storage."""
+    payload = {
+        "why_it_works": data.get("why_it_works") or "",
+        "remember": data.get("remember") or "",
+        "worked_example": data.get("worked_example"),
+        "follow_ups": list(data.get("follow_ups") or [])[:3],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def parse_any_adaptive_feedback(raw: str | dict | None) -> dict | None:
+    """Parse incorrect or correct adaptive feedback (correct preferred when both keys exist)."""
+    correct = parse_correct_adaptive_feedback(raw)
+    if correct and (correct.get("why_it_works") or "").strip():
+        # Prefer correct schema when why_it_works is present.
+        if isinstance(raw, dict):
+            if "why_it_works" in raw:
+                return correct
+        else:
+            text = str(raw or "")
+            if "why_it_works" in text:
+                return correct
+    incorrect = parse_adaptive_feedback(raw)
+    if incorrect:
+        incorrect = dict(incorrect)
+        incorrect["kind"] = "incorrect"
+        return incorrect
+    return correct
 
 
 def _normalize_label(label: str) -> str:

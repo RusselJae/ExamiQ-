@@ -97,45 +97,21 @@ class QuestionEditForm(forms.ModelForm):
             self.fields["topic"].queryset = Topic.objects.filter(
                 subject__program=program
             )
-        # Faculty authoring: hide legacy numeric from the type picker.
-        self.fields["question_type"].choices = [
-            (Question.QuestionType.MCQ, "Multiple Choice"),
-            (Question.QuestionType.TRUE_FALSE, "True or False"),
-            (Question.QuestionType.IDENTIFICATION, "Identification"),
-            (Question.QuestionType.ENUMERATION, "Enumeration"),
-        ]
+        # Faculty authoring is Multiple Choice only (other types remain for legacy rows).
+        self.fields["question_type"].choices = list(
+            Question.AUTHORABLE_QUESTION_TYPE_CHOICES
+        )
+        self.fields["question_type"].widget = forms.HiddenInput(
+            attrs={"id": "id_question_type"}
+        )
+        self.fields["question_type"].initial = Question.QuestionType.MCQ
         self.fields["expected_answer"].required = False
 
     def clean(self):
         cleaned = super().clean()
-        qtype = cleaned.get("question_type") or Question.QuestionType.MCQ
-        expected = (cleaned.get("expected_answer") or "").strip()
-        cleaned["expected_answer"] = expected
-        if qtype == Question.QuestionType.MCQ:
-            cleaned["expected_answer"] = ""
-        elif qtype == Question.QuestionType.TRUE_FALSE:
-            if expected.casefold() not in {"true", "false", "t", "f", "yes", "no"}:
-                self.add_error(
-                    "expected_answer",
-                    "Enter True or False as the expected answer.",
-                )
-            else:
-                cleaned["expected_answer"] = (
-                    "True" if expected.casefold() in {"true", "t", "yes"} else "False"
-                )
-        elif qtype in {
-            Question.QuestionType.IDENTIFICATION,
-            Question.QuestionType.ENUMERATION,
-        }:
-            if not expected:
-                self.add_error("expected_answer", "Expected answer is required.")
-            elif qtype == Question.QuestionType.ENUMERATION:
-                items = [p.strip() for p in expected.splitlines() if p.strip()]
-                if len(items) < 2:
-                    self.add_error(
-                        "expected_answer",
-                        "List at least two items, one per line.",
-                    )
+        # New and edited faculty questions are forced to Multiple Choice.
+        cleaned["question_type"] = Question.QuestionType.MCQ
+        cleaned["expected_answer"] = ""
         return cleaned
 
 

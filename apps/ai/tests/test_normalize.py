@@ -102,7 +102,7 @@ def test_normalize_strips_explanation_fields():
     assert "solution_summary" not in result[0]
 
 
-def test_normalize_identification_payload():
+def test_normalize_non_mcq_payload_coerces_to_mcq():
     result = normalize_generated_questions(
         [
             {
@@ -110,61 +110,39 @@ def test_normalize_identification_payload():
                 "stem": "Name the slope formula.",
                 "concept_tag": "algebra",
                 "expected_answer": "  Rise Over Run ",
+                "choices": [
+                    {"label": "A", "text": "rise/run", "is_correct": True},
+                    {"label": "B", "text": "run/rise", "is_correct": False},
+                    {"label": "C", "text": "x/y", "is_correct": False},
+                    {"label": "D", "text": "y/x", "is_correct": False},
+                ],
+                "correct_label": "A",
             }
         ],
         question_type="identification",
     )
-    assert result[0]["question_type"] == "identification"
-    assert result[0]["expected_answer"] == "Rise Over Run"
-    assert "choices" not in result[0]
+    assert result[0]["question_type"] == "mcq"
 
 
-def test_normalize_true_false_payload():
+def test_normalize_true_false_request_coerces_to_mcq():
     result = normalize_generated_questions(
         [
             {
                 "question_type": "true_false",
                 "stem": "Zero is a natural number.",
                 "expected_answer": "false",
+                "choices": [
+                    {"label": "A", "text": "True", "is_correct": False},
+                    {"label": "B", "text": "False", "is_correct": True},
+                    {"label": "C", "text": "Sometimes", "is_correct": False},
+                    {"label": "D", "text": "Undefined", "is_correct": False},
+                ],
+                "correct_label": "B",
             }
         ],
         question_type="true_false",
     )
-    assert result[0]["expected_answer"] == "False"
-
-
-def test_normalize_true_false_accepts_bool_json_values():
-    result = normalize_generated_questions(
-        [
-            {
-                "question_type": "true_false",
-                "stem": "A triangle has three sides.",
-                "expected_answer": True,
-            },
-            {
-                "question_type": "true_false",
-                "stem": "A triangle has four sides.",
-                "expected_answer": False,
-            },
-        ],
-        question_type="true_false",
-    )
-    assert result[0]["expected_answer"] == "True"
-    assert result[1]["expected_answer"] == "False"
-
-
-def test_normalize_enumeration_accepts_list_json_values():
-    result = normalize_generated_questions(
-        [
-            {
-                "question_type": "enumeration",
-                "stem": "List central tendency measures.",
-                "expected_answer": ["mean", "median", "mode"],
-            }
-        ],
-        question_type="enumeration",
-    )
-    assert result[0]["expected_answer"] == "mean\nmedian\nmode"
+    assert result[0]["question_type"] == "mcq"
 
 
 @pytest.mark.parametrize(
@@ -192,3 +170,112 @@ def test_normalize_feedback_text_strips_internal_meta_prefix():
         normalize_feedback_text("Query: How do I factor this?")
         == "How do I factor this?"
     )
+
+
+def test_validate_adaptive_feedback_accepts_good_payload():
+    from apps.ai.normalize import validate_adaptive_feedback
+
+    raw = {
+        "what_went_wrong": "'Non-singular' needs det ≠ 0. Here det = 0.",
+        "why": "Inverse divides by det(A), so det 0 means no inverse.",
+        "quick_check": "[[1,2],[2,4]] has det 0, so singular.",
+        "remember": "Singular = det 0 = no inverse.",
+        "follow_ups": ["Why dependent rows?", "Try 3×3", "Quiz me"],
+        "solution_steps": None,
+    }
+    validated = validate_adaptive_feedback(raw)
+    assert validated is not None
+    assert validated["quick_check"]
+    assert validated["solution_steps"] is None
+    assert len(validated["follow_ups"]) == 3
+
+
+def test_validate_adaptive_feedback_accepts_solution_steps_with_step_labels():
+    from apps.ai.normalize import validate_adaptive_feedback
+
+    raw = {
+        "what_went_wrong": "You used the sum instead of the product rule.",
+        "why": "The derivative of uv is u'v + uv', not u' + v'.",
+        "quick_check": None,
+        "remember": "Product rule: u'v + uv'.",
+        "follow_ups": ["Show me product rule", "Try another"],
+        "solution_steps": [
+            "Step 1. Identify u = x^2 and v = sin(x).",
+            "Step 2. Compute u' = 2x and v' = cos(x).",
+            "Step 3. Combine: 2x sin(x) + x^2 cos(x).",
+        ],
+    }
+    validated = validate_adaptive_feedback(raw)
+    assert validated is not None
+    assert len(validated["solution_steps"]) == 3
+    assert "Step 1" in validated["solution_steps"][0]
+
+
+def test_validate_adaptive_feedback_rejects_filler_and_steps():
+    from apps.ai.normalize import validate_adaptive_feedback
+
+    bad = {
+        "what_went_wrong": "Great try — double-check your work next time.",
+        "why": "Step 1. The answer is D.",
+        "quick_check": None,
+        "remember": "Since you have high confidence slow down a lot more please now",
+        "follow_ups": ["ok"],
+    }
+    assert validate_adaptive_feedback(bad) is None
+
+
+def test_validate_correct_adaptive_feedback_accepts_good_payload():
+    from apps.ai.normalize import validate_correct_adaptive_feedback
+
+    raw = {
+        "why_it_works": "Inverse divides by det(A), so det 0 means singular.",
+        "remember": "Singular = det 0 = no inverse.",
+        "worked_example": "[[1,2],[2,4]] has det 0, so singular.",
+        "follow_ups": ["Why dependent rows?", "Try 3×3", "Quiz me"],
+    }
+    validated = validate_correct_adaptive_feedback(raw)
+    assert validated is not None
+    assert validated["kind"] == "correct"
+    assert validated["worked_example"]
+    assert len(validated["follow_ups"]) == 3
+
+
+def test_validate_correct_adaptive_feedback_allows_null_example():
+    from apps.ai.normalize import validate_correct_adaptive_feedback
+
+    raw = {
+        "why_it_works": "Det 0 means no inverse exists for the matrix.",
+        "remember": "Singular = det 0 = no inverse.",
+        "worked_example": None,
+        "follow_ups": ["Why dependent rows?"],
+    }
+    validated = validate_correct_adaptive_feedback(raw)
+    assert validated is not None
+    assert validated["worked_example"] is None
+
+
+def test_parse_any_prefers_correct_schema():
+    from apps.ai.normalize import parse_any_adaptive_feedback
+
+    raw = {
+        "why_it_works": "Det 0 blocks the inverse formula.",
+        "remember": "Singular = det 0 = no inverse.",
+        "worked_example": None,
+        "follow_ups": ["Quiz me"],
+    }
+    parsed = parse_any_adaptive_feedback(raw)
+    assert parsed["kind"] == "correct"
+    assert "why_it_works" in parsed
+
+
+def test_normalize_feedback_prefers_structured_fields():
+    raw = (
+        '{"what_went_wrong": "Chose non-singular.", '
+        '"why": "Det 0 means singular.", '
+        '"quick_check": null, '
+        '"remember": "Det 0 = singular.", '
+        '"follow_ups": ["a", "b", "c"]}'
+    )
+    text = normalize_feedback_text(raw)
+    assert "Chose non-singular" in text
+    assert "Det 0 means singular" in text

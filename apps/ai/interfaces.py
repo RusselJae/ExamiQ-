@@ -95,11 +95,54 @@ class AdaptiveFeedbackGenerator:
         correct_answer: str,
         confidence: str = "medium",
         question_type: str = "",
+        *,
+        choices: list[str] | None = None,
+        difficulty: str = "",
+        is_correct: bool = False,
+        unanswered: bool = False,
     ) -> str:
-        return (
-            f"You answered '{user_answer}' but the correct answer is '{correct_answer}'. "
-            f"Review {topic} and practice similar problems."
+        """Return validated adaptive feedback JSON (or plain fallback text)."""
+        from apps.ai.normalize import (
+            adaptive_feedback_to_json,
+            correct_adaptive_feedback_to_json,
         )
+
+        if is_correct:
+            payload = {
+                "why_it_works": (
+                    f"'{correct_answer}' holds for {topic} because it matches "
+                    "the definition and the options given."
+                ),
+                "remember": "Match the definition to the option.",
+                "worked_example": None,
+                "follow_ups": [
+                    f"Why is '{correct_answer}' right?",
+                    "Give a tiny example",
+                    "Quiz me on this",
+                ],
+            }
+            return correct_adaptive_feedback_to_json(payload)
+
+        _ = unanswered
+        payload = {
+            "what_went_wrong": (
+                f"You chose '{user_answer}', which conflicts with the correct "
+                f"result '{correct_answer}'."
+            ),
+            "why": (
+                f"The correct answer holds for {topic} because it matches the "
+                "definition and the options given."
+            ),
+            "quick_check": None,
+            "remember": "Match the definition to the option.",
+            "follow_ups": [
+                f"Why is '{correct_answer}' right?",
+                "Give a tiny example",
+                "Quiz me on this",
+            ],
+            "solution_steps": None,
+        }
+        return adaptive_feedback_to_json(payload)
 
 
 class CurriculumAdvisor:

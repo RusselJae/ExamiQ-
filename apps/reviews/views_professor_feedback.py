@@ -468,6 +468,107 @@ class GlobalChatFacultyMessageView(ProfessorRequiredMixin, View):
         )
 
 
+class FacultyPeerConversationsApiView(ProfessorRequiredMixin, View):
+    """JSON list of faculty-to-faculty conversations and peers."""
+
+    def get(self, request):
+        from apps.analytics.faculty_chat_services import faculty_inbox_payload
+
+        active_id = request.GET.get("conversation_id")
+        active_conversation_id = (
+            int(active_id) if active_id and str(active_id).isdigit() else None
+        )
+        payload = faculty_inbox_payload(
+            request.user, active_conversation_id=active_conversation_id
+        )
+        return JsonResponse(payload)
+
+
+class FacultyPeerMessageView(ProfessorRequiredMixin, View):
+    """Post a faculty-to-faculty message (existing or new peer thread)."""
+
+    def post(self, request, conversation_pk=None):
+        from apps.analytics.faculty_chat_services import (
+            faculty_peers_queryset,
+            get_or_create_faculty_conversation,
+            post_faculty_message,
+            professor_can_access_faculty_conversation,
+            professor_faculty_chat_queryset,
+            serialize_faculty_conversation,
+        )
+        from apps.analytics.forms import MistakeConcernForm
+        from apps.analytics.models import FacultyConversation
+
+        conversation = None
+        if conversation_pk:
+            conversation = get_object_or_404(
+                FacultyConversation.objects.filter(
+                    Q(participant_low=request.user) | Q(participant_high=request.user)
+                ),
+                pk=conversation_pk,
+            )
+            if not professor_can_access_faculty_conversation(
+                request.user, conversation
+            ):
+                return JsonResponse(
+                    {"ok": False, "error": "Not allowed."}, status=403
+                )
+        else:
+            peer_id = request.POST.get("peer_id") or ""
+            if not str(peer_id).isdigit():
+                return JsonResponse(
+                    {"ok": False, "error": "Select a faculty member."},
+                    status=400,
+                )
+            peer = faculty_peers_queryset(request.user).filter(pk=int(peer_id)).first()
+            if peer is None:
+                return JsonResponse(
+                    {"ok": False, "error": "Faculty member not found."},
+                    status=404,
+                )
+            conversation = get_or_create_faculty_conversation(request.user, peer)
+
+        form = MistakeConcernForm(
+            {
+                "body": (
+                    request.POST.get("faculty_note")
+                    or request.POST.get("body")
+                    or ""
+                ),
+            },
+            request.FILES,
+        )
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": form.errors.as_text() or "Reply cannot be empty.",
+                },
+                status=400,
+            )
+        try:
+            post_faculty_message(
+                conversation,
+                request.user,
+                body=form.cleaned_data["body"],
+                image=form.cleaned_data.get("image"),
+            )
+        except (ValueError, PermissionError) as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+        conversation.refresh_from_db()
+        # Ensure queryset prefetch stays fresh after first message.
+        _ = professor_faculty_chat_queryset(request.user)
+        return JsonResponse(
+            {
+                "ok": True,
+                "item": serialize_faculty_conversation(
+                    conversation, viewer=request.user
+                ),
+            }
+        )
+
+
 # Backward-compatible aliases
 GlobalChatConcernsApiView = GlobalChatConversationsApiView
 GlobalChatFacultyNoteView = GlobalChatFacultyMessageView

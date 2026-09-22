@@ -106,9 +106,10 @@ class MistakeListView(StudentRequiredMixin, ListView):
                     "label": "Confidence",
                     "choices": [
                         ("none", "No Confidence"),
-                        ("low", "Low Confidence"),
-                        ("average", "Average Confidence"),
-                        ("high", "High Confidence"),
+                        ("none", "No ratings"),
+                        ("low", "Guessing"),
+                        ("average", "Not sure"),
+                        ("high", "Sure"),
                     ],
                 },
                 *STANDARD_DATE_SORT_FILTER_SPECS,

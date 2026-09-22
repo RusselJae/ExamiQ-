@@ -87,6 +87,7 @@
     {% endif %}
 
     <script src="{% static 'js/examiq-ui.js' %}"></script>
+    <script src="{% static 'js/notifications-dropdown.js' %}"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             if (typeof renderMathInElement !== "undefined") {
@@ -116,12 +117,16 @@
     <script>
     window.ExamiQChat = Object.assign(window.ExamiQChat || {}, {
         role: "{{ user.role }}",
+        selfUserId: {% if user.is_authenticated %}{{ user.pk }}{% else %}null{% endif %},
         csrfToken: "{{ csrf_token }}",
         concernsUrl: "{{ chat_concerns_url }}",
         conversationsUrl: "{{ chat_conversations_url }}",
         noteUrlBase: "{{ chat_note_url_base }}",
         messageUrl: "{{ chat_message_url }}",
         concernUrlTemplate: "{{ chat_concern_url_template }}",
+        facultyConversationsUrl: "{{ faculty_chat_conversations_url }}",
+        facultyMessageUrl: "{{ faculty_chat_message_url }}",
+        facultyNoteUrlBase: "{{ faculty_chat_note_url_base }}",
         selfAvatarUrl: "{{ chat_self_avatar_url|escapejs }}",
         selfInitials: "{{ chat_self_initials|escapejs }}",
         selfName: "{{ chat_self_name|escapejs }}"

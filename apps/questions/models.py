@@ -92,6 +92,13 @@ class Question(TimeStampedModel):
         ENUMERATION = "enumeration", "Enumeration"
         NUMERIC = "numeric", "Numeric Answer"
 
+    # Faculty generation, exam setup, and create/edit pickers are MCQ-only.
+    # Existing non-MCQ rows remain gradable; these are selection allowlists.
+    AUTHORABLE_QUESTION_TYPES = frozenset({QuestionType.MCQ})
+    AUTHORABLE_QUESTION_TYPE_CHOICES = [
+        (QuestionType.MCQ, "Multiple Choice"),
+    ]
+
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         PENDING = "pending", "Pending Review"
@@ -179,6 +186,19 @@ class Question(TimeStampedModel):
         ],
         default="draft",
         help_text="Whether step-by-step solutions are faculty-approved for students.",
+    )
+    faculty_feedback = models.TextField(
+        blank=True,
+        default="",
+        help_text="Faculty review notes for high-mistake questions or validation.",
+    )
+    adaptive_explanation = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text=(
+            "Faculty-curated adaptive explanation: what_went_wrong, why, "
+            "quick_check, remember, worked_example, solution_steps."
+        ),
     )
 
     class Meta:

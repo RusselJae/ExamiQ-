@@ -39,11 +39,31 @@
         }, ms);
     }
 
+    function initExamResultsReview(target) {
+        var resultsCard = target.querySelector("[data-exam-results]");
+        if (!resultsCard) return;
+        var el = document.getElementById("exam-answer-review-data");
+        if (!el || !window.ExamiQUI || !window.ExamiQUI.renderSessionAnswerReview) return;
+        window.ExamiQUI.renderSessionAnswerReview({
+            grid: "exam-answer-review-grid",
+            wrapEl: "exam-answer-review-wrap",
+            emptyEl: "exam-answer-review-empty",
+            legend: "exam-answer-review-legend",
+            toggleButtons: "#exam-results-card [data-review-mode]",
+            data: JSON.parse(el.textContent),
+            defaultMode: "pace",
+            clickable: false,
+        });
+    }
+
     function handleRevealSwap(target) {
         var revealCard = target.querySelector("[data-exam-reveal]");
-        if (!revealCard) return;
-        katexRender(target);
-        scheduleAdvance(revealCard);
+        if (revealCard) {
+            katexRender(target);
+            scheduleAdvance(revealCard);
+            return;
+        }
+        initExamResultsReview(target);
     }
 
     document.body.addEventListener("htmx:beforeSwap", function (event) {

@@ -58,6 +58,7 @@
         {% csrf_token %}
         <input type="hidden" name="time_spent_seconds" value="0" id="time-spent">
         <input type="hidden" name="timed_out" value="false" id="timed-out-input">
+        <input type="hidden" name="confidence" value="{{ form.data.confidence|default:'' }}" id="confidence-input">
 
         {% if form.selected_choice %}
         <fieldset class="exam-choices-fieldset">
@@ -114,31 +115,36 @@
         </div>
         {% endif %}
 
-        {% if not is_timed_exam %}
-        <fieldset class="confidence-fieldset">
-            <legend class="focus-field-legend">How confident are you?</legend>
-            {{ form.confidence }}
-            <div class="grid grid-cols-5 gap-2 mt-1">
-                {% for level in "12345" %}
-                <button type="button"
-                        class="confidence-btn flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-slate-200 text-examiq-navy font-medium hover:border-examiq-cyan transition text-sm"
-                        data-confidence="{{ level }}"
-                        data-theme="{% if level == '1' or level == '2' %}low{% elif level == '3' %}medium{% else %}high{% endif %}"
-                        aria-pressed="false">
-                    {{ level }}
-                </button>
-                {% endfor %}
+        {% if is_timed_exam %}
+        <div class="exam-confidence-gate" id="exam-confidence-gate" hidden data-confidence-gate>
+            <div class="exam-confidence-gate__row">
+                <p class="exam-confidence-gate__label" id="exam-confidence-label">How sure were you?</p>
+                <div class="exam-confidence-gate__buttons" role="group" aria-labelledby="exam-confidence-label">
+                    <button type="button" class="confidence-btn exam-confidence-gate__btn" data-confidence="1" data-theme="low" aria-pressed="false">Guessing</button>
+                    <button type="button" class="confidence-btn exam-confidence-gate__btn" data-confidence="3" data-theme="medium" aria-pressed="false">Not sure</button>
+                    <button type="button" class="confidence-btn exam-confidence-gate__btn" data-confidence="5" data-theme="high" aria-pressed="false">Sure</button>
+                </div>
             </div>
-            <p class="text-xs text-examiq-slate mt-2">1 = not confident &middot; 5 = very confident</p>
+            <p class="exam-confidence-gate__hint">Required. The timer has stopped, so this doesn’t use exam time.</p>
+        </div>
+        {% else %}
+        <fieldset class="confidence-fieldset" data-confidence-practice>
+            <legend class="focus-field-legend">How sure were you?</legend>
+            <div class="exam-confidence-gate__buttons mt-1" role="group">
+                <button type="button" class="confidence-btn exam-confidence-gate__btn" data-confidence="1" data-theme="low" aria-pressed="false">Guessing</button>
+                <button type="button" class="confidence-btn exam-confidence-gate__btn" data-confidence="3" data-theme="medium" aria-pressed="false">Not sure</button>
+                <button type="button" class="confidence-btn exam-confidence-gate__btn" data-confidence="5" data-theme="high" aria-pressed="false">Sure</button>
+            </div>
+            <p class="text-xs text-examiq-slate mt-2">Required before you continue.</p>
         </fieldset>
         {% endif %}
 
         {% if errors %}
         <div class="exam-form-error" role="alert">
             {% if is_timed_exam %}
-            Please select an answer.
+            Please select an answer and how sure you were.
             {% else %}
-            Please select an answer and your confidence level.
+            Please select an answer and how sure you were.
             {% endif %}
         </div>
         {% endif %}

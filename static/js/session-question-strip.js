@@ -12,10 +12,10 @@
     };
 
     var CONFIDENCE_LABELS = {
-        0: "None",
-        1: "Low",
-        2: "Average",
-        3: "High",
+        0: "No ratings",
+        1: "Guessing",
+        2: "Not sure",
+        3: "Sure",
     };
 
     function resolveEl(value) {
@@ -135,7 +135,20 @@
             var btn = event.target.closest(".session-strip-cell");
             if (!btn) return;
             var answerId = parseInt(btn.getAttribute("data-answer-id"), 10);
-            if (!answerId || !window.ExamiQTutor || !window.ExamiQTutor.open) return;
+            if (!answerId) return;
+
+            // Faculty (and other callers) can navigate to a dedicated answer page.
+            var template = options.answerUrlTemplate || "";
+            if (template) {
+                window.location.href = template
+                    .replace("{id}", String(answerId))
+                    .replace("{pk}", String(answerId))
+                    .replace("/0/", "/" + answerId + "/");
+                return;
+            }
+
+            // Students open the AI tutor review screen for that answer.
+            if (!window.ExamiQTutor || !window.ExamiQTutor.open) return;
             window.ExamiQTutor.open({
                 answerId: answerId,
                 reviewMode: true,

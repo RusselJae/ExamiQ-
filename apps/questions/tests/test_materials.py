@@ -36,7 +36,7 @@ def _make_ready_doc(*, course, subject, user, title="Module overview", archived=
 
 @pytest.mark.django_db
 class TestFacultyMaterialsUI:
-    def test_list_removes_add_questions_and_shows_download(
+    def test_list_redirects_to_hub_with_subject(
         self, client, professor, subject
     ):
         course = get_or_create_catalog_course(professor, subject)
@@ -46,15 +46,29 @@ class TestFacultyMaterialsUI:
         response = client.get(
             reverse("analytics_professor:material_list", kwargs={"course_pk": course.pk})
         )
+        assert response.status_code == 302
+        assert reverse("analytics_professor:materials_hub") in response.url
+        assert f"subject={subject.pk}" in response.url
+
+    def test_hub_with_subject_shows_edit_not_download(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program"])
+        course = get_or_create_catalog_course(professor, subject)
+        _make_ready_doc(course=course, subject=subject, user=professor)
+
+        client.force_login(professor)
+        response = client.get(
+            reverse("analytics_professor:materials_hub") + f"?subject={subject.pk}"
+        )
         content = response.content.decode()
         assert response.status_code == 200
-        assert 'btn-secondary btn-primary-sm">Add Questions</a>' not in content
-        assert "Download" in content
-        assert "Archive" in content
-        assert 'class="text-examiq-cyan font-semibold">Open</a>' not in content
-        assert "Upload material" in content
-        assert "whole file" in content
         assert "materials-library" in content
+        assert ">Edit</a>" in content
+        assert "Archive" in content
+        # Faculty library should not expose Download as the primary action.
+        assert 'class="materials-download-btn">Download</a>' not in content
 
     def test_download_returns_attachment(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)

@@ -76,6 +76,12 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
                     <span class="sidebar-label">Exam Setup</span>
                 </a>
+                <a href="{% url 'analytics_professor:materials_hub' %}" title="Learning Materials"
+                   class="sidebar-link {% if request.resolver_match.url_name == 'materials_hub' or request.resolver_match.url_name == 'material_list' or request.resolver_match.url_name == 'material_detail' or request.resolver_match.url_name == 'material_upload' %}sidebar-link-active{% endif %}"
+                   aria-label="Content Management">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                    <span class="sidebar-label">Content Management</span>
+                </a>
 
                 {% if sidebar_course %}
                 <p class="sidebar-section-label sidebar-course-label">

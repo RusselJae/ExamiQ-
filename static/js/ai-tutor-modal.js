@@ -157,7 +157,17 @@
         });
         if (existing) {
             existing.feedback = fbItem.feedback;
+            existing.structured_feedback = fbItem.structured_feedback || null;
             existing.needs_ai = false;
+            if (
+                !existing.structured_feedback &&
+                window.ExamiQUI &&
+                window.ExamiQUI.parseAdaptiveFeedback
+            ) {
+                existing.structured_feedback = window.ExamiQUI.parseAdaptiveFeedback(
+                    fbItem.feedback
+                );
+            }
         } else {
             fbItem.needs_ai = false;
             state.items.push(fbItem);
@@ -253,7 +263,11 @@
 
         var items = reviewItems();
         if (countEl) {
-            countEl.textContent = "Reviewing " + items.length + " item" + (items.length === 1 ? "" : "s");
+            var activeIndex = items.findIndex(function (item) {
+                return item.answer_id === state.activeAnswerId;
+            });
+            var pos = activeIndex >= 0 ? activeIndex + 1 : Math.min(1, items.length);
+            countEl.textContent = "Question " + pos + " of " + items.length;
         }
 
         select.innerHTML = items
@@ -267,7 +281,6 @@
                     (item.needs_ai || state.enriching[item.answer_id])
                         ? " …"
                         : "";
-                var saved = item.message_count > 0 ? " ●" : "";
                 var selected = item.answer_id === state.activeAnswerId ? " selected" : "";
                 return (
                     '<option value="' +
@@ -275,11 +288,10 @@
                     '"' +
                     selected +
                     ">" +
-                    "Q" +
+                    "Question " +
                     qNum +
                     ": " +
                     escapeHtml(truncateStem(item.stem)) +
-                    saved +
                     pending +
                     "</option>"
                 );
@@ -399,36 +411,283 @@
         );
     }
 
+    function parseStructuredFeedback(item) {
+        if (!item) return null;
+        if (item.structured_feedback) return item.structured_feedback;
+        if (window.ExamiQUI && window.ExamiQUI.parseAdaptiveFeedback) {
+            return window.ExamiQUI.parseAdaptiveFeedback(item.feedback);
+        }
+        return null;
+    }
+
+    function renderStructuredFeedback(host, structured) {
+        if (!host) return;
+        if (!structured) {
+            host.hidden = true;
+            host.innerHTML = "";
+            return;
+        }
+        var isCorrectKind =
+            structured.kind === "correct" || !!structured.why_it_works;
+        var rows = isCorrectKind
+            ? [
+                  { key: "why_it_works", label: "Why it works", bold: false },
+                  { key: "remember", label: "Remember", bold: true },
+              ]
+            : [
+                  { key: "what_went_wrong", label: "What went wrong", bold: false },
+                  { key: "why", label: "Why", bold: false },
+                  { key: "quick_check", label: "Quick check", bold: false },
+                  { key: "remember", label: "Remember", bold: true },
+              ];
+        var html = rows
+            .map(function (row) {
+                var value = structured[row.key];
+                if (value == null || value === "") return "";
+                var textClass =
+                    "ai-tutor-structured__text examiq-math-block" +
+                    (row.bold ? " ai-tutor-structured__text--remember" : "");
+                return (
+                    '<div class="ai-tutor-structured__row">' +
+                    '<p class="ai-tutor-structured__label">' +
+                    escapeHtml(row.label) +
+                    "</p>" +
+                    '<div class="' +
+                    textClass +
+                    '">' +
+                    escapeHtml(String(value)).replace(/\n/g, "<br>") +
+                    "</div></div>"
+                );
+            })
+            .filter(Boolean)
+            .join("");
+        host.innerHTML = html;
+        host.hidden = !html;
+    }
+
+    function renderWorkedExample(host, structured) {
+        if (!host) return;
+        var example =
+            structured &&
+            (structured.worked_example != null
+                ? structured.worked_example
+                : null);
+        if (!example) {
+            host.hidden = true;
+            host.innerHTML = "";
+            return;
+        }
+        host.hidden = false;
+        host.innerHTML =
+            '<details class="ai-tutor-worked-example__details">' +
+            '<summary class="ai-tutor-worked-example__summary">See a worked example</summary>' +
+            '<div class="ai-tutor-worked-example__body examiq-math-block">' +
+            escapeHtml(String(example)).replace(/\n/g, "<br>") +
+            "</div></details>";
+    }
+
+    function renderStepByStep(host, item, structured) {
+        if (!host) return;
+        var facultySteps =
+            item && Array.isArray(item.correction_steps)
+                ? item.correction_steps.filter(function (s) {
+                      return String(s || "").trim();
+                  })
+                : [];
+        var aiSteps =
+            structured && Array.isArray(structured.solution_steps)
+                ? structured.solution_steps.filter(function (s) {
+                      return String(s || "").trim();
+                  })
+                : [];
+        var steps = facultySteps.length ? facultySteps : aiSteps;
+        var finalAnswer =
+            (item && (item.final_answer || item.correct_answer)) || "";
+        if (!steps.length && !finalAnswer) {
+            host.hidden = true;
+            host.innerHTML = "";
+            return;
+        }
+        host.hidden = false;
+        host.innerHTML =
+            '<details class="ai-tutor-worked-example__details">' +
+            '<summary class="ai-tutor-worked-example__summary">Step by step</summary>' +
+            '<div class="ai-tutor-worked-example__body">' +
+            '<div class="tutor-visual-host tutor-visual-host--steps"></div>' +
+            "</div></details>";
+        var visualHost = host.querySelector(".tutor-visual-host--steps");
+        if (
+            visualHost &&
+            window.ExamiQUI &&
+            window.ExamiQUI.renderTutorVisualResponse
+        ) {
+            window.ExamiQUI.renderTutorVisualResponse(visualHost, {
+                correctionSteps: steps,
+                finalAnswer: finalAnswer,
+                progressive: false,
+            });
+        } else if (visualHost) {
+            visualHost.innerHTML = steps
+                .map(function (step) {
+                    return (
+                        '<p class="ai-tutor-worked-example__step examiq-math-block">' +
+                        escapeHtml(String(step)).replace(/\n/g, "<br>") +
+                        "</p>"
+                    );
+                })
+                .join("");
+        }
+    }
+
+    function renderFollowUps(host, structured, options) {
+        if (!host) return;
+        options = options || {};
+        var followUps = (structured && structured.follow_ups) || [];
+        var limit = options.limit != null ? options.limit : followUps.length;
+        followUps = followUps.slice(0, Math.max(0, limit));
+        if (!followUps.length) {
+            host.hidden = true;
+            host.innerHTML = "";
+            return;
+        }
+        host.innerHTML = followUps
+            .map(function (text) {
+                return (
+                    '<button type="button" class="ai-tutor-follow-ups__chip" data-follow-up="' +
+                    escapeHtml(text) +
+                    '">' +
+                    escapeHtml(text) +
+                    "</button>"
+                );
+            })
+            .join("");
+        host.hidden = false;
+    }
+
+    function goToNextQuestion() {
+        var items = reviewItems();
+        if (!items.length) return;
+        var idx = items.findIndex(function (item) {
+            return item.answer_id === state.activeAnswerId;
+        });
+        var nextIndex = idx < 0 ? 0 : (idx + 1) % items.length;
+        var next = items[nextIndex];
+        if (next && next.answer_id !== state.activeAnswerId) {
+            selectAnswer(next.answer_id);
+        }
+    }
+
     function renderFeedbackPanel() {
         var item = activeItem();
         var stemEl = document.getElementById("ai-tutor-stem");
         var metaEl = document.getElementById("ai-tutor-meta");
         var userAnswerEl = document.getElementById("ai-tutor-user-answer");
         var correctAnswerEl = document.getElementById("ai-tutor-correct-answer");
+        var compare = document.getElementById("ai-tutor-answer-compare");
+        var correctBanner = document.getElementById("ai-tutor-correct-banner");
+        var correctBannerValue = document.getElementById(
+            "ai-tutor-correct-banner-value"
+        );
+        var unansweredNote = document.getElementById("ai-tutor-unanswered-note");
+        var structuredHost = document.getElementById("ai-tutor-structured-feedback");
+        var workedHost = document.getElementById("ai-tutor-worked-example");
         var visualHost = document.getElementById("ai-tutor-solution-visual");
+        var followHost = document.getElementById("ai-tutor-follow-ups");
+        var actionsRow = document.getElementById("ai-tutor-actions-row");
+        var nextBtn = document.getElementById("ai-tutor-next-question");
         if (!item || !stemEl) return;
 
         stemEl.textContent = item.stem;
 
+        var correctText = item.correct_answer || item.final_answer || "Unknown";
         if (userAnswerEl) {
             userAnswerEl.textContent = item.user_answer || "No answer";
         }
         if (correctAnswerEl) {
-            correctAnswerEl.textContent =
-                item.correct_answer || item.final_answer || "Unknown";
+            correctAnswerEl.textContent = correctText;
         }
 
-        if (visualHost && window.ExamiQUI && window.ExamiQUI.renderTutorVisualResponse) {
-            var why = "";
-            if (!item.is_correct) {
-                why = truncateFeedback(item.feedback || "", 600);
+        var userAns = String(item.user_answer || "").trim();
+        var showUnansweredNote = !item.is_correct && !!(
+            item.unanswered ||
+            item.no_selection ||
+            item.timed_out ||
+            userAns === "Timed out" ||
+            userAns === "No answer" ||
+            userAns === ""
+        );
+        var structured = parseStructuredFeedback(item);
+        var isCorrectStructured =
+            !!item.is_correct &&
+            structured &&
+            (structured.kind === "correct" || !!structured.why_it_works);
+
+        if (correctBanner) {
+            if (isCorrectStructured) {
+                correctBanner.hidden = false;
+                if (correctBannerValue) {
+                    correctBannerValue.textContent = correctText;
+                }
+            } else {
+                correctBanner.hidden = true;
             }
-            window.ExamiQUI.renderTutorVisualResponse(visualHost, {
-                correctionSteps: item.correction_steps || [],
-                finalAnswer: item.final_answer || item.correct_answer || "",
-                why: why,
-                progressive: false,
-            });
+        }
+
+        if (unansweredNote) {
+            unansweredNote.hidden = !showUnansweredNote;
+        }
+
+        if (compare) {
+            // Hide dual wrong/right compare on the correct structured path.
+            compare.hidden = !!isCorrectStructured;
+            compare.classList.toggle(
+                "ai-tutor-answer-compare--correct",
+                !!item.is_correct
+            );
+        }
+
+        if (isCorrectStructured) {
+            renderStructuredFeedback(structuredHost, structured);
+            renderWorkedExample(workedHost, structured);
+            // One follow-up chip + Next question (matches Correct UI mock).
+            renderFollowUps(followHost, structured, { limit: 1 });
+            if (visualHost) {
+                visualHost.hidden = true;
+                visualHost.innerHTML = "";
+            }
+            if (actionsRow) actionsRow.hidden = false;
+            if (nextBtn) nextBtn.hidden = false;
+        } else if (!item.is_correct && structured) {
+            renderStructuredFeedback(structuredHost, structured);
+            renderStepByStep(workedHost, item, structured);
+            renderFollowUps(followHost, structured);
+            if (visualHost) {
+                visualHost.hidden = true;
+                visualHost.innerHTML = "";
+            }
+            if (actionsRow) actionsRow.hidden = false;
+            if (nextBtn) nextBtn.hidden = false;
+        } else {
+            renderStructuredFeedback(structuredHost, null);
+            renderWorkedExample(workedHost, null);
+            renderFollowUps(followHost, null);
+            if (actionsRow) actionsRow.hidden = true;
+            if (nextBtn) nextBtn.hidden = true;
+            if (visualHost && window.ExamiQUI && window.ExamiQUI.renderTutorVisualResponse) {
+                visualHost.hidden = false;
+                var why = "";
+                if (!item.is_correct) {
+                    why = truncateFeedback(item.feedback || "", 600);
+                }
+                window.ExamiQUI.renderTutorVisualResponse(visualHost, {
+                    correctionSteps: item.correction_steps || [],
+                    finalAnswer: item.final_answer || item.correct_answer || "",
+                    why: why,
+                    progressive: false,
+                });
+            } else if (visualHost) {
+                visualHost.hidden = true;
+            }
         }
 
         if (metaEl) {
@@ -801,6 +1060,30 @@
                     imageName.textContent = file.name + " (" + Math.round(file.size / 1024) + " KB)";
                     imageName.classList.remove("hidden");
                 }
+            });
+        }
+
+        var followHost = document.getElementById("ai-tutor-follow-ups");
+        if (followHost) {
+            followHost.addEventListener("click", function (event) {
+                var chip = event.target.closest("[data-follow-up]");
+                if (!chip) return;
+                var text = chip.getAttribute("data-follow-up") || "";
+                var inputEl = document.getElementById("ai-tutor-chat-input");
+                if (!text) return;
+                if (inputEl) {
+                    inputEl.value = text;
+                    inputEl.focus();
+                }
+                sendMessage(text, null);
+            });
+        }
+
+        var nextBtn = document.getElementById("ai-tutor-next-question");
+        if (nextBtn) {
+            nextBtn.addEventListener("click", function (event) {
+                event.preventDefault();
+                goToNextQuestion();
             });
         }
 

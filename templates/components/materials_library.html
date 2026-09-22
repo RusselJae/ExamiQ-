@@ -22,9 +22,9 @@
             {% if faculty_mode %}
             <label class="materials-library__archived">
                 {% if include_archived %}
-                <a href="?" class="materials-library__archived-link">Hide archived</a>
+                <a href="{% if hub_subject_pk %}?subject={{ hub_subject_pk }}{% else %}?{% endif %}" class="materials-library__archived-link">Hide archived</a>
                 {% else %}
-                <a href="?archived=1" class="materials-library__archived-link">Show archived</a>
+                <a href="{% if hub_subject_pk %}?subject={{ hub_subject_pk }}&amp;archived=1{% else %}?archived=1{% endif %}" class="materials-library__archived-link">Show archived</a>
                 {% endif %}
             </label>
             {% endif %}
@@ -71,8 +71,8 @@
             </div>
             <div class="materials-library__actions">
                 {% if faculty_mode and course %}
-                <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
-                   class="materials-download-btn">Download</a>
+                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
+                   class="materials-download-btn">Edit</a>
                 {# Archive / restore inline — archived files stay hidden from students #}
                 <form method="post"
                       action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"

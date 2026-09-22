@@ -41,7 +41,7 @@ class TestRecommendations:
         assert summary["narrative"]
         assert "avg_time_confidence_label" in summary
         assert "avg_confidence_label" in summary
-        assert summary["avg_confidence_label"] == "High"
+        assert summary["avg_confidence_label"] == "Sure"
 
     def test_misconception_triggers_high_priority_recommendation(self, student, course, topic):
         session = start_review_session(

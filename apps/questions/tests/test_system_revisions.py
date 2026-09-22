@@ -1,22 +1,17 @@
-"""Tests for system revisions: publish, bank cap, validation, retakes."""
+"""Tests for system revisions: publish, validation, retakes."""
 
 from __future__ import annotations
 
 import pytest
-from django.conf import settings
 from django.test import override_settings
 
 from apps.questions.models import Question, QuestionValidationSession
-from apps.questions.services import (
-    assert_subject_bank_has_capacity,
-    publish_question_as_faculty,
-    subject_bank_slots_remaining,
-)
+from apps.questions.services import publish_question_as_faculty
 from apps.questions.validation_session_services import (
     clamp_validation_size,
     start_validation_session,
 )
-from apps.reviews.models import RetakeActionPlan, ReviewSession
+from apps.reviews.models import ReviewSession
 from apps.reviews.retake_services import (
     can_start_retake,
     completed_attempt_count,
@@ -39,24 +34,6 @@ def test_publish_question_as_faculty_sets_approved(mcq_question, professor):
 
 
 @pytest.mark.django_db
-@override_settings(MAX_QUESTIONS_PER_SUBJECT=2)
-def test_subject_bank_cap_blocks_extra(subject, topic, professor):
-    for i in range(2):
-        Question.objects.create(
-            topic=topic,
-            stem=f"Cap question {i}",
-            difficulty=Question.Difficulty.EASY,
-            question_type=Question.QuestionType.IDENTIFICATION,
-            expected_answer="x",
-            status=Question.Status.DRAFT,
-            proposed_by=professor,
-        )
-    assert subject_bank_slots_remaining(subject) == 0
-    with pytest.raises(ValueError, match="max 2"):
-        assert_subject_bank_has_capacity(subject, additional=1)
-
-
-@pytest.mark.django_db
 def test_validation_session_size_clamped(subject, topic, professor, mcq_question):
     question, _choice = mcq_question
     question.status = Question.Status.APPROVED
@@ -75,7 +52,7 @@ def test_validation_session_size_clamped(subject, topic, professor, mcq_question
 
 @pytest.mark.django_db
 @override_settings(RETAKE_ACTION_PLAN_THRESHOLD=3)
-def test_retake_requires_action_plan_after_threshold(
+def test_retake_allowed_after_threshold_while_action_plan_disabled(
     student, topic, teaching_assignment, mcq_question
 ):
     _question, _choice = mcq_question
@@ -95,8 +72,9 @@ def test_retake_requires_action_plan_after_threshold(
     assert requires_action_plan(
         student, course=course, subject=topic.subject, difficulty="easy"
     )
+    # Action-plan gate is temporarily disabled — retakes stay unlocked.
     allowed, plan = can_start_retake(
         student, course=course, subject=topic.subject, difficulty="easy"
     )
-    assert allowed is False
-    assert isinstance(plan, RetakeActionPlan)
+    assert allowed is True
+    assert plan is None

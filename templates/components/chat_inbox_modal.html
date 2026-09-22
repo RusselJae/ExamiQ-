@@ -8,12 +8,28 @@
     <div class="examiq-chat-modal__panel">
         <aside class="examiq-chat-modal__sidebar{% if user.role == 'student' %} hidden{% endif %}">
             <h2 id="examiq-chat-title" class="examiq-chat-modal__title">Chat</h2>
+            {% if user.role == 'professor' %}
+            <div class="examiq-chat-modal__tabs" role="tablist" aria-label="Chat inbox">
+                <button type="button"
+                        class="examiq-chat-modal__tab examiq-chat-modal__tab--active"
+                        role="tab"
+                        aria-selected="true"
+                        data-chat-tab="students"
+                        id="examiq-chat-tab-students">Students</button>
+                <button type="button"
+                        class="examiq-chat-modal__tab"
+                        role="tab"
+                        aria-selected="false"
+                        data-chat-tab="faculty"
+                        id="examiq-chat-tab-faculty">Faculty</button>
+            </div>
+            {% endif %}
             <label class="examiq-chat-modal__search">
                 <span class="sr-only">Search</span>
                 <svg class="examiq-chat-modal__search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
-                <input type="search" id="examiq-chat-search" placeholder="{% if user.role == 'professor' %}Search students…{% else %}Search…{% endif %}" autocomplete="off">
+                <input type="search" id="examiq-chat-search" placeholder="Search…" autocomplete="off">
             </label>
             <div id="examiq-chat-list" class="examiq-chat-modal__list" role="listbox" aria-label="Conversations"></div>
             <p id="examiq-chat-list-empty" class="examiq-chat-modal__empty hidden">No conversations yet.</p>

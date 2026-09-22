@@ -327,6 +327,8 @@ class Answer(TimeStampedModel):
     timed_out = models.BooleanField(default=False)
     answered_at = models.DateTimeField(auto_now_add=True)
     time_spent_seconds = models.PositiveIntegerField(default=0)
+    # Structured adaptive JSON for correct answers (incorrect items use MistakeRecord.ai_feedback).
+    ai_feedback = models.TextField(blank=True, default="")
 
     class Meta:
         verbose_name = "Answer"

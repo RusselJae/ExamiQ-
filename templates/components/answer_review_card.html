@@ -19,7 +19,7 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
         <div>
-            <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-1">Your answer</p>
+            <p class="text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-1">{% if answer_owner_label %}{{ answer_owner_label }}{% else %}Your answer{% endif %}</p>
             <p class="text-examiq-navy">
                 {% if answer.selected_choice %}
                 {{ answer.selected_choice.label }}: {{ answer.selected_choice.text }}

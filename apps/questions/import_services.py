@@ -22,12 +22,7 @@ EXPECTED_HEADERS = {
     "stem",
 }
 
-VALID_TYPES = {
-    Question.QuestionType.MCQ,
-    Question.QuestionType.TRUE_FALSE,
-    Question.QuestionType.IDENTIFICATION,
-    Question.QuestionType.ENUMERATION,
-}
+VALID_TYPES = set(Question.AUTHORABLE_QUESTION_TYPES)
 
 VALID_DIFFICULTIES = {c.value for c in Question.Difficulty}
 VALID_STATUSES = {c.value for c in Question.Status}
@@ -292,7 +287,7 @@ def import_questions_from_csv(
                 ImportRowError(
                     offset,
                     stem_preview,
-                    "question_type must be mcq, true_false, identification, or enumeration.",
+                    "question_type must be mcq (Multiple Choice only).",
                 )
             )
             continue
@@ -370,19 +365,6 @@ def import_questions_from_csv(
         status = (row.get("status") or Question.Status.DRAFT).strip().casefold()
         if status not in VALID_STATUSES:
             status = Question.Status.DRAFT
-
-        subject = getattr(topic, "subject", None)
-        if subject is not None:
-            from apps.questions.services import assert_subject_bank_has_capacity
-
-            try:
-                assert_subject_bank_has_capacity(subject, additional=1)
-            except ValueError as exc:
-                summary.skipped_invalid += 1
-                summary.row_errors.append(
-                    ImportRowError(offset, stem_preview, str(exc))
-                )
-                break
 
         question_payload = {
             "topic": topic,

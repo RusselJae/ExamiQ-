@@ -175,3 +175,80 @@ class StudentFacultyMessage(models.Model):
 
     def __str__(self) -> str:
         return f"Chat message by {self.author.email} in conversation {self.conversation_id}"
+
+
+class FacultyConversation(models.Model):
+    """One DM thread between two professors (unordered pair, low/high PK)."""
+
+    participant_low = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="faculty_conversations_as_low",
+        limit_choices_to={"role": User.Role.PROFESSOR},
+    )
+    participant_high = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="faculty_conversations_as_high",
+        limit_choices_to={"role": User.Role.PROFESSOR},
+    )
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Faculty Conversation"
+        verbose_name_plural = "Faculty Conversations"
+        ordering = ["-last_message_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participant_low", "participant_high"],
+                name="analytics_facultyconversation_unique_pair",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(participant_low_id__lt=models.F("participant_high_id")),
+                name="analytics_facultyconversation_low_lt_high",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Faculty chat {self.participant_low_id}–{self.participant_high_id}"
+        )
+
+    def other_participant(self, viewer: User) -> User:
+        if viewer.pk == self.participant_low_id:
+            return self.participant_high
+        return self.participant_low
+
+
+class FacultyMessage(models.Model):
+    """Message in a faculty-to-faculty conversation thread."""
+
+    conversation = models.ForeignKey(
+        FacultyConversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="faculty_peer_chat_messages",
+    )
+    body = models.TextField(blank=True)
+    image = models.ImageField(
+        upload_to="faculty_peer_chat/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Faculty Message"
+        verbose_name_plural = "Faculty Messages"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return (
+            f"Faculty message by {self.author.email} "
+            f"in conversation {self.conversation_id}"
+        )

@@ -3,6 +3,7 @@ from django.test import override_settings
 
 from apps.ai.prompts import (
     build_adaptive_feedback_prompt,
+    build_correct_adaptive_feedback_prompt,
     build_exam_feedback_batch_prompt,
     build_exam_feedback_single_prompt,
     build_explanation_generation_prompt,
@@ -52,20 +53,19 @@ class TestQuestionGenerationPrompt:
         assert "every subject" in user.lower() or "Applies to every subject" in user
         assert tokens > question_generation_max_tokens(3, "medium")
 
-    def test_identification_prompt_mentions_case_insensitive_grading(self, topic):
+    def test_non_mcq_generate_type_coerces_to_mcq(self, topic):
         system, user, _ = build_question_generation_prompt(
             topic, "medium", 2, question_type=Question.QuestionType.IDENTIFICATION
         )
-        assert "identification" in user.lower()
-        assert "capitalization" in user.lower() or "capitalization" in system.lower()
-        assert "expected_answer" in user
+        assert "multiple-choice" in user.lower() or "mcq" in user.lower()
+        assert "identification" not in user.lower() or "multiple-choice" in user.lower()
 
-    def test_true_false_prompt_schema(self, topic):
+    def test_true_false_generate_type_coerces_to_mcq(self, topic):
         _, user, _ = build_question_generation_prompt(
             topic, "easy", 1, question_type=Question.QuestionType.TRUE_FALSE
         )
-        assert "true or false" in user.lower()
-        assert "true_false" in user
+        assert "true_false" not in user or "multiple-choice" in user.lower()
+        assert "choices" in user.lower() or "correct_label" in user.lower()
 
 
 class TestLegacyTutorPrompts:
@@ -91,6 +91,10 @@ class TestLegacyTutorPrompts:
         assert "unrelated to math" in user.lower() or "outside this topic" in user.lower()
         assert '"steps"' in system or '"steps"' in user
         assert "$...$" in system or "KaTeX" in system
+        assert "3 to 6 steps" in system or "3–6 steps" in system or "3 to 6 steps" in user
+        assert "never include step numbers" in system.lower() or "never" in user.lower()
+        assert "highlight" in system.lower()
+        assert "check step" in system.lower() or "check when possible" in user.lower()
 
     def test_tutor_intro_format(self):
         _, user = build_tutor_intro_prompt("Calculus")
@@ -98,18 +102,56 @@ class TestLegacyTutorPrompts:
         assert "Lesson:" in user
         assert "Calculus" in user
 
-    def test_adaptive_feedback_includes_confidence(self):
+    def test_adaptive_feedback_is_structured_json(self):
         system, user = build_adaptive_feedback_prompt(
-            "geometry",
-            "What is the area of a circle?",
-            "B",
-            "A",
-            confidence="low",
-            patterns=["confuses radius and diameter"],
+            "Linear algebra",
+            "If matrix A has a determinant of 0, what can be concluded about A?",
+            "B: A is non-singular",
+            "D: A is singular",
+            confidence="high",
+            patterns=["confuses singular and non-singular"],
+            question_type="Multiple Choice",
+            choices=[
+                "A: A is invertible",
+                "B: A is non-singular",
+                "C: A has full rank",
+                "D: A is singular",
+            ],
+            difficulty="Intermediate",
         )
-        assert "Confidence Level: low" in user
-        assert "confuses radius" in user
+        assert "what_went_wrong" in user
+        assert "solution_steps" in user
+        assert "GOOD EXAMPLE" in user
+        assert "BAD EXAMPLE" in user
+        assert "Do not mention confidence" in user or "Do not comment on the student's confidence" in user
+        assert "Confidence Level:" not in user
+        assert "All options:" in user
+        assert "B: A is non-singular" in user
+        assert "JSON" in system or "json" in system.lower()
         assert "TOPIC RESTRICTION" in system or "topic" in system.lower()
+
+    def test_correct_adaptive_feedback_prompt(self):
+        system, user = build_correct_adaptive_feedback_prompt(
+            "Linear algebra",
+            "If matrix A has a determinant of 0, what can be concluded about A?",
+            "D: A is singular",
+            "D: A is singular",
+            confidence="high",
+            question_type="Multiple Choice",
+            choices=[
+                "A: A is invertible",
+                "B: A is non-singular",
+                "C: A has full rank",
+                "D: A is singular",
+            ],
+            difficulty="Intermediate",
+        )
+        assert "why_it_works" in user
+        assert "worked_example" in user
+        assert "GOOD EXAMPLE" in user
+        assert "Do not mention confidence" in user
+        assert "great job" in user.lower()  # in BAD EXAMPLE
+        assert "json" in system.lower()
 
 
 class TestExamFeedbackPrompts:
@@ -190,7 +232,9 @@ class TestTokenHelpers:
 
     def test_coerce_generate_question_type_defaults_to_mcq(self):
         assert coerce_generate_question_type(None) == Question.QuestionType.MCQ
-        assert coerce_generate_question_type("identification") == Question.QuestionType.IDENTIFICATION
+        assert coerce_generate_question_type("identification") == Question.QuestionType.MCQ
+        assert coerce_generate_question_type("true_false") == Question.QuestionType.MCQ
+        assert coerce_generate_question_type("mcq") == Question.QuestionType.MCQ
 
 
 @pytest.mark.django_db

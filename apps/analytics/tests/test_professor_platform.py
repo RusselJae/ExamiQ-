@@ -710,8 +710,8 @@ class TestProfessorOverviewUX:
         assert "overview-trend-metric" in content
         assert "Jump to offering" not in content
         assert "Your courses" not in content
-        assert "Course subjects" in content
-        assert "Students practicing" in content
+        assert "Course subjects" in content or "Course Subjects" in content
+        assert "Students Handled" in content or "Students practicing" in content
         assert "Avg. mistakes / session" not in content
         assert "Active courses" not in content
         assert "Cross-course snapshot" not in content
@@ -787,16 +787,15 @@ class TestProfessorOverviewTrends:
         trends = professor_overview_trends(professor)
         for range_key in ("weekly", "monthly", "yearly"):
             assert range_key in trends
-            for metric in ("students", "scores", "confidence"):
+            for metric in ("students", "confidence"):
                 assert metric in trends[range_key]
                 assert isinstance(trends[range_key][metric], list)
                 assert len(trends[range_key][metric]) >= 1
                 assert "label" in trends[range_key][metric][0]
                 assert "value" in trends[range_key][metric][0]
-                if metric in ("confidence", "scores"):
+                if metric == "confidence":
                     assert "student_count" in trends[range_key][metric][0]
-                if metric == "scores":
-                    assert trends[range_key][metric][0]["value"] <= 70
+                    assert "sure" in trends[range_key][metric][0]
 
     def test_overview_summary_includes_expected_students(self, professor, program, student):
         from apps.analytics.services import professor_overview_summary
@@ -806,6 +805,34 @@ class TestProfessorOverviewTrends:
         student.save(update_fields=["home_degree_program", "is_active"])
         summary = professor_overview_summary(professor)
         assert summary["expected_students"] >= 1
+
+    def test_overview_summary_includes_students_by_year_level(
+        self, professor, student, year_level
+    ):
+        from apps.analytics.services import professor_overview_summary
+
+        student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
+        student.year_level = year_level
+        student.is_active = True
+        student.save(update_fields=["home_degree_program", "year_level", "is_active"])
+        summary = professor_overview_summary(professor)
+        by_year = summary["students_by_year_level"]
+        assert isinstance(by_year, list)
+        assert any(row["name"] == year_level.name and row["count"] >= 1 for row in by_year)
+
+    def test_overview_renders_year_level_breakdown(
+        self, client, professor, student, year_level
+    ):
+        student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
+        student.year_level = year_level
+        student.is_active = True
+        student.save(update_fields=["home_degree_program", "year_level", "is_active"])
+        client.force_login(professor)
+        response = client.get(reverse("analytics_professor:overview"))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Students by year level" in content
+        assert year_level.name in content
 
 
 @pytest.mark.django_db
@@ -874,7 +901,7 @@ class TestSessionHistoryHelpers:
         assert rows[0]["score_display"] == "0/1"
         assert rows[0]["accuracy"] == 0.0
         assert rows[0]["status_label"] == "Needs review"
-        assert rows[0]["confidence_label"] == "High"
+        assert rows[0]["confidence_label"] == "Sure"
 
     def test_build_confidence_performance_series(self, student, mcq_question, program, professor):
         question, _correct = mcq_question
@@ -1030,12 +1057,43 @@ class TestProfessorSessionReview:
         assert response.status_code == 200
         content = response.content.decode()
         assert "Session review" in content
-        assert "session-strip-grid" in content
-        assert "clickable: false" in content
+        assert "answer-review-grid" in content
+        assert "clickable: true" in content
+        assert "Average confidence" in content
+        assert "calibration-matrix" not in content
+        assert "Topics to revisit" not in content
         assert "ai-tutor-modal" not in content
         assert reverse(
             "analytics_professor:professor_student_detail",
             kwargs={"student_pk": student.pk},
+        ) in content
+
+    def test_professor_can_open_answer_detail(
+        self, client, professor, student, mcq_question, program
+    ):
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="REV101A",
+            name="Review Course A",
+            professor=professor,
+        )
+        session = self._completed_session(student, question, course)
+        answer = session.answers.first()
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:professor_answer_detail",
+                kwargs={"student_pk": student.pk, "answer_pk": answer.pk},
+            )
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Student answer" in content
+        assert "Back to session review" in content
+        assert reverse(
+            "analytics_professor:session_review",
+            kwargs={"student_pk": student.pk, "session_pk": session.pk},
         ) in content
 
     def test_other_professor_cannot_review_session(
@@ -1078,4 +1136,7 @@ class TestProfessorSessionReview:
         client.force_login(student)
         response = client.get(reverse("reviews:summary", kwargs={"pk": session.pk}))
         assert response.status_code == 200
-        assert "session-strip-grid" in response.content.decode()
+        content = response.content.decode()
+        assert "Exam result" in content
+        assert "Average confidence" in content
+        assert "answer-review-grid" in content

@@ -53,6 +53,16 @@ class AIGenerationJob(models.Model):
         blank=True,
         related_name="generation_jobs",
     )
+    reference_stem = models.TextField(
+        blank=True,
+        default="",
+        help_text="Existing question stem when regenerating a high-mistake item.",
+    )
+    reference_question_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Source question pk when regenerating from the edit screen.",
+    )
     error_message = models.TextField(blank=True, default="")
     result = models.JSONField(default=dict, blank=True)
     created = models.DateTimeField(auto_now_add=True)

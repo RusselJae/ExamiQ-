@@ -35,6 +35,7 @@ from apps.core.filtering import (
 from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
 
 from apps.questions.forms import (
+    ExplanationStepFormSet,
     QuestionEditForm,
     SimplifiedQuestionChoiceFormSet,
     TopicForm,
@@ -51,6 +52,8 @@ from apps.questions.services import (
     create_question,
     deactivate_question,
     find_duplicate_question,
+    mistake_student_threshold,
+    question_feedback_summary,
 )
 from apps.users.assignment_services import (
     get_assigned_subjects_queryset,
@@ -78,7 +81,10 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         queryset = Question.objects.select_related(
             "topic", "topic__subject", "validated_by"
         ).annotate(
-            mistake_count=Count("mistake_records")
+            mistake_count=Count("mistake_records"),
+            distinct_student_mistake_count=Count(
+                "mistake_records__student_id", distinct=True
+            ),
         )
         if course_subject:
             queryset = queryset.filter(topic__subject=course_subject)
@@ -126,6 +132,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
 
         context["active_tab"] = "questions"
         context["ai_provider_label"] = get_ai_provider_label()
+        context["mistake_student_threshold"] = mistake_student_threshold()
         course_subject = _subject_for_course(self.course)
         q_labels = _question_q_labels_for_subject(course_subject)
         for question in context["questions"]:
@@ -239,16 +246,6 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
         if qtype != Question.QuestionType.MCQ:
             self.object.correct_answer = None
 
-        subject = _subject_for_course(self.course)
-        if subject is not None:
-            from apps.questions.services import assert_subject_bank_has_capacity
-
-            try:
-                assert_subject_bank_has_capacity(subject, additional=1)
-            except ValueError as exc:
-                messages.error(self.request, str(exc))
-                return self.form_invalid(form)
-
         self.object.save()
 
         if qtype == Question.QuestionType.MCQ:
@@ -320,10 +317,15 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
             context["choice_formset"] = SimplifiedQuestionChoiceFormSet(
                 self.request.POST, instance=self.object
             )
-
+            context["step_formset"] = ExplanationStepFormSet(
+                self.request.POST, instance=self.object, prefix="steps"
+            )
         else:
             context["choice_formset"] = SimplifiedQuestionChoiceFormSet(
                 instance=self.object
+            )
+            context["step_formset"] = ExplanationStepFormSet(
+                instance=self.object, prefix="steps"
             )
 
         context["active_tab"] = "questions"
@@ -332,7 +334,25 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
         context["is_edit"] = True
 
-        context["mistake_count"] = self.object.mistake_records.count()
+        from apps.questions.services import (
+            prefill_adaptive_explanation,
+            question_feedback_summary,
+        )
+
+        feedback = question_feedback_summary(self.object)
+        context["mistake_count"] = feedback["total_mistakes"]
+        context["distinct_student_mistake_count"] = feedback["unique_students"]
+        context["mistake_student_threshold"] = feedback["threshold"]
+        context["needs_revision"] = feedback["needs_revision"]
+        context["feedback_summary"] = feedback
+        context["adaptive_explanation"] = prefill_adaptive_explanation(self.object)
+        context["regenerate_url"] = reverse(
+            "analytics_professor:question_regenerate",
+            kwargs={
+                "course_pk": self.course.pk,
+                "question_pk": self.object.pk,
+            },
+        )
 
         return context
 
@@ -341,15 +361,23 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
         context = self.get_context_data()
 
         choice_formset = context["choice_formset"]
+        step_formset = context["step_formset"]
         qtype = form.cleaned_data.get("question_type") or Question.QuestionType.MCQ
 
         if qtype == Question.QuestionType.MCQ and not choice_formset.is_valid():
             return self.form_invalid(form)
+        if not step_formset.is_valid():
+            return self.form_invalid(form)
+
+        from apps.questions.services import adaptive_explanation_from_post
 
         self.object = form.save(commit=False)
         self.object.question_type = qtype
         if qtype != Question.QuestionType.MCQ:
             self.object.correct_answer = None
+        self.object.adaptive_explanation = adaptive_explanation_from_post(
+            self.request.POST
+        )
         self.object.save()
 
         if qtype == Question.QuestionType.MCQ:
@@ -358,9 +386,11 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
         else:
             self.object.choices.all().delete()
 
+        step_formset.instance = self.object
+        step_formset.save()
+
         from apps.core.audit import log_audit_event
         from apps.core.models import AuditLog
-        from apps.questions.services import publish_question_as_faculty
 
         log_audit_event(
             self.request.user,
@@ -370,21 +400,17 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
             target_id=self.object.pk,
         )
 
-        if self.request.POST.get("faculty_attest") == "1":
-            publish_question_as_faculty(
-                self.object,
-                self.request.user,
-                approve_explanations=self.request.POST.get("approve_explanations") == "1",
-            )
-            messages.success(self.request, "Question updated and published after faculty attestation.")
-        elif (
+        if (
             self.object.status == Question.Status.APPROVED
-            and self.request.POST.get("approve_explanations") == "1"
+            and self.object.explanation_steps.exists()
         ):
             from apps.questions.services import approve_question_explanations
 
             approve_question_explanations(self.object, self.request.user)
-            messages.success(self.request, "Question updated; explanations approved.")
+            messages.success(
+                self.request,
+                "Question updated; adaptive explanation and steps saved.",
+            )
         else:
             messages.success(self.request, "Question updated.")
 
@@ -530,11 +556,9 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
     def get_context_data(self):
         from apps.ai.material_services import ready_documents_for_course
-        from apps.questions.services import subject_bank_slots_remaining
 
         topics = topics_for_course_section(self.course, self.request.user)
         subject = _subject_for_course(self.course)
-        bank_slots = subject_bank_slots_remaining(subject) if subject else None
         return {
             "course": self.course,
             "active_tab": "questions",
@@ -542,18 +566,12 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             "topics": topics,
             "course_subject": subject,
             "learning_documents": ready_documents_for_course(self.course.pk),
-            "bank_slots_remaining": bank_slots,
             "difficulty_choices": [
                 (Question.Difficulty.EASY, "Beginner"),
                 (Question.Difficulty.MEDIUM, "Intermediate"),
                 (Question.Difficulty.HARD, "Advanced"),
             ],
-            "question_type_choices": [
-                (Question.QuestionType.MCQ, "Multiple Choice"),
-                (Question.QuestionType.TRUE_FALSE, "True or False"),
-                (Question.QuestionType.IDENTIFICATION, "Identification"),
-                (Question.QuestionType.ENUMERATION, "Enumeration"),
-            ],
+            "question_type_choices": list(Question.AUTHORABLE_QUESTION_TYPE_CHOICES),
             "ai_provider_label": get_ai_provider_label(),
         }
 
@@ -577,7 +595,6 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
         except (TypeError, ValueError):
             count = 0
 
-        subject = _subject_for_course(self.course)
         created = 0
         skipped_invalid = 0
         skipped_duplicates: list[str] = []
@@ -585,32 +602,10 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
         explanation_question_ids: list[int] = []
         published_ids: list[int] = []
 
-        from apps.questions.services import (
-            assert_subject_bank_has_capacity,
-            publish_question_as_faculty,
-            subject_bank_slots_remaining,
-        )
-
-        if subject is not None:
-            try:
-                # Pre-check remaining slots (actual creates may be fewer after validation).
-                remaining = subject_bank_slots_remaining(subject)
-                if remaining <= 0:
-                    messages.error(
-                        request,
-                        "This subject has reached the 100-question bank limit.",
-                    )
-                    return render(request, self.template_name, self.get_context_data())
-            except Exception:
-                pass
+        from apps.questions.services import publish_question_as_faculty
 
         valid_difficulties = {c.value for c in Question.Difficulty}
-        valid_types = {
-            Question.QuestionType.MCQ,
-            Question.QuestionType.TRUE_FALSE,
-            Question.QuestionType.IDENTIFICATION,
-            Question.QuestionType.ENUMERATION,
-        }
+        valid_types = set(Question.AUTHORABLE_QUESTION_TYPES)
 
         for index in range(count):
             stem = request.POST.get(f"stem_{index}", "").strip()
@@ -675,9 +670,6 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             steps_raw = request.POST.get(f"steps_{index}", "")
             solution_summary = request.POST.get(f"solution_summary_{index}", "")
             faculty_attest = request.POST.get(f"faculty_attest_{index}") == "1"
-            approve_explanations = (
-                request.POST.get(f"approve_explanations_{index}") == "1"
-            )
             # AI drafts defer explanations to a background job; do not invent
             # steps from concept_tag alone.
             if skip_ai_gate and not steps_raw.strip() and not solution_summary.strip():
@@ -705,13 +697,6 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 "explanation_status": "draft",
             }
 
-            if subject is not None:
-                try:
-                    assert_subject_bank_has_capacity(subject, additional=1)
-                except ValueError as exc:
-                    messages.error(request, str(exc))
-                    break
-
             question = create_question(
                 question_payload,
                 choices_data if question_type == Question.QuestionType.MCQ else [],
@@ -721,7 +706,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 publish_question_as_faculty(
                     question,
                     request.user,
-                    approve_explanations=approve_explanations or bool(steps),
+                    approve_explanations=True,
                 )
                 published_ids.append(question.pk)
             if skip_ai_gate and not steps:
@@ -917,16 +902,10 @@ class QuestionAddHubView(ProfessorRequiredMixin, View):
                     (Question.Difficulty.MEDIUM, "Intermediate"),
                     (Question.Difficulty.HARD, "Advanced"),
                 ],
-                "question_type_choices": [
-                    (Question.QuestionType.MCQ, "Multiple Choice"),
-                    (Question.QuestionType.TRUE_FALSE, "True or False"),
-                    (Question.QuestionType.IDENTIFICATION, "Identification"),
-                    (Question.QuestionType.ENUMERATION, "Enumeration"),
-                ],
+                "question_type_choices": list(Question.AUTHORABLE_QUESTION_TYPE_CHOICES),
                 "course_options": course_options,
                 "selected_course_pk": None,
                 "learning_documents": [],
-                "bank_slots_remaining": None,
                 "ai_provider_label": get_ai_provider_label(),
             },
         )
@@ -945,15 +924,17 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         from apps.ai.subject_relevance import assess_subject_relevance
 
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
-        question_type = request.POST.get("question_type", Question.QuestionType.MCQ)
+        question_type = Question.QuestionType.MCQ
         try:
             count = int(request.POST.get("count") or 3)
         except (TypeError, ValueError):
             count = 3
         from django.conf import settings as django_settings
 
-        max_count = getattr(django_settings, "AI_GENERATION_MAX_COUNT", 50)
-        count = max(1, min(count, max_count))
+        max_count = int(getattr(django_settings, "AI_GENERATION_MAX_COUNT", 50) or 50)
+        count = max(1, count)
+        if max_count > 0:
+            count = min(count, max_count)
 
         subject = _subject_for_course(self.course)
         if not subject:
@@ -1069,6 +1050,78 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         )
 
 
+class QuestionRegenerateView(ProfessorCourseMixin, View):
+    """Regenerate easier/clearer variations of a high-mistake question."""
+
+    def post(self, request, course_pk, question_pk):
+        from apps.ai.job_services import start_question_generation_job
+        from apps.ai.material_services import ready_documents_for_course
+        from apps.ai.retrieval import retrieve_material_for_topic
+        from apps.questions.services import (
+            mistake_student_threshold,
+            question_needs_revision,
+        )
+
+        question = get_object_or_404(
+            Question.objects.select_related("topic", "topic__subject"),
+            pk=question_pk,
+            topic__subject__program=self.course.program,
+        )
+        if not question_needs_revision(question):
+            return JsonResponse(
+                {
+                    "error": (
+                        f"Regenerate unlocks after "
+                        f"{mistake_student_threshold()} distinct students miss this question."
+                    )
+                },
+                status=400,
+            )
+
+        topic = question.topic
+        source_material = ""
+        document = None
+        for doc in ready_documents_for_course(self.course.pk):
+            source_material = retrieve_material_for_topic(document=doc, topic=topic)
+            if source_material:
+                document = doc
+                break
+        if not source_material:
+            source_material = "\n".join(
+                part
+                for part in [
+                    f"Concept: {question.concept_tag}" if question.concept_tag else "",
+                    f"Current question:\n{question.stem}",
+                ]
+                if part
+            )
+
+        job = start_question_generation_job(
+            user=request.user,
+            course_id=self.course.pk,
+            topic_id=topic.pk,
+            difficulty=question.difficulty,
+            count=3,
+            source_material=source_material,
+            learning_document=document,
+            question_type=question.question_type or Question.QuestionType.MCQ,
+            reference_stem=question.stem,
+            reference_question_id=question.pk,
+        )
+        return JsonResponse(
+            {
+                "job_id": job.pk,
+                "status": job.status,
+                "topic_id": topic.pk,
+                "status_url": reverse(
+                    "analytics_professor:question_ai_generate_status",
+                    kwargs={"course_pk": self.course.pk, "job_id": job.pk},
+                ),
+            },
+            status=202,
+        )
+
+
 class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
     """Poll job status; return JSON while running, HTML modal when finished."""
 
@@ -1139,16 +1192,8 @@ class QuestionAIValidateView(ProfessorCourseMixin, View):
         difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
         stem = request.POST.get("stem", "")
         correct_label = request.POST.get("correct_label", "A").upper()
-        question_type = request.POST.get("question_type", Question.QuestionType.MCQ)
+        question_type = Question.QuestionType.MCQ
         expected_answer = request.POST.get("expected_answer", "").strip()
-        valid_types = {
-            Question.QuestionType.MCQ,
-            Question.QuestionType.TRUE_FALSE,
-            Question.QuestionType.IDENTIFICATION,
-            Question.QuestionType.ENUMERATION,
-        }
-        if question_type not in valid_types:
-            question_type = Question.QuestionType.MCQ
         topic = (
             topics_for_course_section(self.course, request.user)
             .filter(pk=topic_id)

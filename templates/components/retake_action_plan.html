@@ -35,7 +35,11 @@
     </div>
     {% endif %}
     <div class="flex flex-wrap gap-2">
+        {% if session and session.pk %}
         <a href="{% url 'reviews:summary' session.pk %}?open_tutor=1" class="btn-secondary btn-primary-sm">AI Tutor</a>
+        {% else %}
+        <a href="{% url 'analytics_student:mistakes' %}" class="btn-secondary btn-primary-sm">Review mistakes</a>
+        {% endif %}
         {% if acknowledge_url %}
         <form method="post" action="{{ acknowledge_url }}">
             {% csrf_token %}

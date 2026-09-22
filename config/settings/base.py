@@ -75,19 +75,19 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    },
-    # Railway / PostgreSQL (commented out for local SQLite development):
     # "default": {
-    #     "ENGINE": "django.db.backends.postgresql",
-    #     "NAME": "railway",
-    #     "USER": "postgres",
-    #     "PASSWORD": "UFVvGfRrGljTCyhGWwcVbkjIcuVQkJfx",
-    #     "HOST": "tokaido.proxy.rlwy.net",
-    #     "PORT": "11132",
+    #     "ENGINE": "django.db.backends.sqlite3",
+    #     "NAME": BASE_DIR / "db.sqlite3",
     # },
+    # Railway / PostgreSQL (commented out for local SQLite development):
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "railway",
+        "USER": "postgres",
+        "PASSWORD": "eFpJQNkaXixKdZKyTIcjvRbBRFPXLFIy",
+        "HOST": "tokaido.proxy.rlwy.net",
+        "PORT": "11132",
+    },
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -172,12 +172,16 @@ GEMINI_FALLBACK_MODELS = env.list(
 GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=2048)
 AI_GENERATION_BATCH_SIZE = env.int("AI_GENERATION_BATCH_SIZE", default=5)
 AI_GENERATION_MAX_ATTEMPTS = env.int("AI_GENERATION_MAX_ATTEMPTS", default=3)
+# Legacy env keys retained so existing .env files keep loading; no longer enforced.
 AI_GENERATION_MAX_COUNT = env.int("AI_GENERATION_MAX_COUNT", default=50)
-MAX_QUESTIONS_PER_SUBJECT = env.int("MAX_QUESTIONS_PER_SUBJECT", default=100)
+MAX_QUESTIONS_PER_SUBJECT = env.int("MAX_QUESTIONS_PER_SUBJECT", default=0)
 VALIDATION_SESSION_DEFAULT_SIZE = env.int("VALIDATION_SESSION_DEFAULT_SIZE", default=15)
 VALIDATION_SESSION_MIN_SIZE = env.int("VALIDATION_SESSION_MIN_SIZE", default=10)
 VALIDATION_SESSION_MAX_SIZE = env.int("VALIDATION_SESSION_MAX_SIZE", default=20)
 RETAKE_ACTION_PLAN_THRESHOLD = env.int("RETAKE_ACTION_PLAN_THRESHOLD", default=3)
+QUESTION_MISTAKE_STUDENT_THRESHOLD = env.int(
+    "QUESTION_MISTAKE_STUDENT_THRESHOLD", default=15
+)
 OLLAMA_API_KEY = env("OLLAMA_API_KEY", default="")
 OLLAMA_BASE_URL = env("OLLAMA_BASE_URL", default="https://ollama.com")
 OLLAMA_MODEL = env("OLLAMA_MODEL", default="gpt-oss:120b")
