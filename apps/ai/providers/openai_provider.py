@@ -200,8 +200,19 @@ class OpenAIExplanationGenerator(ExplanationGenerator):
                         "solution_summary": str(
                             data.get("solution_summary") or ""
                         ).strip(),
+                        "what_went_wrong": str(
+                            data.get("what_went_wrong") or ""
+                        ).strip(),
+                        "why": str(data.get("why") or "").strip(),
+                        "quick_check": data.get("quick_check"),
+                        "remember": str(data.get("remember") or "").strip(),
+                        "worked_example": data.get("worked_example"),
                     }
-                    if payload["explanation_steps"] or payload["solution_summary"]:
+                    if (
+                        payload["explanation_steps"]
+                        or payload["solution_summary"]
+                        or payload["what_went_wrong"]
+                    ):
                         return payload
             except (json.JSONDecodeError, TypeError) as exc:
                 last_exc = exc
@@ -260,6 +271,7 @@ class OpenAIAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         difficulty: str = "",
         is_correct: bool = False,
         unanswered: bool = False,
+        shared_base: dict | None = None,
     ) -> str:
         from apps.ai.feedback_services import generate_validated_adaptive_feedback
 
@@ -283,6 +295,7 @@ class OpenAIAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
             difficulty=difficulty,
             is_correct=is_correct,
             unanswered=unanswered,
+            shared_base=shared_base,
         )
 
 

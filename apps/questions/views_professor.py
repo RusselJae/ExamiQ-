@@ -257,6 +257,10 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
         self.object.adaptive_explanation = adaptive_explanation_from_post(
             self.request.POST
         )
+        from apps.questions.services import adaptive_explanation_has_content
+
+        if adaptive_explanation_has_content(self.object.adaptive_explanation):
+            self.object.adaptive_explanation_source = "faculty"
 
         self.object.save()
 
@@ -384,6 +388,10 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
         self.object.adaptive_explanation = adaptive_explanation_from_post(
             self.request.POST
         )
+        from apps.questions.services import adaptive_explanation_has_content
+
+        if adaptive_explanation_has_content(self.object.adaptive_explanation):
+            self.object.adaptive_explanation_source = "faculty"
         self.object.save()
 
         if qtype == Question.QuestionType.MCQ:
@@ -718,6 +726,12 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 "proposed_by": request.user,
                 "explanation_status": "draft",
                 "adaptive_explanation": adaptive_explanation,
+                "adaptive_explanation_source": (
+                    "faculty" if adaptive_explanation and any(
+                        str(v or "").strip() for v in adaptive_explanation.values()
+                    )
+                    else ""
+                ),
             }
 
             question = create_question(

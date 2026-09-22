@@ -176,7 +176,12 @@ EXPLANATION_JSON_SCHEMA = (
     '"x^2 + 2x^2 = 3x^2",'
     '"Write the final answer: 3x^2 + x + 7"'
     '],'
-    '"solution_summary":"Final answer: B"}'
+    '"solution_summary":"Final answer: B",'
+    '"what_went_wrong":"Students often pick a distractor that looks similar but skips a key condition.",'
+    '"why":"The correct option follows from the definition / worked algebra above.",'
+    '"quick_check":"A tiny numeric check that confirms the correct option.",'
+    '"remember":"Check the defining condition first.",'
+    '"worked_example":"Optional tiny example, or null"}'
 )
 
 DIFFICULTY_GUIDANCE: dict[str, str] = {
@@ -603,7 +608,8 @@ def build_explanation_generation_prompt(question) -> tuple[str, str, int]:
     system = EXPLANATION_GENERATION_SYSTEM
 
     user_prompt = (
-        f"Write explanation_steps and solution_summary for this {qtype} question.\n"
+        f"Write explanation_steps, solution_summary, and a shared adaptive explanation "
+        f"for students who miss this {qtype} question.\n"
         f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
         f"Difficulty: {difficulty_label(question.difficulty)}\n"
         f"Stem: {question.stem}\n"
@@ -612,6 +618,9 @@ def build_explanation_generation_prompt(question) -> tuple[str, str, int]:
         f"{math_rules}"
         "Write a complete worked solution a student can study after a mistake — concrete, "
         "ordered, and thorough without repeating the question stem verbatim.\n"
+        "Also write ONE shared adaptive explanation used for any wrong MCQ choice "
+        "(what_went_wrong, why, quick_check, remember, worked_example). "
+        "Keep what_went_wrong about the common confusion, not one specific letter.\n"
         "Use full steps; escape quotes inside JSON strings.\n"
         f"JSON object schema:\n{EXPLANATION_JSON_SCHEMA}"
     )
@@ -802,8 +811,11 @@ def build_adaptive_feedback_prompt(
     choices: list[str] | None = None,
     difficulty: str = "",
     unanswered: bool = False,
+    shared_base: dict | None = None,
 ) -> tuple[str, str]:
     """Build structured adaptive feedback prompt (JSON fields for the tutor UI)."""
+    import json as _json
+
     pattern_text = format_pattern_text(patterns)
     choices_block = "\n".join(f"- {c}" for c in (choices or [])) or "(not provided)"
     # Confidence may be passed for logging; never instruct the model to comment on it.
@@ -820,6 +832,15 @@ def build_adaptive_feedback_prompt(
             "not from a wrong choice.\n"
         )
 
+    shared_block = ""
+    if shared_base and isinstance(shared_base, dict):
+        shared_block = (
+            "\n### SHARED BASE (revise for this student's choice; keep correct math)\n"
+            f"{_json.dumps(shared_base, ensure_ascii=False)}\n"
+            "- Prefer adapting what_went_wrong to their selected option.\n"
+            "- Keep why / remember / quick_check aligned with the shared base unless wrong.\n"
+        )
+
     user_prompt = f"""\
 ### RULES
 - Diagnose the specific mistake from the option they chose, not a generic "you mixed things up".
@@ -832,7 +853,7 @@ def build_adaptive_feedback_prompt(
 - Do NOT use "Step 1." / "Step 2." patterns in what_went_wrong, why, quick_check, or remember.
 - solution_steps: for calculation-heavy items, return an ordered list of detailed steps that solve THIS problem (Step-N wording is allowed only here). For purely conceptual items, return null.
 - Do NOT invent options that were not provided.
-{unanswered_note}
+{unanswered_note}{shared_block}
 ### JSON SCHEMA
 Return ONLY a JSON object with this shape:
 {ADAPTIVE_FEEDBACK_JSON_SCHEMA}

@@ -33,6 +33,7 @@ def generate_validated_adaptive_feedback(
     difficulty: str = "",
     is_correct: bool = False,
     unanswered: bool = False,
+    shared_base: dict | None = None,
 ) -> str:
     """
     Call ``chat_json(system, prompt, max_tokens) -> str|None`` up to twice.
@@ -64,6 +65,7 @@ def generate_validated_adaptive_feedback(
             choices=choices,
             difficulty=difficulty,
             unanswered=unanswered,
+            shared_base=shared_base,
         )
         validate = validate_adaptive_feedback
         to_json = adaptive_feedback_to_json
@@ -84,6 +86,13 @@ def generate_validated_adaptive_feedback(
             "Adaptive feedback attempt %s rejected by validator",
             attempt + 1,
         )
+
+    if shared_base and not is_correct:
+        from apps.ai.normalize import parse_adaptive_feedback
+
+        parsed = parse_adaptive_feedback(shared_base)
+        if parsed:
+            return to_json(parsed)
 
     return stub.generate(
         topic,

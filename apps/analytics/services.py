@@ -137,13 +137,19 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
             mistake_record.error_type = error_type
             mistake_record.save(update_fields=["error_type"])
 
-    from apps.questions.services import faculty_adaptive_feedback_json
+    from apps.questions.services import (
+        adaptive_explanation_has_content,
+        clean_adaptive_explanation,
+        faculty_adaptive_feedback_json,
+    )
 
-    faculty_feedback = faculty_adaptive_feedback_json(question)
-    if faculty_feedback:
-        mistake_record.ai_feedback = faculty_feedback
-        mistake_record.save(update_fields=["ai_feedback"])
-        return faculty_feedback
+    shared_base = clean_adaptive_explanation(
+        getattr(question, "adaptive_explanation", None)
+    )
+    has_shared = adaptive_explanation_has_content(shared_base)
+    faculty_source = (
+        getattr(question, "adaptive_explanation_source", "") or ""
+    ).strip() == "faculty"
 
     ai_feedback = ""
     try:
@@ -178,12 +184,17 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
                 difficulty=question.get_difficulty_display(),
                 is_correct=False,
                 unanswered=answer_is_unanswered(answer),
+                shared_base=shared_base if has_shared else None,
             )
             validated = validate_adaptive_feedback(ai_feedback)
             if validated:
                 ai_feedback = adaptive_feedback_to_json(validated)
     except Exception:
         ai_feedback = ""
+
+    if not ai_feedback and has_shared:
+        # Prefer shared base (faculty or AI) over empty failure.
+        ai_feedback = faculty_adaptive_feedback_json(question)
 
     if ai_feedback:
         from apps.ai.normalize import normalize_feedback_text, validate_adaptive_feedback
@@ -193,7 +204,28 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
             ai_feedback = normalize_feedback_text(ai_feedback)
         mistake_record.ai_feedback = ai_feedback
         mistake_record.save(update_fields=["ai_feedback"])
+    elif faculty_source and has_shared:
+        ai_feedback = faculty_adaptive_feedback_json(question)
+        if ai_feedback:
+            mistake_record.ai_feedback = ai_feedback
+            mistake_record.save(update_fields=["ai_feedback"])
     return ai_feedback
+
+
+def question_feedback_is_faculty_validated(question: Question) -> bool:
+    """True when shared adaptive explanation or steps were faculty-validated."""
+    from apps.questions.services import adaptive_explanation_has_content
+
+    source = (getattr(question, "adaptive_explanation_source", "") or "").strip()
+    if source == "faculty" and adaptive_explanation_has_content(
+        getattr(question, "adaptive_explanation", None)
+    ):
+        return True
+    if question.explanation_status == "faculty_approved":
+        return True
+    if question.status == Question.Status.APPROVED and question.validated_by_id:
+        return True
+    return False
 
 
 def _explanation_steps_text(question) -> str:
@@ -280,10 +312,6 @@ def get_answer_feedback_quick(answer) -> tuple[str, bool]:
     )
     from apps.questions.services import faculty_adaptive_feedback_json
 
-    faculty_feedback = faculty_adaptive_feedback_json(answer.question)
-    if faculty_feedback and not answer.is_correct:
-        return faculty_feedback, False
-
     mistake_record = _get_answer_mistake_record(answer)
     if mistake_record and mistake_record.ai_feedback:
         raw = mistake_record.ai_feedback
@@ -291,6 +319,11 @@ def get_answer_feedback_quick(answer) -> tuple[str, bool]:
         if validate_adaptive_feedback(raw):
             return raw, False
         return normalize_feedback_text(raw), False
+
+    shared = faculty_adaptive_feedback_json(answer.question)
+    if shared and not answer.is_correct:
+        # Shared base first; personalize asynchronously when AI is on.
+        return shared, bool(settings.AI_ENABLED)
 
     # Correct answers cache structured JSON on Answer.ai_feedback.
     cached = (getattr(answer, "ai_feedback", None) or "").strip()
@@ -318,11 +351,6 @@ def generate_answer_feedback(answer) -> str:
         validate_correct_adaptive_feedback,
     )
     from apps.analytics.confidence import answer_is_unanswered
-    from apps.questions.services import faculty_adaptive_feedback_json
-
-    faculty_feedback = faculty_adaptive_feedback_json(answer.question)
-    if faculty_feedback and not answer.is_correct:
-        return faculty_feedback
 
     mistake_record = _get_answer_mistake_record(answer)
     if mistake_record and mistake_record.ai_feedback:
@@ -348,6 +376,11 @@ def generate_answer_feedback(answer) -> str:
                 return normalize_feedback_text(ai_feedback)
         except Exception:
             pass
+        from apps.questions.services import faculty_adaptive_feedback_json
+
+        shared = faculty_adaptive_feedback_json(answer.question)
+        if shared:
+            return shared
         return _rule_based_answer_feedback(answer)
 
     from django.conf import settings

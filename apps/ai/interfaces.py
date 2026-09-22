@@ -100,6 +100,7 @@ class AdaptiveFeedbackGenerator:
         difficulty: str = "",
         is_correct: bool = False,
         unanswered: bool = False,
+        shared_base: dict | None = None,
     ) -> str:
         """Return validated adaptive feedback JSON (or plain fallback text)."""
         from apps.ai.normalize import (
@@ -124,6 +125,21 @@ class AdaptiveFeedbackGenerator:
             return correct_adaptive_feedback_to_json(payload)
 
         _ = unanswered
+        if shared_base and isinstance(shared_base, dict):
+            from apps.ai.normalize import parse_adaptive_feedback
+
+            parsed = parse_adaptive_feedback(shared_base)
+            if parsed:
+                user = (user_answer or "").strip()
+                wrong = parsed.get("what_went_wrong") or ""
+                if user and user.lower() not in wrong.lower():
+                    parsed["what_went_wrong"] = (
+                        f"You chose {user}. {wrong}".strip()
+                        if wrong
+                        else f"You chose {user}, which is not correct."
+                    )
+                return adaptive_feedback_to_json(parsed)
+
         payload = {
             "what_went_wrong": (
                 f"You chose '{user_answer}', which conflicts with the correct "

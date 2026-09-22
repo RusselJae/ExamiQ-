@@ -170,6 +170,11 @@ class TestExplanationGenerationJob:
         generator.generate.return_value = {
             "explanation_steps": ["Add both numbers.", "2 + 2 = 4"],
             "solution_summary": "The correct answer is A.",
+            "what_went_wrong": "Students often add across instead of combining like terms.",
+            "why": "Only like terms can be combined.",
+            "quick_check": "2x + 3x = 5x.",
+            "remember": "Combine like terms only.",
+            "worked_example": None,
         }
         job = _create_explanation_job(
             professor=professor,
@@ -186,13 +191,27 @@ class TestExplanationGenerationJob:
             )
         )
         assert steps == ["Add both numbers.", "2 + 2 = 4"]
+        question.refresh_from_db()
+        assert question.adaptive_explanation["remember"] == "Combine like terms only."
+        assert question.adaptive_explanation_source == "ai"
         assert generator.generate.call_count == 1
 
-    def test_skips_questions_that_already_have_steps(
+    def test_skips_when_steps_and_adaptive_already_exist(
         self, professor, course, topic, mcq_question
     ):
         question, _correct = mcq_question
         ExplanationStep.objects.create(question=question, order=1, content="Existing step.")
+        question.adaptive_explanation = {
+            "what_went_wrong": "Existing.",
+            "why": "Existing why.",
+            "quick_check": "",
+            "remember": "Existing hook.",
+            "worked_example": "",
+        }
+        question.adaptive_explanation_source = "faculty"
+        question.save(
+            update_fields=["adaptive_explanation", "adaptive_explanation_source"]
+        )
         generator = MagicMock()
         job = _create_explanation_job(
             professor=professor,
@@ -205,6 +224,8 @@ class TestExplanationGenerationJob:
         assert job.status == AIGenerationJob.Status.SUCCEEDED
         generator.generate.assert_not_called()
         assert ExplanationStep.objects.filter(question=question).count() == 1
+        question.refresh_from_db()
+        assert question.adaptive_explanation_source == "faculty"
 
     def test_retries_then_succeeds(self, professor, course, topic, mcq_question):
         question, _correct = mcq_question

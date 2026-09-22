@@ -4051,7 +4051,8 @@
 
 /* Question edit / batch draft tabs */
 .question-edit-shell {
-    max-width: 56rem;
+    max-width: none;
+    width: 100%;
 }
 
 .question-edit-tabs {
@@ -4096,6 +4097,30 @@
     position: sticky;
     bottom: 0.75rem;
     z-index: 5;
+}
+
+.ai-tutor-validation-badge {
+    display: inline-flex;
+    align-items: center;
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.ai-tutor-validation-badge--faculty {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
+}
+
+.ai-tutor-validation-badge--pending {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #64748b;
 }
 
 .profile-dropdown-trigger {

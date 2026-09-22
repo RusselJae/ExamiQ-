@@ -196,9 +196,15 @@ class Question(TimeStampedModel):
         blank=True,
         default=dict,
         help_text=(
-            "Faculty-curated adaptive explanation: what_went_wrong, why, "
-            "quick_check, remember, worked_example, solution_steps."
+            "Shared adaptive explanation for wrong answers: what_went_wrong, why, "
+            "quick_check, remember, worked_example."
         ),
+    )
+    adaptive_explanation_source = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Who last wrote adaptive_explanation: 'ai' or 'faculty'.",
     )
 
     class Meta:

@@ -590,6 +590,8 @@
         );
         var unansweredNote = document.getElementById("ai-tutor-unanswered-note");
         var structuredHost = document.getElementById("ai-tutor-structured-feedback");
+        var validationBadge = document.getElementById("ai-tutor-validation-badge");
+        var disclaimer = document.getElementById("ai-tutor-disclaimer");
         var workedHost = document.getElementById("ai-tutor-worked-example");
         var visualHost = document.getElementById("ai-tutor-solution-visual");
         var followHost = document.getElementById("ai-tutor-follow-ups");
@@ -635,6 +637,34 @@
 
         if (unansweredNote) {
             unansweredNote.hidden = !showUnansweredNote;
+        }
+
+        if (validationBadge) {
+            if (item.feedback_validated_by_faculty || item.steps_validated_by_faculty) {
+                validationBadge.hidden = false;
+                validationBadge.textContent = item.feedback_validated_by_faculty
+                    ? "Feedback validated by faculty"
+                    : "Solution validated by faculty";
+                validationBadge.className =
+                    "ai-tutor-validation-badge ai-tutor-validation-badge--faculty";
+            } else if (!item.is_correct) {
+                validationBadge.hidden = false;
+                validationBadge.textContent = "AI-assisted — pending faculty validation";
+                validationBadge.className =
+                    "ai-tutor-validation-badge ai-tutor-validation-badge--pending";
+            } else {
+                validationBadge.hidden = true;
+                validationBadge.textContent = "";
+            }
+        }
+        if (disclaimer) {
+            if (item.feedback_validated_by_faculty) {
+                disclaimer.textContent =
+                    "This feedback was validated by faculty. Still check your course materials if something looks off.";
+            } else {
+                disclaimer.textContent =
+                    "AI-generated feedback can contain errors. Check your course materials when unsure.";
+            }
         }
 
         if (compare) {

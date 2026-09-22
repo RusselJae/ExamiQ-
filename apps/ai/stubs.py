@@ -100,6 +100,16 @@ class StubExplanationGenerator(ExplanationGenerator):
                     f"Select choice {label or 'the correct option'} as the answer.",
                 ],
                 "solution_summary": f"The correct answer is {label}." if label else "Review the correct choice.",
+                "what_went_wrong": (
+                    "A common miss is choosing a distractor that looks familiar "
+                    "but skips a defining condition."
+                ),
+                "why": (
+                    f"The correct choice follows the core idea for {topic_name}."
+                ),
+                "quick_check": None,
+                "remember": "Check the defining condition first.",
+                "worked_example": None,
             }
         topic_name = question.topic.name if question.topic_id else "this topic"
         answer = (question.expected_answer or "").strip()
@@ -110,6 +120,13 @@ class StubExplanationGenerator(ExplanationGenerator):
                 f"The expected answer is: {answer or 'see solution'}.",
             ],
             "solution_summary": answer or "Review the expected answer.",
+            "what_went_wrong": (
+                "Students often stop at a partial recall instead of the full rule."
+            ),
+            "why": f"The expected answer matches the rule for {topic_name}.",
+            "quick_check": None,
+            "remember": "State the full rule before answering.",
+            "worked_example": None,
         }
 
 
@@ -134,10 +151,12 @@ class StubAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
         difficulty="",
         is_correct=False,
         unanswered=False,
+        shared_base=None,
     ):
         from apps.ai.normalize import (
             adaptive_feedback_to_json,
             correct_adaptive_feedback_to_json,
+            parse_adaptive_feedback,
         )
 
         type_hint = f" ({question_type})" if question_type else ""
@@ -159,6 +178,19 @@ class StubAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
             )
 
         _ = unanswered
+        if shared_base and isinstance(shared_base, dict):
+            parsed = parse_adaptive_feedback(shared_base)
+            if parsed:
+                user = (user_answer or "").strip()
+                wrong = parsed.get("what_went_wrong") or ""
+                if user and user.lower() not in wrong.lower():
+                    parsed["what_went_wrong"] = (
+                        f"You chose {user}. {wrong}".strip()
+                        if wrong
+                        else f"You chose {user}, which is not correct."
+                    )
+                return adaptive_feedback_to_json(parsed)
+
         return adaptive_feedback_to_json(
             {
                 "what_went_wrong": (

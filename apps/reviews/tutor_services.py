@@ -173,9 +173,11 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
         ).first()
         feedback, needs_ai = get_answer_feedback_quick(answer)
         from apps.ai.normalize import parse_any_adaptive_feedback
+        from apps.analytics.services import question_feedback_is_faculty_validated
 
         structured = parse_any_adaptive_feedback(feedback)
         unanswered = answer_is_unanswered(answer)
+        faculty_validated = question_feedback_is_faculty_validated(answer.question)
         items.append(
             {
                 "answer_id": answer.pk,
@@ -200,6 +202,10 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
                 "topic": answer.question.topic.name,
                 "difficulty": answer.question.get_difficulty_display(),
                 "message_count": conv.messages.count() if conv else 0,
+                "feedback_validated_by_faculty": faculty_validated,
+                "steps_validated_by_faculty": (
+                    answer.question.explanation_status == "faculty_approved"
+                ),
             }
         )
     return items

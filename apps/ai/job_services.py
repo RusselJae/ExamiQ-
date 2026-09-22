@@ -197,7 +197,12 @@ def run_question_generation_job(job_id: int) -> None:
 
 
 def _apply_explanation(question: Question, payload: dict) -> bool:
-    """Replace explanation steps on a question from generator payload."""
+    """Replace explanation steps and optionally seed shared adaptive explanation."""
+    from apps.questions.services import (
+        adaptive_explanation_has_content,
+        clean_adaptive_explanation,
+    )
+
     steps_raw = payload.get("explanation_steps") or []
     summary = (payload.get("solution_summary") or "").strip()
     steps: list[str] = []
@@ -208,20 +213,47 @@ def _apply_explanation(question: Question, payload: dict) -> bool:
                 steps.append(text)
     if not steps and summary:
         steps = [summary]
-    if not steps:
-        return False
 
-    ExplanationStep.objects.filter(question=question).delete()
-    ExplanationStep.objects.bulk_create(
-        [
-            ExplanationStep(question=question, order=index, content=content)
-            for index, content in enumerate(steps, start=1)
-        ]
-    )
+    applied = False
+    if steps and not ExplanationStep.objects.filter(question=question).exists():
+        ExplanationStep.objects.bulk_create(
+            [
+                ExplanationStep(question=question, order=index, content=content)
+                for index, content in enumerate(steps, start=1)
+            ]
+        )
+        applied = True
+    elif steps and ExplanationStep.objects.filter(question=question).exists():
+        applied = True
+
+    update_fields: list[str] = []
     if summary and not (question.concept_tag or "").strip():
         question.concept_tag = summary[:120]
-        question.save(update_fields=["concept_tag"])
-    return True
+        update_fields.append("concept_tag")
+
+    adaptive = clean_adaptive_explanation(
+        {
+            "what_went_wrong": payload.get("what_went_wrong"),
+            "why": payload.get("why"),
+            "quick_check": payload.get("quick_check"),
+            "remember": payload.get("remember"),
+            "worked_example": payload.get("worked_example"),
+        }
+    )
+    source = (getattr(question, "adaptive_explanation_source", "") or "").strip()
+    can_write_adaptive = source != "faculty" and (
+        not adaptive_explanation_has_content(question.adaptive_explanation)
+    )
+    if adaptive_explanation_has_content(adaptive) and can_write_adaptive:
+        question.adaptive_explanation = adaptive
+        question.adaptive_explanation_source = "ai"
+        update_fields.extend(["adaptive_explanation", "adaptive_explanation_source"])
+        applied = True
+
+    if update_fields:
+        question.save(update_fields=list(dict.fromkeys(update_fields)))
+
+    return applied
 
 
 def run_explanation_generation_job(job_id: int) -> None:
@@ -254,8 +286,11 @@ def run_explanation_generation_job(job_id: int) -> None:
                 failed_ids.append(question_id)
                 continue
             if ExplanationStep.objects.filter(question_id=question_id).exists():
-                completed_ids.append(question_id)
-                continue
+                from apps.questions.services import adaptive_explanation_has_content
+
+                if adaptive_explanation_has_content(question.adaptive_explanation):
+                    completed_ids.append(question_id)
+                    continue
 
             attempt = 0
             last_exc: AIServiceUnavailableError | None = None
