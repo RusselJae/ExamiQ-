@@ -160,7 +160,7 @@ class TestCourseTopicScope:
 
 @pytest.mark.django_db
 class TestProgramExamSetupGating:
-    def test_subjects_available_respects_program_selection(
+    def test_subjects_available_returns_year_matched_subjects(
         self, student, bsed_program, year_level
     ):
         make_bsed_student(student, bsed_program=bsed_program)
@@ -170,63 +170,40 @@ class TestProgramExamSetupGating:
         Subject.objects.create(
             program=bsed_program, code="G2", name="Two", year_level=year_level, semester=1
         )
+        # Faculty allowlist no longer gates student start — year match does.
         setup = get_or_create_program_exam_setup(bsed_program)
-        setup.is_enabled = True
-        setup.save(update_fields=["is_enabled"])
         setup.subjects.set([s1])
 
         codes = set(subjects_available_for_student(student).values_list("code", flat=True))
-        assert codes == {"G1"}
-        assert "G2" not in codes
-
-        setup.subjects.clear()
-        codes = set(subjects_available_for_student(student).values_list("code", flat=True))
         assert {"G1", "G2"}.issubset(codes)
 
-    def test_disabled_program_setup_blocks_eligibility(
+    def test_disabled_program_setup_does_not_block_eligibility(
         self, student, bsed_program, year_level
     ):
         make_bsed_student(student, bsed_program=bsed_program)
+        Subject.objects.create(
+            program=bsed_program,
+            code="OPEN-ELIG",
+            name="Open",
+            year_level=year_level,
+            semester=1,
+        )
         setup = get_or_create_program_exam_setup(bsed_program)
         setup.is_enabled = False
         setup.save(update_fields=["is_enabled"])
+        # Without approved questions, eligibility fails for no_questions — not disabled.
         result = student_setup_eligibility(student)
-        assert result["eligible"] is False
-        assert result["reason"] == "disabled"
-        assert subjects_available_for_student(student).count() == 0
+        assert result.get("reason") != "disabled"
+        assert subjects_available_for_student(student).count() >= 1
 
-    def test_program_exam_setup_view_saves(
+    def test_program_exam_setup_view_redirects_to_overview(
         self, client, professor, bsed_program, year_level
     ):
-        s1 = Subject.objects.create(
-            program=bsed_program, code="S1", name="Sub1", year_level=year_level, semester=1
-        )
-        s2 = Subject.objects.create(
-            program=bsed_program, code="S2", name="Sub2", year_level=year_level, semester=1
-        )
         client.force_login(professor)
         url = reverse("analytics_professor:exam_setup_hub")
         response = client.get(url)
-        assert response.status_code == 200
-        content = response.content.decode()
-        assert "subject-timer-table" in content
-        assert "Course subjects" in content
-        assert "selected subjects" in content.lower()
-
-        response = client.post(
-            url,
-            {
-                "default_seconds": 40,
-                "subjects": [s1.pk, s2.pk],
-                f"timer_{s1.pk}": 35,
-                f"timer_{s2.pk}": 45,
-            },
-        )
         assert response.status_code == 302
-        setup = ProgramExamSetup.objects.get(program=bsed_program)
-        assert setup.is_enabled is True
-        assert setup.seconds_per_question == 40
-        assert set(setup.subjects.values_list("pk", flat=True)) == {s1.pk, s2.pk}
+        assert response.url == reverse("analytics_professor:overview")
 
     def test_sync_program_subject_timers_sets_per_subject_seconds(
         self, bsed_program, year_level

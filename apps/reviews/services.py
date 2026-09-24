@@ -34,12 +34,12 @@ def start_review_session(
     """Create a new active review session."""
     if review_window:
         mode = mode or review_window.mode
-        seconds_per_question = seconds_per_question or review_window.seconds_per_question
+        if seconds_per_question is None:
+            seconds_per_question = review_window.seconds_per_question
         duration_minutes = review_window.duration_minutes
     mode = mode or ReviewSession.Mode.TIMED_EXAM
-    seconds_per_question = seconds_per_question or getattr(
-        settings, "DEFAULT_SECONDS_PER_QUESTION", 30
-    )
+    if seconds_per_question is None:
+        seconds_per_question = getattr(settings, "DEFAULT_SECONDS_PER_QUESTION", 30)
     queue = list(question_queue or [])
     if queue:
         planned_question_count = len(queue)

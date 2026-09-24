@@ -69,6 +69,37 @@ class ReviewSetupForm(forms.Form):
         initial=Question.Difficulty.EASY,
         widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}),
     )
+    seconds_per_question = forms.IntegerField(
+        min_value=0,
+        max_value=120,
+        initial=15,
+        label="Seconds per question",
+        help_text="How long you get on each question (10–120 seconds), or 0 for no timer.",
+        widget=forms.NumberInput(
+            attrs={
+                "class": FORM_INPUT_CLASS,
+                "id": "id_setup_seconds",
+                "min": "0",
+                "max": "120",
+                "step": "1",
+                "inputmode": "numeric",
+            }
+        ),
+    )
+    questions_per_subject = forms.IntegerField(
+        min_value=1,
+        max_value=20,
+        initial=3,
+        required=False,
+        label="Questions per subject",
+        widget=forms.NumberInput(
+            attrs={
+                "id": "id_questions_per_subject",
+                "min": "1",
+                "max": "20",
+            }
+        ),
+    )
     question_type = forms.MultipleChoiceField(
         choices=Question.AUTHORABLE_QUESTION_TYPE_CHOICES,
         initial=[Question.QuestionType.MCQ],
@@ -135,11 +166,22 @@ class ReviewSetupForm(forms.Form):
         difficulty = cleaned.get("difficulty")
         cleaned["question_type"] = [Question.QuestionType.MCQ]
         question_types = cleaned["question_type"]
+        seconds = cleaned.get("seconds_per_question")
+        if seconds is None:
+            seconds = 15
+        seconds = int(seconds)
         if not difficulty:
             return cleaned
         if not question_types:
             self.add_error("question_type", "Select at least one question type.")
             return cleaned
+        if seconds != 0 and not 10 <= seconds <= 120:
+            self.add_error(
+                "seconds_per_question",
+                "Timer must be 0 (no timer) or between 10 and 120 seconds.",
+            )
+            return cleaned
+        cleaned["seconds_per_question"] = seconds
 
         from apps.questions.services import count_available_questions_for_subject
 
@@ -174,8 +216,14 @@ class ReviewSetupForm(forms.Form):
             )
 
         try:
+            questions_per_subj = cleaned.get("questions_per_subject") or 3
             self._exam_target = build_multi_subject_exam_target(
-                self.student, subjects, difficulty, question_types=question_types
+                self.student,
+                subjects,
+                difficulty,
+                question_types=question_types,
+                seconds_per_question=cleaned["seconds_per_question"],
+                questions_per_subject=questions_per_subj,
             )
         except ValueError as exc:
             raise forms.ValidationError(str(exc)) from exc

@@ -46,15 +46,23 @@ document.addEventListener("DOMContentLoaded", function() {
         pageSize: 10,
         defaultMetric: "confidence",
         metricLabels: {
-            confidence: "Confidence share (%)",
-            mistakes: "Mistakes per session",
+            confidence: "Sure vs correct (%)",
+            mistakes: "Times incorrect",
+        },
+        titleByMetric: {
+            mistakes: {
+                title: "Mistakes per question",
+                subtitle: "Questions this student answered incorrectly.",
+            },
         },
         pageLabel: "student-detail-trends-page-label",
         prevBtn: "student-detail-trends-prev",
         nextBtn: "student-detail-trends-next",
         emptyEl: "student-detail-trends-empty",
         wrapEl: "student-detail-trends-wrap",
-        insightEl: "student-detail-trends-insight",
+        gapStatusEl: "student-detail-gap-status",
+        titleEl: "student-detail-trends-title",
+        subtitleEl: "student-detail-trends-subtitle",
     });
 });
 </script>

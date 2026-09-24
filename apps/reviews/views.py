@@ -190,16 +190,34 @@ class ReviewSetupView(StudentRequiredMixin, View):
         year_subjects = list(subjects_available_for_student(self.request.user))
         other_subjects = list(other_subjects_available_for_student(self.request.user))
 
-        from apps.reviews.exam_setup_services import (
-            MIN_QUESTIONS_PER_SUBJECT,
-            MAX_TOTAL_QUESTIONS,
-            get_or_create_program_exam_setup,
-        )
+        from apps.reviews.exam_setup_services import MAX_TOTAL_QUESTIONS
 
-        try:
-            estimate_seconds = get_or_create_program_exam_setup().seconds_per_question or 30
-        except ValueError:
-            estimate_seconds = 30
+        if form.is_bound and form.data.get("seconds_per_question") not in (None, ""):
+            try:
+                estimate_seconds = int(form.data.get("seconds_per_question"))
+            except (TypeError, ValueError):
+                estimate_seconds = 15
+        elif (
+            hasattr(form, "cleaned_data")
+            and form.cleaned_data.get("seconds_per_question") is not None
+        ):
+            estimate_seconds = int(form.cleaned_data["seconds_per_question"])
+        else:
+            estimate_seconds = 15
+        if estimate_seconds != 0 and not 10 <= estimate_seconds <= 120:
+            estimate_seconds = 15
+
+        if form.is_bound and form.data.get("questions_per_subject"):
+            try:
+                questions_per_subject = int(form.data.get("questions_per_subject"))
+            except (TypeError, ValueError):
+                questions_per_subject = 3
+        elif hasattr(form, "cleaned_data") and form.cleaned_data.get("questions_per_subject"):
+            questions_per_subject = int(form.cleaned_data["questions_per_subject"])
+        else:
+            questions_per_subject = 3
+        if not 1 <= questions_per_subject <= 20:
+            questions_per_subject = 3
 
         selected_extra_ids: set[int] = set()
         if form.is_bound:
@@ -226,11 +244,14 @@ class ReviewSetupView(StudentRequiredMixin, View):
         subject_count = len(year_subjects) + len(selected_extra_ids)
         estimate_questions = min(
             MAX_TOTAL_QUESTIONS,
-            max(subject_count, 1) * MIN_QUESTIONS_PER_SUBJECT,
+            max(subject_count, 1) * questions_per_subject,
         )
-        estimate_minutes = max(
-            1, (estimate_questions * estimate_seconds + 59) // 60
-        )
+        if estimate_seconds == 0:
+            estimate_minutes = 0
+        else:
+            estimate_minutes = max(
+                1, (estimate_questions * estimate_seconds + 59) // 60
+            )
 
         return {
             "form": form,
@@ -238,11 +259,13 @@ class ReviewSetupView(StudentRequiredMixin, View):
             "no_exams_available": no_exams,
             "year_subjects": year_subjects,
             "other_subjects": other_subjects,
+            "total_subjects_count": len(year_subjects) + len(other_subjects),
             "selected_extra_ids": selected_extra_ids,
             "show_extra_subjects": show_extra_subjects,
             "selected_question_types": selected_question_types,
             "selected_difficulty": selected_difficulty,
-            "estimate_min_per_subject": MIN_QUESTIONS_PER_SUBJECT,
+            "estimate_min_per_subject": questions_per_subject,
+            "questions_per_subject": questions_per_subject,
             "estimate_seconds": estimate_seconds,
             "estimate_questions": estimate_questions,
             "estimate_minutes": estimate_minutes,

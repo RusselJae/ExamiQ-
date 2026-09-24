@@ -80,16 +80,6 @@ def student_setup_eligibility(student: User) -> dict:
                 "your profile before starting an exam."
             ),
         }
-    try:
-        setup = get_or_create_program_exam_setup()
-    except ValueError:
-        setup = None
-    if setup is not None and not setup.is_enabled:
-        return {
-            "eligible": False,
-            "reason": "disabled",
-            "message": "Exams are currently disabled by faculty. Check back later.",
-        }
     year_subjects = subjects_available_for_student(student)
     if not year_subjects.exists():
         return {
@@ -129,22 +119,12 @@ def get_or_create_section_exam_setup(section) -> SectionExamSetup:
 
 
 def _program_exam_subject_base():
-    """BSED Math subjects allowed by program exam setup (all years)."""
-    base = (
+    """BSED Math subjects open for student exams (all years)."""
+    return (
         Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
         .select_related("year_level", "program")
         .order_by("year_level__order", "semester", "code")
     )
-    try:
-        setup = get_or_create_program_exam_setup()
-    except ValueError:
-        return base
-    if not setup.is_enabled:
-        return base.none()
-    selected_ids = list(setup.subjects.values_list("pk", flat=True))
-    if selected_ids:
-        return base.filter(pk__in=selected_ids)
-    return base
 
 
 def subjects_available_for_student(student: User | None = None):
@@ -354,6 +334,8 @@ def build_multi_subject_exam_target(
     difficulty: str,
     *,
     question_types: list[str] | None = None,
+    seconds_per_question: int | None = None,
+    questions_per_subject: int | None = None,
 ) -> dict:
     """Build a shuffled question queue across multiple subjects.
 
@@ -413,29 +395,44 @@ def build_multi_subject_exam_target(
         )
         for s in subject_list
     ]
-    floors = [min(MIN_QUESTIONS_PER_SUBJECT, a) for a in avail]
 
-    if len(subject_list) == 1:
-        cap = min(avail[0], MAX_QUESTIONS_SINGLE_SUBJECT)
-        per_subject = [random.randint(floors[0], cap)]
-    else:
+    if questions_per_subject is not None:
+        target_q = max(1, min(int(questions_per_subject), MAX_QUESTIONS_SINGLE_SUBJECT))
         caps = [min(a, MAX_QUESTIONS_SINGLE_SUBJECT) for a in avail]
-        if sum(caps) <= MAX_TOTAL_QUESTIONS:
-            per_subject = [random.randint(floors[i], caps[i]) for i in range(len(subject_list))]
+        per_subject = [min(target_q, caps[i]) for i in range(len(subject_list))]
+        total_q = sum(per_subject)
+        if total_q > MAX_TOTAL_QUESTIONS:
+            budget = MAX_TOTAL_QUESTIONS
+            scaled = []
+            for count in per_subject:
+                take = min(count, budget)
+                scaled.append(take)
+                budget -= take
+            per_subject = scaled
+    else:
+        floors = [min(MIN_QUESTIONS_PER_SUBJECT, a) for a in avail]
+
+        if len(subject_list) == 1:
+            cap = min(avail[0], MAX_QUESTIONS_SINGLE_SUBJECT)
+            per_subject = [random.randint(floors[0], cap)]
         else:
-            per_subject = list(floors)
-            budget = MAX_TOTAL_QUESTIONS - sum(floors)
-            order = list(range(len(subject_list)))
-            random.shuffle(order)
-            idx = 0
-            while budget > 0:
-                i = order[idx % len(order)]
-                if per_subject[i] < caps[i]:
-                    per_subject[i] += 1
-                    budget -= 1
-                if all(per_subject[j] >= caps[j] for j in range(len(subject_list))):
-                    break
-                idx += 1
+            caps = [min(a, MAX_QUESTIONS_SINGLE_SUBJECT) for a in avail]
+            if sum(caps) <= MAX_TOTAL_QUESTIONS:
+                per_subject = [random.randint(floors[i], caps[i]) for i in range(len(subject_list))]
+            else:
+                per_subject = list(floors)
+                budget = MAX_TOTAL_QUESTIONS - sum(floors)
+                order = list(range(len(subject_list)))
+                random.shuffle(order)
+                idx = 0
+                while budget > 0:
+                    i = order[idx % len(order)]
+                    if per_subject[i] < caps[i]:
+                        per_subject[i] += 1
+                        budget -= 1
+                    if all(per_subject[j] >= caps[j] for j in range(len(subject_list))):
+                        break
+                    idx += 1
 
     queue: list[int] = []
     primary_topic = None
@@ -461,8 +458,15 @@ def build_multi_subject_exam_target(
 
     first_subject = subject_list[0]
     course = course_for_subject(first_subject)
-    seconds = exam_seconds_per_question(course)
-    duration_minutes = max(1, math.ceil(len(queue) * seconds / 60))
+    if seconds_per_question is not None:
+        seconds = int(seconds_per_question)
+        if seconds != 0 and not 10 <= seconds <= 120:
+            seconds = exam_seconds_per_question(course)
+    else:
+        seconds = exam_seconds_per_question(course)
+    duration_minutes = (
+        0 if seconds == 0 else max(1, math.ceil(len(queue) * seconds / 60))
+    )
 
     if primary_topic is None:
         primary_topic = topics_for_open_subject(first_subject).first()

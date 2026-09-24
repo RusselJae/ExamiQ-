@@ -9,7 +9,7 @@
 {% include "components/page_header.html" with title="Start a timed exam" subtitle="Choose course subjects for your year (and optionally other years), then pick difficulty." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
-<div class="bento-card p-6 mb-6">
+<div class="bento-card p-6 mb-4">
     <p class="text-examiq-slate">{{ setup_eligibility.message }}</p>
 </div>
 {% endif %}
@@ -23,194 +23,299 @@
       id="review-setup-form"
       class="exam-setup-form"
       data-year-count="{{ year_subjects|length }}"
-      data-min-questions="{{ estimate_min_per_subject }}"
-      data-seconds="{{ estimate_seconds }}"
+      data-other-count="{{ other_subjects|length }}"
+      data-total-count="{{ total_subjects_count }}"
       data-max-questions="{{ max_total_questions }}">
-    {% csrf_token %}
-    {{ form.pre_session_confidence.as_hidden }}
-    {{ form.session_goal.as_hidden }}
+        {% csrf_token %}
+        {{ form.pre_session_confidence.as_hidden }}
+        {{ form.session_goal.as_hidden }}
+        <input type="hidden" name="question_type" value="mcq" id="id_setup_question_type">
 
-    {% if form.non_field_errors %}
-    <div class="student-setup-empty mb-4">{{ form.non_field_errors }}</div>
-    {% endif %}
-
-    <div class="exam-setup-how" role="note">
-        <p class="exam-setup-how__title">How this works</p>
-        <div class="exam-setup-how__columns">
-            <div class="exam-setup-how__col">
-                <p class="exam-setup-how__col-title">Before you start</p>
-                <ol class="exam-setup-how__list">
-                    <li>
-                        <span class="exam-setup-how__num" aria-hidden="true">1</span>
-                        <span>Select course subjects for your year (all selected by default).</span>
-                    </li>
-                    <li>
-                        <span class="exam-setup-how__num" aria-hidden="true">2</span>
-                        <span>Optionally add subjects from other years.</span>
-                    </li>
-                    <li>
-                        <span class="exam-setup-how__num" aria-hidden="true">3</span>
-                        <span>About 3+ questions per subject (randomized), up to {{ max_total_questions }} total — timed.</span>
-                    </li>
-                </ol>
-            </div>
-            <div class="exam-setup-how__col">
-                <p class="exam-setup-how__col-title">While answering</p>
-                <ol class="exam-setup-how__list">
-                    <li>
-                        <span class="exam-setup-how__num" aria-hidden="true">1</span>
-                        <span>Each question is timed — submit before the clock runs out.</span>
-                    </li>
-                    <li>
-                        <span class="exam-setup-how__num" aria-hidden="true">2</span>
-                        <span>Choose one answer only (MCQ) or enter a single numeric response.</span>
-                    </li>
-                    <li>
-                        <span class="exam-setup-how__num" aria-hidden="true">3</span>
-                        <span>Rate confidence with Guessing / Not sure / Sure after you answer — it doesn’t use exam time.</span>
-                    </li>
-                </ol>
-            </div>
-        </div>
-    </div>
-
-    <section class="exam-setup-section" aria-labelledby="year-subjects-heading">
-        <div class="exam-setup-section__head">
-            <h2 id="year-subjects-heading" class="exam-setup-section__title">Course subjects for your year</h2>
-            <span class="exam-setup-section__meta" data-selected-count>{{ year_subjects|length }} selected</span>
-        </div>
-
-        {% if year_subjects %}
-        <div class="exam-subject-grid" id="year-subjects-grid">
-            {% for subject in year_subjects %}
-            <label class="exam-subject-card is-selected" data-year-subject-card>
-                <input type="checkbox"
-                       class="sr-only"
-                       name="year_subjects"
-                       value="{{ subject.pk }}"
-                       data-year-subject
-                       checked>
-                <span class="exam-subject-card__check" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>
-                </span>
-                <span class="exam-subject-card__text">
-                    <span class="exam-subject-card__code">{{ subject.code }}</span>
-                    <span class="exam-subject-card__name">{{ subject.name }}</span>
-                </span>
-            </label>
-            {% endfor %}
-        </div>
-        {% if form.year_subjects.errors %}
-        <p class="student-setup-field__error">{{ form.year_subjects.errors.0 }}</p>
-        {% endif %}
-        {% else %}
-        <p class="student-setup-field__error">No course subjects are configured for your year level.</p>
+        {% if form.non_field_errors %}
+        <div class="student-setup-empty mb-2">{{ form.non_field_errors }}</div>
         {% endif %}
 
-        {% if other_subjects %}
-        <div class="exam-setup-extra" data-extra-subjects>
-            <div class="exam-setup-extra__actions">
-                <button type="button"
-                        class="exam-setup-add-btn"
-                        id="toggle-extra-subjects-btn"
-                        aria-expanded="false"
-                        aria-controls="extra-subjects-panel">
-                    <span aria-hidden="true">+</span> Add subjects from other years
-                </button>
-                <button type="button"
-                        class="exam-setup-select-all"
-                        data-select-all-extras>
-                    Select all
-                </button>
+        <!-- How this works card -->
+        <div class="exam-setup-how" role="note">
+            <h2 class="exam-setup-how__title">How this works</h2>
+            <div class="exam-setup-how__columns">
+                <div class="exam-setup-how__col">
+                    <h3 class="exam-setup-how__col-title">BEFORE YOU START</h3>
+                    <ol class="exam-setup-how__list">
+                        <li>
+                            <span class="exam-setup-how__num" aria-hidden="true">1</span>
+                            <span>Select course subjects for your year (all selected by default)</span>
+                        </li>
+                        <li>
+                            <span class="exam-setup-how__num" aria-hidden="true">2</span>
+                            <span>Optionally add subjects from other years</span>
+                        </li>
+                        <li>
+                            <span class="exam-setup-how__num" aria-hidden="true">3</span>
+                            <span>Choose 5+ questions per subject (randomized), up to {{ max_total_questions }} total</span>
+                        </li>
+                    </ol>
+                </div>
+                <div class="exam-setup-how__col">
+                    <h3 class="exam-setup-how__col-title">WHILE ANSWERING</h3>
+                    <ol class="exam-setup-how__list">
+                        <li>
+                            <span class="exam-setup-how__num" aria-hidden="true">1</span>
+                            <span>Each question can be timed (or Off for no timer) — submit before the clock runs out when a timer is on</span>
+                        </li>
+                        <li>
+                            <span class="exam-setup-how__num" aria-hidden="true">2</span>
+                            <span>Choose one answer (MCQ) or enter a single numeric response</span>
+                        </li>
+                        <li>
+                            <span class="exam-setup-how__num" aria-hidden="true">3</span>
+                            <span>Rate confidence: Guessing / Not sure / Sure after you answer — it doesn't score</span>
+                        </li>
+                    </ol>
+                </div>
             </div>
+        </div>
 
-            <div id="extra-subjects-panel"
-                 class="exam-setup-extra__panel{% if not show_extra_subjects %} hidden{% endif %}"
-                 {% if not show_extra_subjects %}hidden{% endif %}>
-                <div class="exam-setup-extra__panel-head">
-                    <p class="exam-setup-extra__hint">Optional. Selected subjects are added to your year-level set.</p>
-                    <button type="button"
-                            class="exam-setup-select-all"
-                            data-select-all-extras>
-                        Select all
-                    </button>
+        <!-- Main 2-Column Section -->
+        <div class="exam-setup-layout">
+            <!-- Left Column: Subjects Table -->
+            <div class="exam-setup-card exam-setup-card--table">
+                <h2 class="sr-only">Course subjects for your year</h2>
+                <!-- Toolbar with tabs and search -->
+                <div class="exam-table-toolbar">
+                    <div class="exam-tabs" role="tablist" aria-label="Subject filter tabs">
+                        <button type="button"
+                                class="exam-tab is-active"
+                                data-tab="year"
+                                role="tab"
+                                aria-selected="true">
+                            Your year · {{ year_subjects|length }}
+                        </button>
+                        <button type="button"
+                                class="exam-tab"
+                                data-tab="other"
+                                role="tab"
+                                aria-selected="false">
+                            Other years · {{ other_subjects|length }}
+                        </button>
+                        <button type="button"
+                                class="exam-tab"
+                                data-tab="all"
+                                role="tab"
+                                aria-selected="false">
+                            All · {{ total_subjects_count }}
+                        </button>
+                    </div>
+
+                    <div class="exam-search-box">
+                        <input type="text"
+                               id="subject-search-input"
+                               class="exam-search-input"
+                               placeholder="Search subjects..."
+                               aria-label="Search subjects">
+                        <button type="button"
+                                id="subject-search-clear"
+                                class="exam-clear-btn"
+                                aria-label="Clear search">Clear</button>
+                    </div>
                 </div>
-                <div class="exam-subject-grid exam-subject-grid--extra" data-extra-subject-grid>
-                    {% for subject in other_subjects %}
-                    <label class="exam-subject-card{% if subject.pk in selected_extra_ids %} is-selected{% endif %}">
-                        <input type="checkbox"
-                               class="sr-only"
-                               name="extra_subjects"
-                               value="{{ subject.pk }}"
-                               data-extra-subject
-                               {% if subject.pk in selected_extra_ids %}checked{% endif %}>
-                        <span class="exam-subject-card__check" aria-hidden="true">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>
+
+                <!-- Table -->
+                <div class="exam-table-container">
+                    <div class="exam-table-header">
+                        <span class="exam-col-code">CODE</span>
+                        <span class="exam-col-subject">SUBJECT</span>
+                        <span class="exam-col-year">YEAR</span>
+                        <span class="exam-col-check">
+                            <label class="exam-custom-checkbox" title="Toggle visible subjects">
+                                <input type="checkbox" id="header-select-all" class="sr-only" checked>
+                                <span class="exam-checkbox-box is-checked" id="header-checkbox-box" aria-hidden="true">
+                                    <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                                </span>
+                            </label>
                         </span>
-                        <span class="exam-subject-card__text">
-                            <span class="exam-subject-card__code">{{ subject.code }}</span>
-                            <span class="exam-subject-card__name">{{ subject.name }}</span>
-                            <span class="exam-subject-card__year">{{ subject.year_level.name }}</span>
-                        </span>
-                    </label>
-                    {% endfor %}
+                    </div>
+
+                    <div class="exam-table-body" id="subjects-table-body">
+                        {% for subject in year_subjects %}
+                        <div class="exam-table-row is-selected"
+                             data-subject-row
+                             data-category="year"
+                             data-code="{{ subject.code }}"
+                             data-name="{{ subject.name }}"
+                             data-search="{{ subject.code|lower }} {{ subject.name|lower }}">
+                            <span class="exam-col-code">{{ subject.code }}</span>
+                            <span class="exam-col-subject" title="{{ subject.name }}">{{ subject.name }}</span>
+                            <span class="exam-col-year">Your year</span>
+                            <span class="exam-col-check">
+                                <label class="exam-custom-checkbox">
+                                    <input type="checkbox"
+                                           name="year_subjects"
+                                           value="{{ subject.pk }}"
+                                           class="sr-only"
+                                           data-subject-checkbox
+                                           data-year-subject
+                                           checked>
+                                    <span class="exam-checkbox-box is-checked" aria-hidden="true">
+                                        <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                                    </span>
+                                </label>
+                            </span>
+                        </div>
+                        {% endfor %}
+
+                        {% for subject in other_subjects %}
+                        <div class="exam-table-row{% if subject.pk in selected_extra_ids %} is-selected{% endif %}"
+                             data-subject-row
+                             data-category="other"
+                             data-code="{{ subject.code }}"
+                             data-name="{{ subject.name }}"
+                             data-search="{{ subject.code|lower }} {{ subject.name|lower }}"
+                             style="display: none;">
+                            <span class="exam-col-code">{{ subject.code }}</span>
+                            <span class="exam-col-subject" title="{{ subject.name }}">{{ subject.name }}</span>
+                            <span class="exam-col-year">{{ subject.year_level.name|default:"Other" }}</span>
+                            <span class="exam-col-check">
+                                <label class="exam-custom-checkbox">
+                                    <input type="checkbox"
+                                           name="extra_subjects"
+                                           value="{{ subject.pk }}"
+                                           class="sr-only"
+                                           data-subject-checkbox
+                                           data-extra-subject
+                                           {% if subject.pk in selected_extra_ids %}checked{% endif %}>
+                                    <span class="exam-checkbox-box{% if subject.pk in selected_extra_ids %} is-checked{% endif %}" aria-hidden="true">
+                                        <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                                    </span>
+                                </label>
+                            </span>
+                        </div>
+                        {% endfor %}
+
+                        <div id="no-search-results" class="exam-table-empty" style="display: none;">
+                            No subjects found matching your search.
+                        </div>
+                    </div>
                 </div>
+
+                {% if form.year_subjects.errors %}
+                <p class="student-setup-field__error mt-3">{{ form.year_subjects.errors.0 }}</p>
+                {% endif %}
                 {% if form.extra_subjects.errors %}
-                <p class="student-setup-field__error">{{ form.extra_subjects.errors.0 }}</p>
+                <p class="student-setup-field__error mt-1">{{ form.extra_subjects.errors.0 }}</p>
                 {% endif %}
             </div>
-        </div>
-        {% endif %}
-    </section>
 
-    <input type="hidden" name="question_type" value="mcq" id="id_setup_question_type">
+            <!-- Right Column: Sidebar -->
+            <div class="exam-setup-card exam-setup-card--sidebar">
+                <!-- DIFFICULTY -->
+                <div class="exam-sidebar-section">
+                    <label class="exam-sidebar-heading" id="diff-label">DIFFICULTY</label>
+                    <input type="hidden"
+                           name="difficulty"
+                           id="id_setup_difficulty"
+                           value="{{ selected_difficulty|default:'easy' }}">
+                    <div class="exam-diff-pills" role="group" aria-labelledby="diff-label">
+                        <button type="button"
+                                class="exam-diff-pill exam-pill{% if selected_difficulty == 'easy' or not selected_difficulty %} is-selected{% endif %}"
+                                data-diff-btn="easy">
+                            Beginner
+                        </button>
+                        <button type="button"
+                                class="exam-diff-pill exam-pill{% if selected_difficulty == 'medium' %} is-selected{% endif %}"
+                                data-diff-btn="medium">
+                            Intermediate
+                        </button>
+                        <button type="button"
+                                class="exam-diff-pill exam-pill{% if selected_difficulty == 'hard' %} is-selected{% endif %}"
+                                data-diff-btn="hard">
+                            Advanced
+                        </button>
+                    </div>
+                    {% if form.difficulty.errors %}
+                    <p class="student-setup-field__error">{{ form.difficulty.errors.0 }}</p>
+                    {% endif %}
+                </div>
 
-    <section class="exam-setup-section" aria-labelledby="difficulty-label">
-        <h2 id="difficulty-label" class="exam-setup-section__title">Difficulty</h2>
-        <select name="difficulty" id="id_setup_difficulty" class="sr-only" tabindex="-1" aria-hidden="true" required>
-            {% for value, label in form.fields.difficulty.choices %}
-            <option value="{{ value }}"{% if selected_difficulty == value %} selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <div class="exam-pill-group"
-             role="group"
-             aria-labelledby="difficulty-label"
-             data-setup-pills
-             data-pill-target="id_setup_difficulty">
-            {% for value, label in form.fields.difficulty.choices %}
-            <button type="button"
-                    class="exam-pill{% if selected_difficulty == value %} is-selected{% endif %}"
-                    data-pill-value="{{ value }}"
-                    aria-pressed="{% if selected_difficulty == value %}true{% else %}false{% endif %}">
-                {{ label }}
-            </button>
-            {% endfor %}
-        </div>
-        {% if form.difficulty.errors %}
-        <p class="student-setup-field__error">{{ form.difficulty.errors.0 }}</p>
-        {% endif %}
-    </section>
+                <!-- Questions per subject -->
+                <div class="exam-sidebar-section">
+                    <div class="exam-stepper-header">
+                        <div>
+                            <div class="exam-sidebar-title">Questions per subject</div>
+                            <span class="exam-sidebar-caption">Max {{ max_total_questions }} total</span>
+                        </div>
+                        <div class="exam-stepper">
+                            <button type="button" id="q-stepper-minus" class="exam-stepper-btn" aria-label="Decrease questions">−</button>
+                            <span id="q-stepper-display" class="exam-stepper-val">{{ questions_per_subject|default:3 }}</span>
+                            <button type="button" id="q-stepper-plus" class="exam-stepper-btn" aria-label="Increase questions">+</button>
+                        </div>
+                    </div>
+                    <input type="hidden"
+                           name="questions_per_subject"
+                           id="id_questions_per_subject"
+                           value="{{ questions_per_subject|default:3 }}">
+                    {% if form.questions_per_subject.errors %}
+                    <p class="student-setup-field__error">{{ form.questions_per_subject.errors.0 }}</p>
+                    {% endif %}
+                </div>
 
-    <div class="exam-setup-summary" aria-live="polite">
-        <div class="exam-setup-summary__stats">
-            <div class="exam-setup-summary__stat">
-                <span class="exam-setup-summary__value" data-summary-subjects>{{ year_subjects|length }}</span>
-                <span class="exam-setup-summary__label">Subjects</span>
-            </div>
-            <div class="exam-setup-summary__stat">
-                <span class="exam-setup-summary__value" data-summary-questions>~{{ estimate_questions }}</span>
-                <span class="exam-setup-summary__label">Questions</span>
-            </div>
-            <div class="exam-setup-summary__stat">
-                <span class="exam-setup-summary__value" data-summary-minutes>~{{ estimate_minutes }} min</span>
-                <span class="exam-setup-summary__label">Estimated time</span>
+                <!-- Time per question -->
+                <div class="exam-sidebar-section">
+                    <div class="exam-timer-header">
+                        <div class="exam-sidebar-title">Time per question</div>
+                        <span id="timer-display-label" class="exam-timer-label">{% if estimate_seconds == 0 %}No timer{% else %}{{ estimate_seconds|default:15 }} sec{% endif %}</span>
+                    </div>
+                    <div class="exam-timer-manual">
+                        <label class="sr-only" for="id_setup_seconds">Seconds per question (0 = no timer)</label>
+                        <input type="number"
+                               name="seconds_per_question"
+                               id="id_setup_seconds"
+                               class="exam-timer-input"
+                               min="0"
+                               max="120"
+                               step="1"
+                               inputmode="numeric"
+                               value="{{ estimate_seconds|default:15 }}"
+                               aria-describedby="timer-display-label">
+                        <span class="exam-timer-input-suffix">sec</span>
+                    </div>
+                    <div class="exam-timer-pills" role="group" aria-label="Time per question presets">
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 0 %} is-selected{% endif %}" data-timer-preset="0">Off</button>
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 10 %} is-selected{% endif %}" data-timer-preset="10">10s</button>
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 15 %} is-selected{% endif %}" data-timer-preset="15">15s</button>
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 30 %} is-selected{% endif %}" data-timer-preset="30">30s</button>
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 45 %} is-selected{% endif %}" data-timer-preset="45">45s</button>
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 60 %} is-selected{% endif %}" data-timer-preset="60">60s</button>
+                        <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 90 %} is-selected{% endif %}" data-timer-preset="90">90s</button>
+                    </div>
+                    <p class="exam-timer-hint">Set 0 or Off for no countdown — answer at your own pace.</p>
+                    {% if form.seconds_per_question.errors %}
+                    <p class="student-setup-field__error">{{ form.seconds_per_question.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Summary Box -->
+                <div class="exam-summary-box exam-setup-summary" aria-live="polite">
+                    <div class="exam-summary-stat">
+                        <span class="exam-summary-num" data-summary-subjects>{{ year_subjects|length }}</span>
+                        <span class="exam-summary-lbl">Subjects</span>
+                    </div>
+                    <div class="exam-summary-stat">
+                        <span class="exam-summary-num" data-summary-questions>{{ estimate_questions }}</span>
+                        <span class="exam-summary-lbl">Questions</span>
+                    </div>
+                    <div class="exam-summary-stat">
+                        <span class="exam-summary-num" data-summary-minutes>~{{ estimate_minutes }} min</span>
+                        <span class="exam-summary-lbl">Est. time</span>
+                    </div>
+                </div>
+
+                <!-- Start CTA Button -->
+                <button type="submit" class="exam-cta-btn" id="start-exam-btn">
+                    Start exam →
+                </button>
             </div>
         </div>
-        <button type="submit" class="exam-setup-summary__cta" id="start-exam-btn">
-            Start exam
-            <span aria-hidden="true">→</span>
-        </button>
-    </div>
 </form>
 {% endif %}
 

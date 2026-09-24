@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Overview - EXAMIQ+{% endblock %}
+{% block title %}Dashboard - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Overview" show_live=True %}
+{% include "components/page_header.html" with title="Dashboard" show_live=True %}
 
 <div class="overview-meta mb-6">
     <span class="overview-meta__item">
@@ -24,12 +24,17 @@
 
 {% if overview.students_by_year_level %}
 <section class="overview-year-levels mb-8" aria-labelledby="overview-year-levels-heading">
-    <h2 id="overview-year-levels-heading" class="overview-year-levels__title">Students by year level · Active BSED Math enrollment</h2>
+    <h2 id="overview-year-levels-heading" class="overview-year-levels__title">Students by year level · Students handled</h2>
     <ul class="overview-year-levels__list">
         {% for row in overview.students_by_year_level %}
-        <li class="overview-year-levels__item">
-            <span class="overview-year-levels__count">{{ row.count }}</span>
-            <span class="overview-year-levels__name">{{ row.name }}</span>
+        <li>
+            <a href="{% url 'analytics_professor:students' %}?year_level={{ row.id }}"
+               class="overview-year-levels__item overview-year-levels__link"
+               aria-label="{{ row.count }} students in {{ row.name }}">
+                <span class="overview-year-levels__count">{{ row.count }}</span>
+                <span class="overview-year-levels__name">{{ row.name }}</span>
+                <svg class="overview-year-levels__arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
         </li>
         {% endfor %}
     </ul>
@@ -38,22 +43,24 @@
 
 <div class="bento-card p-6 overview-trends-card">
     <div class="overview-trends-card__intro">
-        <h2 class="overview-trends-card__title">Confidence over time</h2>
-        <p class="overview-trends-card__subtitle">Share of answers at each confidence level, with results overlaid when Confidence is selected.</p>
+        <h2 class="overview-trends-card__title" id="overview-trends-title">Students over time</h2>
+        <p class="overview-trends-card__subtitle" id="overview-trends-subtitle">How many students participated in each period.</p>
     </div>
     <div class="overview-trends-filters" id="overview-trends-filters" data-overview-pills>
         <div class="overview-trends-filter">
             <span class="overview-trends-filter__label" id="overview-metric-label">Metric</span>
             <select id="overview-trend-metric" class="sr-only" tabindex="-1" aria-labelledby="overview-metric-label">
                 <option value="students" selected>Students participating</option>
-                <option value="confidence">Confidence share</option>
+                <option value="confidence">Sure vs correct</option>
+                <option value="mistakes">Mistakes per question</option>
             </select>
             <div class="overview-pill-group" role="group" aria-labelledby="overview-metric-label" data-pill-target="overview-trend-metric">
                 <button type="button" class="overview-pill is-selected" data-pill-value="students" aria-pressed="true">Students</button>
                 <button type="button" class="overview-pill" data-pill-value="confidence" aria-pressed="false">Confidence</button>
+                <button type="button" class="overview-pill" data-pill-value="mistakes" aria-pressed="false">Mistakes</button>
             </div>
         </div>
-        <div class="overview-trends-filter">
+        <div class="overview-trends-filter" id="overview-range-filter">
             <span class="overview-trends-filter__label" id="overview-range-label">Range</span>
             <select id="overview-trend-range" class="sr-only" tabindex="-1" aria-labelledby="overview-range-label">
                 <option value="weekly" selected>Weekly</option>
@@ -68,15 +75,10 @@
         </div>
     </div>
     <div class="overview-trends-chart-wrap" id="overviewTrendsChartWrap">
-        <canvas id="overviewTrendsChart" aria-label="Overview trend chart"></canvas>
+        <canvas id="overviewTrendsChart" aria-label="Dashboard trend chart"></canvas>
     </div>
-    <div class="overview-confidence-insight" id="overview-trends-insight" hidden>
-        <span class="overview-confidence-insight__icon" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-            </svg>
-        </span>
-        <p class="overview-confidence-insight__body" data-confidence-insight-body></p>
+    <div class="overview-trends-chart-footer">
+        <div class="overview-gap-status-row" id="overview-gap-status" hidden></div>
     </div>
 </div>
 {% endblock %}
@@ -88,17 +90,21 @@
 (function () {
     function bindOverviewPills(root) {
         if (!root) return;
-        root.querySelectorAll("[data-pill-target]").forEach(function (group) {
+        var groups = root.querySelectorAll("[data-pill-target]");
+        groups.forEach(function (group) {
             var select = document.getElementById(group.getAttribute("data-pill-target"));
             if (!select) return;
             group.querySelectorAll("[data-pill-value]").forEach(function (btn) {
                 btn.addEventListener("click", function () {
                     var value = btn.getAttribute("data-pill-value");
                     select.value = value;
-                    group.querySelectorAll("[data-pill-value]").forEach(function (other) {
-                        var on = other === btn;
-                        other.classList.toggle("is-selected", on);
-                        other.setAttribute("aria-pressed", on ? "true" : "false");
+                    groups.forEach(function (g) {
+                        if (g.getAttribute("data-pill-target") !== select.id) return;
+                        g.querySelectorAll("[data-pill-value]").forEach(function (other) {
+                            var on = other.getAttribute("data-pill-value") === value;
+                            other.classList.toggle("is-selected", on);
+                            other.setAttribute("aria-pressed", on ? "true" : "false");
+                        });
                     });
                     select.dispatchEvent(new Event("change", { bubbles: true }));
                 });
@@ -106,6 +112,17 @@
         });
     }
     bindOverviewPills(document.getElementById("overview-trends-filters"));
+
+    var metricSelect = document.getElementById("overview-trend-metric");
+    var rangeFilter = document.getElementById("overview-range-filter");
+    function syncRangeVisibility() {
+        if (!rangeFilter || !metricSelect) return;
+        rangeFilter.hidden = metricSelect.value === "mistakes";
+    }
+    if (metricSelect) {
+        metricSelect.addEventListener("change", syncRangeVisibility);
+        syncRangeVisibility();
+    }
 
     var el = document.getElementById("overview-trends-data");
     if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
@@ -115,10 +132,19 @@
         rangeSelect: "overview-trend-range",
         expectedStudents: {{ overview.expected_students|default:0 }},
         data: JSON.parse(el.textContent),
-        insightEl: "overview-trends-insight",
+        gapStatusEl: "overview-gap-status",
+        titleEl: "overview-trends-title",
+        subtitleEl: "overview-trends-subtitle",
         metricLabels: {
             students: "Students participating",
-            confidence: "Confidence share (%)",
+            confidence: "Sure vs correct (%)",
+            mistakes: "Unique students wrong",
+        },
+        titleByMetric: {
+            mistakes: {
+                title: "Mistakes per question",
+                subtitle: "Questions missed by 15+ unique students.",
+            },
         },
         defaultMetric: "students",
     });

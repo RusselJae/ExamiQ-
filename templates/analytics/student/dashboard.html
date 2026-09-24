@@ -4,29 +4,37 @@
 {% block title %}Student Dashboard - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Your Performance" subtitle="Track confidence across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
+{% include "components/page_header.html" with title="Your Performance" subtitle="Track confidence and mistakes across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
 
 <div class="bento-grid mb-6">
     <div class="span-9">
         <div class="bento-card p-6 overview-trends-card h-full">
             <div class="overview-trends-card__intro">
-                <h2 class="overview-trends-card__title">Confidence by session</h2>
-                <p class="overview-trends-card__subtitle">Share of answers at each confidence level, with your results overlaid.</p>
+                <h2 class="overview-trends-card__title" id="student-trends-title">Feeling sure vs. being right</h2>
+                <p class="overview-trends-card__subtitle" id="student-trends-subtitle">How often answers were marked Sure compared with how often they were correct.</p>
+            </div>
+            <div class="overview-trends-filters" id="student-trends-filters" data-overview-pills>
+                <div class="overview-trends-filter">
+                    <span class="overview-trends-filter__label" id="student-metric-label">Metric</span>
+                    <select id="student-trend-metric" class="sr-only" tabindex="-1" aria-labelledby="student-metric-label">
+                        <option value="confidence" selected>Sure vs correct</option>
+                        <option value="mistakes">Mistakes per question</option>
+                    </select>
+                    <div class="overview-pill-group" role="group" aria-labelledby="student-metric-label" data-pill-target="student-trend-metric">
+                        <button type="button" class="overview-pill is-selected" data-pill-value="confidence" aria-pressed="true">Confidence</button>
+                        <button type="button" class="overview-pill" data-pill-value="mistakes" aria-pressed="false">Mistakes</button>
+                    </div>
+                </div>
             </div>
             <div class="overview-trends-chart-wrap" id="studentTrendsChartWrap">
-                <canvas id="studentTrendsChart" aria-label="Confidence by session chart"></canvas>
+                <canvas id="studentTrendsChart" aria-label="Performance chart"></canvas>
+            </div>
+            <div class="overview-trends-chart-footer">
+                <div class="overview-gap-status-row" id="student-gap-status" hidden></div>
             </div>
             <div id="student-trends-empty" class="chart-empty-state hidden">
                 <p class="empty-state-title">Not enough data yet</p>
-                <p class="empty-state-body">Complete a review session to see confidence trends.</p>
-            </div>
-            <div class="overview-confidence-insight" id="student-trends-insight" hidden>
-                <span class="overview-confidence-insight__icon" aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                    </svg>
-                </span>
-                <p class="overview-confidence-insight__body" data-confidence-insight-body></p>
+                <p class="empty-state-body">Complete a review session to see trends.</p>
             </div>
             <div class="overview-trends-pager overview-trends-pager--center">
                 <button type="button" id="student-trends-prev" class="overview-trends-pager__btn">Previous</button>
@@ -71,23 +79,58 @@
 <script src="{% static 'js/overview-trends-chart.js' %}"></script>
 <script>
 (function () {
+    function bindOverviewPills(root) {
+        if (!root) return;
+        var groups = root.querySelectorAll("[data-pill-target]");
+        groups.forEach(function (group) {
+            var select = document.getElementById(group.getAttribute("data-pill-target"));
+            if (!select) return;
+            group.querySelectorAll("[data-pill-value]").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var value = btn.getAttribute("data-pill-value");
+                    select.value = value;
+                    groups.forEach(function (g) {
+                        if (g.getAttribute("data-pill-target") !== select.id) return;
+                        g.querySelectorAll("[data-pill-value]").forEach(function (other) {
+                            var on = other.getAttribute("data-pill-value") === value;
+                            other.classList.toggle("is-selected", on);
+                            other.setAttribute("aria-pressed", on ? "true" : "false");
+                        });
+                    });
+                    select.dispatchEvent(new Event("change", { bubbles: true }));
+                });
+            });
+        });
+    }
+    bindOverviewPills(document.getElementById("student-trends-filters"));
+
     var el = document.getElementById("student-trends-data");
     if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
     window.ExamiQUI.renderOverviewTrendsChart({
         canvas: "studentTrendsChart",
+        metricSelect: "student-trend-metric",
         data: JSON.parse(el.textContent),
         flatMode: true,
         pageSize: 10,
         defaultMetric: "confidence",
         metricLabels: {
-            confidence: "Confidence share (%)",
+            confidence: "Sure vs correct (%)",
+            mistakes: "Times incorrect",
+        },
+        titleByMetric: {
+            mistakes: {
+                title: "Mistakes per question",
+                subtitle: "Questions you answered incorrectly.",
+            },
         },
         pageLabel: "student-trends-page-label",
         prevBtn: "student-trends-prev",
         nextBtn: "student-trends-next",
         emptyEl: "student-trends-empty",
         wrapEl: "studentTrendsChartWrap",
-        insightEl: "student-trends-insight",
+        gapStatusEl: "student-gap-status",
+        titleEl: "student-trends-title",
+        subtitleEl: "student-trends-subtitle",
     });
 })();
 </script>

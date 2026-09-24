@@ -1,192 +1,320 @@
 /**
- * Start Exam setup UI: extra subjects, pills, and live summary estimates.
+ * ExamiQ Review Setup UI
+ * Handles tab filtering, searching, custom checkboxes, difficulty pills,
+ * questions stepper, timer presets, and live summary estimation.
  */
 (function () {
     "use strict";
 
-    function parseIntAttr(el, name, fallback) {
-        var n = parseInt(el && el.getAttribute(name), 10);
-        return isNaN(n) ? fallback : n;
+    var currentTab = "year";
+
+    function getForm() {
+        return document.getElementById("review-setup-form");
     }
 
-    function getExtraPanelControls() {
-        return {
-            btn: document.getElementById("toggle-extra-subjects-btn"),
-            panel: document.getElementById("extra-subjects-panel"),
-        };
-    }
-
-    function setExtraPanelOpen(open) {
-        var controls = getExtraPanelControls();
-        var btn = controls.btn;
-        var panel = controls.panel;
-        if (!btn || !panel) return;
-
-        if (open) {
-            panel.removeAttribute("hidden");
-            panel.classList.remove("hidden");
-            btn.setAttribute("aria-expanded", "true");
-            btn.innerHTML = "<span aria-hidden=\"true\">−</span> Hide other-year subjects";
-        } else {
-            panel.setAttribute("hidden", "");
-            panel.classList.add("hidden");
-            btn.setAttribute("aria-expanded", "false");
-            btn.innerHTML = "<span aria-hidden=\"true\">+</span> Add subjects from other years";
-        }
-    }
-
-    function isExtraPanelOpen() {
-        var panel = getExtraPanelControls().panel;
-        if (!panel) return false;
-        return !panel.hasAttribute("hidden") && !panel.classList.contains("hidden");
-    }
-
-    function initExtraToggle() {
-        var btn = getExtraPanelControls().btn;
-        var panel = getExtraPanelControls().panel;
-        if (!btn || !panel) return;
-
-        setExtraPanelOpen(isExtraPanelOpen());
-        btn.addEventListener("click", function () {
-            setExtraPanelOpen(!isExtraPanelOpen());
-        });
-    }
-
-    function initYearCards() {
-        document.querySelectorAll("[data-year-subject]").forEach(function (input) {
-            var card = input.closest(".exam-subject-card");
-            if (!card) return;
-            function sync() {
-                card.classList.toggle("is-selected", input.checked);
-                updateSummary();
-            }
-            input.addEventListener("change", sync);
-            sync();
-        });
-    }
-
-    function initExtraCards() {
-        document.querySelectorAll("[data-extra-subject]").forEach(function (input) {
-            var card = input.closest(".exam-subject-card");
-            if (!card) return;
-            function sync() {
-                card.classList.toggle("is-selected", input.checked);
-                updateSummary();
-            }
-            input.addEventListener("change", sync);
-            sync();
-        });
-    }
-
-    function initSelectAllExtras() {
-        document.querySelectorAll("[data-select-all-extras]").forEach(function (btn) {
+    function initTabs() {
+        var tabButtons = document.querySelectorAll("[data-tab]");
+        tabButtons.forEach(function (btn) {
             btn.addEventListener("click", function () {
-                setExtraPanelOpen(true);
-                document.querySelectorAll("[data-extra-subject]").forEach(function (input) {
-                    if (!input.checked) {
-                        input.checked = true;
-                        input.dispatchEvent(new Event("change", { bubbles: true }));
-                    } else {
-                        var card = input.closest(".exam-subject-card");
-                        if (card) card.classList.add("is-selected");
-                    }
+                var tab = btn.getAttribute("data-tab");
+                if (tab === currentTab) return;
+
+                currentTab = tab;
+                tabButtons.forEach(function (b) {
+                    var active = b === btn;
+                    b.classList.toggle("is-active", active);
+                    b.setAttribute("aria-selected", active ? "true" : "false");
                 });
-                updateSummary();
+
+                filterRows();
             });
         });
     }
 
-    function syncSelectFromPills(group, select) {
-        var multiple = group.hasAttribute("data-pill-multiple");
-        var locked = (group.getAttribute("data-locked-values") || "")
-            .split(",")
-            .map(function (v) { return v.trim(); })
-            .filter(Boolean);
+    function initSearch() {
+        var searchInput = document.getElementById("subject-search-input");
+        var clearBtn = document.getElementById("subject-search-clear");
 
-        if (multiple) {
-            var selected = [];
-            group.querySelectorAll("[data-pill-value].is-selected").forEach(function (btn) {
-                selected.push(btn.getAttribute("data-pill-value"));
+        if (searchInput) {
+            searchInput.addEventListener("input", function () {
+                filterRows();
             });
-            locked.forEach(function (value) {
-                if (selected.indexOf(value) === -1) selected.unshift(value);
-            });
-            Array.prototype.forEach.call(select.options, function (opt) {
-                opt.selected = selected.indexOf(opt.value) !== -1;
-            });
-        } else {
-            var active = group.querySelector("[data-pill-value].is-selected");
-            if (active) select.value = active.getAttribute("data-pill-value") || select.value;
         }
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        if (clearBtn && searchInput) {
+            clearBtn.addEventListener("click", function () {
+                searchInput.value = "";
+                filterRows();
+                searchInput.focus();
+            });
+        }
     }
 
-    function initPills() {
-        document.querySelectorAll("[data-setup-pills]").forEach(function (group) {
-            if (group.dataset.bound === "1") return;
-            group.dataset.bound = "1";
-            var targetId = group.getAttribute("data-pill-target");
-            var select = targetId ? document.getElementById(targetId) : null;
-            if (!select) return;
-            var multiple = group.hasAttribute("data-pill-multiple");
-            var locked = (group.getAttribute("data-locked-values") || "")
-                .split(",")
-                .map(function (v) { return v.trim(); })
-                .filter(Boolean);
+    function filterRows() {
+        var searchInput = document.getElementById("subject-search-input");
+        var query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+        var rows = document.querySelectorAll("[data-subject-row]");
+        var emptyMsg = document.getElementById("no-search-results");
+        var visibleCount = 0;
 
-            group.querySelectorAll("[data-pill-value]").forEach(function (btn) {
-                btn.addEventListener("click", function () {
-                    var value = btn.getAttribute("data-pill-value") || "";
-                    if (locked.indexOf(value) !== -1) return;
+        rows.forEach(function (row) {
+            var category = row.getAttribute("data-category");
+            var searchTerms = (row.getAttribute("data-search") || "").toLowerCase();
 
-                    if (multiple) {
-                        btn.classList.toggle("is-selected");
-                        btn.setAttribute(
-                            "aria-pressed",
-                            btn.classList.contains("is-selected") ? "true" : "false"
-                        );
-                    } else {
-                        group.querySelectorAll("[data-pill-value]").forEach(function (other) {
-                            var on = other === btn;
-                            other.classList.toggle("is-selected", on);
-                            other.setAttribute("aria-pressed", on ? "true" : "false");
-                        });
-                    }
-                    syncSelectFromPills(group, select);
+            var matchesTab = false;
+            if (currentTab === "all") {
+                matchesTab = true;
+            } else if (currentTab === "year" && category === "year") {
+                matchesTab = true;
+            } else if (currentTab === "other" && category === "other") {
+                matchesTab = true;
+            }
+
+            var matchesSearch = !query || searchTerms.indexOf(query) !== -1;
+
+            if (matchesTab && matchesSearch) {
+                row.style.display = "grid";
+                visibleCount++;
+            } else {
+                row.style.display = "none";
+            }
+        });
+
+        if (emptyMsg) {
+            emptyMsg.style.display = visibleCount === 0 ? "block" : "none";
+        }
+
+        syncHeaderCheckbox();
+    }
+
+    function initRowsAndCheckboxes() {
+        var rows = document.querySelectorAll("[data-subject-row]");
+        rows.forEach(function (row) {
+            var cb = row.querySelector("[data-subject-checkbox]");
+            var box = row.querySelector(".exam-checkbox-box");
+            if (!cb) return;
+
+            function syncRowUI() {
+                row.classList.toggle("is-selected", cb.checked);
+                if (box) {
+                    box.classList.toggle("is-checked", cb.checked);
+                }
+            }
+
+            cb.addEventListener("change", function () {
+                syncRowUI();
+                updateSummary();
+                syncHeaderCheckbox();
+            });
+
+            row.addEventListener("click", function (e) {
+                if (e.target.closest("label") || e.target.closest("input")) return;
+                cb.checked = !cb.checked;
+                syncRowUI();
+                updateSummary();
+                syncHeaderCheckbox();
+            });
+
+            syncRowUI();
+        });
+    }
+
+    function initHeaderCheckbox() {
+        var headerCb = document.getElementById("header-select-all");
+        var headerBox = document.getElementById("header-checkbox-box");
+        if (!headerCb) return;
+
+        headerCb.addEventListener("change", function () {
+            var shouldCheck = headerCb.checked;
+            var visibleRows = document.querySelectorAll("[data-subject-row]");
+
+            visibleRows.forEach(function (row) {
+                if (row.style.display === "none") return;
+                var cb = row.querySelector("[data-subject-checkbox]");
+                var box = row.querySelector(".exam-checkbox-box");
+                if (cb) {
+                    cb.checked = shouldCheck;
+                    row.classList.toggle("is-selected", shouldCheck);
+                    if (box) box.classList.toggle("is-checked", shouldCheck);
+                }
+            });
+
+            if (headerBox) {
+                headerBox.classList.toggle("is-checked", shouldCheck);
+            }
+
+            updateSummary();
+        });
+    }
+
+    function syncHeaderCheckbox() {
+        var headerCb = document.getElementById("header-select-all");
+        var headerBox = document.getElementById("header-checkbox-box");
+        if (!headerCb) return;
+
+        var visibleRows = Array.from(document.querySelectorAll("[data-subject-row]")).filter(function (r) {
+            return r.style.display !== "none";
+        });
+
+        if (visibleRows.length === 0) {
+            headerCb.checked = false;
+            if (headerBox) headerBox.classList.remove("is-checked");
+            return;
+        }
+
+        var allChecked = visibleRows.every(function (r) {
+            var cb = r.querySelector("[data-subject-checkbox]");
+            return cb && cb.checked;
+        });
+
+        headerCb.checked = allChecked;
+        if (headerBox) {
+            headerBox.classList.toggle("is-checked", allChecked);
+        }
+    }
+
+    function initDifficulty() {
+        var buttons = document.querySelectorAll("[data-diff-btn]");
+        var input = document.getElementById("id_setup_difficulty");
+        if (!buttons.length || !input) return;
+
+        buttons.forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var diff = btn.getAttribute("data-diff-btn");
+                input.value = diff;
+
+                buttons.forEach(function (b) {
+                    var active = b === btn;
+                    b.classList.toggle("is-selected", active);
                 });
             });
-            syncSelectFromPills(group, select);
         });
+    }
+
+    function initStepper() {
+        var minusBtn = document.getElementById("q-stepper-minus");
+        var plusBtn = document.getElementById("q-stepper-plus");
+        var display = document.getElementById("q-stepper-display");
+        var input = document.getElementById("id_questions_per_subject");
+        if (!input) return;
+
+        function setQuestions(val) {
+            val = Math.max(1, Math.min(20, val));
+            input.value = String(val);
+            if (display) display.textContent = String(val);
+            updateSummary();
+        }
+
+        if (minusBtn) {
+            minusBtn.addEventListener("click", function () {
+                var current = parseInt(input.value, 10) || 3;
+                setQuestions(current - 1);
+            });
+        }
+
+        if (plusBtn) {
+            plusBtn.addEventListener("click", function () {
+                var current = parseInt(input.value, 10) || 3;
+                setQuestions(current + 1);
+            });
+        }
+    }
+
+    function initTimer() {
+        var pills = document.querySelectorAll("[data-timer-preset]");
+        var input = document.getElementById("id_setup_seconds");
+        var label = document.getElementById("timer-display-label");
+        if (!input) return;
+
+        function normalizeTimer(raw) {
+            var val = parseInt(raw, 10);
+            if (isNaN(val) || val < 0) val = 15;
+            if (val === 0) return 0;
+            if (val < 10) val = 10;
+            if (val > 120) val = 120;
+            return val;
+        }
+
+        function setTimer(val, syncInput) {
+            val = normalizeTimer(val);
+            if (syncInput !== false) input.value = String(val);
+            if (label) {
+                label.textContent = val === 0 ? "No timer" : val + " sec";
+            }
+
+            pills.forEach(function (pill) {
+                var preset = parseInt(pill.getAttribute("data-timer-preset"), 10);
+                pill.classList.toggle("is-selected", preset === val);
+            });
+
+            updateSummary();
+        }
+
+        pills.forEach(function (pill) {
+            pill.addEventListener("click", function () {
+                setTimer(pill.getAttribute("data-timer-preset"));
+            });
+        });
+
+        input.addEventListener("change", function () {
+            setTimer(input.value);
+        });
+        input.addEventListener("input", function () {
+            var raw = parseInt(input.value, 10);
+            if (isNaN(raw)) return;
+            if (label) {
+                label.textContent = raw === 0 ? "No timer" : raw + " sec";
+            }
+            pills.forEach(function (pill) {
+                var preset = parseInt(pill.getAttribute("data-timer-preset"), 10);
+                pill.classList.toggle("is-selected", preset === raw);
+            });
+            updateSummary();
+        });
+
+        setTimer(input.value, false);
     }
 
     function updateSummary() {
-        var form = document.getElementById("review-setup-form");
+        var form = getForm();
         if (!form) return;
-        var minQ = parseIntAttr(form, "data-min-questions", 3);
-        var seconds = parseIntAttr(form, "data-seconds", 30);
-        var maxQ = parseIntAttr(form, "data-max-questions", 100);
-        var yearCount = form.querySelectorAll("[data-year-subject]:checked").length;
-        var extraCount = form.querySelectorAll("[data-extra-subject]:checked").length;
-        var subjects = yearCount + extraCount;
-        var questions = Math.min(maxQ, Math.max(subjects, 1) * minQ);
-        var minutes = Math.max(1, Math.ceil((questions * seconds) / 60));
 
-        var countEl = form.querySelector("[data-selected-count]");
+        var maxQ = parseInt(form.getAttribute("data-max-questions"), 10) || 100;
+        var qInput = document.getElementById("id_questions_per_subject");
+        var qPerSubj = qInput ? parseInt(qInput.value, 10) || 3 : 3;
+
+        var timerInput = document.getElementById("id_setup_seconds");
+        var seconds = timerInput ? parseInt(timerInput.value, 10) : 15;
+        if (isNaN(seconds) || seconds < 0) seconds = 15;
+
+        var checkedSubjects = form.querySelectorAll("[data-subject-checkbox]:checked").length;
+        var totalQuestions = Math.min(maxQ, Math.max(checkedSubjects, 1) * qPerSubj);
+        var estMinutes =
+            seconds === 0
+                ? null
+                : Math.max(1, Math.ceil((totalQuestions * seconds) / 60));
+
         var subjectsEl = form.querySelector("[data-summary-subjects]");
         var questionsEl = form.querySelector("[data-summary-questions]");
         var minutesEl = form.querySelector("[data-summary-minutes]");
-        if (countEl) countEl.textContent = subjects + " selected";
-        if (subjectsEl) subjectsEl.textContent = String(subjects);
-        if (questionsEl) questionsEl.textContent = "~" + questions;
-        if (minutesEl) minutesEl.textContent = "~" + minutes + " min";
+
+        if (subjectsEl) subjectsEl.textContent = String(checkedSubjects);
+        if (questionsEl) questionsEl.textContent = String(totalQuestions);
+        if (minutesEl) {
+            minutesEl.textContent =
+                estMinutes == null ? "Untimed" : "~" + estMinutes + " min";
+        }
     }
 
     function init() {
-        initExtraToggle();
-        initYearCards();
-        initExtraCards();
-        initSelectAllExtras();
-        initPills();
+        initTabs();
+        initSearch();
+        initRowsAndCheckboxes();
+        initHeaderCheckbox();
+        initDifficulty();
+        initStepper();
+        initTimer();
+        filterRows();
         updateSummary();
     }
 

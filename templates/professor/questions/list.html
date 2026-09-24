@@ -6,8 +6,7 @@
 {% include "components/professor_section_header.html" with course=course page_label="Saved Questions" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-<div class="flex justify-between items-center mb-4">
-    <span class="ai-assist-badge">AI: {{ ai_provider_label|default:"Off" }}</span>
+<div class="flex justify-end items-center mb-4">
     <a href="{% url 'analytics_professor:question_create' course.pk %}" class="btn-primary">Add question</a>
 </div>
 
@@ -15,8 +14,8 @@
     {% include "components/filter_bar.html" %}
 
     <div class="span-full">
-        <div class="bento-card p-0 overflow-hidden data-table-wrap">
-            <table class="data-table">
+        <div class="bento-card p-0 data-table-wrap questions-table-wrap">
+            <table class="data-table questions-data-table">
                 <thead>
                     <tr>
                         <th class="w-16">Q</th>
@@ -30,7 +29,7 @@
                         <th>Mistakes</th>
                         <th>Students</th>
                         <th>Active</th>
-                        <th></th>
+                        <th class="questions-table-actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -63,7 +62,7 @@
                             {% elif question.status == "approved" %}
                             <span class="text-amber-700 text-sm font-medium">Pending faculty validation</span>
                             {% else %}
-                            <span class="text-examiq-slate text-sm">AI-assisted / draft</span>
+                            <span class="text-examiq-slate text-sm">Draft</span>
                             {% endif %}
                         </td>
                         <td class="text-examiq-mistake font-medium">{{ question.mistake_count }}</td>
@@ -71,7 +70,7 @@
                             {{ question.distinct_student_mistake_count }}
                         </td>
                         <td>{% if question.is_active %}Yes{% else %}No{% endif %}</td>
-                        <td class="text-right space-x-2 whitespace-nowrap">
+                        <td class="text-right whitespace-nowrap questions-table-actions">
                             <a href="{% url 'analytics_professor:question_edit' course.pk question.pk %}" class="text-link">Edit</a>
                             {% if question.status != "approved" %}
                             <form method="post" action="{% url 'analytics_professor:question_publish' course.pk question.pk %}" class="inline">
@@ -93,7 +92,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="text-examiq-slate">
+                        <td colspan="12" class="text-examiq-slate">
                             {% if filter_has_active %}No questions match your filters.{% else %}No questions yet.{% endif %}
                         </td>
                     </tr>

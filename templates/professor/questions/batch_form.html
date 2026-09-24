@@ -415,6 +415,129 @@
             '<button type="button" class="close-validate-modal btn-primary w-full mt-6">Close</button></div></div>';
     }
 
+    function showInvalidActionModal(index) {
+        const validateContainer = document.getElementById("validate-modal-container");
+        const feedback =
+            (validationState[index] && validationState[index].feedback) ||
+            "This question did not pass validation.";
+        validateContainer.innerHTML =
+            '<div class="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" id="invalid-action-modal">' +
+            '<div class="bento-card bento-card--elevated p-6 max-w-lg w-full mx-4 shadow-xl">' +
+            '<div class="flex justify-between items-center mb-4">' +
+            '<h2 class="text-lg font-semibold text-examiq-navy">Invalid question</h2>' +
+            '<button type="button" class="close-validate-modal text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button></div>' +
+            '<p class="text-sm text-examiq-slate leading-relaxed mb-3">Do you want to correct this question, regenerate another, or cancel?</p>' +
+            '<div class="rounded-xl bg-slate-50 border border-slate-200 p-3 mb-5">' +
+            '<p class="text-sm text-examiq-slate leading-relaxed">' + feedback + "</p></div>" +
+            '<div class="flex flex-col sm:flex-row gap-2">' +
+            '<button type="button" class="btn-primary flex-1" data-invalid-correct="' + index + '">Correct</button>' +
+            '<button type="button" class="btn-secondary flex-1" data-invalid-regenerate="' + index + '">Regenerate</button>' +
+            '<button type="button" class="close-validate-modal btn-outline flex-1">Cancel</button>' +
+            "</div></div></div>";
+    }
+
+    async function pollGenerateJobJson(statusUrl) {
+        const maxAttempts = 90;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            if (abortGeneratePoll) return null;
+            const resp = await fetch(statusUrl, {
+                headers: { Accept: "application/json" },
+                credentials: "same-origin",
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!data.done) {
+                await sleep(2000);
+                continue;
+            }
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            return data;
+        }
+        throw new Error("Generation is taking too long. Try again.");
+    }
+
+    async function regenerateInvalidRow(index) {
+        if (!generateUrl) {
+            if (window.showToast) window.showToast("Select a course subject first.", "warning");
+            return;
+        }
+        const hasLibrary = librarySelect && librarySelect.value;
+        const hasUpload = sourceInput && sourceInput.files && sourceInput.files[0];
+        if (!hasLibrary && !hasUpload) {
+            if (window.showToast) {
+                window.showToast("Pick a saved learning material or upload a file first.", "warning");
+            }
+            return;
+        }
+        abortGeneratePoll = false;
+        if (window.showToast) window.showToast("Regenerating question…", "info");
+        const fd = getSettingsFormData();
+        fd.append("count", "1");
+        const libraryId = librarySelect && librarySelect.value ? librarySelect.value : "";
+        if (libraryId) {
+            fd.append("learning_document_id", libraryId);
+        } else if (sourceInput && sourceInput.files && sourceInput.files[0]) {
+            fd.append("source_file", sourceInput.files[0]);
+        }
+        const resp = await fetch(generateUrl, {
+            method: "POST",
+            body: fd,
+            headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+            credentials: "same-origin",
+        });
+        const result = await resp.json().catch(function () { return {}; });
+        if (!resp.ok || !result.status_url) {
+            throw new Error(result.error || result.reason || "Generation failed.");
+        }
+        if (result.topic_id) {
+            setTopicId(result.topic_id);
+            onSettingsChange();
+        }
+        const job = await pollGenerateJobJson(result.status_url);
+        const variations = (job && job.variations) || [];
+        if (!variations.length) {
+            throw new Error("No replacement question was generated.");
+        }
+        const v = variations[0];
+        const choiceMap = {};
+        let correctLabel = v.correct_label || v.correct || "A";
+        if (Array.isArray(v.choices)) {
+            v.choices.forEach(function (c) {
+                if (!c || !c.label) return;
+                choiceMap[c.label] = c.text || "";
+                if (c.is_correct) correctLabel = c.label;
+            });
+        } else if (v.choices && typeof v.choices === "object") {
+            ["A", "B", "C", "D"].forEach(function (letter) {
+                choiceMap[letter] = v.choices[letter] || "";
+            });
+        } else {
+            ["A", "B", "C", "D"].forEach(function (letter) {
+                choiceMap[letter] = v["choice_" + letter] || "";
+            });
+        }
+        const data = {
+            stem: v.stem || "",
+            concept: v.concept_tag || v.concept || "",
+            correct: correctLabel,
+            difficulty: normalizeDifficulty(v.difficulty || difficultySelect.value),
+            solution_summary: v.solution_summary || v.solution || "",
+            steps: Array.isArray(v.steps) ? v.steps : [],
+            adaptive_explanation: v.adaptive_explanation || {},
+            choices: choiceMap,
+            question_type: normalizeQuestionType(v.question_type || "mcq"),
+            expected_answer: v.expected_answer || "",
+            ai_generated: true,
+        };
+        setQuestionData(index, data);
+        delete validationState[index];
+        renderTableRow(index);
+        markDirty();
+        window.ExamiQBatch.persist(batchConfig);
+        if (window.showToast) window.showToast("Question regenerated. Validate again when ready.", "success");
+    }
+
     const batchConfig = {
         coursePk: coursePk,
         topicSelect: topicSelect,
@@ -1225,7 +1348,13 @@
         }
         const validateBtn = e.target.closest(".validate-btn");
         if (validateBtn) {
-            runValidate(parseInt(validateBtn.dataset.index, 10), validateBtn);
+            const index = parseInt(validateBtn.dataset.index, 10);
+            const state = validationState[index];
+            if (state && state.is_valid === false) {
+                showInvalidActionModal(index);
+            } else {
+                runValidate(index, validateBtn);
+            }
         }
     });
 
@@ -1331,6 +1460,25 @@
         }
         if (e.target.classList.contains("close-validate-modal")) {
             document.getElementById("validate-modal-container").innerHTML = "";
+            return;
+        }
+        const correctBtn = e.target.closest("[data-invalid-correct]");
+        if (correctBtn) {
+            const index = parseInt(correctBtn.getAttribute("data-invalid-correct"), 10);
+            document.getElementById("validate-modal-container").innerHTML = "";
+            window.location.href = editUrlFor(index);
+            return;
+        }
+        const regenBtn = e.target.closest("[data-invalid-regenerate]");
+        if (regenBtn) {
+            const index = parseInt(regenBtn.getAttribute("data-invalid-regenerate"), 10);
+            document.getElementById("validate-modal-container").innerHTML = "";
+            regenerateInvalidRow(index).catch(function (err) {
+                if (window.showToast) {
+                    window.showToast(err.message || "Regenerate failed.", "error");
+                }
+            });
+            return;
         }
     });
 

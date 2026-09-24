@@ -44,8 +44,6 @@ from apps.core.mixins import (
 )
 from apps.questions.models import Subject
 from apps.reviews.exam_setup_services import (
-    get_or_create_program_exam_setup,
-    program_subject_timer_rows,
     subject_exam_timer_seconds,
 )
 from apps.reviews.models import Answer, ReviewSession
@@ -58,7 +56,7 @@ from apps.users.assignment_services import (
     professor_can_view_student,
     restore_section_student,
 )
-from apps.users.models import Course, Program, ProgramSection, User
+from apps.users.models import Course, ProgramSection, User
 
 
 def _student_initials(student: User) -> str:
@@ -93,80 +91,16 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
 
 
 class ExamSetupHubView(ProfessorRequiredMixin, View):
-    """Program-wide exam setup for all BSED Math students."""
-
-    template_name = "analytics/professor/program_exam_setup.html"
+    """Legacy exam-setup hub — students now set the timer on Start Review."""
 
     def dispatch(self, request, *args, **kwargs):
-        program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
-        if program is None:
-            from django.contrib import messages
-
-            messages.error(request, "BSED Math program is not configured.")
-            return redirect("analytics_professor:overview")
-        self.program = program
-        self.setup = get_or_create_program_exam_setup(program)
-        return super().dispatch(request, *args, **kwargs)
-
-    def get(self, request):
-        subject_rows = program_subject_timer_rows(self.program)
-        configured_rows = [row for row in subject_rows if row["selected"]]
-        return render(
-            request,
-            self.template_name,
-            {
-                "program": self.program,
-                "setup": self.setup,
-                "subject_rows": subject_rows,
-                "configured_rows": configured_rows,
-                "default_seconds": self.setup.seconds_per_question or 30,
-            },
-        )
-
-    def post(self, request):
-        from apps.reviews.exam_setup_services import sync_program_subject_timers
-
-        default_raw = request.POST.get("default_seconds", "")
-        try:
-            default_seconds = int(default_raw) if default_raw else self.setup.seconds_per_question
-        except (TypeError, ValueError):
-            default_seconds = self.setup.seconds_per_question or 30
-        if not 10 <= default_seconds <= 120:
-            from django.contrib import messages
-
-            messages.error(request, "Default timer must be between 10 and 120 seconds.")
-            return self.get(request)
-
-        subject_ids = [
-            int(value)
-            for value in request.POST.getlist("subjects")
-            if str(value).isdigit()
-        ]
-        timers: dict[int, int] = {}
-        for subject_id in subject_ids:
-            raw = request.POST.get(f"timer_{subject_id}", "").strip()
-            try:
-                timers[subject_id] = int(raw) if raw else default_seconds
-            except ValueError:
-                timers[subject_id] = default_seconds
-
-        try:
-            sync_program_subject_timers(
-                self.program,
-                subject_ids=subject_ids,
-                timers_by_subject_id=timers,
-                default_seconds=default_seconds,
-            )
-        except ValueError as exc:
-            from django.contrib import messages
-
-            messages.error(request, str(exc))
-            return self.get(request)
-
         from django.contrib import messages
 
-        messages.success(request, "Exam setup saved for all BSED Math students.")
-        return redirect("analytics_professor:exam_setup_hub")
+        messages.info(
+            request,
+            "Exam timing is set by students when they start a review.",
+        )
+        return redirect("analytics_professor:overview")
 
 
 class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
@@ -181,6 +115,15 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
             self.request.user, include_archived=show_archived
         )
         section_ids = get_faculty_profile_section_ids(self.request.user)
+
+        year_level_raw = get_filter_param(self.request, "year_level")
+        year_level_id = int(year_level_raw) if year_level_raw.isdigit() else None
+        if year_level_id is not None:
+            roster = [
+                row
+                for row in roster
+                if getattr(row["student"], "year_level_id", None) == year_level_id
+            ]
 
         search = get_filter_param(self.request, "q").lower()
         if search:
@@ -213,7 +156,20 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        filter_names = ["q", "sort", "show_archived"]
+        from apps.questions.models import YearLevel
+
+        year_level_raw = get_filter_param(self.request, "year_level")
+        year_level_id = int(year_level_raw) if year_level_raw.isdigit() else None
+        year_level = (
+            YearLevel.objects.filter(pk=year_level_id).first()
+            if year_level_id is not None
+            else None
+        )
+        year_choices = [
+            (str(yl.pk), yl.name) for yl in YearLevel.objects.order_by("order")
+        ]
+        filter_names = ["q", "sort", "show_archived", "year_level"]
+        context["year_level"] = year_level
         context["show_archived"] = get_filter_param(self.request, "show_archived") == "1"
         context["filter_form_fields"] = build_filter_fields(
             self.request,
@@ -223,6 +179,13 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
                     "name": "q",
                     "label": "Search",
                     "placeholder": "Student name or email",
+                },
+                {
+                    "type": "select",
+                    "name": "year_level",
+                    "label": "Year level",
+                    "all_label": "All year levels",
+                    "choices": year_choices,
                 },
                 {
                     "type": "select",
@@ -245,6 +208,14 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
+        if year_level:
+            context["students_subtitle"] = (
+                f"Students in {year_level.name} who completed an exam in your courses."
+            )
+        else:
+            context["students_subtitle"] = (
+                "Students who completed an exam in your courses."
+            )
         return context
 
 

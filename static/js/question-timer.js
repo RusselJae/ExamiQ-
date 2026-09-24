@@ -16,7 +16,33 @@
         const card = document.getElementById("question-card");
         if (!card || card.dataset.timedExam !== "true") return;
 
-        const total = parseInt(card.dataset.seconds, 10) || 30;
+        const total = parseInt(card.dataset.seconds, 10) || 0;
+        // 0 = untimed exam: track elapsed only, no countdown / auto-submit.
+        if (total <= 0) {
+            const timeSpentInput = document.getElementById("time-spent");
+            const form = document.getElementById("answer-form");
+            if (!form) return;
+            let elapsed = 0;
+            const intervalId = setInterval(function () {
+                elapsed += 1;
+                if (timeSpentInput) timeSpentInput.value = elapsed;
+            }, 1000);
+            function onFormSubmit() {
+                clearInterval(intervalId);
+                if (timeSpentInput) timeSpentInput.value = elapsed;
+            }
+            form.addEventListener("submit", onFormSubmit);
+            activeTimerCleanup = function () {
+                clearInterval(intervalId);
+                form.removeEventListener("submit", onFormSubmit);
+            };
+            window.stopQuestionTimer = function () {
+                clearInterval(intervalId);
+                if (timeSpentInput) timeSpentInput.value = elapsed;
+            };
+            return;
+        }
+
         let remaining = total;
         const display = document.getElementById("question-timer-display");
         const ring = document.getElementById("question-timer-ring");

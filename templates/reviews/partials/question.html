@@ -27,7 +27,7 @@
                 <span class="exam-type-badge">{{ question.get_question_type_display }}</span>
             </div>
 
-            {% if is_timed_exam %}
+            {% if is_timed_exam and session.seconds_per_question %}
             <div class="exam-timer-wrap" id="question-timer-ring" aria-live="polite">
                 <svg class="exam-timer-svg" viewBox="0 0 100 100" aria-hidden="true">
                     <circle class="exam-timer-svg__track" cx="50" cy="50" r="45"></circle>

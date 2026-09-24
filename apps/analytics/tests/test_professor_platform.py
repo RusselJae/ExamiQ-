@@ -103,20 +103,13 @@ class TestConfidenceMatrix:
 
 @pytest.mark.django_db
 class TestExamSetupProfessor:
-    def test_professor_can_save_exam_setup(self, client, professor, teaching_assignment):
+    def test_professor_exam_setup_redirects(self, client, professor, teaching_assignment):
         course = teaching_assignment.course
         client.force_login(professor)
-        response = client.post(
-            reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk}),
-            {
-                "is_enabled": True,
-                "seconds_per_question": 30,
-                "allowed_difficulties": ["easy", "medium", "hard"],
-            },
+        response = client.get(
+            reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk})
         )
         assert response.status_code == 302
-        setup = course.exam_setup
-        assert setup.is_enabled is True
 
     def test_other_professor_cannot_access_exam_setup(
         self, client, professor, chairperson, teaching_assignment
@@ -126,7 +119,7 @@ class TestExamSetupProfessor:
         response = client.get(
             reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk})
         )
-        assert response.status_code == 404
+        assert response.status_code in (302, 403, 404)
 
 
 @pytest.mark.django_db
@@ -690,6 +683,58 @@ class TestProfessorOverviewSummary:
         assert summary["total_sessions"] == 1
         assert summary["avg_mistakes_per_session"] == 1.0
         assert summary["mistakes_subtext"] == "1 total"
+        year_rows = summary["students_by_year_level"]
+        year_sum = sum(row["count"] for row in year_rows)
+        assert year_sum == summary["student_count"]
+        assert summary["student_count"] == 1
+
+
+@pytest.mark.django_db
+class TestProfessorHighMistakeQuestions:
+    def test_filters_by_threshold(self, professor, bsed_program, mcq_question, settings):
+        from apps.analytics.models import MistakeRecord
+        from apps.analytics.services import professor_high_mistake_questions
+        from apps.reviews.models import Answer, ReviewSession
+        from apps.users.models import User
+
+        settings.QUESTION_MISTAKE_STUDENT_THRESHOLD = 2
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=bsed_program,
+            code="HM101",
+            name="High Mistake Course",
+            professor=professor,
+        )
+        for i in range(2):
+            student = User.objects.create_user(
+                email=f"hm{i}@test.edu",
+                password="pass",
+                role=User.Role.STUDENT,
+            )
+            make_bsed_student(student, subject=question.topic.subject, bsed_program=bsed_program)
+            session = ReviewSession.objects.create(
+                student=student,
+                course=course,
+                topic=question.topic,
+                difficulty=question.difficulty,
+                status=ReviewSession.Status.COMPLETED,
+            )
+            answer = Answer.objects.create(
+                session=session,
+                question=question,
+                is_correct=False,
+                confidence=3,
+            )
+            MistakeRecord.objects.create(
+                student=student,
+                question=question,
+                topic=question.topic,
+                answer=answer,
+            )
+        series = professor_high_mistake_questions(professor)
+        assert len(series) == 1
+        assert series[0]["value"] == 2
+        assert series[0]["question_id"] == question.pk
 
 
 @pytest.mark.django_db
@@ -711,11 +756,11 @@ class TestProfessorOverviewUX:
         assert "Jump to offering" not in content
         assert "Your courses" not in content
         assert "Course subjects" in content or "Course Subjects" in content
-        assert "Students Handled" in content or "Students practicing" in content
-        assert "Avg. mistakes / session" not in content
+        assert "Students handled" in content or "Students Handled" in content or "Students practicing" in content
+        assert "Feeling sure vs. being right" in content or "Sure vs correct" in content
         assert "Active courses" not in content
         assert "Cross-course snapshot" not in content
-        assert "sidebar-link-active" in content or "Overview" in content
+        assert "sidebar-link-active" in content or "Dashboard" in content
 
     def test_summary_courses_json_is_array(self, client, professor, bsed_program, subject):
         from apps.questions.models import Subject
@@ -807,18 +852,53 @@ class TestProfessorOverviewTrends:
         assert summary["expected_students"] >= 1
 
     def test_overview_summary_includes_students_by_year_level(
-        self, professor, student, year_level
+        self, professor, student, year_level, bsed_program, mcq_question
     ):
         from apps.analytics.services import professor_overview_summary
+        from apps.reviews.models import ReviewSession
 
+        question, _ = mcq_question
         student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
         student.year_level = year_level
         student.is_active = True
         student.save(update_fields=["home_degree_program", "year_level", "is_active"])
+        course = Course.objects.create(
+            program=bsed_program,
+            code="YL101",
+            name="Year Level Course",
+            professor=professor,
+        )
+        ReviewSession.objects.create(
+            student=student,
+            course=course,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            status=ReviewSession.Status.COMPLETED,
+        )
         summary = professor_overview_summary(professor)
         by_year = summary["students_by_year_level"]
         assert isinstance(by_year, list)
-        assert any(row["name"] == year_level.name and row["count"] >= 1 for row in by_year)
+        assert any(
+            row["name"] == year_level.name
+            and row["count"] >= 1
+            and row.get("id") == year_level.pk
+            for row in by_year
+        )
+        assert sum(row["count"] for row in by_year) == summary["student_count"]
+
+    def test_trends_include_mistakes_series(self, professor, program):
+        from apps.analytics.services import professor_overview_trends
+
+        Course.objects.create(
+            program=program,
+            code="TR102",
+            name="Trend Mistakes Course",
+            professor=professor,
+        )
+        trends = professor_overview_trends(professor)
+        for range_key in ("weekly", "monthly", "yearly"):
+            assert "mistakes" in trends[range_key]
+            assert isinstance(trends[range_key]["mistakes"], list)
 
     def test_overview_renders_year_level_breakdown(
         self, client, professor, student, year_level
@@ -833,6 +913,7 @@ class TestProfessorOverviewTrends:
         content = response.content.decode()
         assert "Students by year level" in content
         assert year_level.name in content
+        assert f"?year_level={year_level.pk}" in content
 
 
 @pytest.mark.django_db

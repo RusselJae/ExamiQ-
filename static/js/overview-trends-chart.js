@@ -1,9 +1,8 @@
 /**
  * Shared trends chart for faculty overview + student dashboard.
  *
- * Confidence metric: stacked Sure / Not sure / Guessing / No ratings bars
- * plus an "Answered correctly" line (0–100%).
- * Other metrics: existing filled line chart.
+ * Confidence metric: dual-line Sure % vs Correct % with a filled gap
+ * (overconfidence / underconfidence). Other metrics: filled line chart.
  */
 (function () {
     "use strict";
@@ -11,7 +10,9 @@
     var DEFAULT_METRIC_LABELS = {
         students: "Students participating",
         scores: "Average score (out of 70)",
-        confidence: "Confidence share (%)",
+        confidence: "Sure vs correct (%)",
+        sure: "Sure (%)",
+        guessing: "Guessing (%)",
         mistakes: "Mistakes",
     };
 
@@ -19,20 +20,68 @@
         students: "#1a5634",
         scores: "#1a5634",
         confidence: "#1a5634",
+        sure: "#0284c7",
+        guessing: "#94a3b8",
         mistakes: "#1a5634",
     };
 
-    var STACK_COLORS = {
-        sure: "#0f172a",
-        not_sure: "#64748b",
-        guessing: "#cbd5e1",
-        none: "rgba(148, 163, 184, 0.15)",
+    var SURE_CORRECT_COLORS = {
+        sure: "#0284c7",
         correct: "#1a5634",
+        overFill: "rgba(251, 146, 60, 0.22)",
+        underFill: "rgba(16, 185, 129, 0.18)",
+        overLabel: "#9a3412",
+        underLabel: "#047857",
+        gapClose: 15,
     };
 
     var DEFAULT_Y_MAX = {
         scores: 70,
         confidence: 100,
+        sure: 100,
+        guessing: 100,
+    };
+
+    var TITLE_BY_METRIC = {
+        students: {
+            title: "Students over time",
+            subtitle: "How many students participated in each period.",
+        },
+        confidence: {
+            title: "Feeling sure vs. being right",
+            subtitle:
+                "How often answers were marked Sure compared with how often they were correct.",
+        },
+        sure: {
+            title: "Sure over time",
+            subtitle: "Share of answers marked Sure in each period.",
+        },
+        guessing: {
+            title: "Guessing over time",
+            subtitle: "Share of answers marked Guessing in each period.",
+        },
+        mistakes: {
+            title: "Mistakes per question",
+            subtitle:
+                "Questions with the most unique students who answered incorrectly.",
+        },
+    };
+
+    var LEGEND_STYLE = {
+        display: true,
+        position: "top",
+        align: "end",
+        labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            pointStyle: "circle",
+            color: "#475569",
+            font: { size: 12, weight: "600" },
+            filter: function (item) {
+                return !!item.text;
+            },
+        },
     };
 
     /** Olive stroke with a thicker white underlay for a halo outline. */
@@ -42,6 +91,8 @@
         var borderWidth = opts.borderWidth != null ? opts.borderWidth : 2.5;
         var tension = opts.tension != null ? opts.tension : 0.3;
         var order = opts.order != null ? opts.order : 1;
+        // Do not set dataset.stack — Chart.js treats `stack: false` as the
+        // stack id "false" and sums series, which mis-plots Correct %.
         var underlay = {
             type: "line",
             label: "",
@@ -54,7 +105,7 @@
             fill: false,
             tension: tension,
             order: order + 1,
-            stack: false,
+            borderDash: opts.borderDash || [],
         };
         var overlay = {
             type: "line",
@@ -68,11 +119,12 @@
             pointBorderWidth: 2,
             borderWidth: borderWidth,
             pointRadius: opts.pointRadius != null ? opts.pointRadius : 5,
-            pointHoverRadius: opts.pointHoverRadius != null ? opts.pointHoverRadius : 6,
+            pointHoverRadius:
+                opts.pointHoverRadius != null ? opts.pointHoverRadius : 6,
             fill: !!opts.fill,
             tension: tension,
             order: order,
-            stack: false,
+            borderDash: opts.borderDash || [],
         };
         if (opts.yAxisID) {
             underlay.yAxisID = opts.yAxisID;
@@ -80,6 +132,9 @@
         }
         if (opts.studentCounts) {
             overlay.studentCounts = opts.studentCounts;
+        }
+        if (opts.datasetId) {
+            overlay.datasetId = opts.datasetId;
         }
         return [underlay, overlay];
     }
@@ -102,14 +157,298 @@
         return out;
     }
 
-    function isStackedConfidencePoint(point) {
+    function isSureCorrectPoint(point) {
         return (
             point &&
-            (point.sure != null ||
-                point.not_sure != null ||
-                point.guessing != null ||
-                point.none != null)
+            (point.sure != null || point.correct_pct != null)
         );
+    }
+
+    function confidenceGap(point) {
+        if (!point || point.correct_pct == null || point.sure == null) return null;
+        // Align with chart lines: Sure % vs Correct % (not a diluted score).
+        return point.correct_pct - point.sure;
+    }
+
+    function ratedWeight(point) {
+        if (!point) return 0;
+        return (point.sure || 0) + (point.not_sure || 0) + (point.guessing || 0);
+    }
+
+    function isActiveConfidencePoint(point) {
+        if (!point || point.correct_pct == null || point.sure == null) return false;
+        return ratedWeight(point) > 0;
+    }
+
+    /** Rated-share-weighted averages so busy Sure weeks aren't diluted by sparse ones. */
+    function weightedSureCorrect(points) {
+        var sureSum = 0;
+        var correctSum = 0;
+        var weightSum = 0;
+        points.forEach(function (p) {
+            if (!isActiveConfidencePoint(p)) return;
+            var w = ratedWeight(p);
+            sureSum += p.sure * w;
+            correctSum += p.correct_pct * w;
+            weightSum += w;
+        });
+        if (!weightSum) return null;
+        return {
+            sure: sureSum / weightSum,
+            correct: correctSum / weightSum,
+        };
+    }
+
+    function avgSurePct(points) {
+        var agg = weightedSureCorrect(points);
+        return agg ? agg.sure : null;
+    }
+
+    function avgCorrectPct(points) {
+        var agg = weightedSureCorrect(points);
+        return agg ? agg.correct : null;
+    }
+
+    function avgConfidenceGap(points) {
+        var agg = weightedSureCorrect(points);
+        if (!agg) return 0;
+        return agg.correct - agg.sure;
+    }
+
+    function gapKind(points) {
+        var gap = avgConfidenceGap(points);
+        if (gap < -SURE_CORRECT_COLORS.gapClose) return "over";
+        if (gap > SURE_CORRECT_COLORS.gapClose) return "under";
+        return "realistic";
+    }
+
+    function gapStatusCopy(points) {
+        var agg = weightedSureCorrect(points);
+        if (!agg) {
+            return { kind: "realistic", label: "Realistic", detail: "" };
+        }
+        var sure = agg.sure;
+        var correct = agg.correct;
+        var gap = correct - sure;
+        var sureR = Math.round(sure);
+        var correctR = Math.round(correct);
+        var gapR = Math.round(Math.abs(gap));
+        var kind =
+            gap < -SURE_CORRECT_COLORS.gapClose
+                ? "over"
+                : gap > SURE_CORRECT_COLORS.gapClose
+                  ? "under"
+                  : "realistic";
+        if (kind === "over") {
+            return {
+                kind: "over",
+                label: "Overconfident",
+                detail:
+                    "Across this range, Sure (~" +
+                    sureR +
+                    "%) ran ahead of accuracy (~" +
+                    correctR +
+                    "%) by about " +
+                    gapR +
+                    " points.",
+            };
+        }
+        if (kind === "under") {
+            return {
+                kind: "under",
+                label: "Underconfident",
+                detail:
+                    "Across this range, accuracy (~" +
+                    correctR +
+                    "%) exceeded Sure (~" +
+                    sureR +
+                    "%) by about " +
+                    gapR +
+                    " points.",
+            };
+        }
+        return {
+            kind: "realistic",
+            label: "Realistic",
+            detail:
+                "Across this range, Sure (~" +
+                sureR +
+                "%) closely matched accuracy (~" +
+                correctR +
+                "%).",
+        };
+    }
+
+    function avgGap(points) {
+        return -avgConfidenceGap(points);
+    }
+
+    /** Fill between Sure and Correct + end labels + center gap annotation. */
+    var sureCorrectGapPlugin = {
+        id: "sureCorrectGap",
+        afterDatasetsDraw: function (chart) {
+            var meta = chart.options.plugins && chart.options.plugins.sureCorrectGap;
+            if (!meta || !meta.enabled) return;
+
+            var sureDs = null;
+            var correctDs = null;
+            chart.data.datasets.forEach(function (ds, i) {
+                if (ds.datasetId === "sure") sureDs = chart.getDatasetMeta(i);
+                if (ds.datasetId === "correct") correctDs = chart.getDatasetMeta(i);
+            });
+            if (!sureDs || !correctDs || !sureDs.data.length) return;
+
+            var ctx = chart.ctx;
+            var points = meta.points || [];
+            var n = sureDs.data.length;
+
+            // Segment fills
+            for (var i = 0; i < n - 1; i++) {
+                var s0 = sureDs.data[i];
+                var s1 = sureDs.data[i + 1];
+                var c0 = correctDs.data[i];
+                var c1 = correctDs.data[i + 1];
+                if (!s0 || !s1 || !c0 || !c1) continue;
+                if (s0.skip || s1.skip || c0.skip || c1.skip) continue;
+
+                var sure0 = points[i] && points[i].sure != null ? points[i].sure : null;
+                var sure1 =
+                    points[i + 1] && points[i + 1].sure != null
+                        ? points[i + 1].sure
+                        : null;
+                var cor0 =
+                    points[i] && points[i].correct_pct != null
+                        ? points[i].correct_pct
+                        : null;
+                var cor1 =
+                    points[i + 1] && points[i + 1].correct_pct != null
+                        ? points[i + 1].correct_pct
+                        : null;
+                if (sure0 == null || sure1 == null || cor0 == null || cor1 == null) {
+                    continue;
+                }
+
+                var midGap = (sure0 + sure1) / 2 - (cor0 + cor1) / 2;
+                if (Math.abs(midGap) < 0.5) continue;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(s0.x, s0.y);
+                ctx.lineTo(s1.x, s1.y);
+                ctx.lineTo(c1.x, c1.y);
+                ctx.lineTo(c0.x, c0.y);
+                ctx.closePath();
+                ctx.fillStyle =
+                    midGap > 0
+                        ? SURE_CORRECT_COLORS.overFill
+                        : SURE_CORRECT_COLORS.underFill;
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Center gap label removed — shown as status chip outside the chart.
+
+            // End-of-series value labels
+            var last = n - 1;
+            var sLast = sureDs.data[last];
+            var cLast = correctDs.data[last];
+            var pLast = points[last];
+            if (!sLast || !cLast || !pLast) return;
+
+            ctx.save();
+            ctx.font = "700 12px Inter, system-ui, sans-serif";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+
+            var sureVal =
+                pLast.sure != null ? Math.round(pLast.sure) + "%" : "";
+            var correctVal =
+                pLast.correct_pct != null
+                    ? Math.round(pLast.correct_pct) + "%"
+                    : "";
+
+            if (sureVal && !sLast.skip) {
+                ctx.fillStyle = SURE_CORRECT_COLORS.sure;
+                ctx.fillText("Sure " + sureVal, sLast.x + 10, sLast.y);
+            }
+            if (correctVal && !cLast.skip) {
+                ctx.fillStyle = SURE_CORRECT_COLORS.correct;
+                var cy = cLast.y;
+                if (Math.abs(cLast.y - sLast.y) < 14) {
+                    cy = cLast.y > sLast.y ? cLast.y + 12 : cLast.y - 12;
+                }
+                ctx.fillText("Correct " + correctVal, cLast.x + 10, cy);
+            }
+            ctx.restore();
+        },
+    };
+
+    function sureCorrectDatasets(points) {
+        var sureData = points.map(function (p) {
+            return p.sure != null ? p.sure : null;
+        });
+        var guessingData = points.map(function (p) {
+            return p.guessing != null ? p.guessing : null;
+        });
+        var correctData = points.map(function (p) {
+            return p.correct_pct != null ? p.correct_pct : null;
+        });
+
+        return [
+            {
+                type: "line",
+                label: "Sure",
+                datasetId: "sure",
+                data: sureData,
+                borderColor: SURE_CORRECT_COLORS.sure,
+                backgroundColor: "#fff",
+                pointBackgroundColor: "#fff",
+                pointBorderColor: SURE_CORRECT_COLORS.sure,
+                pointBorderWidth: 2,
+                borderWidth: 2.5,
+                pointRadius: 5,
+                pointHoverRadius: 6,
+                fill: false,
+                tension: 0.25,
+                order: 1,
+            },
+            {
+                type: "line",
+                label: "Guessing",
+                datasetId: "guessing",
+                data: guessingData,
+                borderColor: "#94a3b8",
+                backgroundColor: "#fff",
+                pointBackgroundColor: "#fff",
+                pointBorderColor: "#94a3b8",
+                pointBorderWidth: 2,
+                borderWidth: 2,
+                borderDash: [4, 3],
+                pointRadius: 4,
+                pointHoverRadius: 5,
+                fill: false,
+                tension: 0.25,
+                order: 2,
+            },
+            {
+                type: "line",
+                label: "Correct",
+                datasetId: "correct",
+                data: correctData,
+                borderColor: SURE_CORRECT_COLORS.correct,
+                backgroundColor: "#fff",
+                pointBackgroundColor: "#fff",
+                pointBorderColor: SURE_CORRECT_COLORS.correct,
+                pointBorderWidth: 2,
+                borderWidth: 2.5,
+                borderDash: [6, 4],
+                pointRadius: 5,
+                pointHoverRadius: 6,
+                fill: false,
+                tension: 0.25,
+                order: 1,
+            },
+        ];
     }
 
     function renderOverviewTrendsChart(options) {
@@ -127,15 +466,20 @@
         var emptyEl = resolveEl(options.emptyEl);
         var wrapEl = resolveEl(options.wrapEl);
         var insightEl = resolveEl(options.insightEl);
+        var titleEl = resolveEl(options.titleEl);
+        var subtitleEl = resolveEl(options.subtitleEl);
+        var gapStatusEl = resolveEl(options.gapStatusEl);
 
         var data = options.data || {};
         var flatMode = !!options.flatMode;
         var pageSize = options.pageSize || 0;
         var expectedStudents = options.expectedStudents || 0;
-        var defaultMetric = options.defaultMetric || (flatMode ? "confidence" : "students");
+        var defaultMetric =
+            options.defaultMetric || (flatMode ? "confidence" : "students");
         var metricLabels = mergeMaps(DEFAULT_METRIC_LABELS, options.metricLabels);
         var metricColors = mergeMaps(DEFAULT_METRIC_COLORS, options.metricColors);
         var yMaxByMetric = mergeMaps(DEFAULT_Y_MAX, options.yMaxByMetric);
+        var titleMap = mergeMaps(TITLE_BY_METRIC, options.titleByMetric);
 
         var pageIndex = 0;
         var chart = null;
@@ -156,6 +500,26 @@
         }
 
         function fullPoints(metric) {
+            if (metric === "sure" || metric === "guessing") {
+                var confPoints = fullPoints("confidence");
+                return confPoints.map(function (p) {
+                    return {
+                        label: p.label,
+                        value:
+                            metric === "sure"
+                                ? p.sure != null
+                                    ? p.sure
+                                    : 0
+                                : p.guessing != null
+                                  ? p.guessing
+                                  : 0,
+                        sure: p.sure,
+                        guessing: p.guessing,
+                        not_sure: p.not_sure,
+                        correct_pct: p.correct_pct,
+                    };
+                });
+            }
             if (flatMode) {
                 return data[metric] || [];
             }
@@ -173,6 +537,13 @@
             var range = (rangeSelect && rangeSelect.value) || "weekly";
             var bucket = data[range] || {};
             return bucket.confidence_insight || "";
+        }
+
+        function updateTitles(metric) {
+            var copy = titleMap[metric];
+            if (!copy) return;
+            if (titleEl) titleEl.textContent = copy.title;
+            if (subtitleEl) subtitleEl.textContent = copy.subtitle;
         }
 
         function currentSeries() {
@@ -206,7 +577,9 @@
                 total: total,
                 start: start,
                 end: end,
-                stacked: metric === "confidence" && points.some(isStackedConfidencePoint),
+                sureCorrect:
+                    metric === "confidence" &&
+                    points.some(isSureCorrectPoint),
             };
         }
 
@@ -259,95 +632,41 @@
             if (canvas) canvas.classList.toggle("hidden", isEmpty);
         }
 
-        function updateInsight(series) {
-            if (!insightEl) return;
-            var text = resolveInsight(series.metric);
-            if (series.metric === "confidence" && text) {
-                insightEl.hidden = false;
-                var body = insightEl.querySelector("[data-confidence-insight-body]");
-                if (body) body.textContent = text;
-                else insightEl.textContent = text;
-            } else {
-                insightEl.hidden = true;
+        function updateGapStatus(series) {
+            if (!gapStatusEl) return;
+            if (series.metric !== "confidence" || !series.points.length) {
+                gapStatusEl.hidden = true;
+                gapStatusEl.innerHTML = "";
+                gapStatusEl.className = "overview-gap-status-row";
+                return;
             }
+            var copy = gapStatusCopy(series.points);
+            gapStatusEl.hidden = false;
+            gapStatusEl.className =
+                "overview-gap-status-row overview-gap-status-row--" + copy.kind;
+            gapStatusEl.innerHTML =
+                '<span class="overview-gap-status overview-gap-status--' +
+                copy.kind +
+                '">' +
+                copy.label +
+                "</span>" +
+                (copy.detail
+                    ? '<span class="overview-gap-status__detail">' +
+                      copy.detail +
+                      "</span>"
+                    : "");
         }
 
-        function stackedDatasets(points) {
-            return [
-                {
-                    type: "bar",
-                    label: "Sure",
-                    data: points.map(function (p) {
-                        return p.sure || 0;
-                    }),
-                    backgroundColor: STACK_COLORS.sure,
-                    borderWidth: 0,
-                    stack: "confidence",
-                    order: 2,
-                    barPercentage: 0.65,
-                    categoryPercentage: 0.8,
-                },
-                {
-                    type: "bar",
-                    label: "Not sure",
-                    data: points.map(function (p) {
-                        return p.not_sure || 0;
-                    }),
-                    backgroundColor: STACK_COLORS.not_sure,
-                    borderWidth: 0,
-                    stack: "confidence",
-                    order: 2,
-                    barPercentage: 0.65,
-                    categoryPercentage: 0.8,
-                },
-                {
-                    type: "bar",
-                    label: "Guessing",
-                    data: points.map(function (p) {
-                        return p.guessing || 0;
-                    }),
-                    backgroundColor: STACK_COLORS.guessing,
-                    borderWidth: 0,
-                    stack: "confidence",
-                    order: 2,
-                    barPercentage: 0.65,
-                    categoryPercentage: 0.8,
-                },
-                {
-                    type: "bar",
-                    label: "No ratings",
-                    data: points.map(function (p) {
-                        return p.none || 0;
-                    }),
-                    backgroundColor: STACK_COLORS.none,
-                    borderColor: "#cbd5e1",
-                    borderWidth: 1,
-                    borderDash: [4, 3],
-                    stack: "confidence",
-                    order: 2,
-                    barPercentage: 0.65,
-                    categoryPercentage: 0.8,
-                },
-            ].concat(
-                outlinedLinePair({
-                    label: "Answered correctly",
-                    data: points.map(function (p) {
-                        return p.correct_pct != null ? p.correct_pct : null;
-                    }),
-                    borderColor: STACK_COLORS.correct,
-                    backgroundColor: "#fff",
-                    borderWidth: 2.5,
-                    tension: 0.25,
-                    order: 1,
-                    yAxisID: "y1",
-                })
-            );
+        function updateInsight(series) {
+            if (insightEl) insightEl.hidden = true;
+            updateGapStatus(series);
         }
 
         function build() {
             var series = currentSeries();
             updatePager(series);
             updateInsight(series);
+            updateTitles(series.metric);
 
             if (!series.total) {
                 setEmpty(true);
@@ -363,23 +682,25 @@
             var label = metricLabels[series.metric] || series.metric;
             var config;
 
-            if (series.stacked) {
+            if (series.sureCorrect) {
                 config = {
-                    type: "bar",
+                    type: "line",
                     data: {
                         labels: series.labels,
-                        datasets: stackedDatasets(series.points),
+                        datasets: sureCorrectDatasets(series.points),
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        layout: {
+                            padding: { top: 16, right: 88 },
+                        },
                         scales: {
                             x: {
-                                stacked: true,
                                 grid: { display: false },
                             },
                             y: {
-                                stacked: true,
+                                stacked: false,
                                 min: 0,
                                 max: 100,
                                 beginAtZero: true,
@@ -391,35 +712,12 @@
                                 },
                                 grid: { color: "#f1f5f9" },
                                 title: {
-                                    display: true,
-                                    text: "Share of answers",
+                                    display: false,
                                 },
-                            },
-                            y1: {
-                                stacked: false,
-                                min: 0,
-                                max: 100,
-                                display: false,
-                                grid: { drawOnChartArea: false },
                             },
                         },
                         plugins: {
-                            legend: {
-                                display: true,
-                                position: "top",
-                                align: "start",
-                                labels: {
-                                    boxWidth: 12,
-                                    boxHeight: 12,
-                                    usePointStyle: true,
-                                    pointStyle: "rectRounded",
-                                    color: "#475569",
-                                    font: { size: 12, weight: "600" },
-                                    filter: function (item) {
-                                        return !!item.text;
-                                    },
-                                },
-                            },
+                            legend: LEGEND_STYLE,
                             tooltip: {
                                 filter: function (context) {
                                     return !!context.dataset.label;
@@ -437,6 +735,74 @@
                                     },
                                 },
                             },
+                            sureCorrectGap: {
+                                enabled: true,
+                                points: series.points,
+                            },
+                        },
+                    },
+                    plugins: [sureCorrectGapPlugin],
+                };
+            } else if (series.metric === "mistakes") {
+                config = {
+                    type: "bar",
+                    data: {
+                        labels: series.labels,
+                        datasets: [
+                            {
+                                label: label,
+                                data: series.values,
+                                backgroundColor: "#1a5634",
+                                borderRadius: 4,
+                                barPercentage: 0.7,
+                                categoryPercentage: 0.8,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: {
+                            padding: { top: 16 },
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 12,
+                                },
+                            },
+                            y: {
+                                beginAtZero: true,
+                                suggestedMax: ySuggestedMax(
+                                    series.metric,
+                                    series.values
+                                ),
+                                ticks: {
+                                    precision: 0,
+                                    stepSize: 1,
+                                },
+                                grid: { color: "#f1f5f9" },
+                                title: {
+                                    display: true,
+                                    text: label,
+                                },
+                            },
+                        },
+                        plugins: {
+                            legend: LEGEND_STYLE,
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        var v = context.parsed.y;
+                                        return context.dataset.label + ": " + v;
+                                    },
+                                },
+                            },
+                            sureCorrectGap: { enabled: false },
                         },
                     },
                 };
@@ -459,6 +825,9 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        layout: {
+                            padding: { top: 16 },
+                        },
                         scales: {
                             x: {
                                 grid: { display: false },
@@ -490,6 +859,15 @@
                                         series.values
                                     );
                                     axis.ticks.stepSize = 1;
+                                } else if (
+                                    series.metric === "sure" ||
+                                    series.metric === "guessing"
+                                ) {
+                                    axis.max = 100;
+                                    axis.ticks.stepSize = 25;
+                                    axis.ticks.callback = function (value) {
+                                        return value + "%";
+                                    };
                                 } else {
                                     axis.suggestedMax = ySuggestedMax(
                                         series.metric,
@@ -500,22 +878,7 @@
                             })(),
                         },
                         plugins: {
-                            legend: {
-                                display: true,
-                                position: "top",
-                                align: "end",
-                                labels: {
-                                    boxWidth: 10,
-                                    boxHeight: 10,
-                                    usePointStyle: true,
-                                    pointStyle: "circle",
-                                    color: "#475569",
-                                    font: { size: 12, weight: "600" },
-                                    filter: function (item) {
-                                        return !!item.text;
-                                    },
-                                },
-                            },
+                            legend: LEGEND_STYLE,
                             tooltip: {
                                 filter: function (context) {
                                     return !!context.dataset.label;
@@ -537,6 +900,7 @@
                                     },
                                 },
                             },
+                            sureCorrectGap: { enabled: false },
                         },
                     },
                 };

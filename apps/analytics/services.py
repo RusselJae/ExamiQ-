@@ -533,11 +533,7 @@ def _ordinal_label(n: int) -> str:
 
 
 def student_dashboard_trends(student: User) -> dict:
-    """Flat confidence trend series for the student dashboard.
-
-    Stacked Sure / Not sure / Guessing / No ratings shares per session
-    plus correct_pct for the accuracy overlay.
-    """
+    """Flat confidence + mistakes-per-question series for the student dashboard."""
     from django.utils import timezone
 
     sessions = list(
@@ -571,6 +567,7 @@ def student_dashboard_trends(student: User) -> dict:
 
     return {
         "confidence": confidence_points,
+        "mistakes": student_incorrect_question_series(student),
         "confidence_insight": build_confidence_insight(confidence_points),
     }
 
@@ -700,6 +697,41 @@ def enrolled_bsed_students_by_year_level() -> list[dict]:
     for yl in YearLevel.objects.order_by("order"):
         rows.append(
             {
+                "id": yl.pk,
+                "name": yl.name,
+                "order": yl.order,
+                "count": counts_by_id.get(yl.pk, 0),
+            }
+        )
+    return rows
+
+
+def handled_students_by_year_level(professor: User) -> list[dict]:
+    """Students with sessions on this professor's BSED courses, grouped by year level."""
+    from django.db.models import Count
+
+    from apps.questions.models import YearLevel
+
+    student_ids = (
+        ReviewSession.objects.filter(
+            course__professor=professor,
+            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        )
+        .values_list("student_id", flat=True)
+        .distinct()
+    )
+    raw = (
+        User.objects.filter(pk__in=student_ids)
+        .values("year_level_id")
+        .annotate(count=Count("id"))
+    )
+    counts_by_id = {row["year_level_id"]: row["count"] for row in raw}
+
+    rows: list[dict] = []
+    for yl in YearLevel.objects.order_by("order"):
+        rows.append(
+            {
+                "id": yl.pk,
                 "name": yl.name,
                 "order": yl.order,
                 "count": counts_by_id.get(yl.pk, 0),
@@ -757,18 +789,22 @@ def professor_overview_summary(professor: User) -> dict:
         round(mistake_count / total_sessions, 1) if total_sessions else 0.0
     )
 
-    return {
-        "course_count": subject_count,
-        "subject_count": subject_count,
-        "expected_students": enrolled_bsed_student_count(),
-        "students_by_year_level": enrolled_bsed_students_by_year_level(),
-        "student_count": ReviewSession.objects.filter(
+    student_count = (
+        ReviewSession.objects.filter(
             course__professor=professor,
             course__program__slug=User.HomeDegreeProgram.BSED_MATH,
         )
         .values("student")
         .distinct()
-        .count(),
+        .count()
+    )
+
+    return {
+        "course_count": subject_count,
+        "subject_count": subject_count,
+        "expected_students": enrolled_bsed_student_count(),
+        "students_by_year_level": handled_students_by_year_level(professor),
+        "student_count": student_count,
         "accuracy": accuracy,
         "sessions_this_week": ReviewSession.objects.filter(
             course__professor=professor,
@@ -1073,6 +1109,7 @@ def professor_overview_trends(professor: User) -> dict:
         return points
 
     result = {}
+    high_mistake_questions = professor_high_mistake_questions(professor)
     for range_key, cfg in ranges.items():
         trunc_fn = cfg["trunc"]
         earliest = _bucket_starts(cfg)[0]
@@ -1173,9 +1210,69 @@ def professor_overview_trends(professor: User) -> dict:
             "scores": _fill_scores(scores_map, cfg),
             "confidence": confidence_points,
             "confidence_insight": build_confidence_insight(confidence_points),
+            "mistakes": high_mistake_questions,
         }
 
     return result
+
+
+def professor_high_mistake_questions(
+    professor: User, *, limit: int = 15
+) -> list[dict]:
+    """Questions with ≥ threshold unique student mistakes for this professor."""
+    from apps.questions.services import mistake_student_threshold
+
+    threshold = mistake_student_threshold()
+    rows = (
+        MistakeRecord.objects.filter(
+            answer__session__course__professor=professor,
+            answer__session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        )
+        .values("question_id", "question__stem")
+        .annotate(unique_students=Count("student_id", distinct=True))
+        .filter(unique_students__gte=threshold)
+        .order_by("-unique_students", "question_id")[:limit]
+    )
+    points = []
+    for row in rows:
+        qid = row["question_id"]
+        stem = (row["question__stem"] or "").strip().replace("\n", " ")
+        if len(stem) > 42:
+            stem = stem[:41] + "…"
+        points.append(
+            {
+                "label": stem or f"Q{qid}",
+                "value": row["unique_students"] or 0,
+                "question_id": qid,
+            }
+        )
+    return points
+
+
+def student_incorrect_question_series(
+    student: User, *, limit: int = 20
+) -> list[dict]:
+    """Questions this student answered incorrectly (mistake count per question)."""
+    rows = (
+        MistakeRecord.objects.filter(student=student)
+        .values("question_id", "question__stem")
+        .annotate(mistake_count=Count("id"))
+        .order_by("-mistake_count", "question_id")[:limit]
+    )
+    points = []
+    for row in rows:
+        qid = row["question_id"]
+        stem = (row["question__stem"] or "").strip().replace("\n", " ")
+        if len(stem) > 42:
+            stem = stem[:41] + "…"
+        points.append(
+            {
+                "label": stem or f"Q{qid}",
+                "value": row["mistake_count"] or 0,
+                "question_id": qid,
+            }
+        )
+    return points
 
 
 def _course_student_ids(course: Course):
@@ -2223,16 +2320,6 @@ def _build_student_activity_summary(
     ][:5]
 
     session_ids = [s.pk for s in session_list]
-    mistake_counts_by_session = {}
-    if session_ids:
-        for row in (
-            MistakeRecord.objects.filter(
-                answer__session_id__in=session_ids, student=student
-            )
-            .values("answer__session_id")
-            .annotate(mistake_count=Count("id"))
-        ):
-            mistake_counts_by_session[row["answer__session_id"]] = row["mistake_count"]
 
     from django.utils import timezone
 
@@ -2248,9 +2335,7 @@ def _build_student_activity_summary(
         dashboard_trends["confidence"].append(
             _confidence_share_point(label, session_answers)
         )
-        dashboard_trends["mistakes"].append(
-            {"label": label, "value": mistake_counts_by_session.get(session.pk, 0)}
-        )
+    dashboard_trends["mistakes"] = student_incorrect_question_series(student)
     dashboard_trends["confidence_insight"] = build_confidence_insight(
         dashboard_trends["confidence"]
     )
