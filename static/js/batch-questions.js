@@ -51,7 +51,19 @@
     function draftFromDom(config) {
         const draft = emptyDraft();
         draft.settings.topicId = config.topicSelect.value || "";
-        draft.settings.difficulty = config.difficultySelect.value || "";
+        var diffs = [];
+        if (config.difficultySelect && config.difficultySelect.multiple) {
+            Array.prototype.forEach.call(
+                config.difficultySelect.selectedOptions || [],
+                function (opt) {
+                    if (opt.value) diffs.push(opt.value);
+                }
+            );
+        } else if (config.difficultySelect && config.difficultySelect.value) {
+            diffs.push(config.difficultySelect.value);
+        }
+        draft.settings.difficulties = diffs;
+        draft.settings.difficulty = diffs[0] || "";
         draft.questionIndex = config.questionIndex;
         draft.questions = [];
         for (let i = 0; i < config.questionIndex; i++) {
@@ -64,8 +76,16 @@
         if (draft.settings.topicId) {
             config.topicSelect.value = draft.settings.topicId;
         }
-        if (draft.settings.difficulty) {
-            config.difficultySelect.value = draft.settings.difficulty;
+        var wanted =
+            draft.settings.difficulties && draft.settings.difficulties.length
+                ? draft.settings.difficulties
+                : draft.settings.difficulty
+                  ? [draft.settings.difficulty]
+                  : [];
+        if (wanted.length && config.difficultySelect) {
+            Array.prototype.forEach.call(config.difficultySelect.options, function (opt) {
+                opt.selected = wanted.indexOf(opt.value) !== -1;
+            });
         }
         config.fieldsStore.innerHTML = "";
         config.tableBody.innerHTML = "";

@@ -6,8 +6,10 @@ from django.test import override_settings
 from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.job_services import (
     _chunk_sizes,
+    parse_job_difficulties,
     run_explanation_generation_job,
     run_question_generation_job,
+    split_counts_across,
     start_question_generation_job,
 )
 from apps.ai.models import AIGenerationJob
@@ -32,7 +34,15 @@ def _make_question_batch(count: int, stem_prefix: str = "Q") -> list[dict]:
     ]
 
 
-def _create_job(*, professor, course, topic, count: int, difficulty: str = "easy", question_type: str = "mcq") -> AIGenerationJob:
+def _create_job(
+    *,
+    professor,
+    course,
+    topic,
+    count: int,
+    difficulty: str = "easy",
+    question_type: str = "mcq",
+) -> AIGenerationJob:
     return AIGenerationJob.objects.create(
         job_type=AIGenerationJob.JobType.QUESTION_GENERATE,
         status=AIGenerationJob.Status.PENDING,
@@ -63,6 +73,22 @@ class TestChunkSizes:
         assert _chunk_sizes(10, 5) == [5, 5]
         assert _chunk_sizes(7, 5) == [5, 2]
         assert _chunk_sizes(10, 0) == []
+
+
+class TestDifficultySplitHelpers:
+    def test_parse_job_difficulties(self):
+        assert parse_job_difficulties("") == ["easy"]
+        assert parse_job_difficulties("medium") == ["medium"]
+        assert parse_job_difficulties("easy,medium,hard") == ["easy", "medium", "hard"]
+        assert parse_job_difficulties("hard,easy,hard") == ["hard", "easy"]
+        assert parse_job_difficulties("nope,medium") == ["medium"]
+
+    def test_split_counts_across(self):
+        assert split_counts_across(9, 3) == [3, 3, 3]
+        assert split_counts_across(10, 3) == [4, 3, 3]
+        assert split_counts_across(2, 3) == [1, 1, 0]
+        assert split_counts_across(5, 1) == [5]
+        assert split_counts_across(0, 2) == [0, 0]
 
 
 @pytest.mark.django_db
@@ -102,7 +128,9 @@ class TestQuestionGenerationJob:
     def test_retries_retryable_failure_then_succeeds(self, professor, course, topic):
         generator = MagicMock()
         generator.generate.side_effect = [
-            AIServiceUnavailableError("AI unavailable: API quota exceeded.", retryable=True),
+            AIServiceUnavailableError(
+                "AI unavailable: API quota exceeded.", retryable=True
+            ),
             normalize_generated_questions(_make_question_batch(3, "Q")),
         ]
         job = _create_job(professor=professor, course=course, topic=topic, count=3)
@@ -138,8 +166,41 @@ class TestQuestionGenerationJob:
         assert generator.generate.call_count == 1
         assert "API key" in job.error_message
 
+    @override_settings(AI_GENERATION_BATCH_SIZE=5, AI_GENERATION_MAX_ATTEMPTS=3)
+    def test_multi_difficulty_splits_and_stamps_each_variation(
+        self, professor, course, topic
+    ):
+        generator = MagicMock()
+        generator.generate.side_effect = [
+            normalize_generated_questions(_make_question_batch(3, "E")),
+            normalize_generated_questions(_make_question_batch(3, "M")),
+            normalize_generated_questions(_make_question_batch(3, "H")),
+        ]
+        job = _create_job(
+            professor=professor,
+            course=course,
+            topic=topic,
+            count=9,
+            difficulty="easy,medium,hard",
+        )
+        job = _run(generator, job.pk)
 
-def _create_explanation_job(*, professor, course, topic, question_ids: list[int]) -> AIGenerationJob:
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        assert generator.generate.call_count == 3
+        difficulties = [call.args[1] for call in generator.generate.call_args_list]
+        assert difficulties == ["easy", "medium", "hard"]
+        counts = [call.kwargs["count"] for call in generator.generate.call_args_list]
+        assert counts == [3, 3, 3]
+        variations = job.result["variations"]
+        assert len(variations) == 9
+        assert [v["difficulty"] for v in variations] == (
+            ["easy"] * 3 + ["medium"] * 3 + ["hard"] * 3
+        )
+
+
+def _create_explanation_job(
+    *, professor, course, topic, question_ids: list[int]
+) -> AIGenerationJob:
     return AIGenerationJob.objects.create(
         job_type=AIGenerationJob.JobType.EXPLANATION_GENERATE,
         status=AIGenerationJob.Status.PENDING,
@@ -186,9 +247,9 @@ class TestExplanationGenerationJob:
 
         assert job.status == AIGenerationJob.Status.SUCCEEDED
         steps = list(
-            ExplanationStep.objects.filter(question=question).order_by("order").values_list(
-                "content", flat=True
-            )
+            ExplanationStep.objects.filter(question=question)
+            .order_by("order")
+            .values_list("content", flat=True)
         )
         assert steps == ["Add both numbers.", "2 + 2 = 4"]
         question.refresh_from_db()
@@ -200,7 +261,9 @@ class TestExplanationGenerationJob:
         self, professor, course, topic, mcq_question
     ):
         question, _correct = mcq_question
-        ExplanationStep.objects.create(question=question, order=1, content="Existing step.")
+        ExplanationStep.objects.create(
+            question=question, order=1, content="Existing step."
+        )
         question.adaptive_explanation = {
             "what_went_wrong": "Existing.",
             "why": "Existing why.",
@@ -231,7 +294,9 @@ class TestExplanationGenerationJob:
         question, _correct = mcq_question
         generator = MagicMock()
         generator.generate.side_effect = [
-            AIServiceUnavailableError("AI unavailable: API quota exceeded.", retryable=True),
+            AIServiceUnavailableError(
+                "AI unavailable: API quota exceeded.", retryable=True
+            ),
             {
                 "explanation_steps": ["Work the problem."],
                 "solution_summary": "Answer A.",

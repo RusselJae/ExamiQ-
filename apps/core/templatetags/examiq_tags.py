@@ -18,11 +18,22 @@ DIFFICULTY_LABELS = {
 
 @register.filter
 def difficulty_label(value):
-    """Map stored difficulty code to display label."""
+    """Map stored difficulty code(s) to display label(s).
+
+    Accepts a single code (``easy``) or comma-joined codes
+    (``easy,medium,hard``) from multi-select AI generate jobs.
+    """
     if value is None:
         return ""
-    text = str(value).lower()
-    return DIFFICULTY_LABELS.get(text, str(value))
+    text = str(value).strip()
+    if "," in text:
+        labels = [
+            DIFFICULTY_LABELS.get(part.strip().lower(), part.strip())
+            for part in text.split(",")
+            if part.strip()
+        ]
+        return ", ".join(labels)
+    return DIFFICULTY_LABELS.get(text.lower(), str(value))
 
 
 @register.filter

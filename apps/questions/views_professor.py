@@ -507,7 +507,11 @@ class QuestionPublishView(ProfessorCourseMixin, View):
                 request,
                 "Confirm faculty attestation before publishing this question.",
             )
-            return redirect("analytics_professor:question_edit", course_pk=course_pk, question_pk=question_pk)
+            return redirect(
+                "analytics_professor:question_edit",
+                course_pk=course_pk,
+                question_pk=question_pk,
+            )
         publish_question_as_faculty(
             question,
             request.user,
@@ -727,9 +731,9 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 "explanation_status": "draft",
                 "adaptive_explanation": adaptive_explanation,
                 "adaptive_explanation_source": (
-                    "faculty" if adaptive_explanation and any(
-                        str(v or "").strip() for v in adaptive_explanation.values()
-                    )
+                    "faculty"
+                    if adaptive_explanation
+                    and any(str(v or "").strip() for v in adaptive_explanation.values())
                     else ""
                 ),
             }
@@ -939,7 +943,9 @@ class QuestionAddHubView(ProfessorRequiredMixin, View):
                     (Question.Difficulty.MEDIUM, "Intermediate"),
                     (Question.Difficulty.HARD, "Advanced"),
                 ],
-                "question_type_choices": list(Question.AUTHORABLE_QUESTION_TYPE_CHOICES),
+                "question_type_choices": list(
+                    Question.AUTHORABLE_QUESTION_TYPE_CHOICES
+                ),
                 "course_options": course_options,
                 "selected_course_pk": None,
                 "learning_documents": [],
@@ -960,7 +966,18 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         from apps.ai.source_extract import SourceMaterialError
         from apps.ai.subject_relevance import assess_subject_relevance
 
-        difficulty = request.POST.get("difficulty", Question.Difficulty.EASY)
+        valid_difficulties = set(Question.Difficulty.values)
+        difficulties: list[str] = []
+        for raw in request.POST.getlist("difficulty"):
+            for part in str(raw or "").split(","):
+                code = part.strip()
+                if code in valid_difficulties and code not in difficulties:
+                    difficulties.append(code)
+        if not difficulties:
+            difficulties = [Question.Difficulty.EASY]
+        # Cap at three bands (UI allows 1–3); store comma-joined for the job.
+        difficulties = difficulties[:3]
+        difficulty = ",".join(difficulties)
         question_type = Question.QuestionType.MCQ
         try:
             count = int(request.POST.get("count") or 3)
@@ -991,7 +1008,9 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             )
 
         uploaded = request.FILES.get("source_file")
-        library_id = request.POST.get("learning_document_id") or request.POST.get("material")
+        library_id = request.POST.get("learning_document_id") or request.POST.get(
+            "material"
+        )
         document = None
         if library_id:
             from apps.ai.models import LearningDocument
@@ -1004,7 +1023,9 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             ).first()
             if document is None:
                 return JsonResponse(
-                    {"error": "Selected learning material was not found or is not ready."},
+                    {
+                        "error": "Selected learning material was not found or is not ready."
+                    },
                     status=400,
                 )
         elif uploaded:
@@ -1194,6 +1215,13 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
                 job.result.get("variations") or [],
                 question_type=job.question_type,
             )
+            from apps.ai.job_services import parse_job_difficulties
+
+            fallback = parse_job_difficulties(job.difficulty)[0]
+            for item in variations:
+                code = (item.get("difficulty") or "").strip()
+                if code not in Question.Difficulty.values:
+                    item["difficulty"] = fallback
 
         wants_json = "application/json" in (request.headers.get("Accept") or "")
         if wants_json and request.GET.get("html") != "1":

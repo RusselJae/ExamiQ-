@@ -31,7 +31,7 @@
                            data-concept="{{ variation.concept_tag|default:''|escape }}"
                            data-question-type="{{ variation.question_type|default:'mcq' }}"
                            data-correct="{{ variation.correct_label|default:'A' }}"
-                           data-difficulty="{{ difficulty }}"
+                           data-difficulty="{{ variation.difficulty|default:difficulty }}"
                            data-expected="{{ variation.expected_answer|default:''|escape }}"
                            data-solution="{{ variation.solution_summary|default:''|escape }}"
                            data-what-went-wrong="{{ variation.what_went_wrong|default:''|escape }}"
@@ -45,6 +45,10 @@
                            {% endfor %}>
                     <span class="flex-1 min-w-0">
                         <span class="text-examiq-navy font-medium block">{{ variation.stem }}</span>
+                        <span class="text-xs text-examiq-slate mt-1 block">
+                            Difficulty:
+                            <strong>{{ variation.difficulty|default:difficulty|difficulty_label }}</strong>
+                        </span>
                         {% if variation.concept_tag %}
                         <span class="text-xs text-examiq-slate mt-1 block">Concept: {{ variation.concept_tag }}</span>
                         {% endif %}

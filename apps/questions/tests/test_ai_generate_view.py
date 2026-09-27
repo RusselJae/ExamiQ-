@@ -43,7 +43,13 @@ class TestQuestionAIGenerateView:
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     def test_enqueues_job_and_surfaces_ai_error(
-        self, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
+        self,
+        mock_get_generator,
+        _mock_thread,
+        client,
+        professor,
+        course_with_subject,
+        topic,
     ):
         generator = mock_get_generator.return_value
         generator.generate.side_effect = AIServiceUnavailableError(
@@ -92,7 +98,13 @@ class TestQuestionAIGenerateView:
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     def test_status_returns_modal_on_success(
-        self, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
+        self,
+        mock_get_generator,
+        _mock_thread,
+        client,
+        professor,
+        course_with_subject,
+        topic,
     ):
         generator = mock_get_generator.return_value
         generator.generate.return_value = [
@@ -154,7 +166,14 @@ class TestQuestionAIGenerateView:
             "analytics_professor:question_ai_generate",
             kwargs={"course_pk": course_with_subject.pk},
         )
-        response = client.post(url, {"topic": topic.pk, "difficulty": "easy", "source_file": _sample_module_file()})
+        response = client.post(
+            url,
+            {
+                "topic": topic.pk,
+                "difficulty": "easy",
+                "source_file": _sample_module_file(),
+            },
+        )
         assert response.status_code == 400
         data = response.json()
         assert data["relevance_blocked"] is True
@@ -164,7 +183,14 @@ class TestQuestionAIGenerateView:
     @patch("apps.ai.job_services.get_question_generator")
     @patch("apps.ai.subject_relevance.assess_subject_relevance")
     def test_unrelated_module_ignores_bypass_flag(
-        self, mock_relevance, mock_get_generator, _mock_thread, client, professor, course_with_subject, topic
+        self,
+        mock_relevance,
+        mock_get_generator,
+        _mock_thread,
+        client,
+        professor,
+        course_with_subject,
+        topic,
     ):
         mock_get_generator.return_value.generate.return_value = []
         mock_relevance.return_value = {
@@ -192,3 +218,66 @@ class TestQuestionAIGenerateView:
         data = response.json()
         assert data["relevance_blocked"] is True
         mock_get_generator.assert_not_called()
+
+    @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
+    @patch("apps.ai.job_services.get_question_generator")
+    def test_multi_difficulty_getlist_splits_generation(
+        self,
+        mock_get_generator,
+        _mock_thread,
+        client,
+        professor,
+        course_with_subject,
+        topic,
+    ):
+        generator = mock_get_generator.return_value
+
+        def _batch(topic, difficulty, count=3, **_kwargs):
+            return [
+                {
+                    "stem": f"{difficulty}-{i}",
+                    "choices": [
+                        {"label": "A", "text": "1", "is_correct": True},
+                        {"label": "B", "text": "2", "is_correct": False},
+                        {"label": "C", "text": "3", "is_correct": False},
+                        {"label": "D", "text": "4", "is_correct": False},
+                    ],
+                    "correct_label": "A",
+                    "concept_tag": "Concept",
+                }
+                for i in range(count)
+            ]
+
+        generator.generate.side_effect = _batch
+        client.force_login(professor)
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
+        response = client.post(
+            url,
+            {
+                "topic": topic.pk,
+                "difficulty": ["easy", "medium", "hard"],
+                "count": "9",
+                "source_file": _sample_module_file(),
+            },
+        )
+        assert response.status_code == 202
+        job = AIGenerationJob.objects.get(pk=response.json()["job_id"])
+        assert job.difficulty == "easy,medium,hard"
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        assert generator.generate.call_count == 3
+        stamped = [v["difficulty"] for v in job.result["variations"]]
+        assert stamped == ["easy"] * 3 + ["medium"] * 3 + ["hard"] * 3
+
+        status_url = reverse(
+            "analytics_professor:question_ai_generate_status",
+            kwargs={"course_pk": course_with_subject.pk, "job_id": job.pk},
+        )
+        status_response = client.get(status_url, HTTP_ACCEPT="text/html")
+        assert status_response.status_code == 200
+        html = status_response.content.decode()
+        assert 'data-difficulty="easy"' in html
+        assert 'data-difficulty="medium"' in html
+        assert 'data-difficulty="hard"' in html

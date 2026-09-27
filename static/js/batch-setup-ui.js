@@ -10,13 +10,50 @@
             group.dataset.bound = "1";
             var targetId = group.getAttribute("data-pill-target");
             var select = targetId ? document.getElementById(targetId) : null;
+            var multi = group.getAttribute("data-pill-multi") === "1";
+            var min = parseInt(group.getAttribute("data-pill-min") || "1", 10);
+            var max = parseInt(group.getAttribute("data-pill-max") || "99", 10);
+
+            function syncSelectFromPills() {
+                if (!select) return;
+                var selected = [];
+                group.querySelectorAll("[data-pill-value].is-selected").forEach(function (btn) {
+                    selected.push(btn.getAttribute("data-pill-value") || "");
+                });
+                if (select.multiple) {
+                    Array.prototype.forEach.call(select.options, function (opt) {
+                        opt.selected = selected.indexOf(opt.value) !== -1;
+                    });
+                } else {
+                    select.value = selected[0] || select.value;
+                }
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+
             group.querySelectorAll("[data-pill-value]").forEach(function (btn) {
                 btn.addEventListener("click", function () {
                     var value = btn.getAttribute("data-pill-value") || "";
+                    if (multi) {
+                        var on = btn.classList.contains("is-selected");
+                        var selectedCount = group.querySelectorAll(
+                            "[data-pill-value].is-selected"
+                        ).length;
+                        if (on) {
+                            if (selectedCount <= min) return;
+                            btn.classList.remove("is-selected");
+                            btn.setAttribute("aria-pressed", "false");
+                        } else {
+                            if (selectedCount >= max) return;
+                            btn.classList.add("is-selected");
+                            btn.setAttribute("aria-pressed", "true");
+                        }
+                        syncSelectFromPills();
+                        return;
+                    }
                     group.querySelectorAll("[data-pill-value]").forEach(function (other) {
-                        var on = other === btn;
-                        other.classList.toggle("is-selected", on);
-                        other.setAttribute("aria-pressed", on ? "true" : "false");
+                        var isOn = other === btn;
+                        other.classList.toggle("is-selected", isOn);
+                        other.setAttribute("aria-pressed", isOn ? "true" : "false");
                     });
                     if (select) {
                         select.value = value;

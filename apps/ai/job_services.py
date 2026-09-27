@@ -10,7 +10,11 @@ from django.conf import settings
 from django.db import close_old_connections
 
 from apps.ai.exceptions import AIServiceUnavailableError
-from apps.ai.factory import get_explanation_generator, get_question_generator, is_ai_configured
+from apps.ai.factory import (
+    get_explanation_generator,
+    get_question_generator,
+    is_ai_configured,
+)
 from apps.ai.models import AIGenerationJob
 from apps.ai.normalize import normalize_generated_questions
 from apps.ai.prompts import coerce_generate_question_type
@@ -24,6 +28,27 @@ def _chunk_sizes(total: int, size: int) -> list[int]:
     if total <= 0 or size <= 0:
         return []
     return [min(size, total - start) for start in range(0, total, size)]
+
+
+def parse_job_difficulties(difficulty: str) -> list[str]:
+    """Parse job.difficulty as one value or comma-joined list (e.g. ``easy,medium``)."""
+    valid = {choice.value for choice in Question.Difficulty}
+    ordered: list[str] = []
+    for part in (difficulty or "").split(","):
+        code = part.strip()
+        if code in valid and code not in ordered:
+            ordered.append(code)
+    return ordered or [Question.Difficulty.EASY]
+
+
+def split_counts_across(total: int, n: int) -> list[int]:
+    """Distribute ``total`` as evenly as possible across ``n`` buckets."""
+    if n <= 0:
+        return []
+    if total <= 0:
+        return [0] * n
+    base, rem = divmod(int(total), n)
+    return [base + (1 if i < rem else 0) for i in range(n)]
 
 
 def start_question_generation_job(
@@ -113,7 +138,9 @@ def run_question_generation_job(job_id: int) -> None:
     variations: list[dict] = []
 
     try:
-        topic = Topic.objects.select_related("subject", "subject__program").get(pk=job.topic_id)
+        topic = Topic.objects.select_related("subject", "subject__program").get(
+            pk=job.topic_id
+        )
         source_material = job.source_material or ""
         if job.learning_document_id and not source_material:
             from apps.ai.retrieval import retrieve_material_for_topic
@@ -131,50 +158,61 @@ def run_question_generation_job(job_id: int) -> None:
         # provider request usage (e.g. ~20 requests -> 2 for 10 questions) and
         # keeps each call within the output-token budget. Retry transient
         # provider failures (rate limits, 5xx) with exponential backoff.
+        # When multiple difficulties are selected, split the total count evenly
+        # and generate each band separately so applied rows keep distinct levels.
         batch_size = getattr(settings, "AI_GENERATION_BATCH_SIZE", 5)
         max_attempts = getattr(settings, "AI_GENERATION_MAX_ATTEMPTS", 3)
-        for chunk in _chunk_sizes(job.count, batch_size):
-            attempt = 0
-            last_exc: AIServiceUnavailableError | None = None
-            while attempt < max_attempts:
-                try:
-                    batch = normalize_generated_questions(
-                        generator.generate(
-                            topic,
-                            job.difficulty,
-                            count=chunk,
-                            source_material=source_material,
+        difficulties = parse_job_difficulties(job.difficulty)
+        per_difficulty = split_counts_across(job.count, len(difficulties))
+
+        for difficulty, diff_count in zip(difficulties, per_difficulty, strict=True):
+            if diff_count <= 0:
+                continue
+            produced_for_diff = 0
+            for chunk in _chunk_sizes(diff_count, batch_size):
+                attempt = 0
+                last_exc: AIServiceUnavailableError | None = None
+                while attempt < max_attempts:
+                    try:
+                        batch = normalize_generated_questions(
+                            generator.generate(
+                                topic,
+                                difficulty,
+                                count=chunk,
+                                source_material=source_material,
+                                question_type=job.question_type,
+                                reference_stem=job.reference_stem or "",
+                            ),
                             question_type=job.question_type,
-                            reference_stem=job.reference_stem or "",
-                        ),
-                        question_type=job.question_type,
-                    )
-                    seen_stems = {
-                        (v.get("stem") or "").strip().casefold()
-                        for v in variations
-                        if (v.get("stem") or "").strip()
-                    }
-                    for item in batch:
-                        stem_key = (item.get("stem") or "").strip().casefold()
-                        if not stem_key or stem_key in seen_stems:
-                            continue
-                        seen_stems.add(stem_key)
-                        variations.append(item)
-                    job.result = {"variations": variations[: job.count]}
-                    job.save(update_fields=["result", "updated"])
+                        )
+                        seen_stems = {
+                            (v.get("stem") or "").strip().casefold()
+                            for v in variations
+                            if (v.get("stem") or "").strip()
+                        }
+                        for item in batch:
+                            stem_key = (item.get("stem") or "").strip().casefold()
+                            if not stem_key or stem_key in seen_stems:
+                                continue
+                            seen_stems.add(stem_key)
+                            item["difficulty"] = difficulty
+                            variations.append(item)
+                            produced_for_diff += 1
+                        job.result = {"variations": variations[: job.count]}
+                        job.save(update_fields=["result", "updated"])
+                        break
+                    except AIServiceUnavailableError as exc:
+                        last_exc = exc
+                        if not exc.retryable:
+                            raise
+                        attempt += 1
+                        if attempt < max_attempts:
+                            time.sleep(min(2**attempt, 8))
+                else:
+                    if last_exc is not None:
+                        raise last_exc
+                if produced_for_diff >= diff_count:
                     break
-                except AIServiceUnavailableError as exc:
-                    last_exc = exc
-                    if not exc.retryable:
-                        raise
-                    attempt += 1
-                    if attempt < max_attempts:
-                        time.sleep(min(2**attempt, 8))
-            else:
-                if last_exc is not None:
-                    raise last_exc
-            if len(variations) >= job.count:
-                break
 
         job.result = {"variations": variations[: job.count]}
         job.status = AIGenerationJob.Status.SUCCEEDED
