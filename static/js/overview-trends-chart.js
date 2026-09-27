@@ -27,7 +27,12 @@
 
     var SURE_CORRECT_COLORS = {
         sure: "#0284c7",
+        notSure: "#ca8a04",
+        guessing: "#94a3b8",
         correct: "#1a5634",
+        quick: "#16a34a",
+        steady: "#d97706",
+        slow: "#ea580c",
         overFill: "rgba(251, 146, 60, 0.22)",
         underFill: "rgba(16, 185, 129, 0.18)",
         overLabel: "#9a3412",
@@ -383,72 +388,223 @@
         },
     };
 
+    function lineDataset(opts) {
+        return {
+            type: "line",
+            label: opts.label,
+            datasetId: opts.datasetId,
+            data: opts.data,
+            borderColor: opts.color,
+            backgroundColor: "#fff",
+            pointBackgroundColor: "#fff",
+            pointBorderColor: opts.color,
+            pointBorderWidth: 2,
+            borderWidth: opts.borderWidth != null ? opts.borderWidth : 2.25,
+            borderDash: opts.borderDash || [],
+            pointRadius: opts.pointRadius != null ? opts.pointRadius : 4,
+            pointHoverRadius: opts.pointHoverRadius != null ? opts.pointHoverRadius : 5,
+            fill: false,
+            tension: 0.25,
+            order: opts.order != null ? opts.order : 2,
+            hidden: !!opts.hidden,
+            legendGroup: opts.legendGroup || "rating",
+        };
+    }
+
     function sureCorrectDatasets(points) {
-        var sureData = points.map(function (p) {
-            return p.sure != null ? p.sure : null;
-        });
-        var guessingData = points.map(function (p) {
-            return p.guessing != null ? p.guessing : null;
-        });
-        var correctData = points.map(function (p) {
-            return p.correct_pct != null ? p.correct_pct : null;
-        });
+        var seriesOf = function (key) {
+            return points.map(function (p) {
+                return p[key] != null ? p[key] : null;
+            });
+        };
 
         return [
-            {
-                type: "line",
-                label: "Sure",
-                datasetId: "sure",
-                data: sureData,
-                borderColor: SURE_CORRECT_COLORS.sure,
-                backgroundColor: "#fff",
-                pointBackgroundColor: "#fff",
-                pointBorderColor: SURE_CORRECT_COLORS.sure,
-                pointBorderWidth: 2,
-                borderWidth: 2.5,
-                pointRadius: 5,
-                pointHoverRadius: 6,
-                fill: false,
-                tension: 0.25,
-                order: 1,
-            },
-            {
-                type: "line",
+            lineDataset({
                 label: "Guessing",
                 datasetId: "guessing",
-                data: guessingData,
-                borderColor: "#94a3b8",
-                backgroundColor: "#fff",
-                pointBackgroundColor: "#fff",
-                pointBorderColor: "#94a3b8",
-                pointBorderWidth: 2,
-                borderWidth: 2,
+                data: seriesOf("guessing"),
+                color: SURE_CORRECT_COLORS.guessing,
                 borderDash: [4, 3],
-                pointRadius: 4,
-                pointHoverRadius: 5,
-                fill: false,
-                tension: 0.25,
-                order: 2,
-            },
-            {
-                type: "line",
-                label: "Correct",
-                datasetId: "correct",
-                data: correctData,
-                borderColor: SURE_CORRECT_COLORS.correct,
-                backgroundColor: "#fff",
-                pointBackgroundColor: "#fff",
-                pointBorderColor: SURE_CORRECT_COLORS.correct,
-                pointBorderWidth: 2,
+                borderWidth: 2,
+                legendGroup: "rating",
+            }),
+            lineDataset({
+                label: "Not sure",
+                datasetId: "not_sure",
+                data: seriesOf("not_sure"),
+                color: SURE_CORRECT_COLORS.notSure,
+                borderDash: [5, 4],
+                borderWidth: 2,
+                legendGroup: "rating",
+            }),
+            lineDataset({
+                label: "Sure",
+                datasetId: "sure",
+                data: seriesOf("sure"),
+                color: SURE_CORRECT_COLORS.sure,
                 borderWidth: 2.5,
-                borderDash: [6, 4],
                 pointRadius: 5,
                 pointHoverRadius: 6,
-                fill: false,
-                tension: 0.25,
                 order: 1,
-            },
+                legendGroup: "rating",
+            }),
+            lineDataset({
+                label: "Correct",
+                datasetId: "correct",
+                data: seriesOf("correct_pct"),
+                color: SURE_CORRECT_COLORS.correct,
+                borderDash: [6, 4],
+                borderWidth: 2.5,
+                pointRadius: 5,
+                pointHoverRadius: 6,
+                order: 1,
+                legendGroup: "rating",
+            }),
+            lineDataset({
+                label: "Quick",
+                datasetId: "quick",
+                data: seriesOf("quick"),
+                color: SURE_CORRECT_COLORS.quick,
+                borderWidth: 2,
+                hidden: true,
+                legendGroup: "pace",
+            }),
+            lineDataset({
+                label: "Steady",
+                datasetId: "steady",
+                data: seriesOf("steady"),
+                color: SURE_CORRECT_COLORS.steady,
+                borderDash: [3, 3],
+                borderWidth: 2,
+                hidden: true,
+                legendGroup: "pace",
+            }),
+            lineDataset({
+                label: "Slow",
+                datasetId: "slow",
+                data: seriesOf("slow"),
+                color: SURE_CORRECT_COLORS.slow,
+                borderDash: [2, 4],
+                borderWidth: 2,
+                hidden: true,
+                legendGroup: "pace",
+            }),
         ];
+    }
+
+    function chartHintHtml(series, opts) {
+        opts = opts || {};
+        var flat = !!opts.flatMode;
+        var points = series.points || [];
+        var metric = series.metric;
+
+        if (metric === "confidence") {
+            var studentSum = 0;
+            var hasStudents = false;
+            points.forEach(function (p) {
+                if (p.student_count != null) {
+                    studentSum += p.student_count;
+                    hasStudents = true;
+                }
+            });
+            var statLabel;
+            var detail;
+            if (flat) {
+                statLabel = points.length + (points.length === 1 ? " session" : " sessions");
+                detail = "Your Sure vs Correct · status uses a ±15 pt gap.";
+            } else if (hasStudents) {
+                statLabel =
+                    studentSum +
+                    (studentSum === 1 ? " student-period" : " student-periods");
+                detail = "Sure vs Correct across this range · status uses a ±15 pt gap.";
+            } else {
+                statLabel = points.length + (points.length === 1 ? " period" : " periods");
+                detail = "Sure vs Correct across this range · status uses a ±15 pt gap.";
+            }
+            return (
+                '<div class="overview-chart-hint__row">' +
+                '<span class="overview-chart-hint__stat">' +
+                statLabel +
+                "</span>" +
+                '<p class="overview-chart-hint__text">' +
+                detail +
+                "</p></div>"
+            );
+        }
+
+        if (metric === "mistakes") {
+            var n = points.length;
+            var mistStat = n + (n === 1 ? " question" : " questions");
+            var mistDetail = flat
+                ? "Bar = times incorrect · tap Q# to review the answer."
+                : "Bar = unique students (≥15) · tap Q# to open the question.";
+            return (
+                '<div class="overview-chart-hint__row">' +
+                '<span class="overview-chart-hint__stat">' +
+                mistStat +
+                "</span>" +
+                '<p class="overview-chart-hint__text">' +
+                mistDetail +
+                "</p></div>"
+            );
+        }
+
+        return "";
+    }
+
+    function renderConfidenceLegend(legendEl, chart) {
+        if (!legendEl || !chart) return;
+        var ratingBtns = "";
+        var paceBtns = "";
+        chart.data.datasets.forEach(function (ds, index) {
+            if (!ds.label) return;
+            var meta = chart.getDatasetMeta(index);
+            var on = chart.isDatasetVisible
+                ? chart.isDatasetVisible(index)
+                : !(meta && meta.hidden);
+            var btn =
+                '<button type="button" class="overview-legend-btn' +
+                (on ? " is-on" : "") +
+                '" data-dataset-index="' +
+                index +
+                '" aria-pressed="' +
+                (on ? "true" : "false") +
+                '">' +
+                '<i class="overview-legend-btn__swatch" style="--swatch:' +
+                (ds.borderColor || "#64748b") +
+                '" aria-hidden="true"></i>' +
+                ds.label +
+                "</button>";
+            if (ds.legendGroup === "pace") {
+                paceBtns += btn;
+            } else {
+                ratingBtns += btn;
+            }
+        });
+        legendEl.hidden = false;
+        legendEl.innerHTML =
+            '<div class="overview-confidence-legend__group">' +
+            '<span class="overview-confidence-legend__label">Ratings</span>' +
+            '<div class="overview-confidence-legend__btns">' +
+            ratingBtns +
+            "</div></div>" +
+            '<div class="overview-confidence-legend__group">' +
+            '<span class="overview-confidence-legend__label">Pace</span>' +
+            '<div class="overview-confidence-legend__btns">' +
+            paceBtns +
+            "</div></div>";
+
+        legendEl.querySelectorAll("[data-dataset-index]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var idx = parseInt(btn.getAttribute("data-dataset-index"), 10);
+                var meta = chart.getDatasetMeta(idx);
+                if (!meta) return;
+                meta.hidden = !meta.hidden;
+                btn.classList.toggle("is-on", !meta.hidden);
+                btn.setAttribute("aria-pressed", meta.hidden ? "false" : "true");
+                chart.update();
+            });
+        });
     }
 
     function renderOverviewTrendsChart(options) {
@@ -469,6 +625,8 @@
         var titleEl = resolveEl(options.titleEl);
         var subtitleEl = resolveEl(options.subtitleEl);
         var gapStatusEl = resolveEl(options.gapStatusEl);
+        var legendEl = resolveEl(options.legendEl);
+        var chartHintEl = resolveEl(options.chartHintEl);
 
         var data = options.data || {};
         var flatMode = !!options.flatMode;
@@ -657,9 +815,31 @@
                     : "");
         }
 
+        function updateChartHint(series) {
+            var show =
+                (series.metric === "confidence" || series.metric === "mistakes") &&
+                !!series.points.length;
+            if (chartHintEl) {
+                if (show) {
+                    chartHintEl.hidden = false;
+                    chartHintEl.innerHTML = chartHintHtml(series, {
+                        flatMode: flatMode,
+                    });
+                } else {
+                    chartHintEl.hidden = true;
+                    chartHintEl.innerHTML = "";
+                }
+            }
+            if (legendEl && series.metric !== "confidence") {
+                legendEl.hidden = true;
+                legendEl.innerHTML = "";
+            }
+        }
+
         function updateInsight(series) {
             if (insightEl) insightEl.hidden = true;
             updateGapStatus(series);
+            updateChartHint(series);
         }
 
         function build() {
@@ -670,6 +850,10 @@
 
             if (!series.total) {
                 setEmpty(true);
+                if (legendEl) {
+                    legendEl.hidden = true;
+                    legendEl.innerHTML = "";
+                }
                 if (chart) {
                     chart.destroy();
                     chart = null;
@@ -717,7 +901,7 @@
                             },
                         },
                         plugins: {
-                            legend: LEGEND_STYLE,
+                            legend: { display: false },
                             tooltip: {
                                 filter: function (context) {
                                     return !!context.dataset.label;
@@ -765,14 +949,27 @@
                         layout: {
                             padding: { top: 16 },
                         },
+                        onClick: function (_event, elements) {
+                            if (!elements || !elements.length) return;
+                            var idx = elements[0].index;
+                            var point = series.points[idx];
+                            if (point && point.url) {
+                                window.location.href = point.url;
+                            }
+                        },
+                        onHover: function (event, elements) {
+                            var target = event.native && event.native.target;
+                            if (!target || !target.style) return;
+                            target.style.cursor =
+                                elements && elements.length ? "pointer" : "default";
+                        },
                         scales: {
                             x: {
                                 grid: { display: false },
                                 ticks: {
-                                    maxRotation: 45,
+                                    maxRotation: 0,
                                     minRotation: 0,
-                                    autoSkip: true,
-                                    maxTicksLimit: 12,
+                                    autoSkip: false,
                                 },
                             },
                             y: {
@@ -796,6 +993,12 @@
                             legend: LEGEND_STYLE,
                             tooltip: {
                                 callbacks: {
+                                    title: function (items) {
+                                        if (!items || !items.length) return "";
+                                        var point = series.points[items[0].dataIndex];
+                                        if (point && point.title) return point.title;
+                                        return items[0].label || "";
+                                    },
                                     label: function (context) {
                                         var v = context.parsed.y;
                                         return context.dataset.label + ": " + v;
@@ -908,6 +1111,12 @@
 
             if (chart) chart.destroy();
             chart = new Chart(canvas, config);
+            if (series.sureCorrect) {
+                renderConfidenceLegend(legendEl, chart);
+            } else if (legendEl) {
+                legendEl.hidden = true;
+                legendEl.innerHTML = "";
+            }
             return chart;
         }
 

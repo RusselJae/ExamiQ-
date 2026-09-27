@@ -1,15 +1,16 @@
 """Analytics and performance aggregation services."""
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Avg, Count, Prefetch, Q, Sum
+from django.db.models import Avg, Count, Max, Prefetch, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek, TruncYear
+from django.urls import reverse
 
 from apps.analytics.confidence import (
-    CLASSIFICATION_LABELS,
     PACE_BAR_COUNTS,
     PACE_QUICK,
+    PACE_SLOW,
+    PACE_STEADY,
     answer_is_unanswered,
-    confidence_accuracy_matrix,
     confidence_tier_matrix,
     misconception_topics,
     pace_from_answer,
@@ -17,11 +18,11 @@ from apps.analytics.confidence import (
 from apps.analytics.models import MistakeRecord
 from apps.questions.models import Question, Subject, Topic
 from apps.reviews.models import Answer, FeedbackView, ReviewSession
-from apps.users.constants import home_programs_for_department, students_in_department
 from apps.reviews.tutor_services import (
     format_answer_user_text,
     format_question_correct_text,
 )
+from apps.users.constants import home_programs_for_department, students_in_department
 from apps.users.models import Course, Program, User
 
 
@@ -205,7 +206,10 @@ def generate_mistake_feedback(mistake_record: MistakeRecord) -> str:
         ai_feedback = faculty_adaptive_feedback_json(question)
 
     if ai_feedback:
-        from apps.ai.normalize import normalize_feedback_text, validate_adaptive_feedback
+        from apps.ai.normalize import (
+            normalize_feedback_text,
+            validate_adaptive_feedback,
+        )
 
         # Keep structured JSON when valid; otherwise store plain text.
         if not validate_adaptive_feedback(ai_feedback):
@@ -444,8 +448,8 @@ def generate_answer_feedback(answer) -> str:
 
 def generate_session_feedback(session) -> list[dict]:
     """Generate feedback for every answer in a completed session."""
-    from apps.analytics.confidence import answer_is_unanswered, confidence_tier_key
     from apps.ai.normalize import parse_any_adaptive_feedback
+    from apps.analytics.confidence import answer_is_unanswered, confidence_tier_key
 
     results = []
     answers = (
@@ -549,8 +553,16 @@ def student_dashboard_trends(student: User) -> dict:
     session_ids = [s.pk for s in sessions]
     answers_by_session: dict[int, list] = {sid: [] for sid in session_ids}
     if session_ids:
-        for answer in Answer.objects.filter(session_id__in=session_ids).only(
-            "session_id", "confidence", "is_correct"
+        for answer in Answer.objects.filter(session_id__in=session_ids).select_related(
+            "session"
+        ).only(
+            "session_id",
+            "confidence",
+            "is_correct",
+            "time_spent_seconds",
+            "selected_choice_id",
+            "numeric_response",
+            "session__seconds_per_question",
         ):
             answers_by_session.setdefault(answer.session_id, []).append(answer)
 
@@ -898,8 +910,22 @@ def _confidence_scale_0_3_annotation():
     )
 
 
+def _answer_seconds_per_question(answer, default: int = 30) -> int:
+    """Resolve per-question timer for pace classification."""
+    spq = getattr(answer, "seconds_per_question", None)
+    if spq is None:
+        session = getattr(answer, "session", None)
+        if session is not None:
+            spq = getattr(session, "seconds_per_question", None)
+    try:
+        value = int(spq or default)
+    except (TypeError, ValueError):
+        value = default
+    return value if value > 0 else default
+
+
 def _confidence_share_point(label: str, answers) -> dict:
-    """Build a stacked confidence share point for one session or bucket."""
+    """Build a stacked confidence + pace share point for one session or bucket."""
     total = len(answers)
     if total == 0:
         return {
@@ -909,10 +935,14 @@ def _confidence_share_point(label: str, answers) -> dict:
             "not_sure": 0.0,
             "guessing": 0.0,
             "none": 100.0,
+            "quick": 0.0,
+            "steady": 0.0,
+            "slow": 0.0,
             "correct_pct": 0.0,
         }
 
     sure = not_sure = guessing = none = correct = 0
+    quick = steady = slow = 0
     mapped_sum = 0
     for answer in answers:
         conf = getattr(answer, "confidence", None)
@@ -927,6 +957,13 @@ def _confidence_share_point(label: str, answers) -> dict:
             guessing += 1
         if getattr(answer, "is_correct", False):
             correct += 1
+        pace = pace_from_answer(answer, _answer_seconds_per_question(answer))
+        if pace == PACE_QUICK:
+            quick += 1
+        elif pace == PACE_STEADY:
+            steady += 1
+        elif pace == PACE_SLOW:
+            slow += 1
 
     def pct(count: int) -> float:
         return round(100.0 * count / total, 1)
@@ -938,6 +975,9 @@ def _confidence_share_point(label: str, answers) -> dict:
         "not_sure": pct(not_sure),
         "guessing": pct(guessing),
         "none": pct(none),
+        "quick": pct(quick),
+        "steady": pct(steady),
+        "slow": pct(slow),
         "correct_pct": round(100.0 * correct / total, 1),
     }
 
@@ -994,6 +1034,7 @@ def professor_overview_trends(professor: User) -> dict:
     Returns all metrics × ranges so the client can switch without refetching.
     """
     from datetime import timedelta
+
     from django.utils import timezone
 
     now = timezone.now()
@@ -1168,10 +1209,26 @@ def professor_overview_trends(professor: User) -> dict:
                 answered_at__gte=earliest,
             )
             .annotate(bucket=trunc_fn("answered_at"))
-            .values_list("bucket", "confidence", "is_correct")
+            .values_list(
+                "bucket",
+                "confidence",
+                "is_correct",
+                "time_spent_seconds",
+                "session__seconds_per_question",
+                "selected_choice_id",
+                "numeric_response",
+            )
         )
         answers_by_bucket: dict[str, list] = {}
-        for bucket, confidence, is_correct in conf_rows:
+        for (
+            bucket,
+            confidence,
+            is_correct,
+            time_spent,
+            seconds_per_question,
+            selected_choice_id,
+            numeric_response,
+        ) in conf_rows:
             if not bucket:
                 continue
             k = cfg["key"](bucket)
@@ -1179,7 +1236,14 @@ def professor_overview_trends(professor: User) -> dict:
                 type(
                     "Row",
                     (),
-                    {"confidence": confidence, "is_correct": is_correct},
+                    {
+                        "confidence": confidence,
+                        "is_correct": is_correct,
+                        "time_spent_seconds": time_spent or 0,
+                        "seconds_per_question": seconds_per_question,
+                        "selected_choice_id": selected_choice_id,
+                        "numeric_response": numeric_response,
+                    },
                 )()
             )
 
@@ -1229,47 +1293,75 @@ def professor_high_mistake_questions(
             answer__session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
         )
         .values("question_id", "question__stem")
-        .annotate(unique_students=Count("student_id", distinct=True))
+        .annotate(
+            unique_students=Count("student_id", distinct=True),
+            course_id=Max("answer__session__course_id"),
+        )
         .filter(unique_students__gte=threshold)
         .order_by("-unique_students", "question_id")[:limit]
     )
     points = []
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
         qid = row["question_id"]
+        course_id = row["course_id"]
         stem = (row["question__stem"] or "").strip().replace("\n", " ")
-        if len(stem) > 42:
-            stem = stem[:41] + "…"
+        url = ""
+        if course_id and qid:
+            url = reverse(
+                "analytics_professor:question_edit",
+                kwargs={"course_pk": course_id, "question_pk": qid},
+            )
         points.append(
             {
-                "label": stem or f"Q{qid}",
+                "label": f"Q{index}",
+                "title": stem or f"Q{qid}",
                 "value": row["unique_students"] or 0,
                 "question_id": qid,
+                "course_id": course_id,
+                "url": url,
             }
         )
     return points
 
 
 def student_incorrect_question_series(
-    student: User, *, limit: int = 20
+    student: User, *, limit: int = 20, for_professor: bool = False
 ) -> list[dict]:
     """Questions this student answered incorrectly (mistake count per question)."""
     rows = (
         MistakeRecord.objects.filter(student=student)
         .values("question_id", "question__stem")
-        .annotate(mistake_count=Count("id"))
+        .annotate(
+            mistake_count=Count("id"),
+            answer_id=Max("answer_id"),
+        )
         .order_by("-mistake_count", "question_id")[:limit]
     )
     points = []
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
         qid = row["question_id"]
+        answer_id = row["answer_id"]
         stem = (row["question__stem"] or "").strip().replace("\n", " ")
-        if len(stem) > 42:
-            stem = stem[:41] + "…"
+        url = ""
+        if answer_id:
+            if for_professor:
+                url = reverse(
+                    "analytics_professor:professor_answer_detail",
+                    kwargs={"student_pk": student.pk, "answer_pk": answer_id},
+                )
+            else:
+                url = reverse(
+                    "analytics_student:answer_detail",
+                    kwargs={"answer_pk": answer_id},
+                )
         points.append(
             {
-                "label": stem or f"Q{qid}",
+                "label": f"Q{index}",
+                "title": stem or f"Q{qid}",
                 "value": row["mistake_count"] or 0,
                 "question_id": qid,
+                "answer_id": answer_id,
+                "url": url,
             }
         )
     return points
@@ -2335,7 +2427,9 @@ def _build_student_activity_summary(
         dashboard_trends["confidence"].append(
             _confidence_share_point(label, session_answers)
         )
-    dashboard_trends["mistakes"] = student_incorrect_question_series(student)
+    dashboard_trends["mistakes"] = student_incorrect_question_series(
+        student, for_professor=True
+    )
     dashboard_trends["confidence_insight"] = build_confidence_insight(
         dashboard_trends["confidence"]
     )

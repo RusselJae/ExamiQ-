@@ -1,5 +1,6 @@
 import pytest
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.urls import reverse
 
 from apps.questions.models import YearLevel
@@ -85,9 +86,18 @@ def _faculty_data(signup_year_level, signup_section, **extra):
     return data
 
 
+def _otp_code_from_mailbox() -> str:
+    body = mail.outbox[-1].body
+    return next(token for token in body.split() if token.isdigit() and len(token) == 6)
+
+
 @pytest.mark.django_db
 class TestSignupRoles:
-    def test_student_signup_creates_active_student(
+    @pytest.fixture(autouse=True)
+    def _locmem_email(self, settings):
+        settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+    def test_student_signup_creates_inactive_pending_otp(
         self, client, bsed_program, signup_year_level, signup_section
     ):
         response = client.post(
@@ -95,6 +105,7 @@ class TestSignupRoles:
             _student_data(signup_year_level, signup_section),
         )
         assert response.status_code == 302
+        assert reverse("users:signup_verify") in response.url
         user = User.objects.get(email="newstudent@test.edu")
         assert user.role == User.Role.STUDENT
         assert user.student_number == "123456789"
@@ -102,10 +113,12 @@ class TestSignupRoles:
         assert user.home_degree_program == User.HomeDegreeProgram.BSED_MATH
         assert user.year_level_id == signup_year_level.pk
         assert user.section_id == signup_section.pk
-        assert user.is_active is True
+        assert user.is_active is False
         assert user.approval_status == User.ApprovalStatus.APPROVED
         assert user.first_name == "Ana"
         assert user.last_name == "Santos"
+        assert len(mail.outbox) == 1
+        assert "verification code" in mail.outbox[0].subject.lower()
 
     def test_student_signup_accepts_optional_middle_name_and_suffix(
         self, client, bsed_program, signup_year_level, signup_section
@@ -124,6 +137,7 @@ class TestSignupRoles:
         assert user.middle_name == "Marie"
         assert user.suffix == "Jr."
         assert user.get_full_name() == "Ana Marie Santos Jr."
+        assert user.is_active is False
 
     def test_student_signup_requires_first_and_last_name(
         self, client, bsed_program, signup_year_level, signup_section
@@ -145,7 +159,7 @@ class TestSignupRoles:
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
-    def test_faculty_signup_creates_active_approved_account(
+    def test_faculty_signup_creates_inactive_approved_pending_otp(
         self, client, bsed_program, signup_year_level, signup_section
     ):
         response = client.post(
@@ -158,13 +172,63 @@ class TestSignupRoles:
         assert user.department is not None
         assert user.department.name == "College of Education"
         assert user.employee_id == "EMP-2024-001"
-        assert user.is_active is True
+        assert user.is_active is False
         assert user.approval_status == User.ApprovalStatus.APPROVED
         assert user.year_level_id is None
         assert user.section_id is None
         assert list(user.assigned_sections.values_list("pk", flat=True)) == [
             signup_section.pk
         ]
+        assert len(mail.outbox) == 1
+
+    def test_otp_verify_activates_account(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        user = User.objects.get(email="newstudent@test.edu")
+        assert user.is_active is False
+        code = _otp_code_from_mailbox()
+        response = client.post(
+            reverse("users:signup_verify"),
+            {"action": "verify", "code": code},
+        )
+        assert response.status_code == 302
+        user.refresh_from_db()
+        assert user.is_active is True
+
+    def test_otp_wrong_code_keeps_inactive(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        response = client.post(
+            reverse("users:signup_verify"),
+            {"action": "verify", "code": "000000"},
+        )
+        assert response.status_code == 400
+        user = User.objects.get(email="newstudent@test.edu")
+        assert user.is_active is False
+
+    def test_login_blocked_until_otp_verified(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        client.logout()
+        response = client.post(
+            reverse("account_login"),
+            {"login": "newstudent@test.edu", "password": "strongpass123!"},
+        )
+        assert response.status_code == 302
+        assert "verify_email" in response.url or "signup/verify" in response.url
+        assert "_auth_user_id" not in client.session
 
     def test_faculty_signup_requires_year_and_section(
         self, client, bsed_program, signup_year_level, signup_section
@@ -199,6 +263,7 @@ class TestSignupRoles:
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
         assert user.employee_id == ""
+        assert user.is_active is False
 
     def test_chairperson_role_not_available_on_signup(
         self, client, signup_year_level, signup_section

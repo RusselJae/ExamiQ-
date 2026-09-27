@@ -4,7 +4,7 @@ from .base import *  # noqa: F403
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# EMAIL_* come from .env / base.py (Brevo SMTP). Do not force console here.
 
 # Avoid login lockouts during local development.
 AXES_ENABLED = False

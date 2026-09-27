@@ -134,7 +134,8 @@ LOGOUT_REDIRECT_URL = "account_login"
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_SIGNUP_REDIRECT_URL = "users:signup_verify"
 ACCOUNT_CHANGE_EMAIL = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "apps.users.adapters.ExamiQAccountAdapter"
@@ -159,6 +160,15 @@ DEFAULT_SECONDS_PER_QUESTION = 30
 
 SITE_URL = env("SITE_URL", default="http://127.0.0.1:8000")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@examiq.local")
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = env("EMAIL_HOST", default="smtp-relay.brevo.com")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 
 AI_ENABLED = env.bool("AI_ENABLED", default=False)
 LLM_PROVIDER = env("LLM_PROVIDER", default="openai")

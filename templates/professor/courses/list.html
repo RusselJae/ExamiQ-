@@ -30,6 +30,7 @@
             {% endfor %}
         </select>
     </div>
+    <a href="{% url 'analytics_professor:course_create' %}" class="btn-primary">Add subject</a>
 </div>
 
 {% if course_cards %}
@@ -71,6 +72,7 @@
 {% else %}
 <div class="bento-card p-8 text-center text-examiq-slate">
     No course subjects in the catalog yet.
+    <a href="{% url 'analytics_professor:course_create' %}" class="text-examiq-cyan font-medium">Add a subject</a>.
 </div>
 {% endif %}
 {% endblock %}

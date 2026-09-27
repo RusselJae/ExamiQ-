@@ -317,13 +317,27 @@ class ExamiQSignupForm(SignupForm):
             user.year_level = None
             user.section = None
 
-        # Students and faculty are auto-approved (BSED Math–only product).
+        # Approved after email OTP; stay inactive until the code is verified.
         user.approval_status = User.ApprovalStatus.APPROVED
-        user.is_active = True
+        user.is_active = False
 
         user.save()
         if role == User.Role.PROFESSOR and section is not None:
             user.assigned_sections.add(section)
+
+        from django.contrib import messages
+
+        from apps.users.otp_services import SIGNUP_OTP_SESSION_KEY, send_signup_otp
+
+        request.session[SIGNUP_OTP_SESSION_KEY] = user.pk
+        try:
+            send_signup_otp(user, force=True)
+        except Exception:
+            messages.warning(
+                request,
+                "Account created, but we could not send the verification email. "
+                "Use Resend on the next screen after checking email settings.",
+            )
         return user
 
 

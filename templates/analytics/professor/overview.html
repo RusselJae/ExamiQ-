@@ -79,6 +79,8 @@
     </div>
     <div class="overview-trends-chart-footer">
         <div class="overview-gap-status-row" id="overview-gap-status" hidden></div>
+        <div class="overview-confidence-legend" id="overview-confidence-legend" hidden></div>
+        <div class="overview-chart-hint" id="overview-chart-hint" hidden></div>
     </div>
 </div>
 {% endblock %}
@@ -133,6 +135,8 @@
         expectedStudents: {{ overview.expected_students|default:0 }},
         data: JSON.parse(el.textContent),
         gapStatusEl: "overview-gap-status",
+        legendEl: "overview-confidence-legend",
+        chartHintEl: "overview-chart-hint",
         titleEl: "overview-trends-title",
         subtitleEl: "overview-trends-subtitle",
         metricLabels: {

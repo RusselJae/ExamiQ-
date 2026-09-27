@@ -31,6 +31,8 @@
             </div>
             <div class="overview-trends-chart-footer">
                 <div class="overview-gap-status-row" id="student-gap-status" hidden></div>
+                <div class="overview-confidence-legend" id="student-confidence-legend" hidden></div>
+                <div class="overview-chart-hint" id="student-chart-hint" hidden></div>
             </div>
             <div id="student-trends-empty" class="chart-empty-state hidden">
                 <p class="empty-state-title">Not enough data yet</p>
@@ -129,6 +131,8 @@
         emptyEl: "student-trends-empty",
         wrapEl: "studentTrendsChartWrap",
         gapStatusEl: "student-gap-status",
+        legendEl: "student-confidence-legend",
+        chartHintEl: "student-chart-hint",
         titleEl: "student-trends-title",
         subtitleEl: "student-trends-subtitle",
     });

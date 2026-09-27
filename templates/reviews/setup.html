@@ -107,6 +107,15 @@
                         </button>
                     </div>
 
+                    {% if other_subjects %}
+                    <button type="button"
+                            class="exam-setup-add-btn"
+                            id="add-other-subjects-btn"
+                            data-tab-jump="other">
+                        <span aria-hidden="true">+</span> Add subjects from other years
+                    </button>
+                    {% endif %}
+
                     <div class="exam-search-box">
                         <input type="text"
                                id="subject-search-input"

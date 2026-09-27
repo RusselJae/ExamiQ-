@@ -1038,6 +1038,17 @@ html:has(body.auth-page) {
     transition: background 0.15s ease;
 }
 
+.auth-page .auth-btn-submit--secondary {
+    margin-top: 0.5rem;
+    background: #fff;
+    color: #14532d;
+    border: 1px solid #86efac;
+}
+
+.auth-page .auth-btn-submit--secondary:hover {
+    background: #f0fdf4;
+}
+
 .auth-page .auth-btn-submit:hover {
     background: var(--landing-primary-dark);
 }

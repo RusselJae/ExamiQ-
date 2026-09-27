@@ -514,3 +514,26 @@ class Notification(models.Model):
 
             self.read_at = timezone.now()
             self.save(update_fields=["read_at"])
+
+
+class EmailSignupOTP(models.Model):
+    """One-time email code for completing public signup."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="signup_otps",
+    )
+    code_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_sent_at = models.DateTimeField(auto_now_add=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Email signup OTP"
+        verbose_name_plural = "Email signup OTPs"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"OTP for {self.user_id} @ {self.created_at}"

@@ -12,23 +12,41 @@
         return document.getElementById("review-setup-form");
     }
 
+    function selectTab(tab) {
+        var tabButtons = document.querySelectorAll("[data-tab]");
+        var addOtherBtn = document.getElementById("add-other-subjects-btn");
+        if (!tab) {
+            filterRows();
+            return;
+        }
+        if (tab !== currentTab) {
+            currentTab = tab;
+            tabButtons.forEach(function (b) {
+                var active = b.getAttribute("data-tab") === tab;
+                b.classList.toggle("is-active", active);
+                b.setAttribute("aria-selected", active ? "true" : "false");
+            });
+        }
+        if (addOtherBtn) {
+            addOtherBtn.classList.toggle("is-active", currentTab === "other");
+        }
+        filterRows();
+    }
+
     function initTabs() {
         var tabButtons = document.querySelectorAll("[data-tab]");
         tabButtons.forEach(function (btn) {
             btn.addEventListener("click", function () {
-                var tab = btn.getAttribute("data-tab");
-                if (tab === currentTab) return;
-
-                currentTab = tab;
-                tabButtons.forEach(function (b) {
-                    var active = b === btn;
-                    b.classList.toggle("is-active", active);
-                    b.setAttribute("aria-selected", active ? "true" : "false");
-                });
-
-                filterRows();
+                selectTab(btn.getAttribute("data-tab"));
             });
         });
+
+        var addOtherBtn = document.getElementById("add-other-subjects-btn");
+        if (addOtherBtn) {
+            addOtherBtn.addEventListener("click", function () {
+                selectTab(addOtherBtn.getAttribute("data-tab-jump") || "other");
+            });
+        }
     }
 
     function initSearch() {

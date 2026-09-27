@@ -1,0 +1,46 @@
+{% extends "account/auth_base.html" %}
+
+{% block title %}Verify email - EXAMIQ+{% endblock %}
+
+{% block auth_nav %}{% include "components/auth_nav_signup.html" %}{% endblock %}
+
+{% block auth_content %}
+<h2 class="auth-page__heading">Check your email</h2>
+<p class="auth-page__subheading">
+    We sent a 6-digit code to <strong>{{ email }}</strong>. Enter it below to activate your account.
+</p>
+
+{% if error %}
+<div class="auth-form__errors" role="alert">
+    <p>{{ error }}</p>
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'users:signup_verify' %}" class="auth-form" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="verify">
+    <label class="auth-field{% if error %} auth-field--error{% endif %}" for="id_otp_code">
+        <span class="auth-field__label">Verification code</span>
+        <input
+            type="text"
+            name="code"
+            id="id_otp_code"
+            class="auth-field__input"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            pattern="[0-9]{6}"
+            placeholder="123456"
+            value="{{ code|default:'' }}"
+            required
+        >
+    </label>
+    <button type="submit" class="auth-btn-submit">Verify and continue</button>
+</form>
+
+<form method="post" action="{% url 'users:signup_verify' %}" class="auth-form mt-4">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="resend">
+    <button type="submit" class="auth-btn-submit auth-btn-submit--secondary">Resend code</button>
+</form>
+{% endblock %}

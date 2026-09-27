@@ -9,11 +9,13 @@ from apps.users.views_notifications import (
     NotificationUnreadCountAPIView,
 )
 from apps.users.views_sections import ProgramSectionsAPIView
+from apps.users.views_signup import SignupOTPVerifyView
 
 app_name = "users"
 
 urlpatterns = [
     path("", ProfileView.as_view(), name="profile"),
+    path("signup/verify/", SignupOTPVerifyView.as_view(), name="signup_verify"),
     path("notifications/", NotificationListView.as_view(), name="notifications"),
     path("notifications/read/", NotificationMarkReadView.as_view(), name="notifications_read"),
     path(

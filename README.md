@@ -68,6 +68,22 @@ GEMINI_MODEL=gemini-2.0-flash
 
 Question Bank shows **AI: Ollama Cloud**, **AI: Gemini**, **AI: OpenAI**, or **AI: Off** based on configuration.
 
+## Email (Brevo SMTP)
+
+Signup OTP and workflow emails use Django SMTP. Copy keys from `.env.example` into `.env`:
+
+```env
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp-relay.brevo.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-brevo-smtp-login
+EMAIL_HOST_PASSWORD=your-brevo-smtp-key
+DEFAULT_FROM_EMAIL=ExamiQ <your-verified-sender@example.com>
+```
+
+`DEFAULT_FROM_EMAIL` must be a sender verified in Brevo. Pytest uses the locmem backend and does not call Brevo.
+
 ## Running Tests
 
 ```bash

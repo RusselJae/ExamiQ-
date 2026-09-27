@@ -735,6 +735,9 @@ class TestProfessorHighMistakeQuestions:
         assert len(series) == 1
         assert series[0]["value"] == 2
         assert series[0]["question_id"] == question.pk
+        assert series[0]["label"] == "Q1"
+        assert series[0]["course_id"] == course.pk
+        assert series[0]["url"]
 
 
 @pytest.mark.django_db
