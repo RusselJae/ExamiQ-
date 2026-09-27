@@ -36,7 +36,7 @@ def _make_ready_doc(*, course, subject, user, title="Module overview", archived=
 
 @pytest.mark.django_db
 class TestFacultyMaterialsUI:
-    def test_list_redirects_to_hub_with_subject(
+    def test_course_list_keeps_course_chrome(
         self, client, professor, subject
     ):
         course = get_or_create_catalog_course(professor, subject)
@@ -46,11 +46,16 @@ class TestFacultyMaterialsUI:
         response = client.get(
             reverse("analytics_professor:material_list", kwargs={"course_pk": course.pk})
         )
-        assert response.status_code == 302
-        assert reverse("analytics_professor:materials_hub") in response.url
-        assert f"subject={subject.pk}" in response.url
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Learning materials" in content
+        assert "materials-library" in content
+        assert "Saved Questions" in content
+        assert "course-nav-link" in content
+        assert ">Download</a>" in content
+        assert ">Edit</a>" in content
 
-    def test_hub_with_subject_shows_edit_not_download(
+    def test_hub_with_subject_shows_download_and_edit(
         self, client, professor, subject, bsed_program
     ):
         subject.program = bsed_program
@@ -65,10 +70,10 @@ class TestFacultyMaterialsUI:
         content = response.content.decode()
         assert response.status_code == 200
         assert "materials-library" in content
+        assert ">Download</a>" in content
         assert ">Edit</a>" in content
         assert "Archive" in content
-        # Faculty library should not expose Download as the primary action.
-        assert 'class="materials-download-btn">Download</a>' not in content
+        assert "Content Management" in content
 
     def test_download_returns_attachment(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)

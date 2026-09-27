@@ -52,7 +52,7 @@
                     {% endif %}
                 </div>
                 {% if faculty_mode and course %}
-                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}" class="materials-library__name">
+                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}" class="materials-library__name">
                     {{ doc.display_title }}
                 </a>
                 {% else %}
@@ -71,13 +71,19 @@
             </div>
             <div class="materials-library__actions">
                 {% if faculty_mode and course %}
-                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
+                <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
+                   class="materials-download-btn">Download</a>
+                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}"
                    class="materials-download-btn">Edit</a>
                 {# Archive / restore inline — archived files stay hidden from students #}
                 <form method="post"
                       action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
                       class="materials-archive-form">
                     {% csrf_token %}
+                    {% if hub_subject_pk %}
+                    <input type="hidden" name="hub_return" value="1">
+                    <input type="hidden" name="subject_id" value="{{ hub_subject_pk }}">
+                    {% endif %}
                     {% if doc.is_archived %}
                     <input type="hidden" name="action" value="restore">
                     <button type="submit" class="materials-archive-btn materials-archive-btn--restore">Restore</button>

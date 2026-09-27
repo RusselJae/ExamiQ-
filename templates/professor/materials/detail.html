@@ -11,6 +11,10 @@
             <p class="materials-page__subtitle">{{ document.original_name }} · {{ document.get_status_display }} · {{ document.chunk_count }} chunks</p>
         </div>
         <div class="materials-detail-actions">
+            {% if document.file %}
+            <a href="{% url 'analytics_professor:material_download' course.pk document.pk %}"
+               class="btn-secondary btn-primary-sm">Download</a>
+            {% endif %}
             {% if document.status == "ready" %}
             <a href="{% url 'analytics_professor:question_create' course.pk %}?material={{ document.pk }}" class="btn-secondary btn-primary-sm">Use for AI Generate</a>
             {% endif %}
@@ -55,6 +59,12 @@
         </form>
         <form method="post" class="pt-2 border-t border-slate-100">
             {% csrf_token %}
+            {% if from_hub %}
+            <input type="hidden" name="hub_return" value="1">
+            {% if document.subject_id %}
+            <input type="hidden" name="subject_id" value="{{ document.subject_id }}">
+            {% endif %}
+            {% endif %}
             {% if document.is_archived %}
             <input type="hidden" name="action" value="restore">
             <button type="submit" class="btn-secondary btn-primary-sm">Restore</button>

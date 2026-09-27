@@ -3813,6 +3813,12 @@
     position: relative;
 }
 
+.sidebar-link--compact-label .sidebar-label {
+    font-size: 0.8125rem;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
 .sidebar-link:hover {
     background-color: var(--sidebar-hover-bg);
     color: var(--sidebar-text-active);
@@ -5637,6 +5643,11 @@
     padding-left: 0.85rem;
     padding-right: 1rem;
     min-width: 9.5rem;
+}
+
+.questions-data-table th.questions-table-actions {
+    color: #0f3d24;
+    font-weight: 700;
 }
 
 .questions-data-table tbody tr:nth-child(even) td.questions-table-actions {

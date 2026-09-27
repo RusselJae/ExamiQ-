@@ -160,18 +160,31 @@ class MaterialHubView(ProfessorRequiredMixin, View):
 
 
 class MaterialListView(ProfessorCourseMixin, View):
-    """Redirect course materials into the subject-gated hub."""
+    """Course-scoped learning materials (keeps course header + tabs)."""
+
+    template_name = "professor/materials/list.html"
 
     def get(self, request, course_pk):
+        include_archived = request.GET.get("archived") == "1"
         subject = _subject_for_course(self.course)
-        if subject:
-            url = reverse("analytics_professor:materials_hub")
-            qs = f"?subject={subject.pk}"
-            if request.GET.get("archived") == "1":
-                qs += "&archived=1"
-            return redirect(url + qs)
-        return redirect("analytics_professor:materials_hub")
-
+        subjects = subjects_for_course_section(self.course, request.user)
+        documents = documents_for_course(
+            self.course.pk, include_archived=include_archived
+        )
+        return render(
+            request,
+            self.template_name,
+            {
+                "course": self.course,
+                "subject": subject,
+                "subjects": subjects,
+                "active_tab": "materials",
+                "documents": documents,
+                "include_archived": include_archived,
+                "material_types": LearningDocument.MaterialType.choices,
+                "library_count": documents.count(),
+            },
+        )
 
 class MaterialUploadView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
@@ -234,6 +247,17 @@ class MaterialDetailView(ProfessorCourseMixin, View):
 
     def get(self, request, course_pk, pk):
         document = self.get_document(course_pk, pk)
+        from_hub = request.GET.get("from") == "hub"
+        if from_hub and document.subject_id:
+            back_url = (
+                f"{reverse('analytics_professor:materials_hub')}"
+                f"?subject={document.subject_id}"
+            )
+        else:
+            back_url = reverse(
+                "analytics_professor:material_list",
+                kwargs={"course_pk": course_pk},
+            )
         return render(
             request,
             self.template_name,
@@ -244,11 +268,8 @@ class MaterialDetailView(ProfessorCourseMixin, View):
                 "subjects": subjects_for_course_section(self.course, request.user),
                 "material_types": LearningDocument.MaterialType.choices,
                 "chunks_preview": document.chunks.order_by("order")[:5],
-                "back_url": (
-                    f"{reverse('analytics_professor:materials_hub')}?subject={document.subject_id}"
-                    if document.subject_id
-                    else reverse("analytics_professor:materials_hub")
-                ),
+                "back_url": back_url,
+                "from_hub": from_hub,
             },
         )
 
@@ -256,12 +277,22 @@ class MaterialDetailView(ProfessorCourseMixin, View):
         document = self.get_document(course_pk, pk)
         action = request.POST.get("action", "save")
         subject_pk = document.subject_id
+        hub_return = request.POST.get("hub_return") == "1"
+        hub_subject_id = request.POST.get("subject_id", "")
+        if hub_return and hub_subject_id.isdigit():
+            subject_pk = int(hub_subject_id)
+
+        def _after_mutate():
+            if hub_return and subject_pk:
+                return _hub_redirect_after_upload(subject_pk, course_pk)
+            return redirect(
+                "analytics_professor:material_list", course_pk=course_pk
+            )
+
         if action == "archive":
             archive_document(document)
             messages.success(request, "Material archived.")
-            if subject_pk:
-                return _hub_redirect_after_upload(subject_pk, course_pk)
-            return redirect("analytics_professor:materials_hub")
+            return _after_mutate()
         if action == "restore":
             restore_document(document)
             messages.success(request, "Material restored.")
