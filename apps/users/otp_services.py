@@ -57,20 +57,20 @@ def send_signup_otp(user: User, *, force: bool = False) -> EmailSignupOTP:
     otp = EmailSignupOTP.objects.create(user=user, code_hash=_hash_code(code))
 
     subject = "Your ExamiQ verification code"
-    body = render_to_string(
-        "emails/signup_otp.txt",
-        {
-            "user": user,
-            "code": code,
-            "minutes": int(OTP_TTL.total_seconds() // 60),
-        },
-    )
+    context = {
+        "user": user,
+        "code": code,
+        "minutes": int(OTP_TTL.total_seconds() // 60),
+    }
+    text_body = render_to_string("emails/signup_otp.txt", context)
+    html_body = render_to_string("emails/signup_otp.html", context)
     send_mail(
         subject,
-        body,
+        text_body,
         settings.DEFAULT_FROM_EMAIL,
         [user.email],
         fail_silently=False,
+        html_message=html_body,
     )
     return otp
 

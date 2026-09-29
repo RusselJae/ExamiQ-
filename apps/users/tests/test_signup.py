@@ -119,6 +119,10 @@ class TestSignupRoles:
         assert user.last_name == "Santos"
         assert len(mail.outbox) == 1
         assert "verification code" in mail.outbox[0].subject.lower()
+        assert mail.outbox[0].alternatives
+        html_body = mail.outbox[0].alternatives[0][0]
+        assert "Confirm your email" in html_body
+        assert "ExamiQ" in html_body
 
     def test_student_signup_accepts_optional_middle_name_and_suffix(
         self, client, bsed_program, signup_year_level, signup_section
