@@ -120,6 +120,44 @@
         }
     }
 
+    function initOtpDigits(root) {
+        const input = root.querySelector("[data-otp-digits]");
+        if (!input) return;
+
+        function digitsOnly(value) {
+            return String(value || "").replace(/\D/g, "").slice(0, 6);
+        }
+
+        function sanitize() {
+            const next = digitsOnly(input.value);
+            if (input.value !== next) {
+                input.value = next;
+            }
+        }
+
+        input.addEventListener("beforeinput", function (event) {
+            if (event.inputType === "insertText" && event.data && /\D/.test(event.data)) {
+                event.preventDefault();
+            }
+        });
+
+        input.addEventListener("input", sanitize);
+
+        input.addEventListener("paste", function (event) {
+            event.preventDefault();
+            const pasted =
+                (event.clipboardData && event.clipboardData.getData("text")) || "";
+            input.value = digitsOnly(pasted);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+
+        input.addEventListener("drop", function (event) {
+            event.preventDefault();
+        });
+
+        sanitize();
+    }
+
     function initAuthForms() {
         const page = document.querySelector(".auth-page");
         if (!page) return;
@@ -128,6 +166,7 @@
         initSignupRoleCards(page);
         initPhonePrefix(page);
         initSectionCascade(page);
+        initOtpDigits(page);
     }
 
     function initSectionCascade(root) {

@@ -25,15 +25,19 @@
             type="text"
             name="code"
             id="id_otp_code"
-            class="auth-field__input"
+            class="auth-field__input auth-field__input--otp"
             inputmode="numeric"
             autocomplete="one-time-code"
             maxlength="6"
+            minlength="6"
             pattern="[0-9]{6}"
             placeholder="123456"
             value="{{ code|default:'' }}"
             required
+            aria-describedby="otp-code-hint"
+            data-otp-digits
         >
+        <span id="otp-code-hint" class="sr-only">Enter the 6-digit code. Numbers only.</span>
     </label>
     <button type="submit" class="auth-btn-submit">Verify and continue</button>
 </form>

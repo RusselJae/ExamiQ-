@@ -169,6 +169,9 @@ EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=15)
+# Prefer HTTPS (works on Railway). Falls back to EMAIL_HOST_PASSWORD if it starts with re_.
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
 
 AI_ENABLED = env.bool("AI_ENABLED", default=False)
 LLM_PROVIDER = env("LLM_PROVIDER", default="openai")

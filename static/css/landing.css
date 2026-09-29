@@ -1007,6 +1007,14 @@ html:has(body.auth-page) {
     box-shadow: 0 0 0 2px rgba(58, 122, 48, 0.2);
 }
 
+.auth-page .auth-field__input--otp {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.35em;
+    text-align: center;
+}
+
 .auth-page .auth-field__label {
     font-size: 0.8125rem;
     font-weight: 600;

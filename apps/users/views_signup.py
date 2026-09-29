@@ -47,11 +47,16 @@ class SignupOTPVerifyView(View):
             except (OSError, BadHeaderError, ConnectionError, TimeoutError):
                 messages.error(
                     request,
-                    "We could not send email right now. Check SMTP settings and try again.",
+                    "We could not send email right now. Please try again shortly.",
+                )
+            except Exception:  # noqa: BLE001 — never 500 the OTP resend UX
+                messages.error(
+                    request,
+                    "We could not send email right now. Please try again shortly.",
                 )
             return redirect("users:signup_verify")
 
-        code = request.POST.get("code", "")
+        code = "".join(ch for ch in (request.POST.get("code") or "") if ch.isdigit())[:6]
         try:
             verify_signup_otp(user, code)
         except SignupOTPError as exc:
