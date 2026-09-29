@@ -68,7 +68,7 @@ def _send_via_resend_api(
     html_body: str,
     to_email: str,
 ) -> None:
-    """Send email through Resend's HTTPS API."""
+    """Send email through Resend's HTTPS API (SDK; avoids Cloudflare 1010 on urllib)."""
     api_key = _resend_api_key()
     payload = {
         "from": settings.DEFAULT_FROM_EMAIL,
@@ -77,6 +77,37 @@ def _send_via_resend_api(
         "text": text_body,
         "html": html_body,
     }
+    try:
+        import resend
+        from resend.exceptions import ResendError
+    except ImportError:
+        logger.warning("resend package missing; falling back to urllib")
+        _send_via_resend_urllib(api_key=api_key, payload=payload)
+        return
+
+    resend.api_key = api_key
+    try:
+        result = resend.Emails.send(payload)
+    except ResendError as exc:
+        logger.warning("Resend SDK error: %s", exc)
+        raise SignupOTPError(
+            "We could not send the verification email. Check Resend API settings."
+        ) from exc
+    except (OSError, TimeoutError, ConnectionError) as exc:
+        logger.warning("Resend SDK transport error: %s", exc)
+        raise SignupOTPError(
+            "We could not send the verification email. Please try again shortly."
+        ) from exc
+
+    if isinstance(result, dict) and result.get("statusCode", 200) >= 400:
+        logger.warning("Resend SDK rejected send: %s", result)
+        raise SignupOTPError(
+            "We could not send the verification email. Check Resend API settings."
+        )
+
+
+def _send_via_resend_urllib(*, api_key: str, payload: dict) -> None:
+    """urllib fallback with an explicit User-Agent (Cloudflare-friendly)."""
     timeout = int(getattr(settings, "EMAIL_TIMEOUT", 15) or 15)
     request = urllib.request.Request(
         RESEND_API_URL,
@@ -86,6 +117,7 @@ def _send_via_resend_api(
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": "ExamiQ/1.0 (+https://examiq.xyz; Django OTP)",
         },
     )
     try:
