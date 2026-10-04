@@ -3,6 +3,8 @@
 
 {% block title %}Start Exam - EXAMIQ+{% endblock %}
 
+{% block body_class %}min-h-screen review-setup-body{% endblock %}
+
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
@@ -83,7 +85,7 @@
                 <h2 class="sr-only">Course subjects for your year</h2>
                 <!-- Toolbar with tabs and search -->
                 <div class="exam-table-toolbar">
-                    <div class="exam-tabs" role="tablist" aria-label="Subject filter tabs">
+                    <div class="exam-tabs exam-tabs--segmented" role="tablist" aria-label="Subject filter tabs">
                         <button type="button"
                                 class="exam-tab is-active"
                                 data-tab="year"
@@ -107,15 +109,6 @@
                         </button>
                     </div>
 
-                    {% if other_subjects %}
-                    <button type="button"
-                            class="exam-setup-add-btn"
-                            id="add-other-subjects-btn"
-                            data-tab-jump="other">
-                        <span aria-hidden="true">+</span> Add subjects from other years
-                    </button>
-                    {% endif %}
-
                     <div class="exam-search-box">
                         <input type="text"
                                id="subject-search-input"
@@ -129,81 +122,75 @@
                     </div>
                 </div>
 
-                <!-- Table -->
-                <div class="exam-table-container">
-                    <div class="exam-table-header">
-                        <span class="exam-col-code">CODE</span>
-                        <span class="exam-col-subject">SUBJECT</span>
-                        <span class="exam-col-year">YEAR</span>
-                        <span class="exam-col-check">
-                            <label class="exam-custom-checkbox" title="Toggle visible subjects">
-                                <input type="checkbox" id="header-select-all" class="sr-only" checked>
-                                <span class="exam-checkbox-box is-checked" id="header-checkbox-box" aria-hidden="true">
-                                    <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-                                </span>
-                            </label>
+                <div class="exam-subject-select-bar">
+                    <label class="exam-subject-select-all" for="header-select-all">
+                        <input type="checkbox" id="header-select-all" class="sr-only" checked>
+                        <span class="exam-checkbox-box is-checked" id="header-checkbox-box" aria-hidden="true">
+                            <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
                         </span>
+                        <span>Select all</span>
+                    </label>
+                    <span class="exam-subject-selected-count">
+                        <span data-selected-count>{{ year_subjects|length }}</span> selected
+                    </span>
+                </div>
+
+                <div class="exam-subject-cards" id="subjects-table-body">
+                    {% for subject in year_subjects %}
+                    <div class="exam-subject-card is-selected"
+                         data-subject-row
+                         data-category="year"
+                         data-code="{{ subject.code }}"
+                         data-name="{{ subject.name }}"
+                         data-search="{{ subject.code|lower }} {{ subject.name|lower }}">
+                        <div class="exam-subject-card__text">
+                            <span class="exam-subject-card__title" title="{{ subject.name }}">{{ subject.name }}</span>
+                            <span class="exam-subject-card__subtitle">{{ subject.code }}</span>
+                        </div>
+                        <label class="exam-custom-checkbox exam-subject-card__check">
+                            <input type="checkbox"
+                                   name="year_subjects"
+                                   value="{{ subject.pk }}"
+                                   class="sr-only"
+                                   data-subject-checkbox
+                                   data-year-subject
+                                   checked>
+                            <span class="exam-checkbox-box is-checked" aria-hidden="true">
+                                <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                            </span>
+                        </label>
                     </div>
+                    {% endfor %}
 
-                    <div class="exam-table-body" id="subjects-table-body">
-                        {% for subject in year_subjects %}
-                        <div class="exam-table-row is-selected"
-                             data-subject-row
-                             data-category="year"
-                             data-code="{{ subject.code }}"
-                             data-name="{{ subject.name }}"
-                             data-search="{{ subject.code|lower }} {{ subject.name|lower }}">
-                            <span class="exam-col-code">{{ subject.code }}</span>
-                            <span class="exam-col-subject" title="{{ subject.name }}">{{ subject.name }}</span>
-                            <span class="exam-col-year">Your year</span>
-                            <span class="exam-col-check">
-                                <label class="exam-custom-checkbox">
-                                    <input type="checkbox"
-                                           name="year_subjects"
-                                           value="{{ subject.pk }}"
-                                           class="sr-only"
-                                           data-subject-checkbox
-                                           data-year-subject
-                                           checked>
-                                    <span class="exam-checkbox-box is-checked" aria-hidden="true">
-                                        <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-                                    </span>
-                                </label>
+                    {% for subject in other_subjects %}
+                    <div class="exam-subject-card{% if subject.pk in selected_extra_ids %} is-selected{% endif %}"
+                         data-subject-row
+                         data-category="other"
+                         data-code="{{ subject.code }}"
+                         data-name="{{ subject.name }}"
+                         data-search="{{ subject.code|lower }} {{ subject.name|lower }}"
+                         style="display: none;">
+                        <div class="exam-subject-card__text">
+                            <span class="exam-subject-card__title" title="{{ subject.name }}">{{ subject.name }}</span>
+                            <span class="exam-subject-card__subtitle">{{ subject.code }} · {{ subject.year_level.name|default:"Other" }}</span>
+                        </div>
+                        <label class="exam-custom-checkbox exam-subject-card__check">
+                            <input type="checkbox"
+                                   name="extra_subjects"
+                                   value="{{ subject.pk }}"
+                                   class="sr-only"
+                                   data-subject-checkbox
+                                   data-extra-subject
+                                   {% if subject.pk in selected_extra_ids %}checked{% endif %}>
+                            <span class="exam-checkbox-box{% if subject.pk in selected_extra_ids %} is-checked{% endif %}" aria-hidden="true">
+                                <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
                             </span>
-                        </div>
-                        {% endfor %}
+                        </label>
+                    </div>
+                    {% endfor %}
 
-                        {% for subject in other_subjects %}
-                        <div class="exam-table-row{% if subject.pk in selected_extra_ids %} is-selected{% endif %}"
-                             data-subject-row
-                             data-category="other"
-                             data-code="{{ subject.code }}"
-                             data-name="{{ subject.name }}"
-                             data-search="{{ subject.code|lower }} {{ subject.name|lower }}"
-                             style="display: none;">
-                            <span class="exam-col-code">{{ subject.code }}</span>
-                            <span class="exam-col-subject" title="{{ subject.name }}">{{ subject.name }}</span>
-                            <span class="exam-col-year">{{ subject.year_level.name|default:"Other" }}</span>
-                            <span class="exam-col-check">
-                                <label class="exam-custom-checkbox">
-                                    <input type="checkbox"
-                                           name="extra_subjects"
-                                           value="{{ subject.pk }}"
-                                           class="sr-only"
-                                           data-subject-checkbox
-                                           data-extra-subject
-                                           {% if subject.pk in selected_extra_ids %}checked{% endif %}>
-                                    <span class="exam-checkbox-box{% if subject.pk in selected_extra_ids %} is-checked{% endif %}" aria-hidden="true">
-                                        <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-                                    </span>
-                                </label>
-                            </span>
-                        </div>
-                        {% endfor %}
-
-                        <div id="no-search-results" class="exam-table-empty" style="display: none;">
-                            No subjects found matching your search.
-                        </div>
+                    <div id="no-search-results" class="exam-table-empty" style="display: none;">
+                        No subjects found matching your search.
                     </div>
                 </div>
 

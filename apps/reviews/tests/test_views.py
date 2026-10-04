@@ -206,6 +206,9 @@ class TestReviewSetupPrefill:
         assert "id_setup_subjects" not in content
         assert "Course subjects for your year" in content
         assert "exam-subject-card" in content
+        assert "exam-subject-select-bar" in content
+        assert "app-topbar-actions" in content
+        assert "app-topbar-brand__text" not in content
         assert "id_setup_difficulty" in content
 
     def test_setup_lists_only_student_year_subjects(
@@ -232,8 +235,9 @@ class TestReviewSetupPrefill:
         assert response.status_code == 200
         content = response.content.decode()
         assert subject.code in content
-        assert "Add subjects from other years" in content
+        assert "Add subjects from other years" not in content
         assert "OTH-101" in content
+        assert 'data-tab="other"' in content
         year_subjects = response.context["year_subjects"]
         assert all(s.year_level_id == student.year_level_id for s in year_subjects)
         other_subjects = response.context["other_subjects"]

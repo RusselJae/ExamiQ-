@@ -78,6 +78,7 @@ def _faculty_data(signup_year_level, signup_section, **extra):
         "first_name": "Rico",
         "last_name": "Cruz",
         "employee_id": "EMP-2024-001",
+        "faculty_pin": "FACULTY-PIN-42",
         "phone_number": "09123456789",
         "year_level": signup_year_level.pk,
         "section": signup_section.pk,
@@ -96,6 +97,7 @@ class TestSignupRoles:
     @pytest.fixture(autouse=True)
     def _locmem_email(self, settings):
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+        settings.FACULTY_SIGNUP_PIN = "FACULTY-PIN-42"
 
     def test_student_signup_creates_inactive_pending_otp(
         self, client, bsed_program, signup_year_level, signup_section
@@ -184,6 +186,36 @@ class TestSignupRoles:
             signup_section.pk
         ]
         assert len(mail.outbox) == 1
+
+    def test_faculty_signup_rejects_missing_pin(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        data = _faculty_data(signup_year_level, signup_section, faculty_pin="")
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 200
+        assert not User.objects.filter(email="newprof@test.edu").exists()
+        assert b"Faculty signup PIN is required" in response.content
+
+    def test_faculty_signup_rejects_wrong_pin(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        data = _faculty_data(signup_year_level, signup_section, faculty_pin="wrong-pin")
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 200
+        assert not User.objects.filter(email="newprof@test.edu").exists()
+        assert b"Invalid faculty signup PIN" in response.content
+
+    def test_faculty_signup_blocked_when_pin_unset(
+        self, client, settings, bsed_program, signup_year_level, signup_section
+    ):
+        settings.FACULTY_SIGNUP_PIN = ""
+        response = client.post(
+            reverse("account_signup"),
+            _faculty_data(signup_year_level, signup_section),
+        )
+        assert response.status_code == 200
+        assert not User.objects.filter(email="newprof@test.edu").exists()
+        assert b"Faculty signup is currently unavailable" in response.content
 
     def test_otp_verify_activates_account(
         self, client, bsed_program, signup_year_level, signup_section
@@ -294,9 +326,7 @@ class TestSignupRoles:
     def test_student_number_must_be_nine_digits(
         self, client, signup_year_level, signup_section
     ):
-        data = _student_data(
-            signup_year_level, signup_section, student_number="12345"
-        )
+        data = _student_data(signup_year_level, signup_section, student_number="12345")
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()

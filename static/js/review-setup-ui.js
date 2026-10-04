@@ -14,7 +14,6 @@
 
     function selectTab(tab) {
         var tabButtons = document.querySelectorAll("[data-tab]");
-        var addOtherBtn = document.getElementById("add-other-subjects-btn");
         if (!tab) {
             filterRows();
             return;
@@ -27,9 +26,6 @@
                 b.setAttribute("aria-selected", active ? "true" : "false");
             });
         }
-        if (addOtherBtn) {
-            addOtherBtn.classList.toggle("is-active", currentTab === "other");
-        }
         filterRows();
     }
 
@@ -40,13 +36,6 @@
                 selectTab(btn.getAttribute("data-tab"));
             });
         });
-
-        var addOtherBtn = document.getElementById("add-other-subjects-btn");
-        if (addOtherBtn) {
-            addOtherBtn.addEventListener("click", function () {
-                selectTab(addOtherBtn.getAttribute("data-tab-jump") || "other");
-            });
-        }
     }
 
     function initSearch() {
@@ -321,6 +310,11 @@
         if (minutesEl) {
             minutesEl.textContent =
                 estMinutes == null ? "Untimed" : "~" + estMinutes + " min";
+        }
+
+        var selectedCountEl = form.querySelector("[data-selected-count]");
+        if (selectedCountEl) {
+            selectedCountEl.textContent = String(checkedSubjects);
         }
     }
 

@@ -538,8 +538,6 @@ def _ordinal_label(n: int) -> str:
 
 def student_dashboard_trends(student: User) -> dict:
     """Flat confidence + mistakes-per-question series for the student dashboard."""
-    from django.utils import timezone
-
     sessions = list(
         annotate_session_metrics(
             ReviewSession.objects.filter(
@@ -568,12 +566,7 @@ def student_dashboard_trends(student: User) -> dict:
 
     confidence_points = []
     for index, session in enumerate(sessions, start=1):
-        ordinal = _ordinal_label(index)
-        if session.started_at:
-            date_part = timezone.localtime(session.started_at).strftime("%m-%d-%Y")
-            label = f"{ordinal} ({date_part})"
-        else:
-            label = ordinal
+        label = _ordinal_label(index)
         session_answers = answers_by_session.get(session.pk, [])
         confidence_points.append(_confidence_share_point(label, session_answers))
 
@@ -2413,16 +2406,9 @@ def _build_student_activity_summary(
 
     session_ids = [s.pk for s in session_list]
 
-    from django.utils import timezone
-
     dashboard_trends = {"confidence": [], "mistakes": [], "confidence_insight": ""}
     for index, session in enumerate(reversed(session_list), start=1):
-        ordinal = _ordinal_label(index)
-        if session.started_at:
-            date_part = timezone.localtime(session.started_at).strftime("%m-%d-%Y")
-            label = f"{ordinal} ({date_part})"
-        else:
-            label = ordinal
+        label = _ordinal_label(index)
         session_answers = list(session.answers.all())
         dashboard_trends["confidence"].append(
             _confidence_share_point(label, session_answers)

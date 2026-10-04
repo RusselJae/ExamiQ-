@@ -1,13 +1,21 @@
 """Custom forms for EXAMIQ auth and shared input styling."""
 
+import hmac
 import re
 
+from allauth.account.adapter import get_adapter
+from allauth.account.forms import (
+    ChangePasswordForm,
+    LoginForm,
+    ResetPasswordForm,
+    ResetPasswordKeyForm,
+    SignupForm,
+)
+from allauth.account.utils import filter_users_by_email
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from allauth.account.adapter import get_adapter
-from allauth.account.forms import ChangePasswordForm, LoginForm, SignupForm
-from allauth.account.utils import filter_users_by_email
 
 from apps.questions.models import Subject, YearLevel
 from apps.users.models import (
@@ -72,7 +80,51 @@ class ExamiQLoginForm(LoginForm):
             self.fields["login"].label = "Email"
             self.fields["login"].widget.attrs["placeholder"] = "name@school.edu.ph"
         if "password" in self.fields:
-            self.fields["password"].widget.attrs.setdefault("placeholder", "Your password")
+            self.fields["password"].widget.attrs.setdefault(
+                "placeholder", "Your password"
+            )
+
+
+class ExamiQResetPasswordForm(ResetPasswordForm):
+    """Branded widgets for the forgot-password email form."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _style_auth_fields(self)
+        email = self.fields.get("email")
+        if email:
+            email.label = "Email"
+            email.widget.attrs.setdefault("placeholder", "name@school.edu.ph")
+            email.widget.attrs.setdefault("autocomplete", "email")
+
+
+class ExamiQResetPasswordKeyForm(ResetPasswordKeyForm):
+    """Branded widgets for setting a new password from a reset link."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _style_auth_fields(self)
+        if "password1" in self.fields:
+            self.fields["password1"].label = "New password"
+            self.fields["password1"].widget.attrs.setdefault(
+                "autocomplete", "new-password"
+            )
+        if "password2" in self.fields:
+            self.fields["password2"].label = "Confirm new password"
+            self.fields["password2"].widget.attrs.setdefault(
+                "autocomplete", "new-password"
+            )
+
+
+def _faculty_pin_matches(provided: str, expected: str) -> bool:
+    """Constant-time PIN compare; unequal lengths never match."""
+    if not expected or not provided:
+        return False
+    provided_b = provided.encode("utf-8")
+    expected_b = expected.encode("utf-8")
+    if len(provided_b) != len(expected_b):
+        return False
+    return hmac.compare_digest(provided_b, expected_b)
 
 
 class ExamiQSignupForm(SignupForm):
@@ -85,7 +137,13 @@ class ExamiQSignupForm(SignupForm):
         choices=SIGNUP_ROLE_CHOICES,
         initial=User.Role.STUDENT,
         label="I am registering as",
-        widget=forms.Select(attrs={"class": "auth-role-select-hidden", "id": "id_signup_role", "tabindex": "-1"}),
+        widget=forms.Select(
+            attrs={
+                "class": "auth-role-select-hidden",
+                "id": "id_signup_role",
+                "tabindex": "-1",
+            }
+        ),
     )
     first_name = forms.CharField(
         max_length=150,
@@ -165,6 +223,18 @@ class ExamiQSignupForm(SignupForm):
             }
         ),
     )
+    faculty_pin = forms.CharField(
+        max_length=64,
+        required=False,
+        label="Faculty signup PIN",
+        widget=forms.PasswordInput(
+            attrs={
+                "class": "auth-field__input",
+                "placeholder": "PIN from your department",
+                "autocomplete": "one-time-code",
+            }
+        ),
+    )
     phone_number = forms.CharField(
         max_length=11,
         required=False,
@@ -176,9 +246,7 @@ class ExamiQSignupForm(SignupForm):
         required=True,
         empty_label="— Select year level —",
         label="Year level",
-        widget=forms.Select(
-            attrs={"class": AUTH_SELECT_CLASS, "id": "id_year_level"}
-        ),
+        widget=forms.Select(attrs={"class": AUTH_SELECT_CLASS, "id": "id_year_level"}),
     )
     section = forms.ModelChoiceField(
         queryset=ProgramSection.objects.none(),
@@ -210,7 +278,9 @@ class ExamiQSignupForm(SignupForm):
             self.fields["password1"].widget.attrs["placeholder"] = "Create a password"
         if "password2" in self.fields:
             self.fields["password2"].label = "Confirm password"
-            self.fields["password2"].widget.attrs.setdefault("placeholder", "Re-enter password")
+            self.fields["password2"].widget.attrs.setdefault(
+                "placeholder", "Re-enter password"
+            )
 
         self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
         year_level_id = None
@@ -223,9 +293,7 @@ class ExamiQSignupForm(SignupForm):
             User.HomeDegreeProgram.BSED_MATH,
             year_level_id,
         )
-        self.fields["section"].label_from_instance = (
-            lambda obj: obj.display_label
-        )
+        self.fields["section"].label_from_instance = lambda obj: obj.display_label
         self.fields["section"].widget.attrs["data-program"] = (
             User.HomeDegreeProgram.BSED_MATH
         )
@@ -249,7 +317,9 @@ class ExamiQSignupForm(SignupForm):
             return digits
         if not digits:
             raise forms.ValidationError("Phone number is required.")
-        raise forms.ValidationError("Enter a valid 10-digit mobile number (9XX XXX XXXX).")
+        raise forms.ValidationError(
+            "Enter a valid 10-digit mobile number (9XX XXX XXXX)."
+        )
 
     def clean_department(self):
         return self.cleaned_data.get("department")
@@ -266,8 +336,25 @@ class ExamiQSignupForm(SignupForm):
         role = cleaned.get("role", User.Role.STUDENT)
         if role == User.Role.STUDENT:
             student_number = cleaned.get("student_number")
-            if student_number and User.objects.filter(student_number=student_number).exists():
-                self.add_error("student_number", "This student number is already registered.")
+            if (
+                student_number
+                and User.objects.filter(student_number=student_number).exists()
+            ):
+                self.add_error(
+                    "student_number", "This student number is already registered."
+                )
+        elif role == User.Role.PROFESSOR:
+            expected_pin = (getattr(settings, "FACULTY_SIGNUP_PIN", "") or "").strip()
+            provided_pin = (cleaned.get("faculty_pin") or "").strip()
+            if not expected_pin:
+                self.add_error(
+                    "faculty_pin",
+                    "Faculty signup is currently unavailable. Contact your campus administrator.",
+                )
+            elif not provided_pin:
+                self.add_error("faculty_pin", "Faculty signup PIN is required.")
+            elif not _faculty_pin_matches(provided_pin, expected_pin):
+                self.add_error("faculty_pin", "Invalid faculty signup PIN.")
 
         year_level = cleaned.get("year_level")
         section = cleaned.get("section")
@@ -281,7 +368,9 @@ class ExamiQSignupForm(SignupForm):
                 User.HomeDegreeProgram.BSED_MATH,
                 year_level.pk,
             ):
-                self.add_error("section", "Choose a section for the selected year level.")
+                self.add_error(
+                    "section", "Choose a section for the selected year level."
+                )
             elif role == User.Role.STUDENT:
                 try:
                     validate_section_capacity(section)
@@ -387,7 +476,9 @@ class ProfileUpdateForm(forms.Form):
         self.fields["last_name"].initial = user.last_name
         self.fields["suffix"].initial = user.suffix
         _style_fields(self)
-        self.fields["profile_photo"].widget.attrs["accept"] = "image/jpeg,image/png,image/webp"
+        self.fields["profile_photo"].widget.attrs["accept"] = (
+            "image/jpeg,image/png,image/webp"
+        )
 
         if user.role == User.Role.STUDENT:
             self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
@@ -411,18 +502,20 @@ class ProfileUpdateForm(forms.Form):
             self.fields["assigned_sections"].initial = list(
                 user.assigned_sections.values_list("pk", flat=True)
             )
-            self.fields["assigned_sections"].label_from_instance = (
-                lambda obj: obj.display_label
+            self.fields["assigned_sections"].label_from_instance = lambda obj: (
+                obj.display_label
             )
-            subjects = Subject.objects.filter(
-                program__slug=User.HomeDegreeProgram.BSED_MATH
-            ).select_related("year_level").order_by("year_level__order", "code")
+            subjects = (
+                Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
+                .select_related("year_level")
+                .order_by("year_level__order", "code")
+            )
             self.fields["assigned_subjects"].queryset = subjects
             self.fields["assigned_subjects"].initial = list(
                 user.assigned_subjects.values_list("pk", flat=True)
             )
-            self.fields["assigned_subjects"].label_from_instance = (
-                lambda obj: f"{obj.code} — {obj.name}"
+            self.fields["assigned_subjects"].label_from_instance = lambda obj: (
+                f"{obj.code} — {obj.name}"
             )
             # Associate with profile form when rendered outside the <form> tag.
             for name in ("assigned_sections", "assigned_subjects"):
@@ -446,7 +539,9 @@ class ProfileUpdateForm(forms.Form):
         try:
             return parse_section_label(value)
         except ValidationError as exc:
-            raise forms.ValidationError(exc.messages[0] if exc.messages else str(exc)) from exc
+            raise forms.ValidationError(
+                exc.messages[0] if exc.messages else str(exc)
+            ) from exc
 
     def clean(self):
         cleaned = super().clean()
@@ -555,12 +650,16 @@ class CampusUserCreateForm(forms.Form):
 
 class CampusProfessorCreateForm(CampusUserCreateForm):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, role=User.Role.PROFESSOR, department_required=False, **kwargs)
+        super().__init__(
+            *args, role=User.Role.PROFESSOR, department_required=False, **kwargs
+        )
 
 
 class CampusChairpersonCreateForm(CampusUserCreateForm):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, role=User.Role.CHAIRPERSON, department_required=True, **kwargs)
+        super().__init__(
+            *args, role=User.Role.CHAIRPERSON, department_required=True, **kwargs
+        )
 
 
 class CourseOfferingForm(forms.ModelForm):
@@ -568,11 +667,19 @@ class CourseOfferingForm(forms.ModelForm):
         model = Course
         fields = ["code", "name", "program", "term", "academic_year", "section"]
         widgets = {
-            "code": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "MATH101"}),
-            "name": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "College Algebra"}),
+            "code": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "placeholder": "MATH101"}
+            ),
+            "name": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "placeholder": "College Algebra"}
+            ),
             "program": forms.Select(attrs={"class": INPUT_CLASS}),
-            "term": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "1st Sem"}),
-            "academic_year": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "2026"}),
+            "term": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "placeholder": "1st Sem"}
+            ),
+            "academic_year": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "placeholder": "2026"}
+            ),
             "section": forms.TextInput(
                 attrs={"class": INPUT_CLASS, "placeholder": "BSE 2-1M"}
             ),
@@ -628,7 +735,14 @@ class ExamiQChangePasswordForm(ChangePasswordForm):
 class ProgramSectionForm(forms.ModelForm):
     class Meta:
         model = ProgramSection
-        fields = ["program", "year_level", "label", "academic_year", "max_students", "is_active"]
+        fields = [
+            "program",
+            "year_level",
+            "label",
+            "academic_year",
+            "max_students",
+            "is_active",
+        ]
         widgets = {
             "program": forms.Select(attrs={"class": INPUT_CLASS}),
             "year_level": forms.Select(attrs={"class": INPUT_CLASS}),
@@ -642,7 +756,9 @@ class ProgramSectionForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["program"].queryset = Program.objects.all().order_by("name")
         self.fields["year_level"].queryset = YearLevel.objects.all().order_by("order")
-        self.fields["academic_year"].queryset = AcademicYear.objects.all().order_by("-label")
+        self.fields["academic_year"].queryset = AcademicYear.objects.all().order_by(
+            "-label"
+        )
         if not self.instance.pk and not self.initial.get("academic_year"):
             current = get_current_academic_year()
             if current:
@@ -651,7 +767,9 @@ class ProgramSectionForm(forms.ModelForm):
     def clean_label(self):
         label = (self.cleaned_data.get("label") or "").strip()
         if not label.isdigit():
-            raise forms.ValidationError("Section label must be a number (e.g. 1, 2, 3).")
+            raise forms.ValidationError(
+                "Section label must be a number (e.g. 1, 2, 3)."
+            )
         if int(label) < 1:
             raise forms.ValidationError("Section number must be at least 1.")
         return label
@@ -670,8 +788,12 @@ class ProgramSectionBulkForm(forms.Form):
         queryset=AcademicYear.objects.all().order_by("-label"),
         label="Academic year",
     )
-    section_count = forms.IntegerField(min_value=1, max_value=50, initial=3, label="Number of sections")
-    max_students = forms.IntegerField(min_value=1, initial=40, label="Max students per section")
+    section_count = forms.IntegerField(
+        min_value=1, max_value=50, initial=3, label="Number of sections"
+    )
+    max_students = forms.IntegerField(
+        min_value=1, initial=40, label="Max students per section"
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -701,7 +823,9 @@ class AcademicYearForm(forms.ModelForm):
         model = AcademicYear
         fields = ["label", "is_current"]
         widgets = {
-            "label": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "2025-2026"}),
+            "label": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "placeholder": "2025-2026"}
+            ),
             "is_current": forms.CheckboxInput(),
         }
 
@@ -716,20 +840,26 @@ class AcademicTermForm(forms.ModelForm):
         fields = ["academic_year", "name", "semester", "is_current"]
         widgets = {
             "academic_year": forms.Select(attrs={"class": INPUT_CLASS}),
-            "name": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "1st Sem"}),
+            "name": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "placeholder": "1st Sem"}
+            ),
             "semester": forms.Select(attrs={"class": INPUT_CLASS}),
             "is_current": forms.CheckboxInput(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["academic_year"].queryset = AcademicYear.objects.all().order_by("-label")
+        self.fields["academic_year"].queryset = AcademicYear.objects.all().order_by(
+            "-label"
+        )
         _style_fields(self)
 
 
 class TeachingAssignmentForm(forms.Form):
     professor = forms.ModelChoiceField(
-        queryset=User.objects.filter(role=User.Role.PROFESSOR, is_active=True).order_by("email"),
+        queryset=User.objects.filter(role=User.Role.PROFESSOR, is_active=True).order_by(
+            "email"
+        ),
         label="Faculty",
     )
     program_sections = forms.ModelMultipleChoiceField(
@@ -788,7 +918,11 @@ class TeachingAssignmentForm(forms.Form):
             None,
         )
         if first_section_id:
-            section = ProgramSection.objects.filter(pk=int(first_section_id)).select_related("program").first()
+            section = (
+                ProgramSection.objects.filter(pk=int(first_section_id))
+                .select_related("program")
+                .first()
+            )
             term = None
             if term_id and str(term_id).isdigit():
                 term = AcademicTerm.objects.filter(pk=int(term_id)).first()
@@ -797,7 +931,9 @@ class TeachingAssignmentForm(forms.Form):
             if section and term:
                 from apps.questions.curriculum import subjects_for_teaching_assignment
 
-                self.fields["subject"].queryset = subjects_for_teaching_assignment(section, term)
+                self.fields["subject"].queryset = subjects_for_teaching_assignment(
+                    section, term
+                )
 
     def clean_program_sections(self):
         sections = self.cleaned_data.get("program_sections")

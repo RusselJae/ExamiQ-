@@ -46,7 +46,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-examiq-bg text-examiq-navy min-h-screen font-sans">
+<body class="bg-examiq-bg text-examiq-navy font-sans {% block body_class %}min-h-screen{% endblock %}">
     {% include "components/toast_stack.html" %}
     {% include "components/banner_stack.html" %}
 

@@ -1,12 +1,22 @@
+from typing import Any
+
 from allauth.account.adapter import DefaultAccountAdapter
+from allauth.core import context as allauth_context
 from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.mail import EmailMultiAlternatives
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 
 from apps.core.views import get_role_dashboard_url
 from apps.users.models import User
-from apps.users.otp_services import SIGNUP_OTP_SESSION_KEY
+from apps.users.otp_services import (
+    SIGNUP_OTP_SESSION_KEY,
+    SignupOTPError,
+    _send_via_resend_api,
+    _should_use_resend_api,
+)
 
 
 class ExamiQAccountAdapter(DefaultAccountAdapter):
@@ -22,6 +32,39 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
             return reverse("users:signup_verify")
         return super().get_signup_redirect_url(request)
 
+    def send_mail(self, template_prefix: str, email: str, context: dict) -> None:
+        """Send allauth mail via Resend HTTPS when configured (same path as OTP)."""
+        request = allauth_context.request
+        ctx: dict[str, Any] = {
+            "request": request,
+            "email": email,
+            "current_site": get_current_site(request),
+        }
+        ctx.update(context)
+        msg = self.render_mail(template_prefix, email, ctx)
+
+        if not _should_use_resend_api():
+            msg.send()
+            return
+
+        text_body = msg.body or ""
+        html_body = text_body
+        if isinstance(msg, EmailMultiAlternatives) and msg.alternatives:
+            for content, mimetype in msg.alternatives:
+                if mimetype == "text/html":
+                    html_body = content
+                    break
+        to_email = email if isinstance(email, str) else email[0]
+        try:
+            _send_via_resend_api(
+                subject=msg.subject or "",
+                text_body=text_body,
+                html_body=html_body,
+                to_email=to_email,
+            )
+        except SignupOTPError:
+            msg.send()
+
     def respond_user_inactive(
         self, request: HttpRequest, user: AbstractBaseUser
     ) -> HttpResponse:
@@ -32,9 +75,8 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
             return redirect(f"{reverse('account_login')}?registered=rejected")
         if getattr(user, "is_archived", False):
             return redirect(f"{reverse('account_login')}?archived=1")
-        if (
-            approval_status == User.ApprovalStatus.APPROVED
-            and not getattr(user, "is_active", True)
+        if approval_status == User.ApprovalStatus.APPROVED and not getattr(
+            user, "is_active", True
         ):
             request.session[SIGNUP_OTP_SESSION_KEY] = user.pk
             return redirect("users:signup_verify")

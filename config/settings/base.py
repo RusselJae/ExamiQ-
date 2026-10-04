@@ -143,6 +143,8 @@ ACCOUNT_FORMS = {
     "login": "apps.users.forms.ExamiQLoginForm",
     "signup": "apps.users.forms.ExamiQSignupForm",
     "change_password": "apps.users.forms.ExamiQChangePasswordForm",
+    "reset_password": "apps.users.forms.ExamiQResetPasswordForm",
+    "reset_password_from_key": "apps.users.forms.ExamiQResetPasswordKeyForm",
 }
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
@@ -172,6 +174,8 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=15)
 # Prefer HTTPS (works on Railway). Falls back to EMAIL_HOST_PASSWORD if it starts with re_.
 RESEND_API_KEY = env("RESEND_API_KEY", default="")
+# Shared PIN required for Faculty role on public signup. Empty = faculty signup blocked.
+FACULTY_SIGNUP_PIN = env("FACULTY_SIGNUP_PIN", default="")
 
 AI_ENABLED = env.bool("AI_ENABLED", default=False)
 LLM_PROVIDER = env("LLM_PROVIDER", default="openai")

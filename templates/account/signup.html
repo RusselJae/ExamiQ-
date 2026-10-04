@@ -55,6 +55,7 @@
 
     <div id="signup-staff-fields" class="signup-role-fields is-hidden">
         {% include "components/auth_field.html" with field=form.employee_id %}
+        {% include "components/auth_password_field.html" with field=form.faculty_pin %}
         {{ form.department }}
     </div>
 

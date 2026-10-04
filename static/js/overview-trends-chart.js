@@ -55,7 +55,7 @@
         confidence: {
             title: "Feeling sure vs. being right",
             subtitle:
-                "How often answers were marked Sure compared with how often they were correct.",
+                "When you said you were sure, how often were you actually correct?",
         },
         sure: {
             title: "Sure over time",
@@ -227,10 +227,11 @@
         return "realistic";
     }
 
-    function gapStatusCopy(points) {
+    function gapStatusCopy(points, opts) {
+        opts = opts || {};
         var agg = weightedSureCorrect(points);
         if (!agg) {
-            return { kind: "realistic", label: "Realistic", detail: "" };
+            return { kind: "realistic", label: "Realistic", detail: "", headline: "" };
         }
         var sure = agg.sure;
         var correct = agg.correct;
@@ -238,6 +239,15 @@
         var sureR = Math.round(sure);
         var correctR = Math.round(correct);
         var gapR = Math.round(Math.abs(gap));
+        var n = points.length;
+        var sessionWord = opts.flatMode
+            ? n === 1
+                ? "session"
+                : "sessions"
+            : n === 1
+              ? "period"
+              : "periods";
+        var subject = opts.flatMode ? "You marked" : "Students marked";
         var kind =
             gap < -SURE_CORRECT_COLORS.gapClose
                 ? "over"
@@ -248,39 +258,60 @@
             return {
                 kind: "over",
                 label: "Overconfident",
-                detail:
-                    "Across this range, Sure (~" +
+                headline:
+                    subject +
+                    " " +
                     sureR +
-                    "%) ran ahead of accuracy (~" +
+                    "% of answers Sure, but only " +
                     correctR +
-                    "%) by about " +
+                    "% were correct.",
+                detail:
+                    "That is a " +
                     gapR +
-                    " points.",
+                    "-point gap across " +
+                    n +
+                    " " +
+                    sessionWord +
+                    ". Aim to bring the two lines closer together.",
             };
         }
         if (kind === "under") {
             return {
                 kind: "under",
                 label: "Underconfident",
-                detail:
-                    "Across this range, accuracy (~" +
-                    correctR +
-                    "%) exceeded Sure (~" +
+                headline:
+                    subject +
+                    " " +
                     sureR +
-                    "%) by about " +
+                    "% of answers Sure, but " +
+                    correctR +
+                    "% were correct.",
+                detail:
+                    "Accuracy ran about " +
                     gapR +
-                    " points.",
+                    " points ahead of Sure across " +
+                    n +
+                    " " +
+                    sessionWord +
+                    ". Trust knowledge a bit more.",
             };
         }
         return {
             kind: "realistic",
             label: "Realistic",
-            detail:
-                "Across this range, Sure (~" +
+            headline:
+                subject +
+                " " +
                 sureR +
-                "%) closely matched accuracy (~" +
+                "% of answers Sure, and " +
                 correctR +
-                "%).",
+                "% were correct.",
+            detail:
+                "Confidence stayed close to accuracy across " +
+                n +
+                " " +
+                sessionWord +
+                ".",
         };
     }
 
@@ -351,8 +382,6 @@
                 ctx.restore();
             }
 
-            // Center gap label removed — shown as status chip outside the chart.
-
             // End-of-series value labels
             var last = n - 1;
             var sLast = sureDs.data[last];
@@ -389,14 +418,15 @@
     };
 
     function lineDataset(opts) {
+        var openPoint = !!opts.openPoint;
         return {
             type: "line",
             label: opts.label,
             datasetId: opts.datasetId,
             data: opts.data,
             borderColor: opts.color,
-            backgroundColor: "#fff",
-            pointBackgroundColor: "#fff",
+            backgroundColor: openPoint ? "#fff" : opts.color,
+            pointBackgroundColor: openPoint ? "#fff" : opts.color,
             pointBorderColor: opts.color,
             pointBorderWidth: 2,
             borderWidth: opts.borderWidth != null ? opts.borderWidth : 2.25,
@@ -408,6 +438,7 @@
             order: opts.order != null ? opts.order : 2,
             hidden: !!opts.hidden,
             legendGroup: opts.legendGroup || "rating",
+            alwaysOn: !!opts.alwaysOn,
         };
     }
 
@@ -426,7 +457,8 @@
                 color: SURE_CORRECT_COLORS.guessing,
                 borderDash: [4, 3],
                 borderWidth: 2,
-                legendGroup: "rating",
+                legendGroup: "also",
+                hidden: true,
             }),
             lineDataset({
                 label: "Not sure",
@@ -435,10 +467,11 @@
                 color: SURE_CORRECT_COLORS.notSure,
                 borderDash: [5, 4],
                 borderWidth: 2,
-                legendGroup: "rating",
+                legendGroup: "also",
+                hidden: true,
             }),
             lineDataset({
-                label: "Sure",
+                label: "Marked Sure",
                 datasetId: "sure",
                 data: seriesOf("sure"),
                 color: SURE_CORRECT_COLORS.sure,
@@ -446,19 +479,21 @@
                 pointRadius: 5,
                 pointHoverRadius: 6,
                 order: 1,
-                legendGroup: "rating",
+                legendGroup: "core",
+                openPoint: true,
+                alwaysOn: true,
             }),
             lineDataset({
-                label: "Correct",
+                label: "Actually correct",
                 datasetId: "correct",
                 data: seriesOf("correct_pct"),
                 color: SURE_CORRECT_COLORS.correct,
-                borderDash: [6, 4],
                 borderWidth: 2.5,
                 pointRadius: 5,
                 pointHoverRadius: 6,
                 order: 1,
-                legendGroup: "rating",
+                legendGroup: "core",
+                alwaysOn: true,
             }),
             lineDataset({
                 label: "Quick",
@@ -474,7 +509,6 @@
                 datasetId: "steady",
                 data: seriesOf("steady"),
                 color: SURE_CORRECT_COLORS.steady,
-                borderDash: [3, 3],
                 borderWidth: 2,
                 hidden: true,
                 legendGroup: "pace",
@@ -484,7 +518,6 @@
                 datasetId: "slow",
                 data: seriesOf("slow"),
                 color: SURE_CORRECT_COLORS.slow,
-                borderDash: [2, 4],
                 borderWidth: 2,
                 hidden: true,
                 legendGroup: "pace",
@@ -499,36 +532,34 @@
         var metric = series.metric;
 
         if (metric === "confidence") {
-            var studentSum = 0;
-            var hasStudents = false;
-            points.forEach(function (p) {
-                if (p.student_count != null) {
-                    studentSum += p.student_count;
-                    hasStudents = true;
-                }
-            });
-            var statLabel;
+            var n = points.length;
+            var kind = gapKind(points);
+            var unit = flat
+                ? n === 1
+                    ? "session"
+                    : "sessions"
+                : n === 1
+                  ? "period"
+                  : "periods";
             var detail;
-            if (flat) {
-                statLabel = points.length + (points.length === 1 ? " session" : " sessions");
-                detail = "Your Sure vs Correct · status uses a ±15 pt gap.";
-            } else if (hasStudents) {
-                statLabel =
-                    studentSum +
-                    (studentSum === 1 ? " student-period" : " student-periods");
-                detail = "Sure vs Correct across this range · status uses a ±15 pt gap.";
+            if (kind === "over") {
+                detail =
+                    "Overconfident means your Sure answers ran more than 15 points above your correct ones.";
+            } else if (kind === "under") {
+                detail =
+                    "Underconfident means your correct answers ran more than 15 points above Sure.";
             } else {
-                statLabel = points.length + (points.length === 1 ? " period" : " periods");
-                detail = "Sure vs Correct across this range · status uses a ±15 pt gap.";
+                detail =
+                    "Realistic means Sure stayed within 15 points of your correct answers.";
             }
             return (
-                '<div class="overview-chart-hint__row">' +
-                '<span class="overview-chart-hint__stat">' +
-                statLabel +
-                "</span>" +
                 '<p class="overview-chart-hint__text">' +
+                n +
+                " " +
+                unit +
+                " · " +
                 detail +
-                "</p></div>"
+                "</p>"
             );
         }
 
@@ -554,47 +585,71 @@
 
     function renderConfidenceLegend(legendEl, chart) {
         if (!legendEl || !chart) return;
-        var ratingBtns = "";
-        var paceBtns = "";
+
+        var coreHtml = "";
+        var alsoBtns = "";
+        var paceIndexes = {};
         chart.data.datasets.forEach(function (ds, index) {
             if (!ds.label) return;
+            if (ds.legendGroup === "core") {
+                var open = !!ds.alwaysOn && ds.datasetId === "sure";
+                coreHtml +=
+                    '<div class="overview-core-legend__item">' +
+                    '<span class="overview-core-legend__swatch' +
+                    (open ? " overview-core-legend__swatch--open" : "") +
+                    '" style="--swatch:' +
+                    (ds.borderColor || "#64748b") +
+                    '" aria-hidden="true"></span>' +
+                    '<span><strong>' +
+                    ds.label +
+                    "</strong> — " +
+                    (ds.datasetId === "sure"
+                        ? "answers where you said you were sure"
+                        : "answers you got right") +
+                    "</span></div>";
+                return;
+            }
             var meta = chart.getDatasetMeta(index);
             var on = chart.isDatasetVisible
                 ? chart.isDatasetVisible(index)
                 : !(meta && meta.hidden);
-            var btn =
-                '<button type="button" class="overview-legend-btn' +
-                (on ? " is-on" : "") +
-                '" data-dataset-index="' +
-                index +
-                '" aria-pressed="' +
-                (on ? "true" : "false") +
-                '">' +
-                '<i class="overview-legend-btn__swatch" style="--swatch:' +
-                (ds.borderColor || "#64748b") +
-                '" aria-hidden="true"></i>' +
-                ds.label +
-                "</button>";
-            if (ds.legendGroup === "pace") {
-                paceBtns += btn;
-            } else {
-                ratingBtns += btn;
+            if (ds.legendGroup === "also") {
+                alsoBtns +=
+                    '<button type="button" class="overview-also-btn' +
+                    (on ? " is-on" : "") +
+                    '" data-dataset-index="' +
+                    index +
+                    '" aria-pressed="' +
+                    (on ? "true" : "false") +
+                    '">' +
+                    ds.label +
+                    "</button>";
+            } else if (ds.legendGroup === "pace") {
+                paceIndexes[ds.datasetId] = index;
             }
         });
+
         legendEl.hidden = false;
         legendEl.innerHTML =
-            '<div class="overview-confidence-legend__group">' +
-            '<span class="overview-confidence-legend__label">Ratings</span>' +
-            '<div class="overview-confidence-legend__btns">' +
-            ratingBtns +
+            '<div class="overview-core-legend">' +
+            coreHtml +
+            "</div>" +
+            '<div class="overview-confidence-controls">' +
+            '<div class="overview-confidence-controls__row">' +
+            '<span class="overview-confidence-controls__label">Also show</span>' +
+            '<div class="overview-also-btns">' +
+            alsoBtns +
             "</div></div>" +
-            '<div class="overview-confidence-legend__group">' +
-            '<span class="overview-confidence-legend__label">Pace</span>' +
-            '<div class="overview-confidence-legend__btns">' +
-            paceBtns +
-            "</div></div>";
+            '<div class="overview-confidence-controls__row">' +
+            '<span class="overview-confidence-controls__label">Answer speed</span>' +
+            '<div class="overview-speed-pills" role="group" aria-label="Answer speed">' +
+            '<button type="button" class="overview-speed-pill is-selected" data-pace="all" aria-pressed="true">All</button>' +
+            '<button type="button" class="overview-speed-pill" data-pace="quick" aria-pressed="false">Quick</button>' +
+            '<button type="button" class="overview-speed-pill" data-pace="steady" aria-pressed="false">Steady</button>' +
+            '<button type="button" class="overview-speed-pill" data-pace="slow" aria-pressed="false">Slow</button>' +
+            "</div></div></div>";
 
-        legendEl.querySelectorAll("[data-dataset-index]").forEach(function (btn) {
+        legendEl.querySelectorAll(".overview-also-btn").forEach(function (btn) {
             btn.addEventListener("click", function () {
                 var idx = parseInt(btn.getAttribute("data-dataset-index"), 10);
                 var meta = chart.getDatasetMeta(idx);
@@ -602,6 +657,25 @@
                 meta.hidden = !meta.hidden;
                 btn.classList.toggle("is-on", !meta.hidden);
                 btn.setAttribute("aria-pressed", meta.hidden ? "false" : "true");
+                chart.update();
+            });
+        });
+
+        legendEl.querySelectorAll(".overview-speed-pill").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var pace = btn.getAttribute("data-pace");
+                legendEl.querySelectorAll(".overview-speed-pill").forEach(function (other) {
+                    var on = other.getAttribute("data-pace") === pace;
+                    other.classList.toggle("is-selected", on);
+                    other.setAttribute("aria-pressed", on ? "true" : "false");
+                });
+                ["quick", "steady", "slow"].forEach(function (key) {
+                    var idx = paceIndexes[key];
+                    if (idx == null) return;
+                    var meta = chart.getDatasetMeta(idx);
+                    if (!meta) return;
+                    meta.hidden = pace === "all" ? true : pace !== key;
+                });
                 chart.update();
             });
         });
@@ -798,7 +872,7 @@
                 gapStatusEl.className = "overview-gap-status-row";
                 return;
             }
-            var copy = gapStatusCopy(series.points);
+            var copy = gapStatusCopy(series.points, { flatMode: flatMode });
             gapStatusEl.hidden = false;
             gapStatusEl.className =
                 "overview-gap-status-row overview-gap-status-row--" + copy.kind;
@@ -808,11 +882,18 @@
                 '">' +
                 copy.label +
                 "</span>" +
+                '<div class="overview-gap-status__copy">' +
+                (copy.headline
+                    ? '<p class="overview-gap-status__headline">' +
+                      copy.headline +
+                      "</p>"
+                    : "") +
                 (copy.detail
-                    ? '<span class="overview-gap-status__detail">' +
+                    ? '<p class="overview-gap-status__detail">' +
                       copy.detail +
-                      "</span>"
-                    : "");
+                      "</p>"
+                    : "") +
+                "</div>";
         }
 
         function updateChartHint(series) {
@@ -876,8 +957,9 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        clip: false,
                         layout: {
-                            padding: { top: 16, right: 88 },
+                            padding: { top: 28, right: 88, bottom: 4 },
                         },
                         scales: {
                             x: {
