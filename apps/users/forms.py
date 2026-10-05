@@ -1,6 +1,5 @@
 """Custom forms for EXAMIQ auth and shared input styling."""
 
-import hmac
 import re
 
 from allauth.account.adapter import get_adapter
@@ -13,7 +12,6 @@ from allauth.account.forms import (
 )
 from allauth.account.utils import filter_users_by_email
 from django import forms
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
@@ -114,17 +112,6 @@ class ExamiQResetPasswordKeyForm(ResetPasswordKeyForm):
             self.fields["password2"].widget.attrs.setdefault(
                 "autocomplete", "new-password"
             )
-
-
-def _faculty_pin_matches(provided: str, expected: str) -> bool:
-    """Constant-time PIN compare; unequal lengths never match."""
-    if not expected or not provided:
-        return False
-    provided_b = provided.encode("utf-8")
-    expected_b = expected.encode("utf-8")
-    if len(provided_b) != len(expected_b):
-        return False
-    return hmac.compare_digest(provided_b, expected_b)
 
 
 class ExamiQSignupForm(SignupForm):
@@ -344,16 +331,20 @@ class ExamiQSignupForm(SignupForm):
                     "student_number", "This student number is already registered."
                 )
         elif role == User.Role.PROFESSOR:
-            expected_pin = (getattr(settings, "FACULTY_SIGNUP_PIN", "") or "").strip()
+            from apps.users.faculty_pin_services import (
+                faculty_signup_pin_is_configured,
+                verify_faculty_signup_pin,
+            )
+
             provided_pin = (cleaned.get("faculty_pin") or "").strip()
-            if not expected_pin:
+            if not faculty_signup_pin_is_configured():
                 self.add_error(
                     "faculty_pin",
                     "Faculty signup is currently unavailable. Contact your campus administrator.",
                 )
             elif not provided_pin:
                 self.add_error("faculty_pin", "Faculty signup PIN is required.")
-            elif not _faculty_pin_matches(provided_pin, expected_pin):
+            elif not verify_faculty_signup_pin(provided_pin):
                 self.add_error("faculty_pin", "Invalid faculty signup PIN.")
 
         year_level = cleaned.get("year_level")
@@ -730,6 +721,70 @@ class ExamiQChangePasswordForm(ChangePasswordForm):
         super().save()
         self.user.password_changed_at = timezone.now()
         self.user.save(update_fields=["password_changed_at"])
+
+
+class FacultySignupPinForm(forms.Form):
+    """Rotate the shared faculty public-signup PIN from a faculty profile."""
+
+    new_pin = forms.CharField(
+        max_length=64,
+        label="New faculty signup PIN",
+        widget=forms.PasswordInput(
+            attrs={
+                "autocomplete": "new-password",
+                "placeholder": "Enter a new PIN",
+            }
+        ),
+    )
+    confirm_pin = forms.CharField(
+        max_length=64,
+        label="Confirm new PIN",
+        widget=forms.PasswordInput(
+            attrs={
+                "autocomplete": "new-password",
+                "placeholder": "Re-enter the new PIN",
+            }
+        ),
+    )
+    password = forms.CharField(
+        label="Your account password",
+        widget=forms.PasswordInput(
+            attrs={
+                "autocomplete": "current-password",
+                "placeholder": "Confirm with your password",
+            }
+        ),
+    )
+
+    def __init__(self, user: User, *args, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        _style_fields(self)
+
+    def clean_password(self):
+        password = self.cleaned_data.get("password", "")
+        if not self.user.check_password(password):
+            raise forms.ValidationError("Incorrect account password.")
+        return password
+
+    def clean(self):
+        cleaned = super().clean()
+        new_pin = (cleaned.get("new_pin") or "").strip()
+        confirm_pin = (cleaned.get("confirm_pin") or "").strip()
+        if new_pin and len(new_pin) < 6:
+            self.add_error("new_pin", "PIN must be at least 6 characters.")
+        if new_pin and confirm_pin and new_pin != confirm_pin:
+            self.add_error("confirm_pin", "PINs do not match.")
+        cleaned["new_pin"] = new_pin
+        return cleaned
+
+    def save(self) -> None:
+        from apps.users.faculty_pin_services import update_faculty_signup_pin
+
+        update_faculty_signup_pin(
+            changed_by=self.user,
+            new_pin=self.cleaned_data["new_pin"],
+        )
 
 
 class ProgramSectionForm(forms.ModelForm):

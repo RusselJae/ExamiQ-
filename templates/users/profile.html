@@ -175,6 +175,48 @@
     </div>
     {% endif %}
 
+    {% if can_manage_faculty_signup_pin %}
+    {# Shared faculty signup PIN #}
+    <div class="profile-bento-faculty-pin bento-card profile-card">
+        <h2 class="profile-card-title">Faculty signup PIN</h2>
+        <div class="profile-card-body">
+            <p class="text-sm text-examiq-slate mb-3">
+                New faculty use this PIN on the public signup page. When you change it,
+                every other active faculty account receives the new PIN and your name by email.
+            </p>
+            {% if faculty_signup_pin_status.is_configured %}
+            <div class="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 mb-3 text-xs text-examiq-slate">
+                <p class="font-medium text-examiq-navy">PIN is configured</p>
+                {% if faculty_signup_pin_status.updated_by %}
+                <p class="mt-1">
+                    Last updated by
+                    <strong>{{ faculty_signup_pin_status.updated_by.get_full_name|default:faculty_signup_pin_status.updated_by.email }}</strong>
+                    {% if faculty_signup_pin_status.updated_at %}
+                    on {{ faculty_signup_pin_status.updated_at|date:"M d, Y g:i A" }}
+                    {% endif %}
+                </p>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 mb-3 text-xs text-amber-900">
+                No PIN is set yet. Set one below to enable faculty self-registration.
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'users:profile' %}" class="profile-card-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_faculty_pin">
+                {{ faculty_pin_form.new_pin|as_crispy_field }}
+                {{ faculty_pin_form.confirm_pin|as_crispy_field }}
+                {{ faculty_pin_form.password|as_crispy_field }}
+                <div class="profile-card-footer">
+                    <button type="submit" class="btn-primary btn-primary-sm">Update faculty PIN</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
     {# Login email #}
     <div class="profile-bento-email bento-card profile-card">
         <h2 class="profile-card-title">Login email</h2>

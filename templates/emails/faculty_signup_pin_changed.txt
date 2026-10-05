@@ -1,0 +1,13 @@
+Hi,
+
+The EXAMIQ+ faculty signup PIN was updated by {{ changed_by.get_full_name|default:changed_by.email }} ({{ changed_by.email }}).
+
+New faculty signup PIN:
+{{ new_pin }}
+
+Share this PIN only with trusted colleagues who should be able to register as faculty on the public signup page.
+
+You can review or update it anytime from your profile:
+{{ profile_url }}
+
+— EXAMIQ+

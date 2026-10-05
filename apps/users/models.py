@@ -537,3 +537,34 @@ class EmailSignupOTP(models.Model):
 
     def __str__(self) -> str:
         return f"OTP for {self.user_id} @ {self.created_at}"
+
+
+class FacultySignupPinSettings(models.Model):
+    """Singleton row for the shared faculty public-signup PIN."""
+
+    SINGLETON_PK = 1
+
+    pin_hash = models.CharField(max_length=128, blank=True, default="")
+    updated_at = models.DateTimeField(null=True, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="faculty_signup_pin_updates",
+    )
+
+    class Meta:
+        verbose_name = "Faculty signup PIN"
+        verbose_name_plural = "Faculty signup PIN"
+
+    def __str__(self) -> str:
+        return "Faculty signup PIN settings"
+
+    @classmethod
+    def load(cls) -> "FacultySignupPinSettings":
+        obj, _created = cls.objects.get_or_create(
+            pk=cls.SINGLETON_PK,
+            defaults={"pin_hash": ""},
+        )
+        return obj

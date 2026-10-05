@@ -47,3 +47,31 @@ def send_pending_registration_alert(user: User) -> None:
         },
     )
     send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, admins, fail_silently=True)
+
+
+def send_faculty_signup_pin_changed_email(
+    *,
+    changed_by: User,
+    new_pin: str,
+    recipients: list[str],
+) -> None:
+    """Notify faculty when the shared signup PIN is rotated."""
+    if not recipients:
+        return
+    site_url = getattr(settings, "SITE_URL", "http://127.0.0.1:8000")
+    subject = "EXAMIQ+ faculty signup PIN updated"
+    body = render_to_string(
+        "emails/faculty_signup_pin_changed.txt",
+        {
+            "changed_by": changed_by,
+            "new_pin": new_pin,
+            "profile_url": f"{site_url}/profile/",
+        },
+    )
+    send_mail(
+        subject,
+        body,
+        settings.DEFAULT_FROM_EMAIL,
+        recipients,
+        fail_silently=True,
+    )
