@@ -41,6 +41,28 @@ def parse_job_difficulties(difficulty: str) -> list[str]:
     return ordered or [Question.Difficulty.EASY]
 
 
+
+def _resolve_item_difficulty(item: dict, requested: str) -> str:
+    """Prefer model-assigned difficulty; fall back to tagger then requested band."""
+    from apps.ai.factory import get_difficulty_tagger
+    from apps.questions.models import Question
+
+    valid = {c.value for c in Question.Difficulty}
+    raw = (item.get("difficulty") or "").strip().lower()
+    if raw in valid:
+        return raw
+    stem = (item.get("stem") or "").strip()
+    if stem:
+        try:
+            tagged = (get_difficulty_tagger().tag(stem, requested) or "").strip().lower()
+            if tagged in valid:
+                return tagged
+        except Exception:
+            pass
+    return requested if requested in valid else Question.Difficulty.MEDIUM
+
+
+
 def split_counts_across(total: int, n: int) -> list[int]:
     """Distribute ``total`` as evenly as possible across ``n`` buckets."""
     if n <= 0:
@@ -195,7 +217,9 @@ def run_question_generation_job(job_id: int) -> None:
                             if not stem_key or stem_key in seen_stems:
                                 continue
                             seen_stems.add(stem_key)
-                            item["difficulty"] = difficulty
+                            item["difficulty"] = _resolve_item_difficulty(
+                                item, difficulty
+                            )
                             variations.append(item)
                             produced_for_diff += 1
                         job.result = {"variations": variations[: job.count]}

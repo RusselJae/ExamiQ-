@@ -1,0 +1,41 @@
+{% extends "account/auth_base.html" %}
+{% load i18n %}
+
+{% block title %}Verify sign-in - EXAMIQ+{% endblock %}
+
+{% block auth_nav %}{% include "components/auth_nav_login.html" %}{% endblock %}
+
+{% block auth_content %}
+<h2 class="auth-page__heading">Check your email</h2>
+<p class="auth-page__subheading">
+    {% if email %}
+    We sent a 6-digit sign-in code to <strong>{{ email }}</strong>. Enter it below to finish signing in.
+    {% else %}
+    Enter the sign-in code we sent you to finish signing in.
+    {% endif %}
+</p>
+
+{% if form.errors %}
+<div class="auth-form__errors" role="alert">
+    {% for field in form %}
+        {% for error in field.errors %}<p>{{ error }}</p>{% endfor %}
+    {% endfor %}
+    {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'account_confirm_login_code' %}" class="auth-form" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+        {% if field.is_hidden %}
+            {{ field }}
+        {% else %}
+        <label class="auth-field{% if field.errors %} auth-field--error{% endif %}" for="{{ field.id_for_label }}">
+            <span class="auth-field__label">{{ field.label }}</span>
+            {{ field }}
+        </label>
+        {% endif %}
+    {% endfor %}
+    <button type="submit" class="auth-btn-submit">Verify and continue</button>
+</form>
+{% endblock %}

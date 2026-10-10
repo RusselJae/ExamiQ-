@@ -50,10 +50,14 @@ class NotificationListView(LoginRequiredMixin, ListView):
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
-        from apps.users.notification_services import notification_cta_label
+        from apps.users.notification_services import (
+            notification_cta_label,
+            notification_icon_kind,
+        )
 
         for notification in context["notifications"]:
             notification.cta_label = notification_cta_label(notification)
+            notification.icon_kind = notification_icon_kind(notification)
         return context
 
 

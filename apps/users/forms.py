@@ -84,16 +84,59 @@ class ExamiQLoginForm(LoginForm):
 
 
 class ExamiQResetPasswordForm(ResetPasswordForm):
-    """Branded widgets for the forgot-password email form."""
+    """Forgot-password form with existence check and request throttling."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.throttle_error = None
         _style_auth_fields(self)
         email = self.fields.get("email")
         if email:
             email.label = "Email"
             email.widget.attrs.setdefault("placeholder", "name@school.edu.ph")
             email.widget.attrs.setdefault("autocomplete", "email")
+
+    def clean_email(self):
+        from allauth.account.utils import filter_users_by_email
+
+        from apps.users.password_reset_services import (
+            PasswordResetThrottleError,
+            check_password_reset_allowed,
+            email_has_account,
+            normalize_reset_email,
+        )
+
+        email = normalize_reset_email(self.cleaned_data.get("email", ""))
+        if not email:
+            raise forms.ValidationError("Enter your email address.")
+        if not email_has_account(email):
+            raise forms.ValidationError(
+                "No account is registered with this email address."
+            )
+        try:
+            check_password_reset_allowed(email)
+        except PasswordResetThrottleError as exc:
+            self.throttle_error = exc
+            raise forms.ValidationError(str(exc)) from exc
+        # allauth save() expects self.users from the parent clean_email path.
+        self.users = filter_users_by_email(email, is_active=True, prefer_verified=True)
+        if not self.users:
+            # Include inactive approved accounts that can still reset.
+            self.users = list(User.objects.filter(email__iexact=email))
+        return email
+
+    def save(self, request, **kwargs):
+        from apps.users.password_reset_services import (
+            normalize_reset_email,
+            record_password_reset_request,
+        )
+
+        email = normalize_reset_email(self.cleaned_data["email"])
+        ip = (request.META.get("REMOTE_ADDR") or "")[:45] or None
+        record_password_reset_request(email, ip_address=ip)
+        if not getattr(self, "users", None):
+            self.users = list(User.objects.filter(email__iexact=email))
+        return super().save(request, **kwargs)
 
 
 class ExamiQResetPasswordKeyForm(ResetPasswordKeyForm):
@@ -133,29 +176,31 @@ class ExamiQSignupForm(SignupForm):
         ),
     )
     first_name = forms.CharField(
-        max_length=150,
+        max_length=100,
         label="First name",
         widget=forms.TextInput(
             attrs={
                 "class": "auth-field__input",
                 "placeholder": "First name",
                 "autocomplete": "given-name",
+                "maxlength": "100",
             }
         ),
     )
     last_name = forms.CharField(
-        max_length=150,
+        max_length=100,
         label="Last name",
         widget=forms.TextInput(
             attrs={
                 "class": "auth-field__input",
                 "placeholder": "Last name",
                 "autocomplete": "family-name",
+                "maxlength": "100",
             }
         ),
     )
     middle_name = forms.CharField(
-        max_length=150,
+        max_length=100,
         required=False,
         label="Middle name (optional)",
         widget=forms.TextInput(
@@ -163,6 +208,7 @@ class ExamiQSignupForm(SignupForm):
                 "class": "auth-field__input",
                 "placeholder": "Middle name",
                 "autocomplete": "additional-name",
+                "maxlength": "100",
             }
         ),
     )
@@ -286,6 +332,33 @@ class ExamiQSignupForm(SignupForm):
         )
         self.fields["section"].widget.attrs["data-sections-url"] = (
             "/profile/api/sections/"
+        )
+
+    def clean_first_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("first_name", ""),
+            field_label="First name",
+            required=True,
+        )
+
+    def clean_last_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("last_name", ""),
+            field_label="Last name",
+            required=True,
+        )
+
+    def clean_middle_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("middle_name", ""),
+            field_label="Middle name",
+            required=False,
         )
 
     def clean_student_number(self):
@@ -426,9 +499,9 @@ ALLOWED_PROFILE_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class ProfileUpdateForm(forms.Form):
-    first_name = forms.CharField(max_length=150, required=False, label="First name")
-    middle_name = forms.CharField(max_length=150, required=False, label="Middle name")
-    last_name = forms.CharField(max_length=150, required=False, label="Last name")
+    first_name = forms.CharField(max_length=100, required=False, label="First name")
+    middle_name = forms.CharField(max_length=100, required=False, label="Middle name")
+    last_name = forms.CharField(max_length=100, required=False, label="Last name")
     suffix = forms.CharField(max_length=20, required=False, label="Suffix")
     profile_photo = forms.ImageField(required=False, label="Profile photo")
     year_level = forms.ModelChoiceField(
@@ -521,6 +594,33 @@ class ProfileUpdateForm(forms.Form):
             del self.fields["assigned_sections"]
             del self.fields["assigned_subjects"]
 
+    def clean_first_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("first_name", ""),
+            field_label="First name",
+            required=False,
+        )
+
+    def clean_middle_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("middle_name", ""),
+            field_label="Middle name",
+            required=False,
+        )
+
+    def clean_last_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("last_name", ""),
+            field_label="Last name",
+            required=False,
+        )
+
     def clean_section(self):
         if self.user.role != User.Role.STUDENT:
             return ""
@@ -601,8 +701,8 @@ class CampusUserCreateForm(forms.Form):
         widget=forms.PasswordInput,
         min_length=8,
     )
-    first_name = forms.CharField(max_length=150, required=False, label="First name")
-    last_name = forms.CharField(max_length=150, required=False, label="Last name")
+    first_name = forms.CharField(max_length=100, required=False, label="First name")
+    last_name = forms.CharField(max_length=100, required=False, label="Last name")
     department = forms.ModelChoiceField(
         queryset=Department.objects.all().order_by("name"),
         required=False,
@@ -624,6 +724,24 @@ class CampusUserCreateForm(forms.Form):
         if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError("A user with this email already exists.")
         return email
+
+    def clean_first_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("first_name", ""),
+            field_label="First name",
+            required=False,
+        )
+
+    def clean_last_name(self):
+        from apps.users.name_validation import clean_person_name
+
+        return clean_person_name(
+            self.cleaned_data.get("last_name", ""),
+            field_label="Last name",
+            required=False,
+        )
 
     def save(self) -> User:
         department = self.cleaned_data.get("department")

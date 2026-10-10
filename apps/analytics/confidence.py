@@ -42,14 +42,14 @@ CONFIDENCE_TIER_HIGH = "high"
 CONFIDENCE_TIER_LABELS = {
     CONFIDENCE_TIER_NONE: "No ratings",
     CONFIDENCE_TIER_LOW: "Guessing",
-    CONFIDENCE_TIER_AVERAGE: "Not sure",
+    CONFIDENCE_TIER_AVERAGE: "Guessing",  # legacy mid-tier (3) maps to Guessing
     CONFIDENCE_TIER_HIGH: "Sure",
 }
 
 CONFIDENCE_SCALE_0_3_LABELS = {
     0: "No ratings",
     1: "Guessing",
-    2: "Not sure",
+    2: "Guessing",  # legacy mid-tier
     3: "Sure",
 }
 

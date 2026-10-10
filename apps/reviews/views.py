@@ -190,7 +190,10 @@ class ReviewSetupView(StudentRequiredMixin, View):
         year_subjects = list(subjects_available_for_student(self.request.user))
         other_subjects = list(other_subjects_available_for_student(self.request.user))
 
-        from apps.reviews.exam_setup_services import MAX_TOTAL_QUESTIONS
+        from apps.reviews.exam_setup_services import (
+            MAX_TOTAL_QUESTIONS,
+            instructor_locked_seconds_for_subjects,
+        )
 
         if form.is_bound and form.data.get("seconds_per_question") not in (None, ""):
             try:
@@ -246,6 +249,25 @@ class ReviewSetupView(StudentRequiredMixin, View):
             MAX_TOTAL_QUESTIONS,
             max(subject_count, 1) * questions_per_subject,
         )
+        # Prefill/lock timer when faculty configured all currently selected subjects.
+        preview_subjects = list(year_subjects)
+        if form.is_bound:
+            preview_subjects = []
+            raw_year = form.data.getlist("year_subjects")
+            raw_extra = form.data.getlist("extra_subjects")
+            selected_pks = {
+                int(pk) for pk in (raw_year + raw_extra) if str(pk).isdigit()
+            }
+            by_id = {s.pk: s for s in year_subjects + other_subjects}
+            preview_subjects = [by_id[pk] for pk in selected_pks if pk in by_id]
+        elif not form.is_bound and year_subjects:
+            preview_subjects = list(year_subjects)
+
+        locked_seconds = instructor_locked_seconds_for_subjects(preview_subjects)
+        timer_locked = locked_seconds is not None
+        if timer_locked:
+            estimate_seconds = locked_seconds
+
         if estimate_seconds == 0:
             estimate_minutes = 0
         else:
@@ -270,6 +292,8 @@ class ReviewSetupView(StudentRequiredMixin, View):
             "estimate_questions": estimate_questions,
             "estimate_minutes": estimate_minutes,
             "max_total_questions": MAX_TOTAL_QUESTIONS,
+            "timer_locked_by_instructor": timer_locked,
+            "instructor_timer_seconds": locked_seconds,
             **extra,
         }
 

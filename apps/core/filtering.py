@@ -52,14 +52,36 @@ def build_filter_fields(request, specs: list[dict[str, Any]]) -> list[dict[str, 
     for spec in specs:
         field = dict(spec)
         name = spec["name"]
+        field["active_display"] = ""
         if spec["type"] == "search":
             field["value"] = get_filter_param(request, name)
+            if field["value"]:
+                field["active_display"] = field["value"]
         elif spec["type"] in ("select", "sort"):
-            field["selected"] = get_filter_param(request, name)
+            selected = get_filter_param(request, name)
+            field["selected"] = selected
+            if selected:
+                label = selected
+                for value, choice_label in field.get("choices") or []:
+                    if str(value) == selected:
+                        label = str(choice_label)
+                        break
+                field["active_display"] = label
         elif spec["type"] == "date":
             field["value"] = get_filter_param(request, name)
+            if field["value"]:
+                field["active_display"] = field["value"]
         fields.append(field)
     return fields
+
+
+def count_advanced_active_filters(fields: list[dict[str, Any]]) -> int:
+    """Count active non-search filters (for the mobile Filters badge)."""
+    return sum(
+        1
+        for field in fields
+        if field.get("type") != "search" and field.get("active_display")
+    )
 
 
 def has_active_filters(request, names: list[str]) -> bool:

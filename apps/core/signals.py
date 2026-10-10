@@ -15,3 +15,14 @@ def audit_user_login(sender, request, user, **kwargs):
         target_user=user,
         message=f"{user.email} signed in",
     )
+    # Unrecognized device/IP → in-app + email alert (skips first-ever fingerprint).
+    try:
+        from apps.users.login_alert_services import (
+            notify_unrecognized_login,
+            process_login_fingerprint,
+        )
+
+        if process_login_fingerprint(request, user):
+            notify_unrecognized_login(request, user)
+    except Exception:  # noqa: BLE001 — never break login on alert failure
+        pass

@@ -92,6 +92,100 @@
         return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     }
 
+    function sameCalendarDay(a, b) {
+        return (
+            a.getFullYear() === b.getFullYear() &&
+            a.getMonth() === b.getMonth() &&
+            a.getDate() === b.getDate()
+        );
+    }
+
+    function dateSeparatorLabel(date) {
+        if (isNaN(date.getTime())) return "";
+        var today = new Date();
+        var yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        if (sameCalendarDay(date, today)) return "Today";
+        if (sameCalendarDay(date, yesterday)) return "Yesterday";
+        return date.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+        });
+    }
+
+    function authorKey(msg, side) {
+        if (msg.author_id) return "id:" + msg.author_id;
+        return "role:" + (msg.author_role || side);
+    }
+
+    function buildThreadBlocks(msgs) {
+        var blocks = [];
+        var current = null;
+        var lastDateKey = null;
+        var windowMs = 5 * 60 * 1000;
+
+        (msgs || []).forEach(function (msg) {
+            var date = new Date(msg.created_at);
+            var dateKey = isNaN(date.getTime()) ? "" : date.toDateString();
+            if (dateKey !== lastDateKey) {
+                lastDateKey = dateKey;
+                current = null;
+                blocks.push({
+                    type: "separator",
+                    label: dateSeparatorLabel(date),
+                });
+            }
+
+            var side = messageSide(msg);
+            var key = authorKey(msg, side);
+            var canMerge =
+                current &&
+                current.type === "group" &&
+                current.side === side &&
+                current.authorKey === key;
+
+            if (canMerge) {
+                var prev = current.messages[current.messages.length - 1];
+                var prevTime = new Date(prev.created_at).getTime();
+                var nextTime = date.getTime();
+                if (
+                    !isNaN(prevTime) &&
+                    !isNaN(nextTime) &&
+                    Math.abs(nextTime - prevTime) <= windowMs
+                ) {
+                    current.messages.push(msg);
+                    current.timeLabel = formatTime(msg.created_at);
+                    return;
+                }
+            }
+
+            current = {
+                type: "group",
+                side: side,
+                authorKey: key,
+                messages: [msg],
+                timeLabel: formatTime(msg.created_at),
+            };
+            blocks.push(current);
+        });
+        return blocks;
+    }
+
+    function syncSendEnabled() {
+        var input = document.getElementById("examiq-chat-input");
+        var imageInput = document.getElementById("examiq-chat-image");
+        var send = document.getElementById("examiq-chat-send");
+        if (!send || !input) return;
+        if (input.disabled) {
+            send.disabled = true;
+            return;
+        }
+        var hasText = !!(input.value || "").trim();
+        var hasImage = !!(imageInput && imageInput.files && imageInput.files[0]);
+        send.disabled = !(hasText || hasImage) || state.sending;
+    }
+
     function avatarHtml(url, initials, extraClass) {
         var cls = "examiq-chat-avatar" + (extraClass ? " " + extraClass : "");
         if (url) {
@@ -333,7 +427,7 @@
                 input.value = "";
                 input.disabled = !isFaculty() ? false : true;
             }
-            if (send) send.disabled = !isFaculty() ? false : true;
+            syncSendEnabled();
             return;
         }
 
@@ -346,7 +440,7 @@
                 : "";
         }
         if (input) input.disabled = false;
-        if (send) send.disabled = false;
+        syncSendEnabled();
 
         var msgs = dedupeMessages(item.messages || []);
         if (!msgs.length) {
@@ -355,49 +449,77 @@
             return;
         }
 
-        thread.innerHTML = msgs
-            .map(function (msg) {
-                var side = messageSide(msg);
-                var av = messageAvatar(msg, item);
-                var body = msg.body
-                    ? '<p class="examiq-chat-bubble__text">' +
-                      escapeHtml(msg.body).replace(/\n/g, "<br>") +
-                      "</p>"
-                    : "";
-                var image = msg.image_url
-                    ? '<a class="examiq-chat-bubble__image" href="' +
-                      escapeHtml(msg.image_url) +
-                      '" target="_blank" rel="noopener"><img src="' +
-                      escapeHtml(msg.image_url) +
-                      '" alt="Attachment"></a>'
-                    : "";
-                var avatarLeft = side === "in";
-                return (
-                    '<div class="examiq-chat-msg examiq-chat-msg--' +
+        var html = [];
+        buildThreadBlocks(msgs).forEach(function (block) {
+            if (block.type === "separator") {
+                if (!block.label) return;
+                html.push(
+                    '<div class="examiq-chat-date-sep" role="separator">' +
+                        '<span>' +
+                        escapeHtml(block.label) +
+                        "</span></div>"
+                );
+                return;
+            }
+
+            var side = block.side;
+            var showPeerAvatar = side === "in";
+            var av = showPeerAvatar
+                ? messageAvatar(block.messages[0], item)
+                : null;
+            var bubbles = block.messages
+                .map(function (msg, index) {
+                    var body = msg.body
+                        ? '<p class="examiq-chat-bubble__text">' +
+                          escapeHtml(msg.body).replace(/\n/g, "<br>") +
+                          "</p>"
+                        : "";
+                    var image = msg.image_url
+                        ? '<a class="examiq-chat-bubble__image" href="' +
+                          escapeHtml(msg.image_url) +
+                          '" target="_blank" rel="noopener"><img src="' +
+                          escapeHtml(msg.image_url) +
+                          '" alt="Attachment"></a>'
+                        : "";
+                    var stackClass =
+                        index === 0
+                            ? " examiq-chat-bubble--group-start"
+                            : " examiq-chat-bubble--group-mid";
+                    if (index === block.messages.length - 1) {
+                        stackClass += " examiq-chat-bubble--group-end";
+                    }
+                    return (
+                        '<div class="examiq-chat-bubble examiq-chat-bubble--' +
+                        side +
+                        stackClass +
+                        '">' +
+                        body +
+                        image +
+                        "</div>"
+                    );
+                })
+                .join("");
+
+            html.push(
+                '<div class="examiq-chat-msg examiq-chat-msg--' +
                     side +
+                    (showPeerAvatar ? "" : " examiq-chat-msg--no-avatar") +
                     '">' +
                     '<div class="examiq-chat-msg__row examiq-chat-msg__row--' +
                     side +
                     '">' +
-                    (avatarLeft
+                    (showPeerAvatar
                         ? avatarHtml(av.url, av.initials, "examiq-chat-msg__avatar")
                         : "") +
-                    '<div class="examiq-chat-bubble examiq-chat-bubble--' +
-                    side +
-                    '">' +
-                    body +
-                    image +
-                    "</div>" +
-                    (!avatarLeft
-                        ? avatarHtml(av.url, av.initials, "examiq-chat-msg__avatar")
-                        : "") +
-                    "</div>" +
+                    '<div class="examiq-chat-msg__stack">' +
+                    bubbles +
+                    "</div></div>" +
                     '<span class="examiq-chat-msg__time">' +
-                    escapeHtml(formatTime(msg.created_at)) +
+                    escapeHtml(block.timeLabel || "") +
                     "</span></div>"
-                );
-            })
-            .join("");
+            );
+        });
+        thread.innerHTML = html.join("");
         thread.scrollTop = thread.scrollHeight;
     }
 
@@ -536,7 +658,7 @@
             }
         } finally {
             state.sending = false;
-            if (send) send.disabled = false;
+            syncSendEnabled();
             if (input) input.focus();
         }
     }
@@ -613,6 +735,10 @@
             form.dataset.chatBound = "1";
             form.addEventListener("submit", sendMessage);
         }
+        var chatInput = document.getElementById("examiq-chat-input");
+        if (chatInput) {
+            chatInput.addEventListener("input", syncSendEnabled);
+        }
         var imageInput = document.getElementById("examiq-chat-image");
         var imageName = document.getElementById("examiq-chat-image-name");
         if (imageInput && imageName) {
@@ -623,8 +749,10 @@
                 } else {
                     imageName.classList.add("hidden");
                 }
+                syncSendEnabled();
             });
         }
+        syncSendEnabled();
         document.addEventListener("keydown", function (event) {
             if (event.key === "Escape") closeModal();
         });

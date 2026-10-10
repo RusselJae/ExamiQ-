@@ -137,7 +137,8 @@ class TestQuestionPartialView:
         assert response.status_code == 200
         assert "exam-confidence-gate" in content
         assert "Guessing" in content
-        assert "Not sure" in content
+        assert "Sure" in content
+        assert "Not sure" not in content
         assert "Sure" in content
         assert "question-timer-display" in content
 
@@ -273,7 +274,7 @@ class TestSessionSummaryView:
         assert "answer-review" in content
         assert "Exam result" in content
         assert "Average confidence" in content
-        assert "Sure" in content or "Not sure" in content or "Guessing" in content
+        assert "Sure" in content or "Guessing" in content
         assert "Incorrect answers" not in content
         assert "Confidence gap" not in content
         assert "calibration-matrix" not in content
@@ -343,7 +344,7 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
-                "confidence": "3",
+                "confidence": "1",
                 "time_spent_seconds": "5",
                 "timed_out": "false",
             },
@@ -354,7 +355,7 @@ class TestSubmitAnswerView:
         assert "data-exam-reveal" in content
         assert "data-results-url" in content
 
-    def test_timed_exam_stores_posted_not_sure_confidence(
+    def test_timed_exam_stores_posted_guessing_confidence(
         self, client, student, topic, mcq_question
     ):
         question, correct = mcq_question
@@ -370,7 +371,7 @@ class TestSubmitAnswerView:
             url,
             {
                 "selected_choice": correct.pk,
-                "confidence": "3",
+                "confidence": "1",
                 "time_spent_seconds": "15",
                 "timed_out": "false",
             },
@@ -378,7 +379,7 @@ class TestSubmitAnswerView:
         )
 
         assert response.status_code in (200, 204)
-        assert session.answers.get().confidence == 3
+        assert session.answers.get().confidence == 1
 
     def test_timed_exam_requires_confidence_on_timeout(
         self, client, student, topic, mcq_question

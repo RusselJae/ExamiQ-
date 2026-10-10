@@ -4,6 +4,7 @@ from apps.questions.models import Question, Subject
 from apps.reviews.exam_setup_services import (
     MIN_EXAM_SUBJECTS,
     build_multi_subject_exam_target,
+    instructor_locked_seconds_for_subjects,
     other_subjects_available_for_student,
     student_setup_eligibility,
     subjects_available_for_student,
@@ -215,6 +216,14 @@ class ReviewSetupForm(forms.Form):
                 "subjects at this difficulty and question type."
             )
 
+        # Faculty-configured timers override any client-posted value.
+        locked_seconds = instructor_locked_seconds_for_subjects(subjects)
+        if locked_seconds is not None:
+            cleaned["seconds_per_question"] = locked_seconds
+            cleaned["timer_locked_by_instructor"] = True
+        else:
+            cleaned["timer_locked_by_instructor"] = False
+
         try:
             questions_per_subj = cleaned.get("questions_per_subject") or 3
             self._exam_target = build_multi_subject_exam_target(
@@ -239,10 +248,9 @@ class ReviewSetupForm(forms.Form):
 
 
 class AnswerForm(forms.Form):
-    # Guessing / Not sure / Sure map onto the stored 1 / 3 / 5 scale.
+    # Guessing / Sure map onto the stored 1 / 5 scale (mid-tier removed).
     CONFIDENCE_CHOICES = [
         (1, "Guessing"),
-        (3, "Not sure"),
         (5, "Sure"),
     ]
     TRUE_FALSE_CHOICES = [("True", "True"), ("False", "False")]

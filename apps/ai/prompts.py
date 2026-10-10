@@ -162,7 +162,7 @@ _GENERATION_EXPLAIN_SCHEMA = (
 )
 
 QUESTION_JSON_SCHEMA = (
-    '[{"question_type":"mcq","stem":"short question text","concept_tag":"2-4 word tag",'
+    '[{"question_type":"mcq","stem":"short question text","difficulty":"easy|medium|hard","concept_tag":"2-4 word tag",'
     '"correct_label":"B",'
     '"choices":[{"label":"A","text":"plausible distractor","is_correct":false},'
     '{"label":"B","text":"the one correct answer","is_correct":true},'
@@ -404,7 +404,7 @@ QUESTION_GENERATION_SYSTEM_MCQ = (
     "- correct_label MUST match the single choice with is_correct:true.\n"
     "- Randomize correct_label per question (A, B, C, or D). Never default all answers to A.\n"
     "- In a batch, use at least 2 different correct_label values when count ≥ 2.\n"
-    "- Stems ≤50 words; choice text ≤120 characters; difficulty must match requested level.\n"
+    "- Stems ≤50 words; choice text ≤120 characters; include difficulty (easy|medium|hard) on every item based on the item you wrote.\n"
     "- Distractors plausible but definitively wrong to a subject expert.\n"
     "- Solve each problem yourself before marking the answer; verify correctness.\n"
     f"{_GENERATION_EXPLAIN_RULES}"
@@ -419,7 +419,7 @@ QUESTION_GENERATION_SYSTEM_TRUE_FALSE = (
     "Rules:\n"
     "- Each item is a True or False statement (not a question with choices).\n"
     "- expected_answer must be exactly True or False.\n"
-    "- Stems ≤50 words; difficulty must match requested level.\n"
+    "- Stems ≤50 words; include difficulty (easy|medium|hard) on every item based on the item you wrote.\n"
     f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
@@ -432,7 +432,7 @@ QUESTION_GENERATION_SYSTEM_IDENTIFICATION = (
     "- Each item asks for a short fill-in answer (term, value, or name).\n"
     "- expected_answer must be concise and unambiguous (case does not matter for grading).\n"
     "- Avoid answers that depend on capitalization unless the concept requires it.\n"
-    "- Stems ≤50 words; difficulty must match requested level.\n"
+    "- Stems ≤50 words; include difficulty (easy|medium|hard) on every item based on the item you wrote.\n"
     f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"
@@ -444,7 +444,7 @@ QUESTION_GENERATION_SYSTEM_ENUMERATION = (
     "Rules:\n"
     "- Each item asks the student to list at least two related items.\n"
     "- expected_answer must list items one per line (use \\n between items).\n"
-    "- Stems ≤50 words; difficulty must match requested level.\n"
+    "- Stems ≤50 words; include difficulty (easy|medium|hard) on every item based on the item you wrote.\n"
     f"{_GENERATION_EXPLAIN_RULES}"
     "JSON output rules:\n"
     "- Return ONLY a raw JSON array. No markdown fences or commentary.\n"

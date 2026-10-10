@@ -5,7 +5,7 @@ register = template.Library()
 CONFIDENCE_LABELS = {
     None: "No ratings",
     1: "Guessing",
-    3: "Not sure",
+    3: "Guessing",  # legacy mid-tier
     5: "Sure",
 }
 

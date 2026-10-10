@@ -5,10 +5,17 @@ from django.contrib import admin
 from django.urls import include, path
 
 from apps.core.views import HealthCheckView
+from apps.users.views_password_reset import ExamiQPasswordResetView
 
 urlpatterns = [
     path("health/", HealthCheckView.as_view(), name="health"),
     path("admin/", admin.site.urls),
+    # Override allauth password reset so daily-limit hits return HTTP 429.
+    path(
+        "accounts/password/reset/",
+        ExamiQPasswordResetView.as_view(),
+        name="account_reset_password",
+    ),
     path("accounts/", include("allauth.urls")),
     path("profile/", include("apps.users.urls")),
     path("", include("apps.core.urls")),

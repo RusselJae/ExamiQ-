@@ -136,6 +136,23 @@ class LearningDocument(models.Model):
     def display_title(self) -> str:
         return self.title or self.original_name or f"Document #{self.pk}"
 
+    @property
+    def file_type_label(self) -> str:
+        """Short uppercase extension label for library cards (PDF, DOCX, …)."""
+        name = self.original_name or (self.file.name if self.file else "")
+        if "." not in name:
+            return "FILE"
+        return name.rsplit(".", 1)[-1].upper()[:8] or "FILE"
+
+    @property
+    def file_size_bytes(self) -> int | None:
+        if not self.file:
+            return None
+        try:
+            return int(self.file.size)
+        except (OSError, ValueError, TypeError):
+            return None
+
 
 class LearningChunk(models.Model):
     """Text chunk from a learning document for topic-scoped retrieval."""

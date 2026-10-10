@@ -267,7 +267,7 @@ class User(AbstractUser):
         blank=True,
         help_text="When the user last changed their password.",
     )
-    middle_name = models.CharField(max_length=150, blank=True, default="")
+    middle_name = models.CharField(max_length=100, blank=True, default="")
     suffix = models.CharField(
         max_length=20,
         blank=True,
@@ -568,3 +568,48 @@ class FacultySignupPinSettings(models.Model):
             defaults={"pin_hash": ""},
         )
         return obj
+
+
+class PasswordResetRequestLog(models.Model):
+    """Tracks password-reset requests per email for cooldown and daily limits."""
+
+    email = models.EmailField(db_index=True)
+    requested_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Password reset request"
+        verbose_name_plural = "Password reset requests"
+        ordering = ["-requested_at"]
+
+    def __str__(self) -> str:
+        return f"{self.email} @ {self.requested_at}"
+
+
+class UserLoginFingerprint(models.Model):
+    """Known login device fingerprints for unrecognized-login alerts."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="login_fingerprints",
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent_hash = models.CharField(max_length=64)
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Login fingerprint"
+        verbose_name_plural = "Login fingerprints"
+        ordering = ["-last_seen_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "ip_address", "user_agent_hash"],
+                name="uniq_user_login_fingerprint",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} {self.ip_address} {self.user_agent_hash[:8]}"

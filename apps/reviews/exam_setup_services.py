@@ -224,6 +224,39 @@ def subject_exam_timer_seconds(subject: Subject, *, default_seconds: int = 30) -
     return get_or_create_exam_setup(course).seconds_per_question
 
 
+def instructor_configured_subject_ids(program: Program | None = None) -> set[int]:
+    """Subject PKs faculty selected on the program exam-setup hub."""
+    if program is None:
+        program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
+    if program is None:
+        return set()
+    setup = get_or_create_program_exam_setup(program)
+    return set(setup.subjects.values_list("pk", flat=True))
+
+
+def instructor_locked_seconds_for_subjects(
+    subjects: Iterable[Subject],
+) -> int | None:
+    """
+    Return the instructor timer when every selected subject is faculty-configured.
+
+    Students may choose their own timer when faculty has not configured the
+    subjects (empty program selection, or mixed unconfigured picks).
+    """
+    subject_list = list(subjects)
+    if not subject_list:
+        return None
+    seconds: list[int] = []
+    for subject in subject_list:
+        program = getattr(subject, "program", None)
+        configured_ids = instructor_configured_subject_ids(program)
+        if subject.pk not in configured_ids:
+            return None
+        seconds.append(subject_exam_timer_seconds(subject))
+    # Prefer the strictest (longest) timer across the selected subjects.
+    return max(seconds) if seconds else None
+
+
 def program_subject_timer_rows(program: Program) -> list[dict]:
     """Rows for faculty exam-setup UI: subject, selected flag, timer seconds."""
     setup = get_or_create_program_exam_setup(program)

@@ -536,8 +536,156 @@ def _ordinal_label(n: int) -> str:
     return f"{n}{suffix}"
 
 
-def student_dashboard_trends(student: User) -> dict:
-    """Flat confidence + mistakes-per-question series for the student dashboard."""
+def _parse_donut_period(period: str | None) -> tuple[str, int | None]:
+    """Normalize period query values to (key, days_or_None for all-time)."""
+    key = (period or "all").strip().lower()
+    if key in {"7", "7d", "7days", "week"}:
+        return "7", 7
+    if key in {"30", "30d", "30days", "month"}:
+        return "30", 30
+    return "all", None
+
+
+def student_performance_donut(
+    student: User,
+    *,
+    period: str | None = None,
+) -> dict:
+    """Category totals for the student dashboard donut chart."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
+
+    period_key, days = _parse_donut_period(period)
+    answers_qs = Answer.objects.filter(
+        session__student=student,
+        session__status=ReviewSession.Status.COMPLETED,
+        confidence__isnull=False,
+    ).select_related("session")
+
+    if days is not None:
+        since = timezone.now() - timedelta(days=days)
+        answers_qs = answers_qs.filter(session__started_at__gte=since)
+
+    answers = list(answers_qs.only("confidence", "is_correct", "session_id", "session__started_at"))
+
+    buckets = {
+        "guessing_correct": 0,
+        "guessing_incorrect": 0,
+        "sure_correct": 0,
+        "sure_incorrect": 0,
+    }
+    session_ids: set[int] = set()
+    earliest = None
+    latest = None
+    for answer in answers:
+        session_ids.add(answer.session_id)
+        started = getattr(answer.session, "started_at", None)
+        if started is not None:
+            if earliest is None or started < earliest:
+                earliest = started
+            if latest is None or started > latest:
+                latest = started
+        # Legacy mid-tier (3) folds into Guessing per product decision.
+        is_sure = answer.confidence == CONFIDENCE_HIGH
+        is_guessing = answer.confidence == CONFIDENCE_LOW or (
+            not is_sure and answer.confidence is not None
+        )
+        if is_sure:
+            key = "sure_correct" if answer.is_correct else "sure_incorrect"
+        elif is_guessing:
+            key = "guessing_correct" if answer.is_correct else "guessing_incorrect"
+        else:
+            continue
+        buckets[key] += 1
+
+    total = sum(buckets.values())
+    correct_total = buckets["guessing_correct"] + buckets["sure_correct"]
+    incorrect_total = buckets["guessing_incorrect"] + buckets["sure_incorrect"]
+    sure_incorrect = buckets["sure_incorrect"]
+    percent_correct = round(100.0 * correct_total / total, 1) if total else 0.0
+    sure_of_incorrect_pct = (
+        round(100.0 * sure_incorrect / incorrect_total, 1) if incorrect_total else 0.0
+    )
+
+    slices = [
+        {
+            "key": "guessing_correct",
+            "label": "Guessing & correct",
+            "value": buckets["guessing_correct"],
+        },
+        {
+            "key": "guessing_incorrect",
+            "label": "Guessing & incorrect",
+            "value": buckets["guessing_incorrect"],
+        },
+        {
+            "key": "sure_correct",
+            "label": "Sure & correct",
+            "value": buckets["sure_correct"],
+        },
+        {
+            "key": "sure_incorrect",
+            "label": "Sure & incorrect",
+            "value": buckets["sure_incorrect"],
+        },
+    ]
+    for item in slices:
+        item["percent"] = (
+            round(100.0 * item["value"] / total, 1) if total else 0.0
+        )
+
+    if period_key == "7":
+        range_label = "Last 7 days"
+    elif period_key == "30":
+        range_label = "Last 30 days"
+    elif earliest and latest:
+        if earliest.date() == latest.date():
+            range_label = earliest.strftime("%b %d, %Y")
+        else:
+            range_label = (
+                f"{earliest.strftime('%b %d, %Y')} – {latest.strftime('%b %d, %Y')}"
+            )
+    else:
+        range_label = "All time"
+
+    review_url = ""
+    insight = ""
+    if incorrect_total and sure_incorrect:
+        review_url = reverse("analytics_student:mistakes") + "?confidence=high"
+        insight = (
+            f"{sure_of_incorrect_pct:g}% of your incorrect answers were rated Sure"
+        )
+    elif incorrect_total:
+        review_url = reverse("analytics_student:mistakes") + "?confidence=low"
+        insight = (
+            f"{100.0 - sure_of_incorrect_pct:g}% of your incorrect answers "
+            "were rated Guessing"
+        )
+
+    return {
+        "total": total,
+        "slices": slices,
+        "period": period_key,
+        "percent_correct": percent_correct,
+        "correct_total": correct_total,
+        "session_count": len(session_ids),
+        "range_label": range_label,
+        "scope_line": (
+            f"{total} answer{'s' if total != 1 else ''} · "
+            f"{len(session_ids)} session{'s' if len(session_ids) != 1 else ''} · "
+            f"{range_label}"
+        ),
+        "insight": insight,
+        "insight_url": review_url,
+        "insight_link_label": "Review those questions" if review_url else "",
+    }
+
+
+def student_dashboard_trends(student: User, *, period: str | None = None) -> dict:
+    """Flat confidence + mistakes series plus donut categories for the student dashboard."""
     sessions = list(
         annotate_session_metrics(
             ReviewSession.objects.filter(
@@ -574,6 +722,8 @@ def student_dashboard_trends(student: User) -> dict:
         "confidence": confidence_points,
         "mistakes": student_incorrect_question_series(student),
         "confidence_insight": build_confidence_insight(confidence_points),
+        "donut": student_performance_donut(student, period=period),
+        "period": _parse_donut_period(period)[0],
     }
 
 
@@ -984,7 +1134,7 @@ def build_confidence_insight(confidence_points: list[dict]) -> str:
     ]
     if not rated:
         return (
-            "Rate Guessing, Not sure, or Sure after each question to unlock "
+            "Rate Guessing or Sure after each question to unlock "
             "confidence trends."
         )
 
@@ -1589,7 +1739,7 @@ def _confidence_label_short(avg_confidence: float | None) -> str:
     if rounded <= 2:
         return "Guessing"
     if rounded <= 4:
-        return "Not sure"
+        return "Guessing"
     return "Sure"
 
 

@@ -461,7 +461,7 @@
                 hidden: true,
             }),
             lineDataset({
-                label: "Not sure",
+                label: "Guessing",
                 datasetId: "not_sure",
                 data: seriesOf("not_sure"),
                 color: SURE_CORRECT_COLORS.notSure,

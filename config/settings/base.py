@@ -51,6 +51,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "axes.middleware.AxesMiddleware",
+    "apps.core.middleware.NoStoreForAuthenticatedMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -139,6 +140,13 @@ ACCOUNT_SIGNUP_REDIRECT_URL = "users:signup_verify"
 ACCOUNT_CHANGE_EMAIL = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_ADAPTER = "apps.users.adapters.ExamiQAccountAdapter"
+# Faculty/chairperson complete an email OTP stage after password login
+# (see ExamiQAccountAdapter.is_login_by_code_required).
+ACCOUNT_LOGIN_BY_CODE_ENABLED = True
+ACCOUNT_LOGIN_BY_CODE_REQUIRED = False
+ACCOUNT_LOGIN_BY_CODE_SUPPORTS_RESEND = True
+ACCOUNT_LOGIN_BY_CODE_TIMEOUT = 10 * 60
+ACCOUNT_LOGIN_BY_CODE_MAX_ATTEMPTS = 5
 ACCOUNT_FORMS = {
     "login": "apps.users.forms.ExamiQLoginForm",
     "signup": "apps.users.forms.ExamiQSignupForm",
@@ -176,6 +184,10 @@ EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=15)
 RESEND_API_KEY = env("RESEND_API_KEY", default="")
 # Shared PIN required for Faculty role on public signup. Empty = faculty signup blocked.
 FACULTY_SIGNUP_PIN = env("FACULTY_SIGNUP_PIN", default="")
+
+# Password reset throttling (per email address).
+PASSWORD_RESET_COOLDOWN_SECONDS = env.int("PASSWORD_RESET_COOLDOWN_SECONDS", default=30)
+PASSWORD_RESET_DAILY_LIMIT = env.int("PASSWORD_RESET_DAILY_LIMIT", default=3)
 
 AI_ENABLED = env.bool("AI_ENABLED", default=False)
 LLM_PROVIDER = env("LLM_PROVIDER", default="openai")

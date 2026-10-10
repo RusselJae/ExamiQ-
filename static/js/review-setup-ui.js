@@ -227,11 +227,53 @@
         }
     }
 
+    var PRESET_SECONDS = { 0: true, 10: true, 15: true, 30: true, 45: true, 60: true, 90: true };
+    var DIFF_LABELS = {
+        easy: "Beginner",
+        medium: "Intermediate",
+        hard: "Advanced",
+    };
+
     function initTimer() {
         var pills = document.querySelectorAll("[data-timer-preset]");
         var input = document.getElementById("id_setup_seconds");
         var label = document.getElementById("timer-display-label");
+        var section = document.querySelector("[data-timer-section]");
+        var manual = document.querySelector("[data-timer-manual]");
         if (!input) return;
+
+        function setCustomMode(on) {
+            if (!manual) return;
+            manual.classList.toggle("is-custom-open", !!on);
+        }
+
+        // Instructor-configured timer: show value but block student changes.
+        if (section && section.getAttribute("data-timer-locked") === "1") {
+            var locked = parseInt(section.getAttribute("data-instructor-seconds"), 10);
+            if (!isNaN(locked)) {
+                input.value = String(locked);
+                if (label) {
+                    label.textContent = locked === 0 ? "No timer" : locked + " sec";
+                }
+                pills.forEach(function (pill) {
+                    var preset = pill.getAttribute("data-timer-preset");
+                    if (preset === "custom") {
+                        pill.classList.toggle("is-selected", !PRESET_SECONDS[locked]);
+                        pill.disabled = true;
+                    } else {
+                        pill.classList.toggle(
+                            "is-selected",
+                            parseInt(preset, 10) === locked
+                        );
+                        pill.disabled = true;
+                    }
+                });
+                setCustomMode(!PRESET_SECONDS[locked]);
+            }
+            input.disabled = true;
+            input.readOnly = true;
+            return;
+        }
 
         function normalizeTimer(raw) {
             var val = parseInt(raw, 10);
@@ -242,18 +284,36 @@
             return val;
         }
 
-        function setTimer(val, syncInput) {
+        function syncPillSelection(val, forceCustom) {
+            var isCustom = forceCustom || !PRESET_SECONDS[val];
+            pills.forEach(function (pill) {
+                var preset = pill.getAttribute("data-timer-preset");
+                if (preset === "custom") {
+                    pill.classList.toggle("is-selected", isCustom);
+                } else {
+                    pill.classList.toggle(
+                        "is-selected",
+                        !isCustom && parseInt(preset, 10) === val
+                    );
+                }
+            });
+            setCustomMode(isCustom);
+        }
+
+        function setTimer(val, syncInput, forceCustom) {
+            if (val === "custom") {
+                setCustomMode(true);
+                syncPillSelection(normalizeTimer(input.value), true);
+                if (input) input.focus();
+                updateSummary();
+                return;
+            }
             val = normalizeTimer(val);
             if (syncInput !== false) input.value = String(val);
             if (label) {
                 label.textContent = val === 0 ? "No timer" : val + " sec";
             }
-
-            pills.forEach(function (pill) {
-                var preset = parseInt(pill.getAttribute("data-timer-preset"), 10);
-                pill.classList.toggle("is-selected", preset === val);
-            });
-
+            syncPillSelection(val, !!forceCustom);
             updateSummary();
         }
 
@@ -264,7 +324,7 @@
         });
 
         input.addEventListener("change", function () {
-            setTimer(input.value);
+            setTimer(input.value, true, true);
         });
         input.addEventListener("input", function () {
             var raw = parseInt(input.value, 10);
@@ -272,14 +332,12 @@
             if (label) {
                 label.textContent = raw === 0 ? "No timer" : raw + " sec";
             }
-            pills.forEach(function (pill) {
-                var preset = parseInt(pill.getAttribute("data-timer-preset"), 10);
-                pill.classList.toggle("is-selected", preset === raw);
-            });
+            syncPillSelection(normalizeTimer(raw), true);
             updateSummary();
         });
 
-        setTimer(input.value, false);
+        var initial = normalizeTimer(input.value);
+        setTimer(initial, false, !PRESET_SECONDS[initial]);
     }
 
     function updateSummary() {
@@ -301,21 +359,107 @@
                 ? null
                 : Math.max(1, Math.ceil((totalQuestions * seconds) / 60));
 
-        var subjectsEl = form.querySelector("[data-summary-subjects]");
-        var questionsEl = form.querySelector("[data-summary-questions]");
-        var minutesEl = form.querySelector("[data-summary-minutes]");
-
-        if (subjectsEl) subjectsEl.textContent = String(checkedSubjects);
-        if (questionsEl) questionsEl.textContent = String(totalQuestions);
-        if (minutesEl) {
-            minutesEl.textContent =
+        form.querySelectorAll("[data-summary-subjects]").forEach(function (el) {
+            el.textContent = String(checkedSubjects);
+        });
+        form.querySelectorAll("[data-summary-questions]").forEach(function (el) {
+            el.textContent = String(totalQuestions);
+        });
+        form.querySelectorAll("[data-summary-minutes]").forEach(function (el) {
+            el.textContent =
                 estMinutes == null ? "Untimed" : "~" + estMinutes + " min";
-        }
+        });
 
         var selectedCountEl = form.querySelector("[data-selected-count]");
         if (selectedCountEl) {
             selectedCountEl.textContent = String(checkedSubjects);
         }
+
+        var diffInput = document.getElementById("id_setup_difficulty");
+        var reviewDiff = form.querySelector("[data-review-difficulty]");
+        if (reviewDiff && diffInput) {
+            reviewDiff.textContent = DIFF_LABELS[diffInput.value] || diffInput.value;
+        }
+        var reviewQ = form.querySelector("[data-review-questions-per]");
+        if (reviewQ) reviewQ.textContent = String(qPerSubj);
+        var reviewTimer = form.querySelector("[data-review-timer]");
+        if (reviewTimer) {
+            reviewTimer.textContent = seconds === 0 ? "Off" : seconds + " sec";
+        }
+    }
+
+    function initHowAccordion() {
+        var root = document.querySelector("[data-how-accordion]");
+        var toggle = document.querySelector("[data-how-toggle]");
+        var body = document.querySelector("[data-how-body]");
+        if (!root || !toggle || !body) return;
+
+        toggle.addEventListener("click", function () {
+            var open = root.classList.toggle("is-open");
+            toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+    }
+
+    function initWizard() {
+        var form = getForm();
+        if (!form || !form.hasAttribute("data-setup-wizard")) return;
+
+        var step = 1;
+        var panels = form.querySelectorAll("[data-step-panel]");
+        var stepBtns = form.querySelectorAll("[data-goto-step]");
+        var backBtn = form.querySelector("[data-setup-back]");
+        var nextBtn = form.querySelector("[data-setup-next]");
+        var startBtn = form.querySelector("[data-setup-start]");
+
+        function showStep(next) {
+            step = Math.min(3, Math.max(1, next));
+            form.setAttribute("data-current-step", String(step));
+            panels.forEach(function (panel) {
+                var n = parseInt(panel.getAttribute("data-step-panel"), 10);
+                panel.classList.toggle("is-active-step", n === step);
+            });
+            stepBtns.forEach(function (btn) {
+                var n = parseInt(btn.getAttribute("data-goto-step"), 10);
+                var active = n === step;
+                btn.classList.toggle("is-active", active);
+                if (active) btn.setAttribute("aria-current", "step");
+                else btn.removeAttribute("aria-current");
+                btn.classList.toggle("is-complete", n < step);
+            });
+            if (backBtn) backBtn.hidden = step === 1;
+            if (nextBtn) nextBtn.hidden = step === 3;
+            if (startBtn) startBtn.hidden = step !== 3;
+            updateSummary();
+        }
+
+        stepBtns.forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                showStep(parseInt(btn.getAttribute("data-goto-step"), 10));
+            });
+        });
+        if (backBtn) {
+            backBtn.addEventListener("click", function () {
+                showStep(step - 1);
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener("click", function () {
+                if (step === 1) {
+                    var checked = form.querySelectorAll(
+                        "[data-subject-checkbox]:checked"
+                    ).length;
+                    if (!checked) {
+                        if (typeof showToast === "function") {
+                            showToast("Select at least one subject.", "error");
+                        }
+                        return;
+                    }
+                }
+                showStep(step + 1);
+            });
+        }
+
+        showStep(1);
     }
 
     function init() {
@@ -326,6 +470,8 @@
         initDifficulty();
         initStepper();
         initTimer();
+        initHowAccordion();
+        initWizard();
         filterRows();
         updateSummary();
     }

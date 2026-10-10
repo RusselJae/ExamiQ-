@@ -44,6 +44,8 @@ from apps.core.mixins import (
 )
 from apps.questions.models import Subject
 from apps.reviews.exam_setup_services import (
+    get_or_create_program_exam_setup,
+    program_subject_timer_rows,
     subject_exam_timer_seconds,
 )
 from apps.reviews.models import Answer, ReviewSession
@@ -56,7 +58,7 @@ from apps.users.assignment_services import (
     professor_can_view_student,
     restore_section_student,
 )
-from apps.users.models import Course, ProgramSection, User
+from apps.users.models import Course, Program, ProgramSection, User
 
 
 def _student_initials(student: User) -> str:
@@ -91,16 +93,82 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
 
 
 class ExamSetupHubView(ProfessorRequiredMixin, View):
-    """Legacy exam-setup hub — students now set the timer on Start Review."""
+    """Program-wide exam timer setup — applies to all BSED Math students when set."""
+
+    template_name = "analytics/professor/program_exam_setup.html"
 
     def dispatch(self, request, *args, **kwargs):
+        program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
+        if program is None:
+            from django.contrib import messages
+
+            messages.error(request, "BSED Math program is not configured.")
+            return redirect("analytics_professor:overview")
+        self.program = program
+        self.setup = get_or_create_program_exam_setup(program)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        subject_rows = program_subject_timer_rows(self.program)
+        configured_rows = [row for row in subject_rows if row["selected"]]
+        return render(
+            request,
+            self.template_name,
+            {
+                "program": self.program,
+                "setup": self.setup,
+                "subject_rows": subject_rows,
+                "configured_rows": configured_rows,
+                "default_seconds": self.setup.seconds_per_question or 30,
+            },
+        )
+
+    def post(self, request):
         from django.contrib import messages
 
-        messages.info(
+        from apps.reviews.exam_setup_services import sync_program_subject_timers
+
+        default_raw = request.POST.get("default_seconds", "")
+        try:
+            default_seconds = (
+                int(default_raw) if default_raw else self.setup.seconds_per_question
+            )
+        except (TypeError, ValueError):
+            default_seconds = self.setup.seconds_per_question or 30
+        if not 10 <= default_seconds <= 120:
+            messages.error(request, "Default timer must be between 10 and 120 seconds.")
+            return self.get(request)
+
+        subject_ids = [
+            int(value)
+            for value in request.POST.getlist("subjects")
+            if str(value).isdigit()
+        ]
+        timers: dict[int, int] = {}
+        for subject_id in subject_ids:
+            raw = request.POST.get(f"timer_{subject_id}", "").strip()
+            try:
+                timers[subject_id] = int(raw) if raw else default_seconds
+            except ValueError:
+                timers[subject_id] = default_seconds
+
+        try:
+            sync_program_subject_timers(
+                self.program,
+                subject_ids=subject_ids,
+                timers_by_subject_id=timers,
+                default_seconds=default_seconds,
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return self.get(request)
+
+        messages.success(
             request,
-            "Exam timing is set by students when they start a review.",
+            "Exam timers saved. Students will use these times and cannot change them "
+            "for the selected subjects.",
         )
-        return redirect("analytics_professor:overview")
+        return redirect("analytics_professor:exam_setup_hub")
 
 
 class ProfessorStudentsView(ProfessorRequiredMixin, ListView):

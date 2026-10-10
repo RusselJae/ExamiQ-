@@ -1,11 +1,29 @@
+{% load filter_extras %}
 <div class="span-full filter-bar-container">
     <div class="bento-card filter-bar-card{% if filter_bar_compact %} filter-bar-card--compact{% endif %}">
-        <form method="get" class="filter-bar{% if filter_bar_compact %} filter-bar--compact{% endif %}" role="search">
+        <form method="get"
+              class="filter-bar{% if filter_bar_compact %} filter-bar--compact{% endif %}"
+              role="search"
+              data-filter-bar>
             {% if filter_preserve_params %}
             {% for name, value in filter_preserve_params %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
             {% endif %}
+
+            {% active_advanced_filter_count filter_form_fields as advanced_filter_count %}
+
+            <button type="button"
+                    class="filter-bar__toggle btn-secondary"
+                    data-filter-toggle
+                    aria-expanded="false">
+                Filters
+                <span class="filter-bar__badge{% if advanced_filter_count %} is-visible{% endif %}"
+                      data-filter-badge>
+                    {% if advanced_filter_count %}{{ advanced_filter_count }}{% endif %}
+                </span>
+            </button>
+
             <div class="filter-bar__grid">
                 {% for field in filter_form_fields %}
                     {% if field.type == "search" %}
@@ -21,7 +39,7 @@
                         >
                     </label>
                     {% elif field.type == "select" or field.type == "sort" %}
-                    <label class="filter-bar__field">
+                    <label class="filter-bar__field filter-bar__field--advanced">
                         <span class="filter-bar__label">{{ field.label }}</span>
                         <select name="{{ field.name }}" class="filter-bar__select">
                             {% if field.type == "select" %}
@@ -33,6 +51,9 @@
                         </select>
                     </label>
                     {% elif field.type == "date" %}
+                    {% if field.name == "date_from" %}
+                    <div class="filter-bar__dates filter-bar__field--advanced">
+                    {% endif %}
                     <label class="filter-bar__field">
                         <span class="filter-bar__label">{{ field.label }}</span>
                         <input
@@ -42,15 +63,33 @@
                             class="filter-bar__input"
                         >
                     </label>
+                    {% if field.name == "date_to" %}
+                    </div>
+                    {% endif %}
                     {% endif %}
                 {% endfor %}
             </div>
+
             <div class="filter-bar__actions">
-                <button type="submit" class="btn-primary btn-primary-sm">Apply filters</button>
-                {% if filter_has_active %}
-                <a href="{{ request.path }}" class="btn-secondary btn-primary-sm">Remove filters</a>
-                {% endif %}
+                <button type="submit" class="btn-primary filter-bar__apply">Apply filters</button>
+                <a href="{{ request.path }}"
+                   class="filter-bar__reset{% if filter_has_active %} is-active{% endif %}"
+                   data-filter-reset>Reset</a>
             </div>
         </form>
+
+        <div class="filter-bar__chips" data-filter-chips aria-label="Active filters">
+            {% for field in filter_form_fields %}
+                {% if field.active_display %}
+                <button type="button"
+                        class="filter-bar__chip"
+                        data-filter-chip="{{ field.name }}"
+                        aria-label="Remove {{ field.label }} filter">
+                    <span>{{ field.label }}: {{ field.active_display }}</span>
+                    <span class="filter-bar__chip-x" aria-hidden="true">&times;</span>
+                </button>
+                {% endif %}
+            {% endfor %}
+        </div>
     </div>
 </div>

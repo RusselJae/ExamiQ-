@@ -58,9 +58,9 @@ class TestConfidenceFromTimeSpent:
     def test_avg_confidence_scale_label(self):
         assert avg_confidence_scale_label([]) == "—"
         assert avg_confidence_scale_label([1, 1]) == "Guessing"
-        assert avg_confidence_scale_label([3, 3]) == "Not sure"
+        assert avg_confidence_scale_label([3, 3]) == "Guessing"
         assert avg_confidence_scale_label([5, 5]) == "Sure"
-        assert avg_confidence_scale_label([None, 5]) == "Not sure"
+        assert avg_confidence_scale_label([None, 5]) == "Guessing"
 
     def test_pace_from_answer_buckets(self):
         assert (

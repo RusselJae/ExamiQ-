@@ -47,3 +47,16 @@ def notification_cta_label(notification: Notification) -> str:
     if link:
         return "Open"
     return ""
+
+
+def notification_icon_kind(notification: Notification) -> str:
+    """Return a coarse icon kind for list rendering (message/chat/alert/system)."""
+    link = (notification.link or "").lower()
+    message = (notification.message or "").lower()
+    if "chat" in link or "message" in link or "replied" in message or "concern" in link:
+        return "message"
+    if "login" in message or "unrecognized" in message or "security" in message:
+        return "alert"
+    if "question" in link or "review" in link or "exam" in link or "material" in link:
+        return "exam"
+    return "system"

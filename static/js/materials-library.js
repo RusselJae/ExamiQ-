@@ -1,19 +1,41 @@
 /**
- * Client-side search + type filters for learning materials libraries.
+ * Client-side search, type filters, and sort for learning materials libraries.
  */
 (function () {
     "use strict";
 
     function initLibrary(root) {
         var search = root.querySelector("[data-library-search]");
+        var list = root.querySelector("[data-library-list]");
         var items = Array.prototype.slice.call(root.querySelectorAll("[data-library-item]"));
         var emptyFilter = root.querySelector("[data-library-empty-filter]");
         var countEl = root.querySelector("[data-library-count]");
         var chips = Array.prototype.slice.call(root.querySelectorAll("[data-library-filter]"));
+        var sortSelect = root.querySelector("[data-library-sort]");
         var activeType = "";
 
+        function sortItems() {
+            if (!list || !sortSelect) return;
+            var mode = sortSelect.value || "newest";
+            var ordered = items.slice().sort(function (a, b) {
+                if (mode === "title") {
+                    return (a.getAttribute("data-title") || "").localeCompare(
+                        b.getAttribute("data-title") || ""
+                    );
+                }
+                var ta = a.getAttribute("data-created") || "";
+                var tb = b.getAttribute("data-created") || "";
+                if (mode === "oldest") return ta.localeCompare(tb);
+                return tb.localeCompare(ta);
+            });
+            ordered.forEach(function (item) {
+                list.appendChild(item);
+            });
+            items = ordered;
+        }
+
         function apply() {
-            var q = (search && search.value || "").trim().toLowerCase();
+            var q = ((search && search.value) || "").trim().toLowerCase();
             var visible = 0;
             items.forEach(function (item) {
                 var title = item.getAttribute("data-title") || "";
@@ -24,7 +46,9 @@
                 item.classList.toggle("hidden", !show);
                 if (show) visible += 1;
             });
-            if (emptyFilter) emptyFilter.classList.toggle("hidden", visible > 0 || !items.length);
+            if (emptyFilter) {
+                emptyFilter.classList.toggle("hidden", visible > 0 || !items.length);
+            }
             if (countEl) {
                 countEl.textContent = visible + (visible === 1 ? " item" : " items");
             }
@@ -41,6 +65,13 @@
         });
 
         if (search) search.addEventListener("input", apply);
+        if (sortSelect) {
+            sortSelect.addEventListener("change", function () {
+                sortItems();
+                apply();
+            });
+        }
+        sortItems();
         apply();
     }
 

@@ -1,0 +1,13 @@
+Hi {{ user.get_full_name|default:user.email }},
+
+We detected a new sign-in to your EXAMIQ+ account.
+
+When: {{ when_label }}
+IP address: {{ ip_address }}
+Browser: {{ user_agent }}
+
+If this was you, you can ignore this message.
+If you did not sign in, change your password right away:
+{{ profile_url }}
+
+— EXAMIQ+ Security

@@ -38,7 +38,11 @@ class StudentDashboardView(StudentRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["dashboard_trends"] = student_dashboard_trends(self.request.user)
+        period = self.request.GET.get("period", "all")
+        context["dashboard_trends"] = student_dashboard_trends(
+            self.request.user, period=period
+        )
+        context["donut_period"] = context["dashboard_trends"].get("period", "all")
         context["summary"] = student_performance_summary(self.request.user)
         context["recommendations"] = get_review_recommendations(
             self.request.user, limit=5
@@ -108,7 +112,7 @@ class MistakeListView(StudentRequiredMixin, ListView):
                         ("none", "No Confidence"),
                         ("none", "No ratings"),
                         ("low", "Guessing"),
-                        ("average", "Not sure"),
+                        ("average", "Guessing"),
                         ("high", "Sure"),
                     ],
                 },

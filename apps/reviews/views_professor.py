@@ -18,18 +18,11 @@ from apps.reviews.models import ExamSetup, ReviewWindow
 
 
 class ExamSetupUpdateView(ProfessorCourseMixin, UpdateView):
-    """Legacy per-course exam setup — students set the timer on Start Review."""
+    """Per-course exam setup including instructor-defined per-question timer."""
 
     model = ExamSetup
     form_class = ExamSetupForm
     template_name = "professor/exam_setup/form.html"
-
-    def dispatch(self, request, *args, **kwargs):
-        messages.info(
-            request,
-            "Exam timing is set by students when they start a review.",
-        )
-        return redirect("analytics_professor:overview")
 
     def get_object(self, queryset=None):
         return get_or_create_exam_setup(self.course)

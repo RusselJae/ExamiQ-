@@ -100,7 +100,7 @@ def build_session_summary(session: ReviewSession) -> dict:
         "pace_insight_title": pace_insight_title,
         "pace_insight_body": pace_insight_body,
         "estimated_confidence_subtext": (
-            "Based on your Guessing / Not sure / Sure ratings."
+            "Based on your Guessing / Sure ratings."
             if total
             else "No answers yet."
         ),

@@ -50,19 +50,27 @@
             <div id="examiq-chat-thread" class="examiq-chat-modal__thread" role="log" aria-live="polite"></div>
 
             <form id="examiq-chat-form" class="examiq-chat-modal__composer" enctype="multipart/form-data">
-                <label class="examiq-chat-modal__attach" for="examiq-chat-image" title="Attach image (max 5 MB)">
-                    <input type="file"
-                           id="examiq-chat-image"
-                           accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                           class="sr-only">
-                    <span aria-hidden="true">+</span>
-                    <span class="sr-only">Attach photo</span>
-                </label>
-                <textarea id="examiq-chat-input"
-                          rows="1"
-                          placeholder="Type your message…"
-                          maxlength="2000"></textarea>
-                <button type="submit" id="examiq-chat-send" class="examiq-chat-modal__send">Send</button>
+                <div class="examiq-chat-modal__composer-field">
+                    <label class="examiq-chat-modal__attach" for="examiq-chat-image" title="Attach image (max 5 MB)">
+                        <input type="file"
+                               id="examiq-chat-image"
+                               accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                               class="sr-only">
+                        <span aria-hidden="true">+</span>
+                        <span class="sr-only">Attach photo</span>
+                    </label>
+                    <textarea id="examiq-chat-input"
+                              rows="1"
+                              placeholder="Type your message…"
+                              maxlength="2000"></textarea>
+                </div>
+                <button type="submit" id="examiq-chat-send" class="examiq-chat-modal__send" disabled aria-label="Send">
+                    <span class="examiq-chat-modal__send-label">Send</span>
+                    <svg class="examiq-chat-modal__send-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 19V5" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/>
+                        <path d="M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
             </form>
             <p id="examiq-chat-image-name" class="examiq-chat-modal__file-name hidden"></p>
         </section>

@@ -18,6 +18,9 @@ from apps.users.otp_services import (
     _should_use_resend_api,
 )
 
+# Faculty roles that must complete email OTP after password login.
+_LOGIN_OTP_ROLES = frozenset({User.Role.PROFESSOR, User.Role.CHAIRPERSON})
+
 
 class ExamiQAccountAdapter(DefaultAccountAdapter):
     """Redirect users to role-specific dashboards after login."""
@@ -31,6 +34,23 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
         if request.session.get(SIGNUP_OTP_SESSION_KEY):
             return reverse("users:signup_verify")
         return super().get_signup_redirect_url(request)
+
+    def is_login_by_code_required(self, login) -> bool:
+        """Require email OTP for faculty/chairperson password logins."""
+        try:
+            from allauth.account import authentication
+
+            request = getattr(self, "request", None)
+            if request is not None:
+                records = authentication.get_authentication_records(request)
+                if records and records[-1].get("method") == "code":
+                    return False
+        except Exception:  # noqa: BLE001 — fall through to role check
+            pass
+        user = getattr(login, "user", None)
+        if user is None:
+            return False
+        return getattr(user, "role", None) in _LOGIN_OTP_ROLES
 
     def send_mail(self, template_prefix: str, email: str, context: dict) -> None:
         """Send allauth mail via Resend HTTPS when configured (same path as OTP)."""
