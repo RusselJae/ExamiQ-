@@ -147,6 +147,13 @@ ACCOUNT_LOGIN_BY_CODE_REQUIRED = False
 ACCOUNT_LOGIN_BY_CODE_SUPPORTS_RESEND = True
 ACCOUNT_LOGIN_BY_CODE_TIMEOUT = 10 * 60
 ACCOUNT_LOGIN_BY_CODE_MAX_ATTEMPTS = 5
+# Comma-separated emails allowed to sign in without the emailed login code
+# (break-glass demo/research accounts only — never commit real addresses).
+LOGIN_OTP_EXEMPT_EMAILS = {
+    address.strip().lower()
+    for address in env.list("LOGIN_OTP_EXEMPT_EMAILS", default=[])
+    if address.strip()
+}
 ACCOUNT_FORMS = {
     "login": "apps.users.forms.ExamiQLoginForm",
     "signup": "apps.users.forms.ExamiQSignupForm",

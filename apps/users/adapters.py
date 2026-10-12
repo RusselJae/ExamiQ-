@@ -16,6 +16,7 @@ from apps.users.otp_services import (
     SignupOTPError,
     _send_via_resend_api,
     _should_use_resend_api,
+    login_otp_exempt,
 )
 
 # Faculty roles that must complete email OTP after password login.
@@ -49,6 +50,8 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
             pass
         user = getattr(login, "user", None)
         if user is None:
+            return False
+        if login_otp_exempt(user):
             return False
         return getattr(user, "role", None) in _LOGIN_OTP_ROLES
 

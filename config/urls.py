@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 from apps.core.views import HealthCheckView
+from apps.users.allauth_views import ExamiQLoginView, ExamiQSignupView
 from apps.users.views_password_reset import ExamiQPasswordResetView
 
 urlpatterns = [
@@ -16,6 +17,10 @@ urlpatterns = [
         ExamiQPasswordResetView.as_view(),
         name="account_reset_password",
     ),
+    # Override allauth sign-in/sign-up so a pending login-by-code stage does not
+    # bounce every GET back to the verification-code screen.
+    path("accounts/login/", ExamiQLoginView.as_view(), name="account_login"),
+    path("accounts/signup/", ExamiQSignupView.as_view(), name="account_signup"),
     path("accounts/", include("allauth.urls")),
     path("profile/", include("apps.users.urls")),
     path("", include("apps.core.urls")),

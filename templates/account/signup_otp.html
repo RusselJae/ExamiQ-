@@ -47,4 +47,10 @@
     <input type="hidden" name="action" value="resend">
     <button type="submit" class="auth-btn-submit auth-btn-submit--secondary">Resend code</button>
 </form>
+
+<form method="post" action="{% url 'users:signup_verify' %}" class="auth-form mt-4">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="cancel">
+    <button type="submit" class="auth-btn-submit auth-btn-submit--secondary">Cancel and go to sign in</button>
+</form>
 {% endblock %}

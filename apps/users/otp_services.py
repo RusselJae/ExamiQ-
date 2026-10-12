@@ -276,3 +276,16 @@ def pending_signup_user(request) -> User | None:
         .exclude(approval_status=User.ApprovalStatus.REJECTED)
         .first()
     )
+
+
+def login_otp_exempt(user) -> bool:
+    """Return True when ``user`` may sign in without the emailed login code.
+
+    Driven by ``settings.LOGIN_OTP_EXEMPT_EMAILS`` (``.env`` only) so no real
+    address is hardcoded in the repository.
+    """
+    exempt = getattr(settings, "LOGIN_OTP_EXEMPT_EMAILS", ()) or ()
+    email = (getattr(user, "email", "") or "").strip().lower()
+    if not email:
+        return False
+    return email in {str(item).strip().lower() for item in exempt}

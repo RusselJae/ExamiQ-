@@ -550,8 +550,13 @@ def student_performance_donut(
     student: User,
     *,
     period: str | None = None,
+    for_professor: bool = False,
 ) -> dict:
-    """Category totals for the student dashboard donut chart."""
+    """Category totals for the student dashboard donut chart.
+
+    ``for_professor`` keeps the insight text but drops the student-area
+    "review those questions" link, which faculty cannot open.
+    """
     from datetime import timedelta
 
     from django.utils import timezone
@@ -653,15 +658,26 @@ def student_performance_donut(
 
     review_url = ""
     insight = ""
-    if incorrect_total and sure_incorrect:
-        review_url = reverse("analytics_student:mistakes") + "?confidence=high"
+    if not for_professor:
+        if incorrect_total and sure_incorrect:
+            review_url = reverse("analytics_student:mistakes") + "?confidence=high"
+            insight = (
+                f"{sure_of_incorrect_pct:g}% of your incorrect answers were rated Sure"
+            )
+        elif incorrect_total:
+            review_url = reverse("analytics_student:mistakes") + "?confidence=low"
+            insight = (
+                f"{100.0 - sure_of_incorrect_pct:g}% of your incorrect answers "
+                "were rated Guessing"
+            )
+    elif incorrect_total and sure_incorrect:
         insight = (
-            f"{sure_of_incorrect_pct:g}% of your incorrect answers were rated Sure"
+            f"{sure_of_incorrect_pct:g}% of this student's incorrect answers "
+            "were rated Sure"
         )
     elif incorrect_total:
-        review_url = reverse("analytics_student:mistakes") + "?confidence=low"
         insight = (
-            f"{100.0 - sure_of_incorrect_pct:g}% of your incorrect answers "
+            f"{100.0 - sure_of_incorrect_pct:g}% of this student's incorrect answers "
             "were rated Guessing"
         )
 
@@ -1423,6 +1439,149 @@ def professor_overview_trends(professor: User) -> dict:
     return result
 
 
+def professor_confidence_donut(
+    professor: User, *, period: str | None = None
+) -> dict:
+    """Confidence × correctness donut across every student in a professor's scope.
+
+    Same payload shape as :func:`student_performance_donut` so the shared donut
+    renderer drives both. Scope matches ``professor_overview_trends``:
+    sessions on the professor's non-archived course offerings. ``period``
+    accepts the same ``7`` / ``30`` / ``all`` keys as the student dashboard.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
+
+    period_key, days = _parse_donut_period(period)
+
+    answers = Answer.objects.filter(
+        session__course__professor=professor,
+        session__course__is_archived=False,
+        session__status=ReviewSession.Status.COMPLETED,
+        confidence__isnull=False,
+    ).only("confidence", "is_correct", "session_id", "session__started_at")
+
+    if days is not None:
+        answers = answers.filter(
+            session__started_at__gte=timezone.now() - timedelta(days=days)
+        )
+
+    rows = list(
+        answers.values_list(
+            "confidence", "is_correct", "session_id", "session__started_at"
+        )
+    )
+
+    buckets = {
+        "guessing_correct": 0,
+        "guessing_incorrect": 0,
+        "sure_correct": 0,
+        "sure_incorrect": 0,
+    }
+    session_ids: set[int] = set()
+    earliest = None
+    latest = None
+    for confidence, is_correct, session_id, started_at in rows:
+        session_ids.add(session_id)
+        is_sure = confidence == CONFIDENCE_HIGH
+        is_guessing = confidence == CONFIDENCE_LOW or (not is_sure)
+        if is_sure:
+            key = "sure_correct" if is_correct else "sure_incorrect"
+        elif is_guessing:
+            key = "guessing_correct" if is_correct else "guessing_incorrect"
+        else:
+            continue
+        buckets[key] += 1
+        if started_at is not None:
+            if earliest is None or started_at < earliest:
+                earliest = started_at
+            if latest is None or started_at > latest:
+                latest = started_at
+
+    total = sum(buckets.values())
+    correct_total = buckets["guessing_correct"] + buckets["sure_correct"]
+    incorrect_total = buckets["guessing_incorrect"] + buckets["sure_incorrect"]
+    percent_correct = round(100.0 * correct_total / total, 1) if total else 0.0
+    sure_of_incorrect_pct = (
+        round(100.0 * buckets["sure_incorrect"] / incorrect_total, 1)
+        if incorrect_total
+        else 0.0
+    )
+
+    slices = [
+        {
+            "key": "guessing_correct",
+            "label": "Guessing & correct",
+            "value": buckets["guessing_correct"],
+        },
+        {
+            "key": "guessing_incorrect",
+            "label": "Guessing & incorrect",
+            "value": buckets["guessing_incorrect"],
+        },
+        {
+            "key": "sure_correct",
+            "label": "Sure & correct",
+            "value": buckets["sure_correct"],
+        },
+        {
+            "key": "sure_incorrect",
+            "label": "Sure & incorrect",
+            "value": buckets["sure_incorrect"],
+        },
+    ]
+    for item in slices:
+        item["percent"] = round(100.0 * item["value"] / total, 1) if total else 0.0
+
+    if period_key == "7":
+        range_label = "Last 7 days"
+    elif period_key == "30":
+        range_label = "Last 30 days"
+    elif earliest and latest:
+        if earliest.date() == latest.date():
+            range_label = earliest.strftime("%b %d, %Y")
+        else:
+            range_label = (
+                f"{earliest.strftime('%b %d, %Y')} – {latest.strftime('%b %d, %Y')}"
+            )
+    else:
+        range_label = "All time"
+
+    if incorrect_total and buckets["sure_incorrect"]:
+        insight = (
+            f"{sure_of_incorrect_pct:g}% of your students' incorrect answers "
+            "were rated Sure"
+        )
+    elif incorrect_total:
+        insight = (
+            f"{100.0 - sure_of_incorrect_pct:g}% of your students' incorrect answers "
+            "were rated Guessing"
+        )
+    else:
+        insight = ""
+
+    return {
+        "total": total,
+        "slices": slices,
+        "period": period_key,
+        "percent_correct": percent_correct,
+        "correct_total": correct_total,
+        "session_count": len(session_ids),
+        "range_label": range_label,
+        "scope_line": (
+            f"{total} answer{'s' if total != 1 else ''} · "
+            f"{len(session_ids)} session{'s' if len(session_ids) != 1 else ''} · "
+            f"{range_label}"
+        ),
+        "insight": insight,
+        "insight_url": "",
+        "insight_link_label": "",
+    }
+
+
 def professor_high_mistake_questions(
     professor: User, *, limit: int = 15
 ) -> list[dict]:
@@ -1477,6 +1636,7 @@ def student_incorrect_question_series(
         .annotate(
             mistake_count=Count("id"),
             answer_id=Max("answer_id"),
+            session_id=Max("answer__session_id"),
         )
         .order_by("-mistake_count", "question_id")[:limit]
     )
@@ -1484,6 +1644,7 @@ def student_incorrect_question_series(
     for index, row in enumerate(rows, start=1):
         qid = row["question_id"]
         answer_id = row["answer_id"]
+        session_id = row["session_id"]
         stem = (row["question__stem"] or "").strip().replace("\n", " ")
         url = ""
         if answer_id:
@@ -1504,6 +1665,7 @@ def student_incorrect_question_series(
                 "value": row["mistake_count"] or 0,
                 "question_id": qid,
                 "answer_id": answer_id,
+                "session_id": session_id,
                 "url": url,
             }
         )
@@ -2048,6 +2210,7 @@ def student_professor_summary(student: User, professor: User) -> dict:
         answers,
         weak_topics_filter=Q(answer__session_id__in=session_ids),
         confidence_group_by="subject",
+        include_donut=True,
     )
 
 
@@ -2478,8 +2641,13 @@ def _build_student_activity_summary(
     *,
     weak_topics_filter: Q | None = None,
     confidence_group_by: str = "topic",
+    include_donut: bool = False,
 ) -> dict:
-    """Shared KPI/chart payload for course, subject, or section student detail."""
+    """Shared KPI/chart payload for course, subject, or section student detail.
+
+    ``include_donut`` adds ``dashboard_trends["donut"]`` for the faculty
+    student-detail confidence chart (one extra aggregate query).
+    """
     total_answers = answers.count()
     correct_answers = answers.filter(is_correct=True).count()
     accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
@@ -2569,6 +2737,10 @@ def _build_student_activity_summary(
     dashboard_trends["confidence_insight"] = build_confidence_insight(
         dashboard_trends["confidence"]
     )
+    if include_donut:
+        dashboard_trends["donut"] = student_performance_donut(
+            student, for_professor=True
+        )
 
     return {
         "sessions_completed": sessions.count(),

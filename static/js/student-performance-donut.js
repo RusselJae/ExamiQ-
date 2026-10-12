@@ -171,4 +171,46 @@
 
     window.ExamiQUI = window.ExamiQUI || {};
     window.ExamiQUI.renderStudentPerformanceDonut = renderStudentPerformanceDonut;
+
+    /**
+     * Faculty student-detail pages reuse this donut. They already ship
+     * `summary.dashboard_trends` as #student-detail-trends-data, so the same
+     * payload (including its `donut` key) drives the chart — no inline config.
+     */
+    function autoRenderStudentDetailDonut() {
+        var dataEl = document.getElementById("student-detail-trends-data");
+        if (!dataEl || !document.getElementById("studentDetailDonut")) return;
+        renderStudentPerformanceDonut({
+            canvasId: "studentDetailDonut",
+            wrapEl: "studentDetailDonutWrap",
+            emptyEl: "student-detail-donut-empty",
+            legendEl: "student-detail-donut-legend",
+            centerEl: "student-detail-donut-center",
+            insightEl: "student-detail-donut-insight",
+            scopeEl: "student-detail-donut-scope",
+            data: JSON.parse(dataEl.textContent),
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", autoRenderStudentDetailDonut);
+
+    /**
+     * Professor overview: same renderer, payload in #overview-donut-data.
+     */
+    function autoRenderOverviewDonut() {
+        var dataEl = document.getElementById("overview-donut-data");
+        if (!dataEl || !document.getElementById("overviewDonutChart")) return;
+        renderStudentPerformanceDonut({
+            canvasId: "overviewDonutChart",
+            wrapEl: "overviewDonutWrap",
+            emptyEl: "overview-donut-empty",
+            legendEl: "overview-donut-legend",
+            centerEl: "overview-donut-center",
+            insightEl: "overview-donut-insight",
+            scopeEl: "overview-donut-scope",
+            data: { donut: JSON.parse(dataEl.textContent) },
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", autoRenderOverviewDonut);
 })();

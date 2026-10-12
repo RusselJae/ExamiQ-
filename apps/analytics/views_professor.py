@@ -22,6 +22,7 @@ from apps.analytics.services import (
     get_topic_mastery_heatmap,
     professor_overview_summary,
     professor_overview_course_cards,
+    professor_confidence_donut,
     professor_overview_trends,
     section_heatmap_subjects,
     section_performance_summary,
@@ -89,6 +90,10 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["overview"] = professor_overview_summary(self.request.user)
         context["overview_trends"] = professor_overview_trends(self.request.user)
+        context["overview_donut"] = professor_confidence_donut(
+            self.request.user, period=self.request.GET.get("donut_period")
+        )
+        context["donut_period"] = context["overview_donut"]["period"]
         return context
 
 

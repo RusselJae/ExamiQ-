@@ -760,7 +760,16 @@ class TestProfessorOverviewUX:
         assert "Your courses" not in content
         assert "Course subjects" in content or "Course Subjects" in content
         assert "Students handled" in content or "Students Handled" in content or "Students practicing" in content
-        assert "Feeling sure vs. being right" in content or "Sure vs correct" in content
+        # Confidence moved to its own donut, so the pill is gone from this chart.
+        assert "Feeling sure vs. being right" not in content
+        assert "overviewDonutChart" in content
+        assert "overview-donut-data" in content
+        assert "Confidence performance" in content
+        assert 'data-pill-value="confidence"' not in content
+        # Donut period switcher (7 / 30 / all time).
+        assert "donut_period=7" in content
+        assert "donut_period=30" in content
+        assert "donut_period=all" in content
         assert "Active courses" not in content
         assert "Cross-course snapshot" not in content
         assert "sidebar-link-active" in content or "Dashboard" in content
@@ -1061,6 +1070,14 @@ class TestSessionHistoryHelpers:
         assert "Exam session history" in content
         assert "Review" in content
         assert "/1" in content or "0%" in content or "0.0%" in content
+        # Confidence is now a donut; mistakes keep their own chart.
+        assert 'id="studentDetailDonut"' in content
+        assert "Confidence performance" in content
+        assert "Mistakes per question" in content
+        assert "student-performance-donut.js" in content
+        # The confidence-trend pill is gone; mistakes is the only metric.
+        assert 'data-pill-value="mistakes"' not in content
+        assert "Confidence trend" not in content
 
     def test_student_detail_allows_profile_scoped_professor(
         self, client, professor, student, mcq_question, program, program_section, department

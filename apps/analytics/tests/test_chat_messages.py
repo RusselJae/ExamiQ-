@@ -123,6 +123,20 @@ def test_student_dashboard_has_chat_and_tutor_icons(client, student):
 
 
 @pytest.mark.django_db
+def test_student_dashboard_has_confidence_donut_and_mistakes_chart(client, student):
+    client.force_login(student)
+    response = client.get(reverse("analytics_student:dashboard"))
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="studentTrendsChart"' in content
+    assert 'id="studentMistakesChart"' in content
+    assert "Mistakes per question" in content
+    assert "student-mistakes-chart.js" in content
+    # Bars open the AI Tutor instead of navigating to the answer detail page.
+    assert "Select a bar to open that question in the AI Tutor" in content
+
+
+@pytest.mark.django_db
 def test_ai_tutor_modal_has_no_faculty_tab(client, student):
     client.force_login(student)
     response = client.get(reverse("analytics_student:dashboard"))

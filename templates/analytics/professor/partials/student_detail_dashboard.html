@@ -28,23 +28,53 @@
 </div>
 {% else %}
 
-<div class="bento-card bento-card-inner p-6 mb-8">
-    <div class="overview-trends-card__intro">
-        <h2 class="overview-trends-card__title" id="student-detail-trends-title">Feeling sure vs. being right</h2>
-        <p class="overview-trends-card__subtitle" id="student-detail-trends-subtitle">When you said you were sure, how often were you actually correct?</p>
-    </div>
-    <div class="overview-trends-filters" id="student-detail-trends-filters" data-overview-pills>
-        <div class="overview-trends-filter">
-            <span class="overview-trends-filter__label" id="student-detail-metric-label">Metric</span>
-            <select id="student-detail-trend-metric" class="sr-only" tabindex="-1" aria-labelledby="student-detail-metric-label">
-                <option value="confidence" selected>Sure vs correct</option>
-                <option value="mistakes">Mistakes per question</option>
-            </select>
-            <div class="overview-pill-group" role="group" aria-labelledby="student-detail-metric-label" data-pill-target="student-detail-trend-metric">
-                <button type="button" class="overview-pill is-selected" data-pill-value="confidence" aria-pressed="true">Confidence</button>
-                <button type="button" class="overview-pill" data-pill-value="mistakes" aria-pressed="false">Mistakes</button>
+<div class="bento-card bento-card-inner p-6 mb-8 student-confidence-card" data-confidence-card>
+    <div class="overview-trends-card__intro student-confidence-card__intro">
+        <div class="student-confidence-card__title-row">
+            <h2 class="overview-trends-card__title" id="student-detail-donut-title">Confidence performance</h2>
+            <button type="button"
+                    class="student-confidence-card__info"
+                    data-confidence-info-toggle
+                    aria-expanded="false"
+                    aria-controls="student-detail-donut-info"
+                    aria-label="About confidence performance">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path stroke-linecap="round" d="M12 16v-4M12 8h.01"/>
+                </svg>
+            </button>
+            <div class="student-confidence-card__popover" id="student-detail-donut-info" data-confidence-info hidden>
+                <p class="student-confidence-card__popover-title">How to read this chart</p>
+                <ul class="student-confidence-card__popover-list">
+                    <li><strong>Guessing</strong> — the student rated the answer as Guessing.</li>
+                    <li><strong>Sure</strong> — the student rated the answer as Sure.</li>
+                    <li><strong>Correct / Incorrect</strong> — whether the answer scored right.</li>
+                    <li><strong>Sure &amp; incorrect</strong> — the misconception to target first.</li>
+                </ul>
             </div>
         </div>
+        <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-detail-donut-scope">
+            {{ summary.dashboard_trends.donut.scope_line }}
+        </p>
+    </div>
+    <div class="overview-trends-chart-wrap student-donut-wrap" id="studentDetailDonutWrap">
+        <canvas id="studentDetailDonut" aria-label="Confidence performance donut chart"></canvas>
+        <div class="student-donut-center" id="student-detail-donut-center" aria-hidden="true"></div>
+    </div>
+    <div class="overview-trends-chart-footer">
+        <div class="student-donut-legend overview-confidence-legend" id="student-detail-donut-legend" hidden></div>
+        <p class="student-confidence-card__insight" id="student-detail-donut-insight" hidden></p>
+    </div>
+    <div id="student-detail-donut-empty" class="chart-empty-state hidden">
+        <p class="empty-state-title">Not enough data yet</p>
+        <p class="empty-state-body">Confidence ratings appear after this student completes sessions.</p>
+    </div>
+</div>
+
+<div class="bento-card bento-card-inner p-6 mb-8">
+    <div class="overview-trends-card__intro">
+        <h2 class="overview-trends-card__title" id="student-detail-trends-title">Mistakes per question</h2>
+        <p class="overview-trends-card__subtitle" id="student-detail-trends-subtitle">Questions this student answered incorrectly, most missed first.</p>
     </div>
     <div class="overview-gap-status-row" id="student-detail-gap-status" hidden></div>
     <div class="overview-trends-chart-wrap" id="student-detail-trends-wrap">

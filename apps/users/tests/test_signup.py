@@ -1,12 +1,21 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
 from django.urls import reverse
 
 from apps.questions.models import YearLevel
 from apps.users.models import AcademicYear, Department, Program, ProgramSection
 
 User = get_user_model()
+
+
+@pytest.fixture(autouse=True)
+def _clear_rate_limit_cache():
+    """Keep allauth's signup rate limit from leaking across tests (429s)."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture
@@ -154,6 +163,48 @@ class TestSignupRoles:
         response = client.post(reverse("account_signup"), data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("first_name", "Ana2"),
+            ("first_name", "Ana_Marie"),
+            ("last_name", "Santos#"),
+            ("middle_name", "3Rose"),
+        ],
+    )
+    def test_signup_rejects_digits_and_specials_in_names(
+        self, client, bsed_program, signup_year_level, signup_section, field, value
+    ):
+        data = _student_data(signup_year_level, signup_section, **{field: value})
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 200
+        assert not User.objects.filter(email="newstudent@test.edu").exists()
+
+    @pytest.mark.parametrize("field", ["first_name", "last_name", "middle_name"])
+    def test_signup_rejects_names_over_100_characters(
+        self, client, bsed_program, signup_year_level, signup_section, field
+    ):
+        data = _student_data(signup_year_level, signup_section, **{field: "A" * 101})
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 200
+        assert not User.objects.filter(email="newstudent@test.edu").exists()
+
+    def test_signup_accepts_hyphens_spaces_and_apostrophes(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        data = _student_data(
+            signup_year_level,
+            signup_section,
+            email="names@test.edu",
+            first_name="Mary-Jane",
+            last_name="O'Neil",
+            middle_name="de la Cruz",
+        )
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 302
+        user = User.objects.get(email="names@test.edu")
+        assert user.get_full_name() == "Mary-Jane de la Cruz O'Neil"
 
     def test_student_signup_requires_year_and_section(
         self, client, bsed_program, signup_year_level, signup_section

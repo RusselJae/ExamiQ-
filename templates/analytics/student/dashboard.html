@@ -79,6 +79,21 @@
 
     <div class="span-full">
         <div class="bento-card bento-card-inner">
+            {% include "components/section_header.html" with label="Practice" title="Mistakes per question" %}
+            <p class="overview-trends-card__subtitle mb-4">Select a bar to open that question in the AI Tutor.</p>
+            <p class="overview-trends-card__subtitle mb-4" id="student-mistakes-count"></p>
+            <div class="overview-trends-chart-wrap" id="studentMistakesWrap">
+                <canvas id="studentMistakesChart" aria-label="Mistakes per question bar chart"></canvas>
+            </div>
+            <div id="student-mistakes-empty" class="chart-empty-state hidden">
+                <p class="empty-state-title">No mistakes yet</p>
+                <p class="empty-state-body">Questions you answer incorrectly will show up here. Select a bar to ask the AI Tutor about it.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="span-full">
+        <div class="bento-card bento-card-inner">
             {% include "components/section_header.html" with label="History" title="Recent Sessions" action_url="/student/sessions/" action_label="View all" %}
             {% if summary.recent_session_rows %}
             {% include "components/session_history_table.html" with session_history_rows=summary.recent_session_rows show_status_column=False show_summary_link=False %}
@@ -94,6 +109,7 @@
 {{ dashboard_trends|json_script:"student-trends-data" }}
 <script src="{% static 'js/student-performance-donut.js' %}"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
+<script src="{% static 'js/student-mistakes-chart.js' %}"></script>
 <script>
 (function () {
     var el = document.getElementById("student-trends-data");
