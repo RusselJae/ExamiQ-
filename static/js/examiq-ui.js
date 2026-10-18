@@ -209,13 +209,22 @@
         }
     }
 
-    document.addEventListener("DOMContentLoaded", function () {
+    function initUi() {
         initDjangoMessages();
         initAuthBanners();
         initProfileDropdowns();
         initAppSidebar();
         initConfirmForms();
-    });
+        initMobileNavSearch();
+    }
+
+    /* Also boot immediately when the document is already parsed, otherwise a
+       script loaded after DOMContentLoaded never initialises. */
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initUi);
+    } else {
+        initUi();
+    }
 
     function initConfirmForms() {
         document.querySelectorAll("form[data-confirm-message]").forEach(function (form) {
@@ -245,6 +254,30 @@
         });
     }
 
+    function initMobileNavSearch() {
+        var toggle = document.querySelector("[data-nav-search-toggle]");
+        var floating = document.getElementById("nav-search-floating");
+        if (!toggle || !floating) return;
+        function setSearchOpen(isOpen) {
+            floating.classList.toggle("hidden", !isOpen);
+            toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            if (isOpen) {
+                var input = floating.querySelector("input");
+                if (input) input.focus();
+            }
+        }
+        toggle.addEventListener("click", function (e) {
+            e.stopPropagation();
+            setSearchOpen(floating.classList.contains("hidden"));
+        });
+        document.addEventListener("click", function (e) {
+            if (floating.classList.contains("hidden")) return;
+            if (e.target.closest && e.target.closest("#nav-search-floating")) return;
+            if (e.target.closest && e.target.closest("[data-nav-search-toggle]")) return;
+            setSearchOpen(false);
+        });
+    }
+
     function initProfileDropdowns() {
         document.querySelectorAll("[data-dropdown]").forEach(function (dropdown) {
             const toggle = dropdown.querySelector("[data-dropdown-toggle]");
@@ -253,23 +286,44 @@
 
             toggle.addEventListener("click", function (e) {
                 e.stopPropagation();
+                /* Section toggles (e.g. sidebar "Action Plan") only reveal their
+                   sub-links; the sub-items carry the navigation. */
+                if (toggle.hasAttribute("data-dropdown-prevent-nav")) {
+                    e.preventDefault();
+                }
                 const isOpen = dropdown.classList.contains("open");
                 closeAllDropdowns();
                 if (!isOpen) {
-                    dropdown.classList.add("open");
-                    menu.classList.remove("hidden");
-                    toggle.setAttribute("aria-expanded", "true");
+                    openDropdown(dropdown);
                 }
             });
+
+            /* Sticky menus behave like an expanded section: open on load and
+               only collapse when their toggle is clicked again. */
+            if (dropdown.hasAttribute("data-dropdown-sticky")) {
+                openDropdown(dropdown);
+            }
         });
 
         document.addEventListener("click", function () {
+            /* Sticky menus (the sidebar "Action Plan" section) behave like an
+               expanded section: they stay open until their own toggle is
+               clicked again, so skip dismiss-on-outside-click entirely. */
+            if (document.querySelector("[data-dropdown-sticky].open")) return;
             closeAllDropdowns();
         });
 
         document.addEventListener("keydown", function (e) {
             if (e.key === "Escape") closeAllDropdowns();
         });
+    }
+
+    function openDropdown(dropdown) {
+        dropdown.classList.add("open");
+        const menu = dropdown.querySelector("[data-dropdown-menu]");
+        const toggle = dropdown.querySelector("[data-dropdown-toggle]");
+        if (menu) menu.classList.remove("hidden");
+        if (toggle) toggle.setAttribute("aria-expanded", "true");
     }
 
     function closeAllDropdowns() {

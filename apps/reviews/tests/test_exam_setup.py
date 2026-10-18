@@ -128,3 +128,60 @@ class TestExamSetupViews:
         url = reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk})
         response = client.get(url)
         assert response.status_code in (302, 403, 404)
+
+    def test_setup_renders_stepper_timer_and_inline_search_clear(
+        self, client, student, topic, mcq_question, bsed_program, course
+    ):
+        from conftest import make_bsed_student
+
+        _, _ = mcq_question  # run fixture: seeds one approved question
+        make_bsed_student(
+            student, subject=topic.subject, course=course, bsed_program=bsed_program
+        )
+        topic.subject.code = course.code
+        topic.subject.save(update_fields=["code"])
+
+        client.force_login(student)
+        response = client.get(reverse("reviews:setup"))
+        assert response.status_code == 200
+        content = response.content.decode()
+        # Search clear is an × inside a full-width field (no "Clear" text button).
+        assert "&times;" in content
+        assert ">Clear</button>" not in content
+        # Timer uses a quantity stepper; the side label, manual input,
+        # and Custom preset are gone.
+        assert 'id="t-stepper-minus"' in content
+        assert 'id="t-stepper-display"' in content
+        assert 'id="t-stepper-plus"' in content
+        assert 'id="id_setup_seconds"' in content
+        assert "timer-display-label" not in content
+        assert "exam-timer-manual" not in content
+        assert 'data-timer-preset="custom"' not in content
+        assert content.count("data-timer-preset=") == 7
+
+    def test_setup_accepts_stepper_timer_value(
+        self, client, student, topic, mcq_question, bsed_program, course
+    ):
+        from apps.reviews.models import ReviewSession
+        from conftest import make_bsed_student
+
+        question, _ = mcq_question
+        make_bsed_student(
+            student, subject=topic.subject, course=course, bsed_program=bsed_program
+        )
+        topic.subject.code = course.code
+        topic.subject.save(update_fields=["code"])
+
+        client.force_login(student)
+        response = client.post(
+            reverse("reviews:setup"),
+            {
+                "difficulty": question.difficulty,
+                "question_type": ["mcq"],
+                "seconds_per_question": 25,
+                "year_subjects": [topic.subject.pk],
+            },
+        )
+        assert response.status_code == 302, response.content.decode()[:500]
+        session = ReviewSession.objects.filter(student=student).latest("pk")
+        assert session.seconds_per_question == 25

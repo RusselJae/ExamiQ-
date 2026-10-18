@@ -13,6 +13,7 @@
         var chips = Array.prototype.slice.call(root.querySelectorAll("[data-library-filter]"));
         var sortSelect = root.querySelector("[data-library-sort]");
         var activeType = "";
+        var activeExt = "";
 
         function sortItems() {
             if (!list || !sortSelect) return;
@@ -40,9 +41,11 @@
             items.forEach(function (item) {
                 var title = item.getAttribute("data-title") || "";
                 var type = item.getAttribute("data-type") || "";
+                var ext = (item.getAttribute("data-ext") || "").toUpperCase();
                 var matchQ = !q || title.indexOf(q) !== -1;
                 var matchT = !activeType || type === activeType;
-                var show = matchQ && matchT;
+                var matchE = !activeExt || ext === activeExt;
+                var show = matchQ && matchT && matchE;
                 item.classList.toggle("hidden", !show);
                 if (show) visible += 1;
             });
@@ -56,7 +59,14 @@
 
         chips.forEach(function (chip) {
             chip.addEventListener("click", function () {
-                activeType = chip.getAttribute("data-library-filter") || "";
+                var ext = (chip.getAttribute("data-ext") || "").toUpperCase();
+                if (ext) {
+                    activeExt = ext;
+                    activeType = "";
+                } else {
+                    activeExt = "";
+                    activeType = chip.getAttribute("data-library-filter") || "";
+                }
                 chips.forEach(function (other) {
                     other.classList.toggle("is-active", other === chip);
                 });
@@ -99,9 +109,58 @@
         }
     }
 
+    function initDropzone() {
+        var zone = document.querySelector("[data-dropzone]");
+        var input = document.getElementById("material-file");
+        var label = document.querySelector("[data-file-name]");
+        var submit = document.querySelector("[data-upload-submit]");
+        var defaultHint = "or browse from your device";
+        if (!zone || !input) return;
+
+        function refreshName() {
+            var fileName = input.files && input.files[0] ? input.files[0].name : "";
+            if (label) {
+                label.textContent = fileName || defaultHint;
+            }
+            if (submit && !submit.disabled) {
+                submit.disabled = !fileName && submit.hasAttribute("data-require-file");
+            }
+        }
+
+        zone.addEventListener("click", function (event) {
+            if (event.target.closest("button") || event.target.closest("a")) return;
+            if (input.disabled) return;
+            input.click();
+        });
+        ["dragenter", "dragover"].forEach(function (name) {
+            zone.addEventListener(name, function (event) {
+                event.preventDefault();
+                if (input.disabled) return;
+                zone.classList.add("is-dragover");
+            });
+        });
+        ["dragleave", "drop"].forEach(function (name) {
+            zone.addEventListener(name, function (event) {
+                event.preventDefault();
+                zone.classList.remove("is-dragover");
+            });
+        });
+        zone.addEventListener("drop", function (event) {
+            if (input.disabled) return;
+            var files = event.dataTransfer && event.dataTransfer.files;
+            if (files && files.length) {
+                input.files = files;
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+                refreshName();
+            }
+        });
+        input.addEventListener("change", refreshName);
+    }
+
     function init() {
         document.querySelectorAll("[data-materials-library]").forEach(initLibrary);
         initFileName();
+        initDropzone();
     }
 
     if (document.readyState === "loading") {

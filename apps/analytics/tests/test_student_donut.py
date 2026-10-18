@@ -150,6 +150,51 @@ def test_mistake_series_exposes_session_for_ai_tutor(
 
 
 @pytest.mark.django_db
+def test_faculty_mistake_bar_links_to_question_edit(
+    professor, course, student, topic, mcq_question
+):
+    """Faculty mistake bars open the question edit screen, not answer review."""
+    from django.urls import reverse
+
+    from apps.analytics.models import MistakeRecord
+    from apps.users.assignment_services import get_or_create_catalog_course
+
+    question, _correct = mcq_question
+    session = start_review_session(
+        student=student,
+        topic=topic,
+        difficulty=Question.Difficulty.EASY,
+        mode=ReviewSession.Mode.TIMED_EXAM,
+    )
+    session.course = course
+    session.status = ReviewSession.Status.COMPLETED
+    session.save(update_fields=["course", "status"])
+    answer = Answer.objects.create(
+        session=session, question=question, confidence=3, is_correct=False
+    )
+    MistakeRecord.objects.create(
+        student=student,
+        answer=answer,
+        question=question,
+        topic=question.topic,
+    )
+
+    catalog_course = get_or_create_catalog_course(professor, question.topic.subject)
+    points = student_incorrect_question_series(student, for_professor=True)
+    assert points
+    assert points[0]["url"] == reverse(
+        "analytics_professor:question_edit",
+        kwargs={"course_pk": catalog_course.pk, "question_pk": question.pk},
+    )
+
+    from django.test import Client
+
+    client = Client()
+    client.force_login(professor)
+    assert client.get(points[0]["url"]).status_code == 200
+
+
+@pytest.mark.django_db
 def test_professor_confidence_donut_spans_scope(
     professor, course, student, topic, mcq_question, numeric_question
 ):

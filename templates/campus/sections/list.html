@@ -3,7 +3,7 @@
 {% block title %}Sections - Campus Admin{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Program Sections" subtitle="Manage cohort sections per program and year level." %}
+{% include "components/page_header.html" with title="Program Sections" subtitle="Manage cohort sections per year level." %}
 
 <div class="flex flex-wrap gap-3 mb-6">
     <a href="{% url 'campus:section_create' %}" class="btn-primary btn-primary-sm">Add section</a>
@@ -11,12 +11,6 @@
 </div>
 
 <form method="get" class="flex flex-wrap gap-3 mb-4">
-    <select name="program" class="rounded-xl border border-slate-200 px-3 py-2 text-sm">
-        <option value="">All programs</option>
-        {% for program in programs %}
-        <option value="{{ program.pk }}" {% if program_filter == program.pk|stringformat:"s" %}selected{% endif %}>{{ program.name }}</option>
-        {% endfor %}
-    </select>
     <select name="academic_year" class="rounded-xl border border-slate-200 px-3 py-2 text-sm">
         <option value="">All years</option>
         {% for year in academic_years %}

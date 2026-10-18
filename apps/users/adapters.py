@@ -20,7 +20,9 @@ from apps.users.otp_services import (
 )
 
 # Faculty roles that must complete email OTP after password login.
-_LOGIN_OTP_ROLES = frozenset({User.Role.PROFESSOR, User.Role.CHAIRPERSON})
+_LOGIN_OTP_ROLES = frozenset(
+    {User.Role.PROFESSOR, User.Role.PROGRAM_COORDINATOR, User.Role.CHAIRPERSON}
+)
 
 
 class ExamiQAccountAdapter(DefaultAccountAdapter):

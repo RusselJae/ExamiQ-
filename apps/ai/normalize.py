@@ -574,3 +574,246 @@ def normalize_generated_questions(
     if result and result[0].get("question_type") == Question.QuestionType.MCQ:
         return _vary_batch_positions(result)
     return result
+
+
+_DIAGNOSIS_TYPES = {"misconception", "knowledge_gap", "careless_error"}
+_STYLE_TYPES = {"worked_example", "analogy", "mistakes_first", "backwards"}
+_DIFFICULTIES = {"beginner", "intermediate", "advanced"}
+_OPTION_IDS = ("A", "B", "C", "D")
+
+
+def parse_concept_remediation(raw: str | dict | None) -> dict | None:
+    """Parse concept Learn / Try it remediation JSON, or return None."""
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        data = _extract_json_object(str(raw or ""))
+    if not data:
+        return None
+    if not isinstance(data.get("diagnosis"), dict):
+        return None
+    if not isinstance(data.get("explanation"), dict):
+        return None
+    if not isinstance(data.get("try_it"), dict):
+        return None
+    return data
+
+
+def validate_concept_remediation(raw: str | dict | None) -> dict | None:
+    """Validate remediation payload; return cleaned dict or None."""
+    data = parse_concept_remediation(raw)
+    if not data:
+        return None
+
+    diagnosis = data["diagnosis"]
+    dtype = _coerce_text(diagnosis.get("type")).casefold()
+    if dtype not in _DIAGNOSIS_TYPES:
+        return None
+    what_went_wrong = _coerce_text(diagnosis.get("what_went_wrong"))
+    if not what_went_wrong or len(what_went_wrong) > _FIELD_MAX_CHARS:
+        return None
+    prereq = diagnosis.get("prerequisite_flag")
+    if prereq is None or str(prereq).strip().lower() in {"", "null", "none"}:
+        prerequisite_flag = None
+    else:
+        prerequisite_flag = _coerce_text(prereq)[:200] or None
+
+    explanation = data["explanation"]
+    style = _coerce_text(explanation.get("style_used")).casefold()
+    if style not in _STYLE_TYPES:
+        return None
+    core_idea = _coerce_text(explanation.get("core_idea"))
+    if not core_idea or len(core_idea.split()) > 80:
+        return None
+    key_rules_raw = explanation.get("key_rules") or []
+    key_rules: list[str] = []
+    if isinstance(key_rules_raw, list):
+        for item in key_rules_raw:
+            text = _coerce_text(item)
+            if text:
+                key_rules.append(text)
+    key_rules = key_rules[:3]
+    if not key_rules:
+        return None
+
+    worked = data.get("worked_example") or {}
+    if not isinstance(worked, dict):
+        return None
+    problem = _coerce_text(worked.get("problem"))
+    final_answer = _coerce_text(worked.get("final_answer"))
+    steps_raw = worked.get("steps") or []
+    steps: list[dict] = []
+    if isinstance(steps_raw, list):
+        for item in steps_raw[:5]:
+            if isinstance(item, dict):
+                step_text = _coerce_text(item.get("step"))
+                why = _coerce_text(item.get("why"))
+                if step_text:
+                    steps.append({"step": step_text, "why": why})
+            else:
+                step_text = _coerce_text(item)
+                if step_text:
+                    steps.append({"step": step_text, "why": ""})
+    if not problem or not steps or not final_answer:
+        return None
+
+    mistakes_raw = data.get("common_mistakes") or []
+    mistakes: list[dict] = []
+    if isinstance(mistakes_raw, list):
+        for item in mistakes_raw[:2]:
+            if not isinstance(item, dict):
+                continue
+            mistake = _coerce_text(item.get("mistake"))
+            why_fails = _coerce_text(item.get("why_it_fails"))
+            fix = _coerce_text(item.get("fix"))
+            if mistake and why_fails:
+                mistakes.append(
+                    {"mistake": mistake, "why_it_fails": why_fails, "fix": fix}
+                )
+
+    try_it = data["try_it"]
+    try_problem = _coerce_text(try_it.get("problem"))
+    choices_raw = try_it.get("first_step_choices") or []
+    choices: list[str] = []
+    if isinstance(choices_raw, list):
+        for item in choices_raw:
+            text = _coerce_text(item)
+            if text:
+                choices.append(text)
+    if len(choices) != 3 or not try_problem:
+        return None
+    try:
+        correct_index = int(try_it.get("correct_index"))
+    except (TypeError, ValueError):
+        return None
+    if correct_index < 0 or correct_index > 2:
+        return None
+    hint = _coerce_text(try_it.get("hint"))
+    feedback_if_wrong = _coerce_text(try_it.get("feedback_if_wrong"))
+    if not hint or not feedback_if_wrong:
+        return None
+
+    check_yourself = _coerce_text(data.get("check_yourself"))
+    if not check_yourself:
+        return None
+
+    return {
+        "diagnosis": {
+            "type": dtype,
+            "what_went_wrong": what_went_wrong,
+            "prerequisite_flag": prerequisite_flag,
+        },
+        "explanation": {
+            "style_used": style,
+            "core_idea": core_idea,
+            "key_rules": key_rules,
+        },
+        "worked_example": {
+            "problem": problem,
+            "steps": steps,
+            "final_answer": final_answer,
+        },
+        "common_mistakes": mistakes,
+        "try_it": {
+            "problem": try_problem,
+            "first_step_choices": choices,
+            "correct_index": correct_index,
+            "hint": hint,
+            "feedback_if_wrong": feedback_if_wrong,
+        },
+        "check_yourself": check_yourself,
+    }
+
+
+def parse_concept_practice_question(raw: str | dict | None) -> dict | None:
+    """Parse concept practice MCQ JSON, or return None."""
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        data = _extract_json_object(str(raw or ""))
+    if not data:
+        return None
+    if not data.get("question") or not isinstance(data.get("options"), list):
+        return None
+    return data
+
+
+def validate_concept_practice_question(raw: str | dict | None) -> dict | None:
+    """Validate practice MCQ; reject bad option counts or multiple corrects."""
+    data = parse_concept_practice_question(raw)
+    if not data:
+        return None
+
+    question = _coerce_text(data.get("question"))
+    if not question:
+        return None
+    difficulty = _coerce_text(data.get("difficulty")).casefold() or "beginner"
+    if difficulty not in _DIFFICULTIES:
+        difficulty = "beginner"
+    concept = _coerce_text(data.get("concept"))
+
+    options_raw = data.get("options") or []
+    if not isinstance(options_raw, list) or len(options_raw) != 4:
+        return None
+
+    options: list[dict] = []
+    correct_count = 0
+    texts: list[str] = []
+    for i, opt in enumerate(options_raw):
+        if not isinstance(opt, dict):
+            return None
+        opt_id = _coerce_text(opt.get("id")).upper() or _OPTION_IDS[i]
+        text = _coerce_text(opt.get("text"))
+        if not text:
+            return None
+        is_correct = bool(opt.get("is_correct"))
+        if is_correct:
+            correct_count += 1
+            error_tag = None
+            why_wrong = None
+        else:
+            error_tag = _coerce_text(opt.get("error_tag")) or "unspecified_error"
+            why_wrong = _coerce_text(opt.get("why_wrong")) or "This option reflects a common slip."
+        texts.append(text.casefold())
+        options.append(
+            {
+                "id": opt_id if opt_id in _OPTION_IDS else _OPTION_IDS[i],
+                "text": text,
+                "is_correct": is_correct,
+                "error_tag": error_tag,
+                "why_wrong": why_wrong,
+            }
+        )
+
+    if correct_count != 1:
+        return None
+    # Reject duplicate option texts (accidental double-correct equivalents).
+    if len(set(texts)) < 4:
+        return None
+
+    hint = _coerce_text(data.get("hint"))
+    self_check = _coerce_text(data.get("self_check"))
+    final_answer = _coerce_text(data.get("final_answer"))
+    if not hint or not self_check or not final_answer:
+        return None
+
+    steps_raw = data.get("solution_steps") or []
+    steps: list[str] = []
+    if isinstance(steps_raw, list):
+        for item in steps_raw[:5]:
+            text = _coerce_text(item)
+            if text:
+                steps.append(text)
+    if not steps:
+        return None
+
+    return {
+        "concept": concept,
+        "difficulty": difficulty,
+        "question": question,
+        "options": options,
+        "hint": hint,
+        "solution_steps": steps,
+        "final_answer": final_answer,
+        "self_check": self_check,
+    }

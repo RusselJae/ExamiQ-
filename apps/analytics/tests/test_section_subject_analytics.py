@@ -46,7 +46,9 @@ class TestSectionAndSubjectAnalytics:
         correct = QuestionChoice.objects.create(
             question=q, label="A", text="yes", is_correct=True
         )
-        QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+        QuestionChoice.objects.create(
+            question=q, label="B", text="no", is_correct=False
+        )
 
         session = start_review_session(
             student,
@@ -85,7 +87,7 @@ class TestSectionAndSubjectAnalytics:
         content = response.content.decode()
         assert "CAT-1" in content
         assert "Clone to 2nd Sem" not in content
-        assert "Course subjects" in content
+        assert "Course" in content
         assert "course-subjects-table" in content
         assert "Questions" in content
 
@@ -100,12 +102,15 @@ class TestSectionAndSubjectAnalytics:
             max_students=40,
         )
         client.force_login(professor)
-        response = client.get(reverse("analytics_professor:section_detail", kwargs={"pk": section.pk}))
+        response = client.get(
+            reverse("analytics_professor:section_detail", kwargs={"pk": section.pk})
+        )
         assert response.status_code == 404
 
-    def test_professor_can_add_catalog_course(
+    def test_professor_cannot_add_catalog_course(
         self, client, professor, year_level, bsed_program
     ):
+        """Faculty subject creation is retired; only coordinators add subjects."""
         client.force_login(professor)
         response = client.post(
             reverse("analytics_professor:course_create"),
@@ -116,8 +121,8 @@ class TestSectionAndSubjectAnalytics:
                 "semester": 1,
             },
         )
-        assert response.status_code == 302
-        assert Subject.objects.filter(program=bsed_program, code="BSEM 99").exists()
+        assert response.status_code == 403
+        assert not Subject.objects.filter(program=bsed_program, code="BSEM 99").exists()
 
 
 @pytest.mark.django_db

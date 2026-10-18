@@ -97,18 +97,15 @@ class TestProfileView:
         assert "profile-page--student" not in content
         assert "profile-bento" in content
 
-    def test_professor_profile_shows_assignment_fields(self, client, professor):
+    def test_professor_profile_does_not_allow_self_assignment_changes(self, client, professor):
         client.force_login(professor)
         response = client.get(reverse("users:profile"))
         content = response.content.decode()
-        assert "Teaching assignments" in content
-        assert "profile-bento--faculty" in content
-        assert "assigned_sections" in content
-        assert "assigned_subjects" in content
-        assert "data-multi-select" in content
-        assert "multi-select-dropdown.js" in content
+        assert "Teaching assignments" not in content
+        assert "assigned_sections" not in content
+        assert "assigned_subjects" not in content
 
-    def test_professor_can_save_sections_and_subjects(
+    def test_professor_cannot_change_sections_and_subjects_from_profile(
         self, client, professor, program_section, subject, bsed_program
     ):
         from apps.questions.models import Subject
@@ -132,12 +129,8 @@ class TestProfileView:
         )
         assert response.status_code == 302
         professor.refresh_from_db()
-        assert list(professor.assigned_sections.values_list("pk", flat=True)) == [
-            program_section.pk
-        ]
-        assert list(professor.assigned_subjects.values_list("pk", flat=True)) == [
-            subject.pk
-        ]
+        assert not professor.assigned_sections.exists()
+        assert not professor.assigned_subjects.exists()
 
     def test_update_name(self, client, student):
         client.force_login(student)

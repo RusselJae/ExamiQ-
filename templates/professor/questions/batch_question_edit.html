@@ -1,131 +1,122 @@
-{% extends "base.html" %}
+{% extends "components/question_editor_layout.html" %}
 {% load static %}
 
-{% block title %}Edit Question {{ question_number }} - EXAMIQ+{% endblock %}
+{# Batch draft question editor. Values live in sessionStorage, so the fields
+   are plain inputs rather than Django form widgets. #}
 
-{% block main_class %}question-edit-page{% endblock %}
-
-{% block content %}
-{% include "components/professor_section_header.html" with course=course page_label="Edit question" %}
-{% include "components/professor_course_nav.html" with course=course active_tab="questions" %}
-
-<p class="text-sm text-examiq-slate mb-4">
-    Update this Multiple Choice draft before submitting the batch. Use the tabs to edit details, answers, explanation, and steps without long scrolling.
-</p>
-
-<form id="batch-edit-form" class="question-edit-shell space-y-4" data-question-edit-tabs>
-    <input type="hidden" id="edit-question-type" value="mcq">
-
-    <nav class="question-edit-tabs" role="tablist" aria-label="Draft editor sections">
-        <button type="button" class="question-edit-tab is-active" role="tab" aria-selected="true" data-tab-target="details" id="tab-details">1 Details</button>
-        <button type="button" class="question-edit-tab" role="tab" aria-selected="false" data-tab-target="answers" id="tab-answers">2 Answers</button>
-        <button type="button" class="question-edit-tab" role="tab" aria-selected="false" data-tab-target="explanation" id="tab-explanation">3 Explanation</button>
-        <button type="button" class="question-edit-tab" role="tab" aria-selected="false" data-tab-target="steps" id="tab-steps">4 Steps</button>
-    </nav>
-
-    <div class="question-edit-panels">
-        <section class="question-edit-panel is-active bento-card bento-card--elevated p-6 shadow-sm space-y-4"
-                 role="tabpanel" data-tab-panel="details" aria-labelledby="tab-details">
-            <div>
-                <h2 class="text-lg font-semibold text-examiq-navy">Question details</h2>
-                <p class="text-xs text-examiq-slate mt-1">Concept tag and question stem.</p>
-            </div>
-            <div>
-                <label for="edit-concept" class="block text-sm font-medium text-examiq-slate mb-1">Concept Tag</label>
-                <input type="text" id="edit-concept" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" placeholder="Short concept label">
-            </div>
-            <div>
-                <label for="edit-stem" class="block text-sm font-medium text-examiq-slate mb-1">Question</label>
-                <textarea id="edit-stem" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-examiq-navy shadow-sm" placeholder="Enter question text..."></textarea>
-            </div>
-        </section>
-
-        <section class="question-edit-panel bento-card bento-card--elevated p-6 shadow-sm space-y-4 hidden"
-                 role="tabpanel" data-tab-panel="answers" aria-labelledby="tab-answers" hidden>
-            <div>
-                <h2 class="text-lg font-semibold text-examiq-navy">Answer choices</h2>
-                <p class="text-xs text-examiq-slate mt-1">Select the correct option (A–D).</p>
-            </div>
-            <div id="edit-mcq-fields" class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {% for letter in "ABCD" %}
-                    <div>
-                        <label for="edit-choice-{{ letter }}" class="block text-sm font-medium text-examiq-slate mb-1">Choice {{ letter }}</label>
-                        <input type="text" id="edit-choice-{{ letter }}" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
-                    </div>
-                    {% endfor %}
-                </div>
-                <div>
-                    <label for="edit-correct" class="block text-sm font-medium text-examiq-slate mb-1">Correct Answer (A–D)</label>
-                    <select id="edit-correct" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm">
-                        {% for letter in "ABCD" %}
-                        <option value="{{ letter }}">{{ letter }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-        </section>
-
-        <section class="question-edit-panel bento-card bento-card--elevated p-6 shadow-sm space-y-4 hidden"
-                 role="tabpanel" data-tab-panel="explanation" aria-labelledby="tab-explanation" hidden>
-            <div>
-                <h2 class="text-lg font-semibold text-examiq-navy">Adaptive explanation</h2>
-                <p class="text-xs text-examiq-slate mt-1">
-                    Structured feedback shown when students miss this question. Saved with the draft until you submit the batch.
-                </p>
-            </div>
-            <div class="space-y-4">
-                <div>
-                    <label for="edit-adaptive-what-went-wrong" class="block text-sm font-medium text-examiq-slate mb-1">What went wrong</label>
-                    <textarea id="edit-adaptive-what-went-wrong" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
-                </div>
-                <div>
-                    <label for="edit-adaptive-why" class="block text-sm font-medium text-examiq-slate mb-1">Why</label>
-                    <textarea id="edit-adaptive-why" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
-                </div>
-                <div>
-                    <label for="edit-adaptive-quick-check" class="block text-sm font-medium text-examiq-slate mb-1">Quick check</label>
-                    <textarea id="edit-adaptive-quick-check" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
-                </div>
-                <div>
-                    <label for="edit-adaptive-remember" class="block text-sm font-medium text-examiq-slate mb-1">Remember</label>
-                    <textarea id="edit-adaptive-remember" rows="1" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
-                </div>
-                <div>
-                    <label for="edit-adaptive-worked-example" class="block text-sm font-medium text-examiq-slate mb-1">Worked example</label>
-                    <textarea id="edit-adaptive-worked-example" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm"></textarea>
-                </div>
-            </div>
-        </section>
-
-        <section class="question-edit-panel bento-card bento-card--elevated p-6 shadow-sm space-y-4 hidden"
-                 role="tabpanel" data-tab-panel="steps" aria-labelledby="tab-steps" hidden>
-            <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h2 class="text-lg font-semibold text-examiq-navy">Step-by-step</h2>
-                    <p class="text-xs text-examiq-slate mt-1">Ordered solution steps for student review.</p>
-                </div>
-                <button type="button" id="edit-add-step" class="btn-secondary btn-primary-sm">+ Add step</button>
-            </div>
-            <div id="edit-steps-list" class="space-y-3"></div>
-            <p id="edit-steps-empty" class="text-sm text-examiq-slate hidden">No steps yet. Add one or leave empty for now.</p>
-        </section>
-    </div>
-
-    <div class="question-edit-footer flex flex-wrap gap-3">
-        <button type="submit" class="btn-primary">Save changes</button>
-        <a href="{% url 'analytics_professor:question_create' course.pk %}" class="btn-secondary">Cancel</a>
-    </div>
-</form>
+{% block editor_form_attrs %}
+data-stem-selector="#edit-stem"
+data-choice-selector="[data-choice-input]"
+data-correct-selector="[name='edit-correct']"
+data-explanation-selector="[data-adaptive-field]"
+data-steps-selector="[data-step-input]"
 {% endblock %}
 
-{% block extra_js %}
+{% block editor_fields %}
+<div class="bento-card bento-card--elevated qe-card">
+    <div class="qe-row">
+        <div class="qe-field qe-field--grow">
+            <label for="edit-concept" class="qe-label">Concept tag</label>
+            <input type="text" id="edit-concept" class="qe-input" placeholder="Short concept label" autocomplete="off">
+        </div>
+        <div class="qe-field qe-field--difficulty">
+            <span class="qe-label" id="edit-difficulty-label">Difficulty</span>
+            <div class="qe-pill-group" role="group" aria-labelledby="edit-difficulty-label" data-edit-difficulty-group>
+                <button type="button" class="qe-pill" data-edit-difficulty="easy" aria-pressed="false">Beginner</button>
+                <button type="button" class="qe-pill" data-edit-difficulty="medium" aria-pressed="false">Intermediate</button>
+                <button type="button" class="qe-pill" data-edit-difficulty="hard" aria-pressed="false">Advanced</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="qe-field">
+        <label for="edit-stem" class="qe-label">Question</label>
+        <textarea id="edit-stem" rows="4" class="qe-input qe-input--area"
+                  placeholder="Enter question text…"></textarea>
+    </div>
+
+    <div class="qe-choices">
+        <div class="qe-choices__head">
+            <h2 class="qe-subtitle">Answer choices</h2>
+            <p class="qe-hint">Tap the circle to mark the correct one</p>
+        </div>
+        <div class="qe-choices__grid">
+            {% for letter in "ABCD" %}
+            <div class="qe-choice" data-choice-card>
+                <span class="qe-choice__letter" aria-hidden="true">{{ letter }}</span>
+                <span class="qe-choice__text">
+                    <label class="sr-only" for="edit-choice-{{ letter }}">Choice {{ letter }}</label>
+                    <input type="text" id="edit-choice-{{ letter }}" class="qe-input qe-input--flush"
+                           data-choice-input data-choice-label="{{ letter }}" autocomplete="off">
+                </span>
+                <label class="qe-choice__mark" for="edit-correct-{{ letter }}"
+                       data-choice-radio data-choice-value="{{ letter }}">
+                    <span class="sr-only">Mark choice {{ letter }} correct</span>
+                    <input type="radio" name="edit-correct" id="edit-correct-{{ letter }}"
+                           value="{{ letter }}" class="sr-only" data-edit-correct>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="qe-subtabs" role="tablist" aria-label="Explanation sections">
+        <button type="button" class="qe-subtab is-active" role="tab" aria-selected="true"
+                data-subtab="explanation">Explanation</button>
+        <button type="button" class="qe-subtab" role="tab" aria-selected="false"
+                data-subtab="steps">Solution steps <span class="qe-subtab__count" data-step-count></span></button>
+        <p class="qe-hint qe-subtabs__hint">Shown when a student misses this question</p>
+    </div>
+
+    <div class="qe-subpanel" data-subpanel="explanation">
+        <div class="qe-grid-2">
+            <div class="qe-field">
+                <label for="edit-adaptive-what-went-wrong" class="qe-label">What went wrong</label>
+                <textarea id="edit-adaptive-what-went-wrong" rows="3" class="qe-input" data-adaptive-field></textarea>
+            </div>
+            <div class="qe-field">
+                <label for="edit-adaptive-why" class="qe-label">Why</label>
+                <textarea id="edit-adaptive-why" rows="3" class="qe-input" data-adaptive-field></textarea>
+            </div>
+            <div class="qe-field">
+                <label for="edit-adaptive-quick-check" class="qe-label">Quick check</label>
+                <textarea id="edit-adaptive-quick-check" rows="3" class="qe-input" data-adaptive-field></textarea>
+            </div>
+            <div class="qe-field">
+                <label for="edit-adaptive-remember" class="qe-label">Remember</label>
+                <textarea id="edit-adaptive-remember" rows="3" class="qe-input" data-adaptive-field></textarea>
+            </div>
+        </div>
+        <div class="qe-field">
+            <label for="edit-adaptive-worked-example" class="qe-label">Worked example</label>
+            <textarea id="edit-adaptive-worked-example" rows="3" class="qe-input" data-adaptive-field></textarea>
+        </div>
+    </div>
+
+    <div class="qe-subpanel hidden" data-subpanel="steps">
+        <div class="qe-steps__head">
+            <h2 class="qe-subtitle">Solution steps</h2>
+            <button type="button" id="edit-add-step" class="btn-secondary btn-primary-sm">+ Add step</button>
+        </div>
+        <div id="edit-steps-list" class="qe-steps__list"></div>
+        <p id="edit-steps-empty" class="text-sm text-examiq-slate hidden">No steps yet. Add one or leave empty for now.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block editor_actions %}
+<button type="button" class="btn-secondary" data-editor-cancel
+        {% if cancel_url %}data-cancel-url="{{ cancel_url }}"{% endif %}>Cancel</button>
+<button type="submit" class="btn-primary">Save changes</button>
+{% endblock %}
+
+{% block editor_js %}
 <script src="{% static 'js/batch-questions.js' %}"></script>
-<script src="{% static 'js/question-edit-tabs.js' %}"></script>
 <script>
 (function() {
     const coursePk = "{{ course.pk }}";
     const questionIndex = {{ question_index }};
+    const LETTERS = ["A", "B", "C", "D"];
     const ADAPTIVE_KEYS = [
         "what_went_wrong",
         "why",
@@ -141,7 +132,13 @@
         return;
     }
 
+    const form = document.getElementById("question-edit-form");
+    const stemInput = document.getElementById("edit-stem");
+    const totalEl = document.getElementById("qe-total-questions");
     const draft = window.ExamiQBatch.loadDraft(coursePk);
+    if (totalEl && draft.questions.length) {
+        totalEl.textContent = String(draft.questions.length);
+    }
     const data = draft.questions[questionIndex] || {
         stem: "", correct: "A", concept: "", choices: { A: "", B: "", C: "", D: "" },
         question_type: "mcq", expected_answer: "", ai_generated: false,
@@ -166,6 +163,21 @@
         return out;
     }
 
+    function setDifficulty(code) {
+        const group = form.querySelector("[data-edit-difficulty-group]");
+        if (!group) return;
+        group.querySelectorAll("[data-edit-difficulty]").forEach(function (btn) {
+            const on = btn.getAttribute("data-edit-difficulty") === code;
+            btn.classList.toggle("is-selected", on);
+            btn.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+    }
+
+    function currentDifficulty() {
+        const pressed = form.querySelector('[data-edit-difficulty][aria-pressed="true"]');
+        return (pressed && pressed.getAttribute("data-edit-difficulty")) || data.difficulty || "medium";
+    }
+
     function renderSteps(steps) {
         const list = document.getElementById("edit-steps-list");
         const empty = document.getElementById("edit-steps-empty");
@@ -173,23 +185,32 @@
         const items = steps.length ? steps : [""];
         items.forEach(function(text, index) {
             const row = document.createElement("div");
-            row.className = "rounded-xl border border-slate-200 p-4 bg-white shadow-sm space-y-2";
+            row.className = "qe-step";
             row.innerHTML =
-                '<div class="flex items-center justify-between gap-2">' +
-                '<label class="block text-xs font-medium text-examiq-slate" for="edit-step-' + index + '">Step ' + (index + 1) + '</label>' +
-                '<button type="button" class="text-xs text-examiq-slate hover:text-red-600" data-remove-step="' + index + '">Remove</button>' +
+                '<div class="qe-step__head">' +
+                '<label class="qe-label" for="edit-step-' + index + '">Step ' + (index + 1) + "</label>" +
+                '<button type="button" class="qe-step__remove" data-remove-step="' + index + '">Remove</button>' +
                 "</div>" +
-                '<textarea id="edit-step-' + index + '" rows="2" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy shadow-sm" data-step-input></textarea>';
+                '<textarea id="edit-step-' + index + '" rows="3" class="qe-input" data-step-input></textarea>';
             list.appendChild(row);
             row.querySelector("[data-step-input]").value = text;
         });
         empty.classList.toggle("hidden", items.some(function(t) { return String(t || "").trim(); }) || items.length > 1);
+        const counter = form.querySelector("[data-step-count]");
+        if (counter) {
+            counter.textContent = String(
+                Array.prototype.filter.call(
+                    document.querySelectorAll("[data-step-input]"),
+                    function (el) { return el.value.trim(); }
+                ).length
+            );
+        }
     }
 
     function collectSteps() {
         return Array.prototype.map.call(
             document.querySelectorAll("[data-step-input]"),
-            function(el) { return el.value.trim(); }
+            function (el) { return el.value.trim(); }
         ).filter(Boolean);
     }
 
@@ -202,10 +223,10 @@
         return out;
     }
 
-    document.getElementById("edit-stem").value = data.stem || "";
-    document.getElementById("edit-correct").value = data.correct || "A";
+    /* ------------------------------ hydrate ---------------------------- */
+    stemInput.value = data.stem || "";
     document.getElementById("edit-concept").value = data.concept || "";
-    ["A","B","C","D"].forEach(function(letter) {
+    LETTERS.forEach(function(letter) {
         document.getElementById("edit-choice-" + letter).value =
             (data.choices && data.choices[letter]) || "";
     });
@@ -216,6 +237,19 @@
         if (el) el.value = adaptive[key] || "";
     });
     renderSteps(normalizeSteps(data.steps));
+    setDifficulty(data.difficulty || "medium");
+
+    const correctRadio = form.querySelector(
+        '[name="edit-correct"][value="' + (data.correct || "A") + '"]'
+    );
+    if (correctRadio) correctRadio.checked = true;
+
+    form.querySelector("[data-edit-difficulty-group]").addEventListener("click", function (event) {
+        const btn = event.target.closest("[data-edit-difficulty]");
+        if (!btn) return;
+        event.preventDefault();
+        setDifficulty(btn.getAttribute("data-edit-difficulty"));
+    });
 
     document.getElementById("edit-add-step").addEventListener("click", function() {
         const steps = collectSteps();
@@ -234,11 +268,25 @@
         }
     });
 
-    document.getElementById("batch-edit-form").addEventListener("submit", function(e) {
+    form.addEventListener("input", function (event) {
+        if (event.target.matches && event.target.matches("[data-step-input]")) {
+            const counter = form.querySelector("[data-step-count]");
+            if (counter) {
+                counter.textContent = String(
+                    Array.prototype.filter.call(
+                        document.querySelectorAll("[data-step-input]"),
+                        function (el) { return el.value.trim(); }
+                    ).length
+                );
+            }
+        }
+    });
+
+    form.addEventListener("submit", function(e) {
         e.preventDefault();
         const updated = {
-            stem: document.getElementById("edit-stem").value,
-            correct: document.getElementById("edit-correct").value,
+            stem: stemInput.value,
+            correct: (form.querySelector('[name="edit-correct"]:checked') || {}).value || "A",
             concept: document.getElementById("edit-concept").value,
             question_type: "mcq",
             expected_answer: "",
@@ -246,12 +294,12 @@
             steps: collectSteps(),
             adaptive_explanation: collectAdaptive(),
             solution_summary: data.solution_summary || "",
-            difficulty: data.difficulty || "medium",
+            difficulty: currentDifficulty(),
             choices: {},
             validation: null,
             faculty_attest: !!data.faculty_attest,
         };
-        ["A","B","C","D"].forEach(function(letter) {
+        LETTERS.forEach(function(letter) {
             updated.choices[letter] = document.getElementById("edit-choice-" + letter).value;
         });
         while (draft.questions.length <= questionIndex) {

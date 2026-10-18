@@ -1,6 +1,8 @@
 from django.contrib import admin
 
 from apps.analytics.models import (
+    ConceptPracticeAttempt,
+    ConceptReview,
     ErrorType,
     FacultyConversation,
     FacultyMessage,
@@ -34,6 +36,36 @@ class MistakeRecordAdmin(admin.ModelAdmin):
     ordering = ["-occurred_at"]
     readonly_fields = ["occurred_at"]
     inlines = [MistakeConcernMessageInline]
+
+
+class ConceptPracticeAttemptInline(admin.TabularInline):
+    model = ConceptPracticeAttempt
+    extra = 0
+    readonly_fields = [
+        "attempt_number",
+        "chosen_option_id",
+        "is_correct",
+        "error_tag_hit",
+        "created_at",
+        "answered_at",
+    ]
+    can_delete = False
+
+
+@admin.register(ConceptReview)
+class ConceptReviewAdmin(admin.ModelAdmin):
+    list_display = [
+        "concept_name",
+        "student",
+        "status",
+        "correct_streak",
+        "miss_count",
+        "updated_at",
+    ]
+    list_filter = ["status", "diagnosis_type"]
+    search_fields = ["concept_name", "student__email", "concept_key"]
+    ordering = ["-updated_at"]
+    inlines = [ConceptPracticeAttemptInline]
 
 
 class StudentFacultyMessageInline(admin.TabularInline):

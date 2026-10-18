@@ -4,7 +4,7 @@
 {% block title %}Exam Setup - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Exam Setup" subtitle="Choose course subjects for student exams and set the per-question timer for each." %}
+{% include "components/page_header.html" with title="Exam Setup" subtitle="Choose courses for student exams and set the per-question timer for each." %}
 
 <form method="post" class="exam-setup-form program-exam-setup space-y-6" id="program-exam-setup-form">
     {% csrf_token %}
@@ -12,8 +12,8 @@
     <section class="bento-card p-6">
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-4">
             <div>
-                <h2 class="text-lg font-semibold text-examiq-navy">Course subjects &amp; timers</h2>
-                <p class="text-sm text-examiq-slate">Select subjects students may use for exams and set seconds per question for each.</p>
+                <h2 class="text-lg font-semibold text-examiq-navy">Course &amp; timers</h2>
+                <p class="text-sm text-examiq-slate">Select courses students may use for exams and set seconds per question for each.</p>
             </div>
             <div class="w-full sm:w-48">
                 <label for="default_seconds" class="block text-xs font-semibold uppercase tracking-wider text-examiq-slate mb-1">Default timer (sec)</label>
@@ -21,7 +21,7 @@
             </div>
         </div>
 
-        <label for="subject-timer-search" class="sr-only">Search course subjects</label>
+        <label for="subject-timer-search" class="sr-only">Search courses</label>
         <input type="search" id="subject-timer-search" class="course-subjects-toolbar__search w-full mb-4" placeholder="Search code or name…" autocomplete="off">
 
         <div class="data-table-wrap">

@@ -234,46 +234,18 @@
         hard: "Advanced",
     };
 
+    var TIMER_STEP = 5;
+    var TIMER_MAX = 120;
+
     function initTimer() {
         var pills = document.querySelectorAll("[data-timer-preset]");
         var input = document.getElementById("id_setup_seconds");
-        var label = document.getElementById("timer-display-label");
+        var display = document.getElementById("t-stepper-display");
+        var minusBtn = document.getElementById("t-stepper-minus");
+        var plusBtn = document.getElementById("t-stepper-plus");
+        var stepper = document.querySelector("[data-timer-stepper]");
         var section = document.querySelector("[data-timer-section]");
-        var manual = document.querySelector("[data-timer-manual]");
         if (!input) return;
-
-        function setCustomMode(on) {
-            if (!manual) return;
-            manual.classList.toggle("is-custom-open", !!on);
-        }
-
-        // Instructor-configured timer: show value but block student changes.
-        if (section && section.getAttribute("data-timer-locked") === "1") {
-            var locked = parseInt(section.getAttribute("data-instructor-seconds"), 10);
-            if (!isNaN(locked)) {
-                input.value = String(locked);
-                if (label) {
-                    label.textContent = locked === 0 ? "No timer" : locked + " sec";
-                }
-                pills.forEach(function (pill) {
-                    var preset = pill.getAttribute("data-timer-preset");
-                    if (preset === "custom") {
-                        pill.classList.toggle("is-selected", !PRESET_SECONDS[locked]);
-                        pill.disabled = true;
-                    } else {
-                        pill.classList.toggle(
-                            "is-selected",
-                            parseInt(preset, 10) === locked
-                        );
-                        pill.disabled = true;
-                    }
-                });
-                setCustomMode(!PRESET_SECONDS[locked]);
-            }
-            input.disabled = true;
-            input.readOnly = true;
-            return;
-        }
 
         function normalizeTimer(raw) {
             var val = parseInt(raw, 10);
@@ -284,37 +256,40 @@
             return val;
         }
 
-        function syncPillSelection(val, forceCustom) {
-            var isCustom = forceCustom || !PRESET_SECONDS[val];
+        // Any value that is not a preset counts as custom: no pill stays
+        // selected and the stepper itself shows the custom state.
+        function syncTimerUI(val) {
+            var isCustom = !PRESET_SECONDS[val];
             pills.forEach(function (pill) {
-                var preset = pill.getAttribute("data-timer-preset");
-                if (preset === "custom") {
-                    pill.classList.toggle("is-selected", isCustom);
-                } else {
-                    pill.classList.toggle(
-                        "is-selected",
-                        !isCustom && parseInt(preset, 10) === val
-                    );
-                }
+                pill.classList.toggle(
+                    "is-selected",
+                    !isCustom && parseInt(pill.getAttribute("data-timer-preset"), 10) === val
+                );
             });
-            setCustomMode(isCustom);
+            if (stepper) stepper.classList.toggle("is-custom", isCustom);
+            if (display) display.textContent = val === 0 ? "Off" : val + "s";
         }
 
-        function setTimer(val, syncInput, forceCustom) {
-            if (val === "custom") {
-                setCustomMode(true);
-                syncPillSelection(normalizeTimer(input.value), true);
-                if (input) input.focus();
-                updateSummary();
-                return;
-            }
+        function setTimer(val) {
             val = normalizeTimer(val);
-            if (syncInput !== false) input.value = String(val);
-            if (label) {
-                label.textContent = val === 0 ? "No timer" : val + " sec";
-            }
-            syncPillSelection(val, !!forceCustom);
+            input.value = String(val);
+            syncTimerUI(val);
             updateSummary();
+        }
+
+        // Instructor-configured timer: show value but block student changes.
+        if (section && section.getAttribute("data-timer-locked") === "1") {
+            var locked = parseInt(section.getAttribute("data-instructor-seconds"), 10);
+            if (!isNaN(locked)) {
+                input.value = String(locked);
+                syncTimerUI(locked);
+            }
+            pills.forEach(function (pill) {
+                pill.disabled = true;
+            });
+            if (minusBtn) minusBtn.disabled = true;
+            if (plusBtn) plusBtn.disabled = true;
+            return;
         }
 
         pills.forEach(function (pill) {
@@ -323,21 +298,25 @@
             });
         });
 
-        input.addEventListener("change", function () {
-            setTimer(input.value, true, true);
-        });
-        input.addEventListener("input", function () {
-            var raw = parseInt(input.value, 10);
-            if (isNaN(raw)) return;
-            if (label) {
-                label.textContent = raw === 0 ? "No timer" : raw + " sec";
-            }
-            syncPillSelection(normalizeTimer(raw), true);
-            updateSummary();
-        });
+        if (minusBtn) {
+            minusBtn.addEventListener("click", function () {
+                var current = normalizeTimer(input.value);
+                setTimer(current <= 10 ? 0 : current - TIMER_STEP);
+            });
+        }
 
-        var initial = normalizeTimer(input.value);
-        setTimer(initial, false, !PRESET_SECONDS[initial]);
+        if (plusBtn) {
+            plusBtn.addEventListener("click", function () {
+                var current = normalizeTimer(input.value);
+                setTimer(
+                    current === 0
+                        ? 10
+                        : Math.min(TIMER_MAX, current + TIMER_STEP)
+                );
+            });
+        }
+
+        setTimer(input.value);
     }
 
     function updateSummary() {

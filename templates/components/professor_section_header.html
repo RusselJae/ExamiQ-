@@ -1,7 +1,8 @@
 {# Course/catalog page chrome for faculty tools (Overview-style). #}
 {# Optional: page_label (e.g. "Saved Questions"), show_subject_subtitle (default true) #}
+{# Optional: cta_url, cta_label — same-row action (e.g. Add Question) #}
 <div class="overview-header mb-6">
-    <a href="{% url 'analytics_professor:course_list' %}" class="overview-back-link">&larr; Back to course subjects</a>
+    <a href="{% url 'analytics_professor:course_list' %}" class="overview-back-link">&larr; Back to course</a>
     <div class="overview-header__main">
         <div class="overview-header__copy">
             <h1 class="overview-title">
@@ -15,5 +16,12 @@
             <p class="overview-as-of">{{ course.code }} — {{ course.name }}</p>
             {% endif %}
         </div>
+        {% if cta_url and cta_label %}
+        <div class="overview-header__aside">
+            <div class="page-header-actions">
+                <a href="{{ cta_url }}" class="btn-primary btn-primary-sm">{{ cta_label }}</a>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>

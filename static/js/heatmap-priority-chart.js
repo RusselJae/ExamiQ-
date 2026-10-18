@@ -6,9 +6,11 @@
 (function () {
     const PAGE_SIZE = 10;
     const COL_PX = 56;
+    const COMPACT_COL_PX = 30;
     const CHART_CHROME_PX = 120;
     const MIN_HEIGHT_PX = 320;
     const MISTAKE_COLOR = "#D32F2F";
+    const COMPACT_QUERY = "(max-width: 639px)";
 
     const TIER_COLORS = {
         none: "#D32F2F",
@@ -37,7 +39,21 @@
     }
 
     function chartMinWidth(visibleCount) {
+        if (isCompact()) {
+            // Keep every bar on one screen instead of clipping to the first few.
+            return Math.max(260, visibleCount * COMPACT_COL_PX + 30);
+        }
         return Math.max(480, visibleCount * COL_PX + 80);
+    }
+
+    /* Narrow screens must still show the whole page of bars at once.
+       .heatmap-chart-wrap is overflow:hidden, so a desktop min-width would
+       clip the right-hand bars off instead of letting them shrink. */
+    function isCompact() {
+        if (typeof window.matchMedia === "function") {
+            return window.matchMedia(COMPACT_QUERY).matches;
+        }
+        return window.innerWidth < 640;
     }
 
     function truncateStem(stem, max) {
@@ -146,27 +162,11 @@
         function confidenceDatasets(slice) {
             return [
                 {
-                    label: "No ratings",
-                    data: slice.map(function (q) {
-                        return q.none || 0;
-                    }),
-                    backgroundColor: TIER_COLORS.none,
-                    borderRadius: 2,
-                },
-                {
                     label: "Guessing",
                     data: slice.map(function (q) {
                         return q.low || 0;
                     }),
                     backgroundColor: TIER_COLORS.low,
-                    borderRadius: 2,
-                },
-                {
-                    label: "Not sure",
-                    data: slice.map(function (q) {
-                        return q.average || 0;
-                    }),
-                    backgroundColor: TIER_COLORS.average,
                     borderRadius: 2,
                 },
                 {
@@ -206,6 +206,7 @@
                 return questionLabel(q);
             });
             const isMistakes = metric === "mistakes";
+            const compact = isCompact();
             const config = {
                 type: "bar",
                 data: {
@@ -222,8 +223,17 @@
                         x: {
                             stacked: !isMistakes,
                             grid: { display: false },
+                            // Never skip a label: the page size is the point.
+                            ticks: compact
+                                ? {
+                                      autoSkip: false,
+                                      maxRotation: 0,
+                                      autoSkipPadding: 0,
+                                      font: { size: 9 },
+                                  }
+                                : { autoSkip: false, maxRotation: 0, font: { size: 11 } },
                             title: {
-                                display: true,
+                                display: !compact,
                                 text: "Questions",
                             },
                         },
@@ -235,6 +245,7 @@
                                 ? {
                                       precision: 0,
                                       stepSize: 50,
+                                      font: compact ? { size: 9 } : undefined,
                                       callback: function (value) {
                                           if (value === 0 || value === 50 || value === 100) {
                                               return value;
@@ -242,10 +253,10 @@
                                           return "";
                                       },
                                   }
-                                : { precision: 0 },
+                                : { precision: 0, font: compact ? { size: 9 } : undefined },
                             grid: { color: "#f1f5f9" },
                             title: {
-                                display: true,
+                                display: !compact,
                                 text: isMistakes
                                     ? "Number of mistakes"
                                     : "Confidence level (students)",
@@ -321,6 +332,20 @@
             metricSelect.addEventListener("change", function () {
                 setMetric(metricSelect.value);
             });
+        }
+
+        // Rebuild when the viewport crosses the mobile breakpoint so the bars
+        // re-fit instead of keeping the width they were built with.
+        if (typeof window.matchMedia === "function") {
+            var compactQuery = window.matchMedia(COMPACT_QUERY);
+            var onBreakpointChange = function () {
+                buildChart();
+            };
+            if (typeof compactQuery.addEventListener === "function") {
+                compactQuery.addEventListener("change", onBreakpointChange);
+            } else if (typeof compactQuery.addListener === "function") {
+                compactQuery.addListener(onBreakpointChange);
+            }
         }
 
         return buildChart();

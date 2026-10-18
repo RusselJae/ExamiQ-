@@ -217,7 +217,7 @@ def send_signup_otp(user: User, *, force: bool = False) -> EmailSignupOTP:
 
 
 def verify_signup_otp(user: User, code: str) -> User:
-    """Validate ``code`` and activate ``user``. Raises SignupOTPError on failure."""
+    """Validate an email OTP and activate only already-approved accounts."""
     cleaned = (code or "").strip()
     if not cleaned.isdigit() or len(cleaned) != OTP_LENGTH:
         raise SignupOTPError("Enter the 6-digit code from your email.")
@@ -252,8 +252,9 @@ def verify_signup_otp(user: User, code: str) -> User:
     otp.consumed_at = timezone.now()
     otp.save(update_fields=["consumed_at"])
 
-    user.is_active = True
-    user.save(update_fields=["is_active"])
+    if user.approval_status == User.ApprovalStatus.APPROVED:
+        user.is_active = True
+        user.save(update_fields=["is_active"])
 
     from allauth.account.models import EmailAddress
 
@@ -281,9 +282,12 @@ def pending_signup_user(request) -> User | None:
 def login_otp_exempt(user) -> bool:
     """Return True when ``user`` may sign in without the emailed login code.
 
-    Driven by ``settings.LOGIN_OTP_EXEMPT_EMAILS`` (``.env`` only) so no real
+    Superusers are always exempt, plus any address in
+    ``settings.LOGIN_OTP_EXEMPT_EMAILS`` (``.env`` only) so no real
     address is hardcoded in the repository.
     """
+    if getattr(user, "is_superuser", False):
+        return True
     exempt = getattr(settings, "LOGIN_OTP_EXEMPT_EMAILS", ()) or ()
     email = (getattr(user, "email", "") or "").strip().lower()
     if not email:

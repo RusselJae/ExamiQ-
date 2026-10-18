@@ -1,36 +1,55 @@
 {% extends "base.html" %}
 
-{% block title %}Course subjects - EXAMIQ+{% endblock %}
+{% block title %}Courses - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Course subjects" subtitle="Browse subjects, then open one to manage topics and questions." %}
+{% include "components/page_header.html" with title="Courses" subtitle="Browse courses, then open one to manage topics and questions." %}
 
-<div class="course-subjects-toolbar mb-4">
-    <div class="course-subjects-toolbar__filters">
-        <label class="sr-only" for="course-subject-search">Search</label>
-        <input
-            type="search"
-            id="course-subject-search"
-            class="course-subjects-toolbar__search"
-            placeholder="Search code or name…"
-            autocomplete="off"
-        >
-        <label class="sr-only" for="course-subject-year">Year level</label>
-        <select id="course-subject-year" class="course-subjects-toolbar__select">
-            <option value="">All year levels</option>
-            {% for yl in year_levels %}
-            <option value="{{ yl.pk }}">{{ yl.name }}</option>
-            {% endfor %}
-        </select>
-        <label class="sr-only" for="course-subject-semester">Semester</label>
-        <select id="course-subject-semester" class="course-subjects-toolbar__select">
-            <option value="">All semesters</option>
-            {% for value, label in semester_choices %}
-            <option value="{{ value }}">{{ label }}</option>
-            {% endfor %}
-        </select>
+{% comment %}
+Mirrors the Session History filter bar (components/filter_bar.html) so the
+control sizes and card treatment match across the app. Filtering here is
+client-side, so there is no Apply/Reset submit pair.
+{% endcomment %}
+<div class="filter-bar-container mb-4">
+    <div class="bento-card filter-bar-card filter-bar-card--compact">
+        <div class="filter-bar filter-bar--compact" role="search">
+            <div class="filter-bar__grid">
+                <label class="filter-bar__field filter-bar__field--search">
+                    <span class="filter-bar__label">Search</span>
+                    <input
+                        type="search"
+                        id="course-subject-search"
+                        class="filter-bar__input"
+                        placeholder="Search code or name…"
+                        autocomplete="off"
+                    >
+                </label>
+                <label class="filter-bar__field">
+                    <span class="filter-bar__label">Year level</span>
+                    <select id="course-subject-year" class="filter-bar__select">
+                        <option value="">All year levels</option>
+                        {% for yl in year_levels %}
+                        <option value="{{ yl.pk }}">{{ yl.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="filter-bar__field">
+                    <span class="filter-bar__label">Semester</span>
+                    <select id="course-subject-semester" class="filter-bar__select">
+                        <option value="">All semesters</option>
+                        {% for value, label in semester_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="filter-bar__actions">
+                <button type="button" class="filter-bar__reset" id="course-subject-reset">
+                    Clear filters
+                </button>
+            </div>
+        </div>
     </div>
-    <a href="{% url 'analytics_professor:course_create' %}" class="btn-primary">Add subject</a>
 </div>
 
 {% if course_cards %}
@@ -40,9 +59,10 @@
             <tr>
                 <th>Code</th>
                 <th>Name</th>
-                <th>Year / Sem</th>
+                <th>Year</th>
+                <th>Semester</th>
                 <th class="text-right">Questions</th>
-                <th class="text-right">Actions</th>
+                <th class="text-right">Question bank</th>
             </tr>
         </thead>
         <tbody>
@@ -56,9 +76,8 @@
             >
                 <td class="font-semibold">{{ card.subject.code }}</td>
                 <td>{{ card.subject.name }}</td>
-                <td class="text-examiq-slate">
-                    {{ card.subject.year_level.name }} · {{ card.subject.get_semester_display }}
-                </td>
+                <td class="text-examiq-slate">{{ card.subject.year_level.name }}</td>
+                <td class="text-examiq-slate">{{ card.subject.get_semester_display }}</td>
                 <td class="text-right font-medium">{{ card.question_count }}</td>
                 <td class="text-right whitespace-nowrap">
                     <a href="{% url 'analytics_professor:question_list' card.catalog_course.pk %}" class="text-link text-sm font-medium">Open</a>
@@ -67,12 +86,11 @@
             {% endfor %}
         </tbody>
     </table>
-    <p id="course-subjects-empty-filter" class="hidden p-8 text-center text-examiq-slate text-sm">No subjects match your filters.</p>
+    <p id="course-subjects-empty-filter" class="hidden p-8 text-center text-examiq-slate text-sm">No courses match your filters.</p>
 </div>
 {% else %}
 <div class="bento-card p-8 text-center text-examiq-slate">
-    No course subjects in the catalog yet.
-    <a href="{% url 'analytics_professor:course_create' %}" class="text-examiq-cyan font-medium">Add a subject</a>.
+    No courses have been added to the catalog yet. Contact your program coordinator.
 </div>
 {% endif %}
 {% endblock %}
@@ -83,6 +101,7 @@
     var search = document.getElementById("course-subject-search");
     var year = document.getElementById("course-subject-year");
     var semester = document.getElementById("course-subject-semester");
+    var reset = document.getElementById("course-subject-reset");
     var rows = Array.prototype.slice.call(document.querySelectorAll(".course-subject-row"));
     var empty = document.getElementById("course-subjects-empty-filter");
     if (!rows.length) return;
@@ -106,6 +125,15 @@
     if (search) search.addEventListener("input", applyFilter);
     if (year) year.addEventListener("change", applyFilter);
     if (semester) semester.addEventListener("change", applyFilter);
+    if (reset) {
+        reset.addEventListener("click", function () {
+            if (search) search.value = "";
+            if (year) year.value = "";
+            if (semester) semester.value = "";
+            applyFilter();
+            if (search) search.focus();
+        });
+    }
 })();
 </script>
 {% endblock %}

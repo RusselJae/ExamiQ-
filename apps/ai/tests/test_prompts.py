@@ -3,6 +3,8 @@ from django.test import override_settings
 
 from apps.ai.prompts import (
     build_adaptive_feedback_prompt,
+    build_concept_practice_question_prompt,
+    build_concept_remediation_prompt,
     build_correct_adaptive_feedback_prompt,
     build_exam_feedback_batch_prompt,
     build_exam_feedback_single_prompt,
@@ -311,3 +313,68 @@ class TestExplanationGenerationPrompt:
         )
         _, user, _ = build_explanation_generation_prompt(question)
         assert "enumeration" in user.lower() or "each required" in user.lower()
+
+    def test_faculty_steps_are_used_as_generation_basis(self, mcq_question):
+        from apps.questions.models import ExplanationStep
+
+        question, _correct = mcq_question
+        ExplanationStep.objects.create(
+            question=question, order=1, content="Faculty step one."
+        )
+        ExplanationStep.objects.create(
+            question=question, order=2, content="Faculty step two."
+        )
+        _, user, _ = build_explanation_generation_prompt(question)
+        assert "Faculty-authored solution steps" in user
+        assert "Faculty step one." in user
+        assert "Faculty step two." in user
+
+    def test_prompt_has_no_faculty_block_without_steps(self, mcq_question):
+        question, _correct = mcq_question
+        _, user, _ = build_explanation_generation_prompt(question)
+        assert "Faculty-authored solution steps" not in user
+
+
+class TestConceptReviewPrompts:
+    def test_remediation_prompt_includes_inputs(self):
+        system, user = build_concept_remediation_prompt(
+            concept_name="Solving two-step linear equations",
+            subject="College Algebra",
+            topic="Linear equations",
+            difficulty="beginner",
+            miss_count=3,
+            missed_questions=[
+                {
+                    "stem": "Solve 2x+7=15",
+                    "chosen_answer": "11",
+                    "correct_answer": "4",
+                    "confidence": "Sure",
+                }
+            ],
+            previous_feedback_styles=["worked_example"],
+            student_stage="second_review",
+            preferred_style="mistakes_first",
+        )
+        assert "ExamiQ+" in system
+        assert "Solving two-step linear equations" in user
+        assert "worked_example" in user
+        assert "mistakes_first" in user
+        assert "try_it" in user
+        assert "diagnosis" in user
+
+    def test_practice_prompt_includes_error_tags_and_previous(self):
+        system, user = build_concept_practice_question_prompt(
+            concept_name="Indefinite integrals",
+            subject="Calculus",
+            topic="Integrals",
+            difficulty="intermediate",
+            attempt_number=2,
+            known_error_tags=["sign_error", "forgot_constant"],
+            previous_questions=[{"question": "Integrate 3x^2", "final_answer": "x^3"}],
+            prerequisite_mode=False,
+        )
+        assert "ExamiQ+" in system
+        assert "sign_error" in user
+        assert "Integrate 3x^2" in user
+        assert "attempt_number" in user.lower() or "Attempt number" in user
+        assert "error_tag" in user

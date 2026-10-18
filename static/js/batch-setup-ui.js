@@ -1,5 +1,5 @@
 /**
- * Batch setup UI: pill toggles, source tabs, count stepper, dropzone.
+ * Batch setup UI: pill toggles, count stepper, dropzone.
  */
 (function () {
     "use strict";
@@ -64,48 +64,6 @@
         });
     }
 
-    function initSourceTabs(root) {
-        (root || document).querySelectorAll("[data-source-tabs]").forEach(function (wrap) {
-            if (wrap.dataset.bound === "1") return;
-            wrap.dataset.bound = "1";
-            var tabs = wrap.querySelectorAll("[data-source-tab]");
-            var panels = wrap.querySelectorAll("[data-source-panel]");
-            var library = document.getElementById("ai-library-document");
-            var fileInput = document.getElementById("ai-source-file");
-            var filenameEl = wrap.querySelector("[data-dropzone-filename]");
-
-            function showTab(name) {
-                tabs.forEach(function (tab) {
-                    var on = tab.getAttribute("data-source-tab") === name;
-                    tab.classList.toggle("is-selected", on);
-                    tab.setAttribute("aria-selected", on ? "true" : "false");
-                });
-                panels.forEach(function (panel) {
-                    var on = panel.getAttribute("data-source-panel") === name;
-                    panel.classList.toggle("hidden", !on);
-                    if (on) panel.removeAttribute("hidden");
-                    else panel.setAttribute("hidden", "");
-                });
-                if (name === "saved" && fileInput) {
-                    fileInput.value = "";
-                    if (filenameEl) {
-                        filenameEl.textContent = "";
-                        filenameEl.classList.add("hidden");
-                    }
-                }
-                if (name === "upload" && library) {
-                    library.value = "";
-                }
-            }
-
-            tabs.forEach(function (tab) {
-                tab.addEventListener("click", function () {
-                    showTab(tab.getAttribute("data-source-tab") || "saved");
-                });
-            });
-        });
-    }
-
     function initSteppers(root) {
         (root || document).querySelectorAll("[data-stepper]").forEach(function (stepper) {
             if (stepper.dataset.bound === "1") return;
@@ -147,7 +105,9 @@
         (root || document).querySelectorAll("[data-dropzone]").forEach(function (zone) {
             if (zone.dataset.bound === "1") return;
             zone.dataset.bound = "1";
-            var input = zone.querySelector('input[type="file"]');
+            var inputId = zone.getAttribute("data-dropzone-input");
+            var input = zone.querySelector('input[type="file"]') ||
+                (inputId ? document.getElementById(inputId) : null);
             var chooseBtn = zone.querySelector("[data-dropzone-choose]");
             var filenameEl = zone.querySelector("[data-dropzone-filename]");
             if (!input) return;
@@ -207,11 +167,63 @@
         });
     }
 
+    /**
+     * "AI decides" is an exclusive shortcut beside the band pills: it selects
+     * every band at once so the generated questions land across the whole
+     * difficulty range and each one keeps its model-assigned difficulty.
+     * Clicking any band pill hands control back to the faculty member.
+     */
+    function initDifficultyAuto(root) {
+        (root || document).querySelectorAll("[data-difficulty-auto]").forEach(function (autoBtn) {
+            if (autoBtn.dataset.bound === "1") return;
+            var group = autoBtn.closest("[data-pill-group]");
+            if (!group) return;
+            autoBtn.dataset.bound = "1";
+
+            var select = document.getElementById(group.getAttribute("data-pill-target"));
+            var bandPills = Array.prototype.filter.call(
+                group.querySelectorAll("[data-pill-value]"),
+                function (pill) { return pill !== autoBtn; }
+            );
+
+            function syncSelect() {
+                if (!select) return;
+                Array.prototype.forEach.call(select.options, function (opt) {
+                    opt.selected = true;
+                });
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+
+            function setAuto(on) {
+                autoBtn.classList.toggle("is-selected", on);
+                autoBtn.setAttribute("aria-pressed", on ? "true" : "false");
+                bandPills.forEach(function (pill) {
+                    pill.classList.toggle("is-selected", on);
+                    pill.setAttribute("aria-pressed", on ? "true" : "false");
+                });
+                syncSelect();
+            }
+
+            autoBtn.addEventListener("click", function () {
+                var on = autoBtn.classList.contains("is-selected");
+                setAuto(!on);
+            });
+
+            bandPills.forEach(function (pill) {
+                pill.addEventListener("click", function () {
+                    if (!autoBtn.classList.contains("is-selected")) return;
+                    autoBtn.classList.remove("is-selected");
+                    autoBtn.setAttribute("aria-pressed", "false");
+                });
+            });
+        });
+    }
+
     function init(root) {
         initPills(root);
-        initSourceTabs(root);
         initSteppers(root);
         initDropzones(root);
+        initDifficultyAuto(root);
     }
 
     if (document.readyState === "loading") {

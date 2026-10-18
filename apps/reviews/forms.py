@@ -47,14 +47,14 @@ class ReviewSetupForm(forms.Form):
     year_subjects = forms.ModelMultipleChoiceField(
         queryset=Subject.objects.none(),
         required=False,
-        label="Course subjects for your year",
+        label="Courses for your year",
         widget=forms.CheckboxSelectMultiple(),
         help_text="Uncheck any year-level subjects you want to skip.",
     )
     extra_subjects = forms.ModelMultipleChoiceField(
         queryset=Subject.objects.none(),
         required=False,
-        label="Other course subjects",
+        label="Other courses",
         widget=forms.SelectMultiple(
             attrs={
                 "class": FORM_MULTISELECT_CLASS,
@@ -62,13 +62,15 @@ class ReviewSetupForm(forms.Form):
                 "size": "8",
             }
         ),
-        help_text="Optional. Leave empty to use only your year-level course subjects.",
+        help_text="Optional. Leave empty to use only your year-level courses.",
     )
     difficulty = forms.ChoiceField(
         choices=PILOT_DIFFICULTY_CHOICES,
         label="Difficulty",
         initial=Question.Difficulty.EASY,
-        widget=forms.Select(attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}),
+        widget=forms.Select(
+            attrs={"class": FORM_INPUT_CLASS, "id": "id_setup_difficulty"}
+        ),
     )
     seconds_per_question = forms.IntegerField(
         min_value=0,
@@ -136,16 +138,18 @@ class ReviewSetupForm(forms.Form):
 
         year_qs = subjects_available_for_student(student)
         self.fields["year_subjects"].queryset = year_qs
-        self.fields["year_subjects"].label_from_instance = (
-            lambda obj: f"{obj.code} — {obj.name}"
+        self.fields["year_subjects"].label_from_instance = lambda obj: (
+            f"{obj.code} — {obj.name}"
         )
         if not self.is_bound:
-            self.fields["year_subjects"].initial = list(year_qs.values_list("pk", flat=True))
+            self.fields["year_subjects"].initial = list(
+                year_qs.values_list("pk", flat=True)
+            )
 
         other_qs = other_subjects_available_for_student(student)
         self.fields["extra_subjects"].queryset = other_qs
-        self.fields["extra_subjects"].label_from_instance = (
-            lambda obj: f"{obj.code} — {obj.name} ({obj.year_level.name})"
+        self.fields["extra_subjects"].label_from_instance = lambda obj: (
+            f"{obj.code} — {obj.name} ({obj.year_level.name})"
         )
         if not other_qs.exists():
             self.fields["extra_subjects"].disabled = True

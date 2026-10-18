@@ -71,6 +71,8 @@
         const roleSelect = root.querySelector("#id_signup_role");
         const studentFields = root.querySelector("#signup-student-fields");
         const staffFields = root.querySelector("#signup-staff-fields");
+        const studentYearSection = root.querySelector("#signup-student-year-section");
+        const facultySections = root.querySelector("#signup-faculty-sections");
         const roleCards = root.querySelectorAll(".auth-role-card");
         if (!roleSelect || !studentFields || !staffFields) return;
 
@@ -82,6 +84,8 @@
             const isStudent = role === "student";
             studentFields.classList.toggle("is-hidden", !isStudent);
             staffFields.classList.toggle("is-hidden", isStudent);
+            if (studentYearSection) studentYearSection.classList.toggle("is-hidden", !isStudent);
+            if (facultySections) facultySections.classList.toggle("is-hidden", isStudent);
         }
 
         roleCards.forEach(function (card) {

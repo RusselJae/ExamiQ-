@@ -9,6 +9,8 @@ from django.utils import timezone
 from apps.ai.interfaces import (
     AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
+    ConceptPracticeGenerator,
+    ConceptRemediationGenerator,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -373,3 +375,185 @@ class StubErrorClassifier(ErrorClassifier):
 
 class StubCurriculumAdvisor(CurriculumAdvisor):
     pass
+
+
+class StubConceptRemediationGenerator(ConceptRemediationGenerator):
+    def generate(
+        self,
+        *,
+        concept_name: str,
+        subject: str,
+        topic: str,
+        difficulty: str = "beginner",
+        miss_count: int = 1,
+        missed_questions: list | None = None,
+        previous_feedback_styles: list | None = None,
+        student_stage: str = "first_review",
+        prerequisites: list | None = None,
+        preferred_style: str = "worked_example",
+    ) -> dict:
+        style = preferred_style or "worked_example"
+        if style not in {
+            "worked_example",
+            "analogy",
+            "mistakes_first",
+            "backwards",
+        }:
+            style = "worked_example"
+        _ = (
+            subject,
+            topic,
+            difficulty,
+            miss_count,
+            missed_questions,
+            previous_feedback_styles,
+            student_stage,
+            prerequisites,
+        )
+        return {
+            "diagnosis": {
+                "type": "knowledge_gap",
+                "what_went_wrong": (
+                    f"You missed items on {concept_name}. That usually means "
+                    "a key first step or rule is incomplete."
+                ),
+                "prerequisite_flag": None,
+            },
+            "explanation": {
+                "style_used": style,
+                "core_idea": (
+                    f"For {concept_name}, undo operations in a clear order and "
+                    "check each transform before moving on."
+                ),
+                "key_rules": [
+                    "Name the goal of the first step.",
+                    "Apply one operation at a time.",
+                    "Check by substituting back.",
+                ],
+            },
+            "worked_example": {
+                "problem": f"Work a small example for {concept_name}: solve $3x + 5 = 20$.",
+                "steps": [
+                    {
+                        "step": "Subtract $5$ from both sides: $3x = 15$",
+                        "why": "Undo addition first.",
+                    },
+                    {
+                        "step": "Divide both sides by $3$: $x = 5$",
+                        "why": "Undo multiplication next.",
+                    },
+                    {
+                        "step": "Check: $3(5) + 5 = 20$",
+                        "why": "Substitution confirms the solution.",
+                    },
+                ],
+                "final_answer": "$x = 5$",
+            },
+            "common_mistakes": [
+                {
+                    "mistake": "Doing the multiply/divide step before undoing add/subtract.",
+                    "why_it_fails": "It leaves an extra term attached to $x$.",
+                    "fix": "Undo +/− first, then ×/÷.",
+                },
+                {
+                    "mistake": "Adding when you should subtract.",
+                    "why_it_fails": "The constant moves farther from isolation.",
+                    "fix": "Use the opposite of the shown operation.",
+                },
+            ],
+            "try_it": {
+                "problem": "Solve $4x + 9 = 33$. Which step should come first?",
+                "first_step_choices": [
+                    "Divide both sides by $4$",
+                    "Add $9$ to both sides",
+                    "Subtract $9$ from both sides",
+                ],
+                "correct_index": 2,
+                "hint": "Undo the constant term before touching the coefficient of $x$.",
+                "feedback_if_wrong": (
+                    "Not quite. To undo $+9$, subtract $9$ from both sides first."
+                ),
+            },
+            "check_yourself": (
+                "Substitute your answer into the original equation and confirm both sides match."
+            ),
+        }
+
+
+class StubConceptPracticeGenerator(ConceptPracticeGenerator):
+    def generate(
+        self,
+        *,
+        concept_name: str,
+        subject: str,
+        topic: str,
+        difficulty: str = "beginner",
+        attempt_number: int = 1,
+        known_error_tags: list | None = None,
+        previous_questions: list | None = None,
+        prerequisite_mode: bool = False,
+        prerequisite_concept: str = "",
+    ) -> dict:
+        _ = (subject, topic, previous_questions, prerequisite_mode, prerequisite_concept)
+        # Vary numbers slightly by attempt so repeats are not identical.
+        addend = 3 + (attempt_number % 5)
+        coeff = 2 + (attempt_number % 3)
+        right = coeff * 6 + addend
+        correct = str(6)
+        tags = list(known_error_tags or [])
+        primary_tag = tags[0] if tags else "wrong_operation_order"
+        return {
+            "concept": concept_name,
+            "difficulty": difficulty if difficulty in {
+                "beginner", "intermediate", "advanced"
+            } else "beginner",
+            "question": (
+                f"Solve ${coeff}x + {addend} = {right}$. What is $x$?"
+            ),
+            "options": [
+                {
+                    "id": "A",
+                    "text": str(right - addend),
+                    "is_correct": False,
+                    "error_tag": "forgot_to_divide",
+                    "why_wrong": (
+                        f"You subtracted {addend} but did not divide by {coeff}."
+                    ),
+                },
+                {
+                    "id": "B",
+                    "text": correct,
+                    "is_correct": True,
+                    "error_tag": None,
+                    "why_wrong": None,
+                },
+                {
+                    "id": "C",
+                    "text": str(right + addend),
+                    "is_correct": False,
+                    "error_tag": "sign_error",
+                    "why_wrong": (
+                        f"Adding {addend} instead of subtracting moves the constant the wrong way."
+                    ),
+                },
+                {
+                    "id": "D",
+                    "text": str((right + addend) // coeff if coeff else 0),
+                    "is_correct": False,
+                    "error_tag": primary_tag,
+                    "why_wrong": (
+                        "This mixes the wrong first operation with dividing by the coefficient."
+                    ),
+                },
+            ],
+            "hint": f"First undo the $+{addend}$ term on the left side.",
+            "solution_steps": [
+                f"Subtract ${addend}$ from both sides: ${coeff}x = {right - addend}$.",
+                f"Divide both sides by ${coeff}$: $x = {correct}$.",
+                f"Check: ${coeff}({correct}) + {addend} = {right}$.",
+            ],
+            "final_answer": f"$x = {correct}$",
+            "self_check": (
+                f"Plug $x = {correct}$ back into ${coeff}x + {addend}$ and confirm it equals ${right}$."
+            ),
+        }

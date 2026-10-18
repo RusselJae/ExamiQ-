@@ -4,6 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Avg, Count, Max, Prefetch, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek, TruncYear
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.analytics.confidence import (
     PACE_BAR_COUNTS,
@@ -58,6 +59,22 @@ def log_mistake(
     if generate_ai:
         generate_mistake_feedback(record)
         record.refresh_from_db()
+
+    from apps.analytics.concept_review_services import (
+        diagnose_from_stats,
+        record_exam_miss_for_concept,
+    )
+
+    error_slug = error_type.slug if error_type else ""
+    review = record_exam_miss_for_concept(
+        student,
+        question,
+        answer,
+        error_slug=error_slug,
+    )
+    if not review.diagnosis_type:
+        review.diagnosis_type = diagnose_from_stats(review)
+        review.save(update_fields=["diagnosis_type", "updated_at"])
 
     threshold = mistake_student_threshold()
     unique_after = prior_unique if already_counted else prior_unique + 1
@@ -1310,6 +1327,9 @@ def professor_overview_trends(professor: User) -> dict:
 
     result = {}
     high_mistake_questions = professor_high_mistake_questions(professor)
+    mistake_trend = professor_mistake_trend(
+        professor, ranges=ranges, bucket_starts=_bucket_starts
+    )
     for range_key, cfg in ranges.items():
         trunc_fn = cfg["trunc"]
         earliest = _bucket_starts(cfg)[0]
@@ -1434,6 +1454,7 @@ def professor_overview_trends(professor: User) -> dict:
             "confidence": confidence_points,
             "confidence_insight": build_confidence_insight(confidence_points),
             "mistakes": high_mistake_questions,
+            "mistake_trend": mistake_trend.get(range_key, []),
         }
 
     return result
@@ -1582,6 +1603,77 @@ def professor_confidence_donut(
     }
 
 
+def professor_mistake_trend(professor: User, *, ranges: dict, bucket_starts) -> dict:
+    """Mistakes and exam-taker counts bucketed per trend range.
+
+    ``ranges``/``bucket_starts`` mirror :func:`professor_overview_trends` so both
+    series share identical bucket boundaries. Returns ``{range_key: [points]}``
+    where each point carries ``value`` (mistakes), ``student_count`` (students
+    who sat an exam) and ``mistake_students`` (students with >=1 mistake).
+    """
+    result: dict[str, list[dict]] = {}
+
+    for range_key, cfg in ranges.items():
+        trunc_fn = cfg["trunc"]
+        earliest = bucket_starts(cfg)[0]
+
+        mistake_rows = (
+            MistakeRecord.objects.filter(
+                answer__session__course__professor=professor,
+                answer__session__course__is_archived=False,
+                occurred_at__gte=earliest,
+            )
+            .annotate(bucket=trunc_fn("occurred_at"))
+            .values("bucket")
+            .annotate(
+                mistakes=Count("id"),
+                mistake_students=Count("student_id", distinct=True),
+            )
+            .order_by("bucket")
+        )
+        mistake_map = {
+            cfg["key"](row["bucket"]): {
+                "mistakes": row["mistakes"] or 0,
+                "mistake_students": row["mistake_students"] or 0,
+            }
+            for row in mistake_rows
+            if row["bucket"]
+        }
+
+        exam_rows = (
+            ReviewSession.objects.filter(
+                course__professor=professor,
+                course__is_archived=False,
+                started_at__gte=earliest,
+            )
+            .annotate(bucket=trunc_fn("started_at"))
+            .values("bucket")
+            .annotate(exam_students=Count("student_id", distinct=True))
+            .order_by("bucket")
+        )
+        exam_map = {
+            cfg["key"](row["bucket"]): row["exam_students"] or 0
+            for row in exam_rows
+            if row["bucket"]
+        }
+
+        points = []
+        for start in bucket_starts(cfg):
+            key = cfg["key"](start)
+            bucket = mistake_map.get(key, {})
+            points.append(
+                {
+                    "label": cfg["label"](start),
+                    "value": bucket.get("mistakes", 0),
+                    "mistake_students": bucket.get("mistake_students", 0),
+                    "student_count": exam_map.get(key, 0),
+                }
+            )
+        result[range_key] = points
+
+    return result
+
+
 def professor_high_mistake_questions(
     professor: User, *, limit: int = 15
 ) -> list[dict]:
@@ -1629,10 +1721,19 @@ def professor_high_mistake_questions(
 def student_incorrect_question_series(
     student: User, *, limit: int = 20, for_professor: bool = False
 ) -> list[dict]:
-    """Questions this student answered incorrectly (mistake count per question)."""
+    """Questions this student answered incorrectly (mistake count per question).
+
+    Faculty bars link to the question edit screen (via the shared catalog
+    course); students keep linking to their answer review.
+    """
     rows = (
         MistakeRecord.objects.filter(student=student)
-        .values("question_id", "question__stem")
+        .values(
+            "question_id",
+            "question__stem",
+            "question__topic__subject__program_id",
+            "question__topic__subject__code",
+        )
         .annotate(
             mistake_count=Count("id"),
             answer_id=Max("answer_id"),
@@ -1640,6 +1741,19 @@ def student_incorrect_question_series(
         )
         .order_by("-mistake_count", "question_id")[:limit]
     )
+    catalog_courses: dict[tuple[int | None, str], int] = {}
+    if for_professor:
+        from apps.users.models import Course
+
+        program_ids = {row["question__topic__subject__program_id"] for row in rows}
+        codes = {row["question__topic__subject__code"] for row in rows}
+        for course_id, program_id, code in Course.objects.filter(
+            program_id__in=program_ids,
+            code__in=codes,
+            term="Catalog",
+            section="Catalog",
+        ).values_list("id", "program_id", "code"):
+            catalog_courses[(program_id, code)] = course_id
     points = []
     for index, row in enumerate(rows, start=1):
         qid = row["question_id"]
@@ -1649,10 +1763,22 @@ def student_incorrect_question_series(
         url = ""
         if answer_id:
             if for_professor:
-                url = reverse(
-                    "analytics_professor:professor_answer_detail",
-                    kwargs={"student_pk": student.pk, "answer_pk": answer_id},
+                course_id = catalog_courses.get(
+                    (
+                        row["question__topic__subject__program_id"],
+                        row["question__topic__subject__code"],
+                    )
                 )
+                if course_id:
+                    url = reverse(
+                        "analytics_professor:question_edit",
+                        kwargs={"course_pk": course_id, "question_pk": qid},
+                    )
+                else:
+                    url = reverse(
+                        "analytics_professor:professor_answer_detail",
+                        kwargs={"student_pk": student.pk, "answer_pk": answer_id},
+                    )
             else:
                 url = reverse(
                     "analytics_student:answer_detail",

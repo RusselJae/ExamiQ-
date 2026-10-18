@@ -29,6 +29,28 @@
     {% for field in form %}
         {% if field.is_hidden %}
             {{ field }}
+        {% elif field.name == "code" %}
+        <label class="auth-field{% if field.errors %} auth-field--error{% endif %}" for="{{ field.id_for_label|default:'id_code' }}">
+            <span class="auth-field__label">{{ field.label }}</span>
+            <input
+                type="text"
+                name="code"
+                id="{{ field.id_for_label|default:'id_code' }}"
+                class="auth-field__input auth-field__input--otp"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                minlength="6"
+                pattern="[0-9]{6}"
+                placeholder="123456"
+                value="{{ field.value|default:'' }}"
+                required
+                autofocus
+                aria-describedby="login-code-hint"
+                data-otp-digits
+            >
+            <span id="login-code-hint" class="sr-only">Enter the 6-digit code. Numbers only.</span>
+        </label>
         {% else %}
         <label class="auth-field{% if field.errors %} auth-field--error{% endif %}" for="{{ field.id_for_label }}">
             <span class="auth-field__label">{{ field.label }}</span>
@@ -45,7 +67,7 @@
     <button type="submit" class="auth-btn-submit auth-btn-submit--secondary">Resend code</button>
 </form>
 
-<p class="auth-page__subheading mt-4">
+<p class="auth-page__footer">
     Wrong account or no code? <a href="{% url 'account_login' %}">Back to sign in</a>.
 </p>
 {% endblock %}

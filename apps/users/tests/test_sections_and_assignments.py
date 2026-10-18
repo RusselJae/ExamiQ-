@@ -74,7 +74,7 @@ class TestCampusSections:
 
 @pytest.mark.django_db
 class TestAssignmentSubjectsAPI:
-    def test_api_filters_by_section_year_and_term_semester(
+    def test_api_lists_all_year_subjects_regardless_of_semester(
         self, client, chairperson, program_section, subject, program, year_level
     ):
         from apps.questions.models import Subject as SubjectModel
@@ -97,6 +97,13 @@ class TestAssignmentSubjectsAPI:
             year_level=other_year,
             semester=1,
         )
+        SubjectModel.objects.create(
+            program=program,
+            code="COSC-51",
+            name="Second Semester Course",
+            year_level=other_year,
+            semester=2,
+        )
         term = AcademicTerm.objects.create(
             academic_year=program_section.academic_year,
             name="1st Sem",
@@ -111,6 +118,7 @@ class TestAssignmentSubjectsAPI:
         assert response.status_code == 200
         codes = {s["code"] for s in response.json()["subjects"]}
         assert "COSC-50" in codes
+        assert "COSC-51" in codes
         assert subject.code not in codes or subject.year_level_id == other_year.id
 
 
@@ -232,13 +240,45 @@ class TestTeachingAssignments:
 
         assert ExamSetup.objects.filter(course__professor=professor).count() == 2
 
-    def test_professor_can_self_create_catalog_course(
+    def test_chairperson_can_assign_cross_semester_subject(
+        self, client, chairperson, professor, program_section, program, year_level
+    ):
+        from apps.questions.models import Subject as SubjectModel
+
+        chairperson.department = program.managing_department
+        chairperson.save(update_fields=["department"])
+        cross_subject = SubjectModel.objects.create(
+            program=program,
+            code="COSC-60",
+            name="Second Semester Course",
+            year_level=year_level,
+            semester=2,
+        )
+        term = AcademicTerm.objects.create(
+            academic_year=program_section.academic_year,
+            name="1st Sem",
+            semester=AcademicTerm.Semester.FIRST,
+            is_current=True,
+        )
+        client.force_login(chairperson)
+        response = client.post(
+            reverse("analytics_chairperson:assignment_create"),
+            {
+                "professor": professor.pk,
+                "program_sections": [program_section.pk],
+                "subject": cross_subject.pk,
+                "term": term.pk,
+            },
+        )
+        assert response.status_code == 302
+        assert professor.teaching_assignments.filter(subject=cross_subject).count() == 1
+
+    def test_professor_cannot_self_create_catalog_course(
         self, client, professor, program_section, subject, year_level, bsed_program
     ):
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:course_create"))
-        assert response.status_code == 200
-        assert "Course Code" in response.content.decode()
+        assert response.status_code == 403
 
         response = client.post(
             reverse("analytics_professor:course_create"),
@@ -249,7 +289,7 @@ class TestTeachingAssignments:
                 "semester": 1,
             },
         )
-        assert response.status_code == 302
-        assert Subject.objects.filter(
+        assert response.status_code == 403
+        assert not Subject.objects.filter(
             program=bsed_program, code="BSEM 99"
         ).exists()

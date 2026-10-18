@@ -37,12 +37,13 @@ def subjects_for_teaching_assignment(
     section: ProgramSection,
     term: AcademicTerm,
 ):
-    """Subjects valid for a teaching assignment (section year + term semester)."""
-    semester = term_semester(term)
+    """Subjects valid for a teaching assignment (section program + year).
+
+    Semester is intentionally ignored so any course can be assigned in any term.
+    """
     return get_subjects_for_program(
         section.program_id,
         section.year_level_id,
-        semester=semester,
     )
 
 

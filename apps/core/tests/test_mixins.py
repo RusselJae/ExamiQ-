@@ -24,3 +24,15 @@ class TestRoleAccess:
         client.force_login(chairperson)
         response = client.get(reverse("analytics_chairperson:dashboard"))
         assert response.status_code == 200
+
+    def test_chairperson_lands_on_chairperson_dashboard(self, client, chairperson):
+        from apps.core.views import get_role_dashboard_url
+
+        assert get_role_dashboard_url(chairperson) == reverse(
+            "analytics_chairperson:dashboard"
+        )
+        client.force_login(chairperson)
+        assert client.get(reverse("analytics_professor:overview")).status_code == 403
+        assert (
+            client.get(reverse("analytics_chairperson:dashboard")).status_code == 200
+        )

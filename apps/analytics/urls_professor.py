@@ -203,6 +203,21 @@ urlpatterns = [
         name="material_download",
     ),
     path(
+        "courses/<int:course_pk>/materials/<int:pk>/office/config/",
+        material_views.MaterialOfficeConfigView.as_view(),
+        name="material_office_config",
+    ),
+    path(
+        "courses/<int:course_pk>/materials/<int:pk>/office/file/",
+        material_views.MaterialOfficeFileView.as_view(),
+        name="material_office_file",
+    ),
+    path(
+        "courses/<int:course_pk>/materials/<int:pk>/office/callback/",
+        material_views.MaterialOfficeCallbackView.as_view(),
+        name="material_office_callback",
+    ),
+    path(
         "courses/<int:course_pk>/validation/",
         validation_views.ValidationSessionStartView.as_view(),
         name="validation_start",

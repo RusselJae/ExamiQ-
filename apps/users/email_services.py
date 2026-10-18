@@ -8,10 +8,18 @@ from django.template.loader import render_to_string
 from apps.users.models import User
 
 
-def get_campus_admin_emails() -> list[str]:
+def get_account_manager_emails(user: User) -> list[str]:
+    """Return active coordinator emails for the applicant's department."""
     return list(
         User.objects.filter(is_active=True)
-        .filter(Q(role=User.Role.CAMPUS_ADMIN) | Q(is_superuser=True))
+        .filter(
+            Q(
+                role=User.Role.PROGRAM_COORDINATOR,
+                department=user.department,
+            )
+            | Q(role=User.Role.CAMPUS_ADMIN)
+            | Q(is_superuser=True)
+        )
         .values_list("email", flat=True)
         .distinct()
     )
@@ -34,8 +42,8 @@ def send_account_rejected_email(user: User) -> None:
 
 
 def send_pending_registration_alert(user: User) -> None:
-    admins = get_campus_admin_emails()
-    if not admins:
+    account_managers = get_account_manager_emails(user)
+    if not account_managers:
         return
     site_url = getattr(settings, "SITE_URL", "http://127.0.0.1:8000")
     subject = f"New pending registration: {user.get_role_display()}"
@@ -43,35 +51,14 @@ def send_pending_registration_alert(user: User) -> None:
         "emails/pending_registration_alert.txt",
         {
             "user": user,
-            "review_url": f"{site_url}/campus/users/?status=pending",
-        },
-    )
-    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, admins, fail_silently=True)
-
-
-def send_faculty_signup_pin_changed_email(
-    *,
-    changed_by: User,
-    new_pin: str,
-    recipients: list[str],
-) -> None:
-    """Notify faculty when the shared signup PIN is rotated."""
-    if not recipients:
-        return
-    site_url = getattr(settings, "SITE_URL", "http://127.0.0.1:8000")
-    subject = "EXAMIQ+ faculty signup PIN updated"
-    body = render_to_string(
-        "emails/faculty_signup_pin_changed.txt",
-        {
-            "changed_by": changed_by,
-            "new_pin": new_pin,
-            "profile_url": f"{site_url}/profile/",
+            "review_url": f"{site_url}/coordinator/users/?status=pending",
         },
     )
     send_mail(
         subject,
         body,
         settings.DEFAULT_FROM_EMAIL,
-        recipients,
+        account_managers,
         fail_silently=True,
     )
+

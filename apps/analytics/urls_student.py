@@ -26,6 +26,31 @@ urlpatterns = [
     path("topics/", views_student.TopicProgressView.as_view(), name="topic_progress"),
     path("mistakes/", views_student.MistakeListView.as_view(), name="mistakes"),
     path(
+        "mistakes/concepts/<int:pk>/",
+        views_student.ConceptReviewDetailView.as_view(),
+        name="concept_review",
+    ),
+    path(
+        "mistakes/concepts/<int:pk>/continue/",
+        views_student.ConceptReviewContinueView.as_view(),
+        name="concept_review_continue",
+    ),
+    path(
+        "mistakes/concepts/<int:pk>/try-it/",
+        views_student.ConceptReviewTryItView.as_view(),
+        name="concept_review_try_it",
+    ),
+    path(
+        "mistakes/concepts/<int:pk>/practice/",
+        views_student.ConceptReviewPracticeView.as_view(),
+        name="concept_review_practice",
+    ),
+    path(
+        "mistakes/concepts/<int:pk>/review-again/",
+        views_student.ConceptReviewAgainView.as_view(),
+        name="concept_review_again",
+    ),
+    path(
         "mistakes/answers/<int:answer_pk>/",
         views_student.AnswerDetailView.as_view(),
         name="answer_detail",

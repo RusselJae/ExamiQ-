@@ -31,46 +31,73 @@ from apps.users.notification_services import create_notification
 from apps.users.section_services import get_current_academic_year
 
 
-def _campus_recent_activity(limit: int = 8) -> list[dict]:
-    """Build a lightweight activity feed for the campus dashboard."""
+def _managed_programs(user: User):
+    """Return the programs a coordinator may administer."""
+    programs = Program.objects.all()
+    if user.is_superuser or user.role == User.Role.CAMPUS_ADMIN:
+        return programs
+    if user.role == User.Role.PROGRAM_COORDINATOR and user.department_id:
+        return programs.filter(managing_department=user.department)
+    return programs.none()
+
+
+def _managed_users(user: User):
+    """Return accounts within a coordinator's program and department scope."""
+    users = User.objects.all()
+    if user.is_superuser or user.role == User.Role.CAMPUS_ADMIN:
+        return users
+    if user.role != User.Role.PROGRAM_COORDINATOR or not user.department_id:
+        return users.none()
+    program_slugs = _managed_programs(user).values_list("slug", flat=True)
+    return users.filter(
+        Q(
+            role=User.Role.STUDENT,
+            home_degree_program__in=program_slugs,
+        )
+        | Q(role=User.Role.PROFESSOR, department=user.department)
+    )
+
+
+def _campus_recent_activity(manager: User, limit: int = 8) -> list[dict]:
+    """Build a lightweight activity feed scoped to the current coordinator."""
     activities: list[dict] = []
 
-    for user in (
-        User.objects.filter(role__in=[User.Role.PROFESSOR, User.Role.CHAIRPERSON])
+    for account in (
+        _managed_users(manager).filter(role=User.Role.PROFESSOR)
         .order_by("-date_joined")[:6]
     ):
-        name = user.get_full_name() or user.email
-        role_label = user.get_role_display().lower()
+        name = account.get_full_name() or account.email
+        role_label = account.get_role_display().lower()
         activities.append(
             {
                 "message": f"New {role_label} account provisioned — {name}",
-                "timestamp": user.date_joined,
+                "timestamp": account.date_joined,
                 "tone": "success",
             }
         )
 
-    for user in User.objects.filter(approval_status=User.ApprovalStatus.PENDING).order_by(
+    for account in _managed_users(manager).filter(approval_status=User.ApprovalStatus.PENDING).order_by(
         "-date_joined"
     )[:4]:
-        name = user.get_full_name() or user.email
+        name = account.get_full_name() or account.email
         activities.append(
             {
                 "message": f"New registration awaiting approval — {name}",
-                "timestamp": user.date_joined,
+                "timestamp": account.date_joined,
                 "tone": "warning",
             }
         )
 
-    for user in (
-        User.objects.filter(role=User.Role.STUDENT, is_active=False)
+    for account in (
+        _managed_users(manager).filter(role=User.Role.STUDENT, is_active=False)
         .exclude(approval_status=User.ApprovalStatus.PENDING)
         .order_by("-date_joined")[:3]
     ):
-        name = user.get_full_name() or user.email
+        name = account.get_full_name() or account.email
         activities.append(
             {
                 "message": f"Student account deactivated — {name}",
-                "timestamp": user.date_joined,
+                "timestamp": account.date_joined,
                 "tone": "error",
             }
         )
@@ -85,12 +112,11 @@ class CampusDashboardView(CampusAdminRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         month_ago = timezone.now() - timedelta(days=30)
-        students = User.objects.filter(role=User.Role.STUDENT)
-        professors = User.objects.filter(role=User.Role.PROFESSOR)
-        chairpersons = User.objects.filter(role=User.Role.CHAIRPERSON)
+        managed_users = _managed_users(self.request.user)
+        students = managed_users.filter(role=User.Role.STUDENT)
+        professors = managed_users.filter(role=User.Role.PROFESSOR)
         context["student_count"] = students.count()
         context["professor_count"] = professors.count()
-        context["chairperson_count"] = chairpersons.count()
         context["new_students_count"] = students.filter(date_joined__gte=month_ago).count()
         context["student_subtext"] = (
             f"+{context['new_students_count']} this month"
@@ -99,12 +125,13 @@ class CampusDashboardView(CampusAdminRequiredMixin, TemplateView):
         )
         context["active_professor_count"] = professors.filter(is_active=True).count()
         context["professor_subtext"] = f"{context['active_professor_count']} active accounts"
-        context["active_chairperson_count"] = chairpersons.filter(is_active=True).count()
-        context["chairperson_subtext"] = f"{context['active_chairperson_count']} active"
-        context["pending_count"] = User.objects.filter(
+        context["pending_count"] = managed_users.filter(
             approval_status=User.ApprovalStatus.PENDING
         ).count()
-        sections = ProgramSection.queryset_with_counts().filter(is_active=True)
+        sections = ProgramSection.queryset_with_counts().filter(
+            is_active=True,
+            program__in=_managed_programs(self.request.user),
+        )
         context["section_count"] = sections.count()
         context["sections_near_capacity"] = [
             s for s in sections if s.remaining_slots <= 5 and not s.is_full
@@ -112,7 +139,7 @@ class CampusDashboardView(CampusAdminRequiredMixin, TemplateView):
         context["sections_full"] = [s for s in sections if s.is_full]
         context["current_academic_year"] = get_current_academic_year()
         context["current_term"] = AcademicTerm.get_current()
-        context["recent_activity"] = _campus_recent_activity()
+        context["recent_activity"] = _campus_recent_activity(self.request.user)
         return context
 
 
@@ -122,7 +149,9 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = User.objects.select_related("department", "year_level", "section")
+        qs = _managed_users(self.request.user).select_related(
+            "department", "year_level", "section"
+        )
         qs = apply_date_range(qs, self.request, "date_joined")
         qs = apply_sort(
             qs,
@@ -155,7 +184,10 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
         context["role_filter"] = self.request.GET.get("role", "")
         context["status_filter"] = self.request.GET.get("status", "")
         context["search_query"] = self.request.GET.get("q", "")
-        context["role_choices"] = User.Role.choices
+        context["role_choices"] = [
+            (User.Role.STUDENT, "Student"),
+            (User.Role.PROFESSOR, "Faculty"),
+        ]
         context["status_choices"] = User.ApprovalStatus.choices
         context["filter_has_active"] = has_active_filters(
             self.request, ["q", "role", "status"]
@@ -167,6 +199,12 @@ class CampusCreateProfessorView(CampusAdminRequiredMixin, FormView):
     template_name = "campus/users/create_professor.html"
     form_class = CampusProfessorCreateForm
     success_url = reverse_lazy("campus:user_list")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        if self.request.user.role == User.Role.PROGRAM_COORDINATOR:
+            kwargs["provisioning_department"] = self.request.user.department
+        return kwargs
 
     def form_valid(self, form):
         user = form.save()
@@ -187,7 +225,7 @@ class CampusCreateChairpersonView(CampusAdminRequiredMixin, FormView):
 
 class CampusToggleUserActiveView(CampusAdminRequiredMixin, View):
     def post(self, request, pk):
-        user = get_object_or_404(User, pk=pk)
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
         if user == request.user:
             messages.error(request, "You cannot deactivate your own account.")
             return redirect_preserving_filters(request, "campus:user_list")
@@ -205,7 +243,7 @@ class CampusToggleUserActiveView(CampusAdminRequiredMixin, View):
 
 class CampusApproveUserView(CampusAdminRequiredMixin, View):
     def post(self, request, pk):
-        user = get_object_or_404(User, pk=pk)
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
         if user.approval_status != User.ApprovalStatus.PENDING:
             messages.error(request, "Only pending registrations can be approved.")
             return redirect_preserving_filters(request, "campus:user_list")
@@ -236,7 +274,7 @@ class CampusApproveUserView(CampusAdminRequiredMixin, View):
 
 class CampusRejectUserView(CampusAdminRequiredMixin, View):
     def post(self, request, pk):
-        user = get_object_or_404(User, pk=pk)
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
         if user.approval_status != User.ApprovalStatus.PENDING:
             messages.error(request, "Only pending registrations can be rejected.")
             return redirect_preserving_filters(request, "campus:user_list")
@@ -273,6 +311,7 @@ class CampusSectionListView(CampusAdminRequiredMixin, ListView):
     def get_queryset(self):
         qs = (
             ProgramSection.queryset_with_counts()
+            .filter(program__in=_managed_programs(self.request.user))
             .select_related("program", "year_level", "academic_year")
             .order_by("program__name", "year_level__order", "label")
         )
@@ -289,7 +328,7 @@ class CampusSectionListView(CampusAdminRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["programs"] = Program.objects.all().order_by("name")
+        context["programs"] = _managed_programs(self.request.user).order_by("name")
         context["academic_years"] = AcademicYear.objects.all().order_by("-label")
         context["program_filter"] = self.request.GET.get("program", "")
         context["year_level_filter"] = self.request.GET.get("year_level", "")
@@ -303,6 +342,11 @@ class CampusSectionCreateView(CampusAdminRequiredMixin, CreateView):
     template_name = "campus/sections/form.html"
     success_url = reverse_lazy("campus:section_list")
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["coordinator"] = self.request.user
+        return kwargs
+
     def form_valid(self, form):
         messages.success(self.request, "Section created.")
         return super().form_valid(form)
@@ -314,6 +358,16 @@ class CampusSectionUpdateView(CampusAdminRequiredMixin, UpdateView):
     template_name = "campus/sections/form.html"
     success_url = reverse_lazy("campus:section_list")
 
+    def get_queryset(self):
+        return ProgramSection.objects.filter(
+            program__in=_managed_programs(self.request.user)
+        )
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["coordinator"] = self.request.user
+        return kwargs
+
     def form_valid(self, form):
         messages.success(self.request, "Section updated.")
         return super().form_valid(form)
@@ -323,6 +377,11 @@ class CampusSectionBulkCreateView(CampusAdminRequiredMixin, FormView):
     template_name = "campus/sections/bulk_form.html"
     form_class = ProgramSectionBulkForm
     success_url = reverse_lazy("campus:section_list")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["coordinator"] = self.request.user
+        return kwargs
 
     def form_valid(self, form):
         created = form.save()

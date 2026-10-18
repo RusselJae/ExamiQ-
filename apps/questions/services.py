@@ -532,6 +532,71 @@ def build_steps_from_post(steps_raw: str, concept_tag: str = "", solution_summar
     return steps
 
 
+DIFFICULTY_ORDER: tuple[str, ...] = ("easy", "medium", "hard")
+DIFFICULTY_LABELS_BY_CODE: dict[str, str] = {
+    "easy": "Beginner",
+    "medium": "Intermediate",
+    "hard": "Advanced",
+}
+MIN_STEPS_FOR_GOOD_FIT = 2
+
+
+def generation_fit_meta(
+    variation: dict, requested_bands: list[str]
+) -> dict:
+    """Describe how well one generated draft matches the requested difficulty mix.
+
+    Powers the "Review generated questions" modal: a ``fit`` state, the
+    ``flag`` chip ("Rounds on Beginner"), a reasoning note derived from the
+    explanation steps, and whether a "Regenerate harder" retry makes sense.
+    """
+    bands = [b for b in requested_bands if b in DIFFICULTY_ORDER] or ["easy"]
+    steps = variation.get("explanation_steps") or []
+    step_count = len(steps)
+    code = str(variation.get("difficulty") or bands[0]).strip().lower()
+    if code not in DIFFICULTY_ORDER:
+        code = bands[0]
+
+    on_band = code in bands
+    has_reasoning = step_count >= MIN_STEPS_FOR_GOOD_FIT
+    hardest_requested = max(bands, key=DIFFICULTY_ORDER.index)
+    sits_above_mix = DIFFICULTY_ORDER.index(code) > DIFFICULTY_ORDER.index(hardest_requested)
+    own_label = DIFFICULTY_LABELS_BY_CODE.get(code, code)
+
+    if has_reasoning and on_band:
+        fit = "good"
+        flag = ""
+    else:
+        # Either the draft never rises to the band it was asked for, or it
+        # sits outside the requested mix entirely.
+        fit = "shallow" if not has_reasoning else "off_band"
+        flag = "Above the requested mix" if sits_above_mix else f"Rounds on {own_label}"
+
+    if step_count == 1:
+        reasoning_note = "1 step, no reasoning"
+    elif step_count == 0:
+        reasoning_note = "No reasoning steps"
+    else:
+        reasoning_note = f"{step_count} steps"
+
+    at_top_band = DIFFICULTY_ORDER.index(code) == len(DIFFICULTY_ORDER) - 1
+    return {
+        "fit": fit,
+        "flag": flag,
+        "reasoning_note": reasoning_note,
+        "step_count": step_count,
+        "step_label": f"{step_count} step" + ("" if step_count == 1 else "s"),
+        "difficulty_code": code,
+        "difficulty_label": own_label,
+        "can_regenerate_harder": fit != "good" and not at_top_band,
+        "next_difficulty": (
+            code
+            if at_top_band
+            else DIFFICULTY_ORDER[DIFFICULTY_ORDER.index(code) + 1]
+        ),
+    }
+
+
 def mistake_student_threshold() -> int:
     """Distinct students who must miss a question before revision is urged."""
     from django.conf import settings

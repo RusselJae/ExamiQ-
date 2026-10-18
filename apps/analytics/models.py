@@ -5,6 +5,125 @@ from apps.reviews.models import Answer
 from apps.users.models import User
 
 
+class ConceptReview(models.Model):
+    """Student progress on one concept after repeated exam misses."""
+
+    class Status(models.TextChoices):
+        NEEDS_REVIEW = "needs_review", "Needs Review"
+        PRACTICING = "practicing", "Practicing"
+        RESOLVED = "resolved", "Resolved"
+
+    class DiagnosisType(models.TextChoices):
+        MISCONCEPTION = "misconception", "Misconception"
+        KNOWLEDGE_GAP = "knowledge_gap", "Knowledge Gap"
+        CARELESS_ERROR = "careless_error", "Careless Error"
+
+    class Step(models.TextChoices):
+        LEARN = "learn", "Learn"
+        TRY_IT = "try_it", "Try it"
+        PRACTICE = "practice", "Practice"
+
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="concept_reviews",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    concept_key = models.CharField(max_length=200)
+    concept_name = models.CharField(max_length=200)
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name="concept_reviews",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.NEEDS_REVIEW,
+        db_index=True,
+    )
+    current_step = models.CharField(
+        max_length=20,
+        choices=Step.choices,
+        default=Step.LEARN,
+    )
+    diagnosis_type = models.CharField(
+        max_length=20,
+        choices=DiagnosisType.choices,
+        blank=True,
+        default="",
+    )
+    known_error_tags = models.JSONField(default=list, blank=True)
+    correct_streak = models.PositiveSmallIntegerField(default=0)
+    miss_count = models.PositiveIntegerField(default=0)
+    same_wrong_answer_count = models.PositiveIntegerField(default=0)
+    marked_sure_count = models.PositiveIntegerField(default=0)
+    marked_guessing_count = models.PositiveIntegerField(default=0)
+    last_wrong_answer_text = models.CharField(max_length=500, blank=True, default="")
+    learn_payload = models.JSONField(default=dict, blank=True)
+    feedback_styles_used = models.JSONField(default=list, blank=True)
+    prerequisite_flag = models.CharField(max_length=200, blank=True, default="")
+    prerequisite_mode = models.BooleanField(default=False)
+    difficulty = models.CharField(max_length=20, blank=True, default="beginner")
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    recheck_due_at = models.DateTimeField(null=True, blank=True)
+    last_practiced_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Concept Review"
+        verbose_name_plural = "Concept Reviews"
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "concept_key"],
+                name="analytics_conceptreview_student_concept_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(correct_streak__lte=3),
+                name="analytics_conceptreview_streak_max_3",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.concept_name} ({self.student.email})"
+
+    @property
+    def try_it_payload(self) -> dict:
+        payload = self.learn_payload or {}
+        try_it = payload.get("try_it")
+        return try_it if isinstance(try_it, dict) else {}
+
+
+class ConceptPracticeAttempt(models.Model):
+    """One AI-generated untimed practice question for a concept review."""
+
+    concept_review = models.ForeignKey(
+        ConceptReview,
+        on_delete=models.CASCADE,
+        related_name="practice_attempts",
+    )
+    attempt_number = models.PositiveIntegerField(default=1)
+    question_payload = models.JSONField(default=dict)
+    chosen_option_id = models.CharField(max_length=8, blank=True, default="")
+    is_correct = models.BooleanField(null=True, blank=True)
+    error_tag_hit = models.CharField(max_length=100, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Concept Practice Attempt"
+        verbose_name_plural = "Concept Practice Attempts"
+        ordering = ["attempt_number", "created_at"]
+
+    def __str__(self) -> str:
+        return (
+            f"Practice #{self.attempt_number} for "
+            f"{self.concept_review.concept_name}"
+        )
+
+
 class ErrorType(models.Model):
     slug = models.SlugField(unique=True)
     label = models.CharField(max_length=100)

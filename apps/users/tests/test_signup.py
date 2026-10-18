@@ -87,13 +87,13 @@ def _faculty_data(signup_year_level, signup_section, **extra):
         "first_name": "Rico",
         "last_name": "Cruz",
         "employee_id": "EMP-2024-001",
-        "faculty_pin": "FACULTY-PIN-42",
         "phone_number": "09123456789",
-        "year_level": signup_year_level.pk,
-        "section": signup_section.pk,
     }
     data.update(extra)
     return data
+
+
+FACULTY_TOKEN = "test-faculty-token-456"
 
 
 def _otp_code_from_mailbox() -> str:
@@ -106,7 +106,7 @@ class TestSignupRoles:
     @pytest.fixture(autouse=True)
     def _locmem_email(self, settings):
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-        settings.FACULTY_SIGNUP_PIN = "FACULTY-PIN-42"
+        settings.FACULTY_PORTAL_TOKEN = FACULTY_TOKEN
 
     def test_student_signup_creates_inactive_pending_otp(
         self, client, bsed_program, signup_year_level, signup_section
@@ -216,11 +216,11 @@ class TestSignupRoles:
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
-    def test_faculty_signup_creates_inactive_approved_pending_otp(
+    def test_faculty_signup_creates_inactive_pending_approval_request(
         self, client, bsed_program, signup_year_level, signup_section
     ):
         response = client.post(
-            reverse("account_signup"),
+            reverse("account_faculty_signup", args=[FACULTY_TOKEN]),
             _faculty_data(signup_year_level, signup_section),
         )
         assert response.status_code == 302
@@ -230,43 +230,26 @@ class TestSignupRoles:
         assert user.department.name == "College of Education"
         assert user.employee_id == "EMP-2024-001"
         assert user.is_active is False
-        assert user.approval_status == User.ApprovalStatus.APPROVED
+        assert user.approval_status == User.ApprovalStatus.PENDING
         assert user.year_level_id is None
         assert user.section_id is None
-        assert list(user.assigned_sections.values_list("pk", flat=True)) == [
-            signup_section.pk
-        ]
+        assert not user.assigned_sections.exists()
         assert len(mail.outbox) == 1
 
-    def test_faculty_signup_rejects_missing_pin(
+    def test_faculty_signup_does_not_accept_section_assignments(
         self, client, bsed_program, signup_year_level, signup_section
     ):
-        data = _faculty_data(signup_year_level, signup_section, faculty_pin="")
-        response = client.post(reverse("account_signup"), data)
-        assert response.status_code == 200
-        assert not User.objects.filter(email="newprof@test.edu").exists()
-        assert b"Faculty signup PIN is required" in response.content
-
-    def test_faculty_signup_rejects_wrong_pin(
-        self, client, bsed_program, signup_year_level, signup_section
-    ):
-        data = _faculty_data(signup_year_level, signup_section, faculty_pin="wrong-pin")
-        response = client.post(reverse("account_signup"), data)
-        assert response.status_code == 200
-        assert not User.objects.filter(email="newprof@test.edu").exists()
-        assert b"Invalid faculty signup PIN" in response.content
-
-    def test_faculty_signup_blocked_when_pin_unset(
-        self, client, settings, bsed_program, signup_year_level, signup_section
-    ):
-        settings.FACULTY_SIGNUP_PIN = ""
-        response = client.post(
-            reverse("account_signup"),
-            _faculty_data(signup_year_level, signup_section),
+        data = _faculty_data(
+            signup_year_level,
+            signup_section,
+            assigned_sections=[signup_section.pk],
         )
-        assert response.status_code == 200
-        assert not User.objects.filter(email="newprof@test.edu").exists()
-        assert b"Faculty signup is currently unavailable" in response.content
+        response = client.post(
+            reverse("account_faculty_signup", args=[FACULTY_TOKEN]), data
+        )
+        assert response.status_code == 302
+        user = User.objects.get(email="newprof@test.edu")
+        assert not user.assigned_sections.exists()
 
     def test_otp_verify_activates_account(
         self, client, bsed_program, signup_year_level, signup_section
@@ -301,6 +284,23 @@ class TestSignupRoles:
         user = User.objects.get(email="newstudent@test.edu")
         assert user.is_active is False
 
+    def test_faculty_email_verification_keeps_account_pending(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        client.post(
+            reverse("account_faculty_signup", args=[FACULTY_TOKEN]),
+            _faculty_data(signup_year_level, signup_section),
+        )
+        code = _otp_code_from_mailbox()
+        response = client.post(
+            reverse("users:signup_verify"),
+            {"action": "verify", "code": code},
+        )
+        assert response.status_code == 302
+        user = User.objects.get(email="newprof@test.edu")
+        assert user.approval_status == User.ApprovalStatus.PENDING
+        assert user.is_active is False
+
     def test_login_blocked_until_otp_verified(
         self, client, bsed_program, signup_year_level, signup_section
     ):
@@ -317,21 +317,11 @@ class TestSignupRoles:
         assert "verify_email" in response.url or "signup/verify" in response.url
         assert "_auth_user_id" not in client.session
 
-    def test_faculty_signup_requires_year_and_section(
-        self, client, bsed_program, signup_year_level, signup_section
-    ):
-        data = _faculty_data(signup_year_level, signup_section)
-        data.pop("year_level")
-        data.pop("section")
-        response = client.post(reverse("account_signup"), data)
-        assert response.status_code == 200
-        assert not User.objects.filter(email="newprof@test.edu").exists()
-
     def test_faculty_signup_requires_employee_id(
         self, client, bsed_program, signup_year_level, signup_section
     ):
         response = client.post(
-            reverse("account_signup"),
+            reverse("account_faculty_signup", args=[FACULTY_TOKEN]),
             _faculty_data(
                 signup_year_level,
                 signup_section,
@@ -421,8 +411,9 @@ class TestAuthTemplates:
         assert "Middle name (optional)" in content
         assert "Suffix (optional)" in content
         assert "auth-password-strength--compact" in content
-        assert "Employee ID" in content
+        assert "Employee ID" not in content
         assert "id_year_level" in content
         assert "id_section" in content
+        assert "Faculty signup PIN" not in content
         assert "Subjects (choose at least 3)" not in content
         assert "Program" not in content or "home_degree_program" not in content

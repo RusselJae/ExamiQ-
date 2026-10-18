@@ -161,6 +161,45 @@ class AdaptiveFeedbackGenerator:
         return adaptive_feedback_to_json(payload)
 
 
+class ConceptRemediationGenerator:
+    """Generate Learn + Try it JSON for a concept review."""
+
+    def generate(
+        self,
+        *,
+        concept_name: str,
+        subject: str,
+        topic: str,
+        difficulty: str = "beginner",
+        miss_count: int = 1,
+        missed_questions: list | None = None,
+        previous_feedback_styles: list | None = None,
+        student_stage: str = "first_review",
+        prerequisites: list | None = None,
+        preferred_style: str = "worked_example",
+    ) -> dict:
+        return {}
+
+
+class ConceptPracticeGenerator:
+    """Generate one untimed practice MCQ JSON for a concept."""
+
+    def generate(
+        self,
+        *,
+        concept_name: str,
+        subject: str,
+        topic: str,
+        difficulty: str = "beginner",
+        attempt_number: int = 1,
+        known_error_tags: list | None = None,
+        previous_questions: list | None = None,
+        prerequisite_mode: bool = False,
+        prerequisite_concept: str = "",
+    ) -> dict:
+        return {}
+
+
 class CurriculumAdvisor:
     def program_report(self, program) -> str:
         from apps.analytics.services import program_performance_summary

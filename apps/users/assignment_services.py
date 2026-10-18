@@ -2,7 +2,6 @@
 
 from django.db import IntegrityError, transaction
 
-from apps.questions.curriculum import subjects_for_teaching_assignment, term_semester
 from apps.questions.models import Subject
 from apps.reviews.exam_setup_services import get_or_create_exam_setup
 from apps.users.models import Course, ProgramSection, TeachingAssignment, User
@@ -46,10 +45,9 @@ def faculty_handles_student_subject(
         return False
     if not faculty_has_chat_scope(professor):
         return False
-    return (
-        section_id in get_faculty_profile_section_ids(professor)
-        and subject_id in get_faculty_profile_subject_ids(professor)
-    )
+    return section_id in get_faculty_profile_section_ids(
+        professor
+    ) and subject_id in get_faculty_profile_subject_ids(professor)
 
 
 def professor_has_assignments(professor: User) -> bool:
@@ -136,10 +134,9 @@ def get_professor_section_nav(professor: User) -> list[dict]:
 
 def is_catalog_course(course: Course) -> bool:
     """Return True when the offering is the shared subject catalog shell."""
-    return (
-        (course.section or "").strip() == "Catalog"
-        and (course.term or "").strip() == "Catalog"
-    )
+    return (course.section or "").strip() == "Catalog" and (
+        course.term or ""
+    ).strip() == "Catalog"
 
 
 def professor_can_access_course(professor: User, course: Course) -> bool:
@@ -149,8 +146,10 @@ def professor_can_access_course(professor: User, course: Course) -> bool:
     return course.professor_id == professor.pk
 
 
-def get_or_create_catalog_course(professor: User, subject: Subject) -> Course:
-    """Ensure a professor Course offering exists for catalog subject tools."""
+def get_or_create_catalog_course(
+    professor: User | None, subject: Subject
+) -> Course:
+    """Ensure a shared catalog Course offering exists for subject tools."""
     from apps.users.section_services import get_current_academic_year
 
     academic_year = get_current_academic_year()
@@ -223,14 +222,34 @@ def create_catalog_subject(
     return subject, course
 
 
-def delete_catalog_subject(subject: Subject) -> str:
-    """Remove a BSED Math curriculum subject and matching catalog courses.
+def create_curriculum_subject(
+    *,
+    program,
+    code: str,
+    name: str,
+    year_level,
+    semester: int,
+) -> Subject:
+    """Create a coordinator-managed curriculum subject and its catalog shell."""
+    from apps.questions.models import Topic
+
+    subject = Subject.objects.create(
+        program=program,
+        code=code.strip().upper(),
+        name=name.strip(),
+        year_level=year_level,
+        semester=semester,
+    )
+    Topic.objects.create(subject=subject, name=subject.name, parent=None)
+    get_or_create_catalog_course(None, subject)
+    return subject
+
+
+def delete_curriculum_subject(subject: Subject) -> str:
+    """Remove a curriculum subject and its matching catalog shell courses.
 
     Cascades topics/questions via FK. Returns the deleted subject code.
     """
-    if subject.program.slug != User.HomeDegreeProgram.BSED_MATH:
-        raise ValueError("Only BSED Math course subjects can be removed here.")
-
     code = subject.code
     program = subject.program
     Course.objects.filter(
@@ -260,17 +279,17 @@ def professor_has_assignment(professor: User, subject_id: int) -> bool:
     ).exists()
 
 
-def validate_assignment_subject(section: ProgramSection, subject: Subject, term) -> None:
-    """Raise ValueError when subject does not match section year and term semester."""
+def validate_assignment_subject(
+    section: ProgramSection, subject: Subject, term
+) -> None:
+    """Raise ValueError when subject does not match the section's program/year.
+
+    Semester is intentionally ignored so any course can be assigned in any term.
+    """
     if subject.program_id != section.program_id:
         raise ValueError("Subject must belong to the section's program.")
     if subject.year_level_id != section.year_level_id:
-        raise ValueError(
-            "Subject year level must match the section's year level."
-        )
-    semester = term_semester(term)
-    if semester is not None and subject.semester != semester:
-        raise ValueError("Subject semester must match the selected academic term.")
+        raise ValueError("Subject year level must match the section's year level.")
 
 
 @transaction.atomic
@@ -421,11 +440,7 @@ def professor_can_view_student(professor: User, student: User) -> bool:
     return completed.filter(
         Q(subjects__in=subject_ids)
         | Q(topic__subject_id__in=subject_ids)
-        | Q(
-            course__code__in=Subject.objects.filter(pk__in=subject_ids).values(
-                "code"
-            )
-        )
+        | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
     ).exists()
 
 

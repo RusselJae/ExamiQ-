@@ -7,6 +7,8 @@ from django.conf import settings
 from apps.ai.interfaces import (
     AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
+    ConceptPracticeGenerator,
+    ConceptRemediationGenerator,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -20,6 +22,8 @@ from apps.ai.stubs import (
     RuleBasedSpacedRepetitionScheduler,
     StubAdaptiveFeedbackGenerator,
     StubCalibrationAnalyzer,
+    StubConceptPracticeGenerator,
+    StubConceptRemediationGenerator,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
@@ -221,3 +225,43 @@ def get_adaptive_feedback_generator() -> AdaptiveFeedbackGenerator:
         except Exception as exc:
             logger.warning("Falling back to stub AdaptiveFeedbackGenerator: %s", exc)
     return StubAdaptiveFeedbackGenerator()
+
+
+def get_concept_remediation_generator() -> ConceptRemediationGenerator:
+    if _ai_available():
+        try:
+            if settings.LLM_PROVIDER == "gemini":
+                from apps.ai.providers.gemini_provider import (
+                    GeminiConceptRemediationGenerator,
+                )
+
+                return GeminiConceptRemediationGenerator()
+            if settings.LLM_PROVIDER == "ollama":
+                return _ollama_import().OllamaConceptRemediationGenerator()
+            from apps.ai.providers.openai_provider import (
+                OpenAIConceptRemediationGenerator,
+            )
+
+            return OpenAIConceptRemediationGenerator()
+        except Exception as exc:
+            logger.warning("Falling back to stub ConceptRemediationGenerator: %s", exc)
+    return StubConceptRemediationGenerator()
+
+
+def get_concept_practice_generator() -> ConceptPracticeGenerator:
+    if _ai_available():
+        try:
+            if settings.LLM_PROVIDER == "gemini":
+                from apps.ai.providers.gemini_provider import (
+                    GeminiConceptPracticeGenerator,
+                )
+
+                return GeminiConceptPracticeGenerator()
+            if settings.LLM_PROVIDER == "ollama":
+                return _ollama_import().OllamaConceptPracticeGenerator()
+            from apps.ai.providers.openai_provider import OpenAIConceptPracticeGenerator
+
+            return OpenAIConceptPracticeGenerator()
+        except Exception as exc:
+            logger.warning("Falling back to stub ConceptPracticeGenerator: %s", exc)
+    return StubConceptPracticeGenerator()

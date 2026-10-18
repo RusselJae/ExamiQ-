@@ -59,7 +59,7 @@ class TestCourseTopicScope:
         assert response.status_code == 200
         content = response.content.decode()
         assert "OPEN-1" in content
-        assert "Course subjects" in content
+        assert "Course" in content
         assert "course-subjects-table" in content
         assert "Questions" in content
         assert "Saved Questions" not in content or "Open" in content
@@ -68,7 +68,10 @@ class TestCourseTopicScope:
             reverse("analytics_professor:topic_list", kwargs={"course_pk": course.pk})
         )
         assert topics.status_code == 200
-        assert "OPEN-1 Catalog" in topics.content.decode() or "Topics" in topics.content.decode()
+        assert (
+            "OPEN-1 Catalog" in topics.content.decode()
+            or "Topics" in topics.content.decode()
+        )
 
     def test_course_list_reuses_existing_catalog_course(
         self, client, professor, bsed_program, year_level, academic_year
@@ -102,7 +105,9 @@ class TestCourseTopicScope:
         assert course.pk == existing.pk
 
         questions = client.get(
-            reverse("analytics_professor:question_list", kwargs={"course_pk": course.pk})
+            reverse(
+                "analytics_professor:question_list", kwargs={"course_pk": course.pk}
+            )
         )
         assert questions.status_code == 200
 
@@ -153,7 +158,9 @@ class TestCourseTopicScope:
         )
         client.force_login(professor)
         response = client.get(
-            reverse("analytics_professor:question_list", kwargs={"course_pk": catalog.pk})
+            reverse(
+                "analytics_professor:question_list", kwargs={"course_pk": catalog.pk}
+            )
         )
         assert response.status_code == 200
 
@@ -165,16 +172,26 @@ class TestProgramExamSetupGating:
     ):
         make_bsed_student(student, bsed_program=bsed_program)
         s1 = Subject.objects.create(
-            program=bsed_program, code="G1", name="One", year_level=year_level, semester=1
+            program=bsed_program,
+            code="G1",
+            name="One",
+            year_level=year_level,
+            semester=1,
         )
         Subject.objects.create(
-            program=bsed_program, code="G2", name="Two", year_level=year_level, semester=1
+            program=bsed_program,
+            code="G2",
+            name="Two",
+            year_level=year_level,
+            semester=1,
         )
         # Faculty allowlist no longer gates student start — year match does.
         setup = get_or_create_program_exam_setup(bsed_program)
         setup.subjects.set([s1])
 
-        codes = set(subjects_available_for_student(student).values_list("code", flat=True))
+        codes = set(
+            subjects_available_for_student(student).values_list("code", flat=True)
+        )
         assert {"G1", "G2"}.issubset(codes)
 
     def test_disabled_program_setup_does_not_block_eligibility(
@@ -209,7 +226,11 @@ class TestProgramExamSetupGating:
         self, bsed_program, year_level
     ):
         s1 = Subject.objects.create(
-            program=bsed_program, code="T1", name="Timer1", year_level=year_level, semester=1
+            program=bsed_program,
+            code="T1",
+            name="Timer1",
+            year_level=year_level,
+            semester=1,
         )
         sync_program_subject_timers(
             bsed_program,
@@ -303,7 +324,9 @@ class TestStudentMultiSelectSetup:
                 stem=f"Q{i}",
                 status=Question.Status.APPROVED,
             )
-            QuestionChoice.objects.create(question=q, label="A", text="1", is_correct=True)
+            QuestionChoice.objects.create(
+                question=q, label="A", text="1", is_correct=True
+            )
 
         client.force_login(student)
         response = client.get(reverse("reviews:setup"))
@@ -311,6 +334,6 @@ class TestStudentMultiSelectSetup:
         content = response.content.decode()
         assert "exam-pill" in content
         assert "id_setup_subjects" not in content
-        assert "Course subjects for your year" in content
+        assert "Courses for your year" in content
         assert "id_setup_question_type" in content
         assert "exam-setup-summary" in content

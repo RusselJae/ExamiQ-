@@ -16,7 +16,7 @@ from apps.users.otp_services import (
 
 
 class SignupOTPVerifyView(View):
-    """Enter the emailed 6-digit code to activate a new account."""
+    """Verify the email address for a new student or faculty request."""
 
     template_name = "account/signup_otp.html"
 
@@ -28,7 +28,12 @@ class SignupOTPVerifyView(View):
         return render(
             request,
             self.template_name,
-            {"email": user.email, "error": ""},
+            {
+                "email": user.email,
+                "error": "",
+                "awaiting_approval": user.approval_status
+                == user.ApprovalStatus.PENDING,
+            },
         )
 
     def post(self, request):
@@ -68,10 +73,23 @@ class SignupOTPVerifyView(View):
             return render(
                 request,
                 self.template_name,
-                {"email": user.email, "error": str(exc), "code": code},
+                {
+                    "email": user.email,
+                    "error": str(exc),
+                    "code": code,
+                    "awaiting_approval": user.approval_status
+                    == user.ApprovalStatus.PENDING,
+                },
                 status=400,
             )
 
         request.session.pop(SIGNUP_OTP_SESSION_KEY, None)
+        if user.approval_status == user.ApprovalStatus.PENDING:
+            messages.success(
+                request,
+                "Email verified. Your faculty account request is awaiting program coordinator approval.",
+            )
+            return redirect(f"{reverse('account_login')}?registered=pending")
+
         messages.success(request, "Email verified. You can sign in now.")
         return redirect(f"{reverse('account_login')}?verified=1")

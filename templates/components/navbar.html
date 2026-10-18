@@ -11,9 +11,31 @@
             {% include "components/landing_logo_icon.html" %}
         </a>
 
-        <div class="flex-1"></div>
+        <div class="app-topbar-crumbs">
+            {% block nav_breadcrumbs %}{% include "components/nav_breadcrumbs.html" %}{% endblock %}
+        </div>
 
         <div class="app-topbar-actions">
+            <div class="nav-search-wrap relative max-w-[14rem] hidden md:block">
+                <label class="sr-only" for="nav-search">Search</label>
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-examiq-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/>
+                </svg>
+                <input type="search" id="nav-search" class="nav-search" placeholder="Search…" autocomplete="off">
+                <div id="nav-search-results" class="nav-search-results hidden" role="listbox"></div>
+            </div>
+
+            <button type="button"
+                    class="relative p-2 text-examiq-slate hover:text-examiq-navy md:hidden"
+                    data-nav-search-toggle
+                    aria-label="Open search"
+                    aria-expanded="false"
+                    aria-controls="nav-search-floating">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/>
+                </svg>
+            </button>
+
             {% if show_chat_modal %}
             <button type="button" class="relative p-2 text-examiq-slate hover:text-examiq-navy" data-open-chat-modal aria-label="Chat">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -67,11 +89,13 @@
                         <li class="notifications-dropdown-item {% if not notification.is_read %}is-unread{% endif %}">
                             {% if notification.link %}
                             <a href="{% url 'users:notification_open' notification.pk %}" class="notifications-dropdown-link" role="menuitem">
+                                {% include "components/notification_icon.html" with kind=notification.icon_kind %}
                                 <span class="notifications-dropdown-message">{{ notification.message }}</span>
                                 <span class="notifications-dropdown-meta">{{ notification.created_at|timesince }} ago</span>
                             </a>
                             {% else %}
                             <div class="notifications-dropdown-link" role="menuitem">
+                                {% include "components/notification_icon.html" with kind=notification.icon_kind %}
                                 <span class="notifications-dropdown-message">{{ notification.message }}</span>
                                 <span class="notifications-dropdown-meta">{{ notification.created_at|timesince }} ago</span>
                             </div>
@@ -102,10 +126,10 @@
                 <div class="profile-dropdown-menu hidden" data-dropdown-menu role="menu">
                     <div class="profile-dropdown-header">
                         {% include "components/profile_avatar_upload.html" with size="nav-lg" show_camera=False preview_id="nav-avatar-menu-preview" %}
-                        <div>
-                            <p class="font-semibold text-examiq-navy">{{ user.get_full_name|default:user.email }}</p>
-                            <p class="text-xs text-examiq-slate">{{ user.email }}</p>
-                            <p class="text-xs text-examiq-slate mt-0.5">{{ user.get_role_display }}</p>
+                        <div class="min-w-0 flex-1 profile-dropdown-meta">
+                            <p class="font-semibold text-examiq-navy truncate" title="{{ user.get_full_name|default:user.email }}">{{ user.get_full_name|default:user.email }}</p>
+                            <p class="text-xs text-examiq-slate profile-dropdown-email" title="{{ user.email }}">{{ user.email }}</p>
+                            <p class="text-xs text-examiq-slate mt-0.5 truncate" title="{{ user.get_role_display }}">{{ user.get_role_display }}</p>
                         </div>
                     </div>
                     <div class="profile-dropdown-divider"></div>
@@ -117,6 +141,14 @@
                 </div>
             </div>
         </div>
+    </div>
+    <div id="nav-search-floating" class="nav-search-floating hidden">
+        <input type="search"
+               id="nav-search-mobile"
+               class="nav-search nav-search--mobile"
+               placeholder="Search…"
+               autocomplete="off">
+        <div id="nav-search-results-mobile" class="nav-search-results hidden" role="listbox"></div>
     </div>
 </header>
 {% endif %}

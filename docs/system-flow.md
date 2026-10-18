@@ -14,8 +14,7 @@ This document describes how users, modules, and data move through the system fro
 |-------|-------------------|
 | **Student** | Completes timed review sessions, views feedback, tracks mistakes and progress |
 | **Faculty** | Configures exams, manages the question bank, monitors course performance |
-| **Chairperson** | Assigns teaching load, approves questions, monitors program-level trends |
-| **Campus Administrator** | Approves accounts, manages academic calendar and program sections |
+| **Program Coordinator** | Approves faculty requests, manages faculty sections, and maintains subjects |
 
 ### Core modules
 
@@ -102,17 +101,17 @@ flowchart LR
 sequenceDiagram
     actor User
     participant Signup as /accounts/signup/
-    participant Admin as Campus Admin
+    participant Coordinator as Program Coordinator
     participant Auth as User Management
     participant Dashboard as Role Dashboard
 
-    User->>Signup: Register (Student / Faculty / Chairperson)
+    User->>Signup: Register as Student or request a Faculty account
     alt Student
         Signup->>Auth: Create approved account
         Auth->>Dashboard: Redirect to /student/dashboard/
-    else Faculty or Chairperson
-        Signup->>Auth: Create pending account
-        Admin->>Auth: Approve or reject at /campus/users/
+    else Faculty
+        Signup->>Auth: Verify email and create pending request
+        Coordinator->>Auth: Approve or reject at /coordinator/users/
         Auth->>Dashboard: Redirect on approval
     end
     User->>Auth: Maintain profile at /profile/
@@ -120,9 +119,9 @@ sequenceDiagram
 
 | Step | Action |
 |------|--------|
-| 1 | User visits the landing page and signs up at `/accounts/signup/` |
-| 2 | Student accounts are activated immediately; Faculty and Chairperson accounts enter **pending** status |
-| 3 | Campus Administrator reviews pending registrations at `/campus/users/` |
+| 1 | Students visit `/accounts/signup/`; faculty use the unlisted `/accounts/faculty/<token>/signup/` link (from `FACULTY_PORTAL_TOKEN`, not linked on any page); coordinators use their own unlisted link |
+| 2 | Student accounts activate after email verification; faculty accounts remain **pending** after verification |
+| 3 | The Program Coordinator reviews pending faculty requests at `/coordinator/users/` |
 | 4 | Approved user logs in and is redirected to their role home page |
 | 5 | All users maintain profile and notifications at `/profile/` |
 
@@ -133,7 +132,7 @@ sequenceDiagram
 | Student | `/student/dashboard/` |
 | Faculty | `/professor/courses/` |
 | Chairperson | `/chairperson/dashboard/` |
-| Campus Administrator | `/admin/` or `/campus/` |
+| Program Coordinator | `/coordinator/` |
 
 ---
 
@@ -141,7 +140,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    CA[Campus Admin<br/>calendar & sections] --> CP[Chairperson<br/>teaching assignments]
+    CA[Program Coordinator<br/>subjects & sections] --> CP[Program Coordinator<br/>teaching assignments]
     CP --> CO[Course offering & exam setup created]
     CO --> FC[Faculty configures exam setup]
     FC --> QB[Faculty creates questions]
@@ -153,8 +152,8 @@ flowchart TD
 
 | Step | Actor | Action |
 |------|-------|--------|
-| 1 | Campus Administrator | Creates academic years, terms, and program sections; sets current term |
-| 2 | Chairperson | Creates teaching assignments (Faculty + section + subject + term) |
+| 1 | Program Coordinator | Creates subjects and manages program sections |
+| 2 | Program Coordinator | Creates teaching assignments (Faculty + section + subject + term) |
 | 3 | System | Creates course offering and exam setup for each assignment |
 | 4 | Faculty | Enables exam setup — topics, difficulties, duration, per-question timer |
 | 5 | Faculty | Creates questions manually or with AI assistance |
@@ -300,14 +299,15 @@ flowchart LR
 | Cross-program analytics | Department-scoped program analytics |
 | Teaching assignments | Create assignments linking Faculty, section, subject, term |
 
-### Campus Administrator
+### Program Coordinator
 
 | Action | URL |
 |--------|-----|
-| User approval | `/campus/users/` |
-| Program sections | `/campus/sections/` |
-| Academic calendar | `/campus/academic-calendar/` |
-| Campus dashboard | `/campus/` |
+| Faculty approval | `/coordinator/users/` |
+| Faculty sections | `/coordinator/assignments/` |
+| Program sections | `/coordinator/sections/` |
+| Subject catalog | `/coordinator/subjects/` |
+| Coordinator dashboard | `/coordinator/` |
 
 ---
 

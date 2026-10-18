@@ -160,20 +160,12 @@ class ExamiQResetPasswordKeyForm(ResetPasswordKeyForm):
 class ExamiQSignupForm(SignupForm):
     SIGNUP_ROLE_CHOICES = [
         (User.Role.STUDENT, "Student"),
-        (User.Role.PROFESSOR, "Faculty"),
     ]
 
     role = forms.ChoiceField(
         choices=SIGNUP_ROLE_CHOICES,
         initial=User.Role.STUDENT,
-        label="I am registering as",
-        widget=forms.Select(
-            attrs={
-                "class": "auth-role-select-hidden",
-                "id": "id_signup_role",
-                "tabindex": "-1",
-            }
-        ),
+        widget=forms.HiddenInput(),
     )
     first_name = forms.CharField(
         max_length=100,
@@ -238,13 +230,6 @@ class ExamiQSignupForm(SignupForm):
             }
         ),
     )
-    department = forms.ModelChoiceField(
-        queryset=Department.objects.all().order_by("name"),
-        required=False,
-        empty_label="— Select department —",
-        label="Department",
-        widget=forms.HiddenInput(),
-    )
     employee_id = forms.CharField(
         max_length=50,
         required=False,
@@ -256,18 +241,6 @@ class ExamiQSignupForm(SignupForm):
             }
         ),
     )
-    faculty_pin = forms.CharField(
-        max_length=64,
-        required=False,
-        label="Faculty signup PIN",
-        widget=forms.PasswordInput(
-            attrs={
-                "class": "auth-field__input",
-                "placeholder": "PIN from your department",
-                "autocomplete": "one-time-code",
-            }
-        ),
-    )
     phone_number = forms.CharField(
         max_length=11,
         required=False,
@@ -276,14 +249,14 @@ class ExamiQSignupForm(SignupForm):
     )
     year_level = forms.ModelChoiceField(
         queryset=YearLevel.objects.none(),
-        required=True,
+        required=False,
         empty_label="— Select year level —",
         label="Year level",
         widget=forms.Select(attrs={"class": AUTH_SELECT_CLASS, "id": "id_year_level"}),
     )
     section = forms.ModelChoiceField(
         queryset=ProgramSection.objects.none(),
-        required=True,
+        required=False,
         empty_label="— Select section —",
         label="Section",
         widget=forms.Select(
@@ -294,7 +267,6 @@ class ExamiQSignupForm(SignupForm):
             }
         ),
     )
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _style_auth_fields(self)
@@ -303,8 +275,6 @@ class ExamiQSignupForm(SignupForm):
                 self.fields[name].widget.attrs.setdefault("class", "auth-field__input")
         if "email" in self.fields:
             self.fields["email"].widget.attrs["placeholder"] = "name@school.edu.ph"
-        if "employee_id" in self.fields:
-            self.fields["employee_id"].help_text = ""
         if "password1" in self.fields:
             self.fields["password1"].label = "Password"
             self.fields["password1"].help_text = ""
@@ -333,7 +303,6 @@ class ExamiQSignupForm(SignupForm):
         self.fields["section"].widget.attrs["data-sections-url"] = (
             "/profile/api/sections/"
         )
-
     def clean_first_name(self):
         from apps.users.name_validation import clean_person_name
 
@@ -381,9 +350,6 @@ class ExamiQSignupForm(SignupForm):
             "Enter a valid 10-digit mobile number (9XX XXX XXXX)."
         )
 
-    def clean_department(self):
-        return self.cleaned_data.get("department")
-
     def clean_employee_id(self):
         value = self.cleaned_data.get("employee_id", "").strip()
         role = self.data.get("role", User.Role.STUDENT)
@@ -403,46 +369,30 @@ class ExamiQSignupForm(SignupForm):
                 self.add_error(
                     "student_number", "This student number is already registered."
                 )
-        elif role == User.Role.PROFESSOR:
-            from apps.users.faculty_pin_services import (
-                faculty_signup_pin_is_configured,
-                verify_faculty_signup_pin,
-            )
-
-            provided_pin = (cleaned.get("faculty_pin") or "").strip()
-            if not faculty_signup_pin_is_configured():
-                self.add_error(
-                    "faculty_pin",
-                    "Faculty signup is currently unavailable. Contact your campus administrator.",
-                )
-            elif not provided_pin:
-                self.add_error("faculty_pin", "Faculty signup PIN is required.")
-            elif not verify_faculty_signup_pin(provided_pin):
-                self.add_error("faculty_pin", "Invalid faculty signup PIN.")
-
         year_level = cleaned.get("year_level")
         section = cleaned.get("section")
-        if not year_level:
-            self.add_error("year_level", "Year level is required.")
-        if not section:
-            self.add_error("section", "Section is required.")
-        elif year_level and "section" not in self.errors:
-            if not section_matches_student(
-                section,
-                User.HomeDegreeProgram.BSED_MATH,
-                year_level.pk,
-            ):
-                self.add_error(
-                    "section", "Choose a section for the selected year level."
-                )
-            elif role == User.Role.STUDENT:
-                try:
-                    validate_section_capacity(section)
-                except ValidationError as exc:
+        if role == User.Role.STUDENT:
+            if not year_level:
+                self.add_error("year_level", "Year level is required.")
+            if not section:
+                self.add_error("section", "Section is required.")
+            elif year_level and "section" not in self.errors:
+                if not section_matches_student(
+                    section,
+                    User.HomeDegreeProgram.BSED_MATH,
+                    year_level.pk,
+                ):
                     self.add_error(
-                        "section",
-                        exc.messages[0] if exc.messages else str(exc),
+                        "section", "Choose a section for the selected year level."
                     )
+                else:
+                    try:
+                        validate_section_capacity(section)
+                    except ValidationError as exc:
+                        self.add_error(
+                            "section",
+                            exc.messages[0] if exc.messages else str(exc),
+                        )
         return cleaned
 
     def save(self, request):
@@ -454,29 +404,74 @@ class ExamiQSignupForm(SignupForm):
         user.middle_name = self.cleaned_data.get("middle_name", "").strip()
         user.suffix = self.cleaned_data.get("suffix", "").strip()
         user.phone_number = self.cleaned_data["phone_number"]
-        section = self.cleaned_data["section"]
-
-        if role == User.Role.STUDENT:
-            user.student_number = self.cleaned_data["student_number"]
-            user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
-            user.employee_id = ""
-            user.year_level = self.cleaned_data["year_level"]
-            user.section = section
-        else:
-            edu, _ = Department.objects.get_or_create(name=EDUCATION_DEPARTMENT_NAME)
-            user.department = edu
-            user.employee_id = self.cleaned_data.get("employee_id", "")
-            user.student_number = None
-            user.year_level = None
-            user.section = None
-
-        # Approved after email OTP; stay inactive until the code is verified.
+        user.student_number = self.cleaned_data["student_number"]
+        user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
+        user.employee_id = ""
+        user.year_level = self.cleaned_data["year_level"]
+        user.section = self.cleaned_data["section"]
         user.approval_status = User.ApprovalStatus.APPROVED
         user.is_active = False
 
         user.save()
-        if role == User.Role.PROFESSOR and section is not None:
-            user.assigned_sections.add(section)
+
+        from django.contrib import messages
+
+        from apps.users.email_services import send_pending_registration_alert
+        from apps.users.otp_services import SIGNUP_OTP_SESSION_KEY, send_signup_otp
+
+        request.session[SIGNUP_OTP_SESSION_KEY] = user.pk
+        send_pending_registration_alert(user)
+        try:
+            send_signup_otp(user, force=True)
+        except Exception:
+            messages.warning(
+                request,
+                "Account created, but we could not send the verification email. "
+                "Use Resend on the next screen after checking email settings.",
+            )
+        return user
+
+
+class FacultySignupForm(ExamiQSignupForm):
+    """Public faculty registration request awaiting coordinator approval."""
+
+    role = forms.ChoiceField(
+        choices=[(User.Role.PROFESSOR, "Faculty")],
+        initial=User.Role.PROFESSOR,
+        widget=forms.HiddenInput(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ("student_number", "year_level", "section"):
+            self.fields.pop(field_name, None)
+        self.fields["employee_id"].required = True
+        self.fields["employee_id"].help_text = ""
+
+    def clean(self):
+        cleaned = super(ExamiQSignupForm, self).clean()
+        return cleaned
+
+    def save(self, request):
+        user = SignupForm.save(self, request)
+        education_department, _ = Department.objects.get_or_create(
+            name=EDUCATION_DEPARTMENT_NAME
+        )
+        user.role = User.Role.PROFESSOR
+        user.first_name = self.cleaned_data["first_name"].strip()
+        user.last_name = self.cleaned_data["last_name"].strip()
+        user.middle_name = self.cleaned_data.get("middle_name", "").strip()
+        user.suffix = self.cleaned_data.get("suffix", "").strip()
+        user.phone_number = self.cleaned_data["phone_number"]
+        user.department = education_department
+        user.employee_id = self.cleaned_data["employee_id"]
+        user.student_number = None
+        user.home_degree_program = ""
+        user.year_level = None
+        user.section = None
+        user.approval_status = User.ApprovalStatus.PENDING
+        user.is_active = False
+        user.save()
 
         from django.contrib import messages
 
@@ -488,7 +483,67 @@ class ExamiQSignupForm(SignupForm):
         except Exception:
             messages.warning(
                 request,
-                "Account created, but we could not send the verification email. "
+                "Account request created, but we could not send the verification email. "
+                "Use Resend on the next screen after checking email settings.",
+            )
+        return user
+
+
+class CoordinatorSignupForm(ExamiQSignupForm):
+    """Unlisted program-coordinator registration (secret link only)."""
+
+    role = forms.ChoiceField(
+        choices=[(User.Role.PROGRAM_COORDINATOR, "Program Coordinator")],
+        initial=User.Role.PROGRAM_COORDINATOR,
+        widget=forms.HiddenInput(),
+    )
+    department = forms.ModelChoiceField(
+        queryset=Department.objects.all().order_by("name"),
+        empty_label="— Select department —",
+        label="Department",
+        widget=forms.Select(attrs={"class": AUTH_SELECT_CLASS}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ("student_number", "year_level", "section"):
+            self.fields.pop(field_name, None)
+        self.fields["employee_id"].required = True
+        self.fields["employee_id"].help_text = ""
+        self.fields["department"].required = True
+
+    def clean(self):
+        return super(ExamiQSignupForm, self).clean()
+
+    def save(self, request):
+        user = SignupForm.save(self, request)
+        user.role = User.Role.PROGRAM_COORDINATOR
+        user.first_name = self.cleaned_data["first_name"].strip()
+        user.last_name = self.cleaned_data["last_name"].strip()
+        user.middle_name = self.cleaned_data.get("middle_name", "").strip()
+        user.suffix = self.cleaned_data.get("suffix", "").strip()
+        user.phone_number = self.cleaned_data["phone_number"]
+        user.department = self.cleaned_data["department"]
+        user.employee_id = self.cleaned_data["employee_id"]
+        user.student_number = None
+        user.home_degree_program = ""
+        user.year_level = None
+        user.section = None
+        user.approval_status = User.ApprovalStatus.PENDING
+        user.is_active = False
+        user.save()
+
+        from django.contrib import messages
+
+        from apps.users.otp_services import SIGNUP_OTP_SESSION_KEY, send_signup_otp
+
+        request.session[SIGNUP_OTP_SESSION_KEY] = user.pk
+        try:
+            send_signup_otp(user, force=True)
+        except Exception:
+            messages.warning(
+                request,
+                "Account request created, but we could not send the verification email. "
                 "Use Resend on the next screen after checking email settings.",
             )
         return user
@@ -517,21 +572,6 @@ class ProfileUpdateForm(forms.Form):
         widget=forms.TextInput(attrs={"placeholder": "1M or BSE 2-1M"}),
         help_text="Your cohort section for Chat and exam access (e.g. 1M, 2-1M).",
     )
-    assigned_sections = forms.ModelMultipleChoiceField(
-        queryset=ProgramSection.objects.none(),
-        required=False,
-        label="Sections you handle",
-        widget=forms.SelectMultiple(),
-        help_text="Students in these sections can message you about your subjects.",
-    )
-    assigned_subjects = forms.ModelMultipleChoiceField(
-        queryset=Subject.objects.none(),
-        required=False,
-        label="Course subjects you handle",
-        widget=forms.SelectMultiple(),
-        help_text="Required with sections for Chat. Leave empty to receive no student messages.",
-    )
-
     def __init__(self, user, *args, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
@@ -549,50 +589,9 @@ class ProfileUpdateForm(forms.Form):
             self.fields["year_level"].initial = user.year_level
             if user.section_id:
                 self.fields["section"].initial = user.section.display_label
-            del self.fields["assigned_sections"]
-            del self.fields["assigned_subjects"]
-        elif user.role == User.Role.PROFESSOR:
-            from apps.users.section_services import get_current_academic_year
-
-            academic_year = get_current_academic_year()
-            sections = ProgramSection.objects.filter(
-                program__slug=User.HomeDegreeProgram.BSED_MATH,
-                is_active=True,
-            ).select_related("program", "year_level", "academic_year")
-            if academic_year:
-                sections = sections.filter(academic_year=academic_year)
-            sections = sections.order_by("year_level__order", "label")
-            self.fields["assigned_sections"].queryset = sections
-            self.fields["assigned_sections"].initial = list(
-                user.assigned_sections.values_list("pk", flat=True)
-            )
-            self.fields["assigned_sections"].label_from_instance = lambda obj: (
-                obj.display_label
-            )
-            subjects = (
-                Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
-                .select_related("year_level")
-                .order_by("year_level__order", "code")
-            )
-            self.fields["assigned_subjects"].queryset = subjects
-            self.fields["assigned_subjects"].initial = list(
-                user.assigned_subjects.values_list("pk", flat=True)
-            )
-            self.fields["assigned_subjects"].label_from_instance = lambda obj: (
-                f"{obj.code} — {obj.name}"
-            )
-            # Associate with profile form when rendered outside the <form> tag.
-            for name in ("assigned_sections", "assigned_subjects"):
-                self.fields[name].widget.attrs["form"] = "profile-update-form"
-                self.fields[name].widget.attrs["class"] = "multi-select-native"
-            _style_fields(self)
-            del self.fields["year_level"]
-            del self.fields["section"]
         else:
             del self.fields["year_level"]
             del self.fields["section"]
-            del self.fields["assigned_sections"]
-            del self.fields["assigned_subjects"]
 
     def clean_first_name(self):
         from apps.users.name_validation import clean_person_name
@@ -685,13 +684,6 @@ class ProfileUpdateForm(forms.Form):
             self.user.section = self.cleaned_data.get("section_obj")
             update_fields.extend(["home_degree_program", "year_level", "section"])
         self.user.save(update_fields=update_fields)
-        if self.user.role == User.Role.PROFESSOR:
-            self.user.assigned_sections.set(
-                self.cleaned_data.get("assigned_sections") or []
-            )
-            self.user.assigned_subjects.set(
-                self.cleaned_data.get("assigned_subjects") or []
-            )
 
 
 class CampusUserCreateForm(forms.Form):
@@ -710,14 +702,27 @@ class CampusUserCreateForm(forms.Form):
         label="Department",
     )
 
-    def __init__(self, *args, role: str, department_required: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        role: str,
+        department_required: bool = False,
+        provisioning_department: Department | None = None,
+        **kwargs,
+    ):
         self.role = role
         self.department_required = department_required
+        self.provisioning_department = provisioning_department
         super().__init__(*args, **kwargs)
         _style_fields(self)
         self.fields["department"].required = department_required
         if department_required:
             self.fields["department"].empty_label = "— Select department —"
+        if provisioning_department:
+            self.fields["department"].queryset = Department.objects.filter(
+                pk=provisioning_department.pk
+            )
+            self.fields["department"].initial = provisioning_department.pk
 
     def clean_email(self) -> str:
         email = self.cleaned_data["email"].lower()
@@ -744,7 +749,7 @@ class CampusUserCreateForm(forms.Form):
         )
 
     def save(self) -> User:
-        department = self.cleaned_data.get("department")
+        department = self.provisioning_department or self.cleaned_data.get("department")
         return User.objects.create_user(
             email=self.cleaned_data["email"],
             password=self.cleaned_data["password"],
@@ -841,70 +846,6 @@ class ExamiQChangePasswordForm(ChangePasswordForm):
         self.user.save(update_fields=["password_changed_at"])
 
 
-class FacultySignupPinForm(forms.Form):
-    """Rotate the shared faculty public-signup PIN from a faculty profile."""
-
-    new_pin = forms.CharField(
-        max_length=64,
-        label="New faculty signup PIN",
-        widget=forms.PasswordInput(
-            attrs={
-                "autocomplete": "new-password",
-                "placeholder": "Enter a new PIN",
-            }
-        ),
-    )
-    confirm_pin = forms.CharField(
-        max_length=64,
-        label="Confirm new PIN",
-        widget=forms.PasswordInput(
-            attrs={
-                "autocomplete": "new-password",
-                "placeholder": "Re-enter the new PIN",
-            }
-        ),
-    )
-    password = forms.CharField(
-        label="Your account password",
-        widget=forms.PasswordInput(
-            attrs={
-                "autocomplete": "current-password",
-                "placeholder": "Confirm with your password",
-            }
-        ),
-    )
-
-    def __init__(self, user: User, *args, **kwargs):
-        self.user = user
-        super().__init__(*args, **kwargs)
-        _style_fields(self)
-
-    def clean_password(self):
-        password = self.cleaned_data.get("password", "")
-        if not self.user.check_password(password):
-            raise forms.ValidationError("Incorrect account password.")
-        return password
-
-    def clean(self):
-        cleaned = super().clean()
-        new_pin = (cleaned.get("new_pin") or "").strip()
-        confirm_pin = (cleaned.get("confirm_pin") or "").strip()
-        if new_pin and len(new_pin) < 6:
-            self.add_error("new_pin", "PIN must be at least 6 characters.")
-        if new_pin and confirm_pin and new_pin != confirm_pin:
-            self.add_error("confirm_pin", "PINs do not match.")
-        cleaned["new_pin"] = new_pin
-        return cleaned
-
-    def save(self) -> None:
-        from apps.users.faculty_pin_services import update_faculty_signup_pin
-
-        update_faculty_signup_pin(
-            changed_by=self.user,
-            new_pin=self.cleaned_data["new_pin"],
-        )
-
-
 class ProgramSectionForm(forms.ModelForm):
     class Meta:
         model = ProgramSection
@@ -925,9 +866,13 @@ class ProgramSectionForm(forms.ModelForm):
             "is_active": forms.CheckboxInput(),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, coordinator: User | None = None, **kwargs):
+        self.coordinator = coordinator
         super().__init__(*args, **kwargs)
-        self.fields["program"].queryset = Program.objects.all().order_by("name")
+        programs = Program.objects.all()
+        if coordinator and coordinator.department_id:
+            programs = programs.filter(managing_department=coordinator.department)
+        self.fields["program"].queryset = programs.order_by("name")
         self.fields["year_level"].queryset = YearLevel.objects.all().order_by("order")
         self.fields["academic_year"].queryset = AcademicYear.objects.all().order_by(
             "-label"
@@ -968,9 +913,14 @@ class ProgramSectionBulkForm(forms.Form):
         min_value=1, initial=40, label="Max students per section"
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, coordinator: User | None = None, **kwargs):
+        self.coordinator = coordinator
         super().__init__(*args, **kwargs)
         _style_fields(self)
+        if coordinator and coordinator.department_id:
+            self.fields["program"].queryset = Program.objects.filter(
+                managing_department=coordinator.department
+            ).order_by("name")
         current = get_current_academic_year()
         if current:
             self.fields["academic_year"].initial = current.pk
@@ -989,6 +939,84 @@ class ProgramSectionBulkForm(forms.Form):
             if was_created:
                 created.append(section)
         return created
+
+
+class ProgramCoordinatorSubjectForm(forms.Form):
+    """Create a curriculum subject within the coordinator's department."""
+
+    program = forms.ModelChoiceField(queryset=Program.objects.none(), label="Program")
+    code = forms.CharField(max_length=20, label="Course code")
+    name = forms.CharField(max_length=200, label="Course title")
+    year_level = forms.ModelChoiceField(
+        queryset=YearLevel.objects.none(),
+        label="Year level",
+    )
+    semester = forms.TypedChoiceField(
+        choices=Subject.Semester.choices,
+        coerce=int,
+        label="Semester",
+    )
+
+    def __init__(self, *args, coordinator: User, **kwargs):
+        self.coordinator = coordinator
+        super().__init__(*args, **kwargs)
+        _style_fields(self)
+        programs = Program.objects.all()
+        if coordinator.department_id:
+            programs = programs.filter(managing_department=coordinator.department)
+        self.fields["program"].queryset = programs.order_by("name")
+        self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
+        self.fields["code"].widget.attrs["placeholder"] = "e.g. MATH101"
+        self.fields["name"].widget.attrs["placeholder"] = "e.g. College Algebra"
+
+    def clean_code(self) -> str:
+        return (self.cleaned_data.get("code") or "").strip().upper()
+
+    def clean(self):
+        cleaned = super().clean()
+        program = cleaned.get("program")
+        code = cleaned.get("code")
+        if program and code and Subject.objects.filter(program=program, code=code).exists():
+            self.add_error("code", f"Course code {code} already exists for this program.")
+        return cleaned
+
+
+class ChairpersonSubjectForm(forms.ModelForm):
+    """Add or edit a curriculum subject in the chairperson's department."""
+
+    class Meta:
+        model = Subject
+        fields = ["program", "code", "name", "year_level", "semester"]
+
+    def __init__(self, *args, manager: User | None = None, **kwargs):
+        self.manager = manager
+        super().__init__(*args, **kwargs)
+        _style_fields(self)
+        programs = Program.objects.all()
+        if manager is not None and manager.department_id:
+            programs = programs.filter(managing_department=manager.department)
+        self.fields["program"].queryset = programs.order_by("name")
+        self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
+        self.fields["code"].widget.attrs["placeholder"] = "e.g. MATH101"
+        self.fields["name"].widget.attrs["placeholder"] = "e.g. College Algebra"
+
+    def clean_code(self) -> str:
+        return (self.cleaned_data.get("code") or "").strip().upper()
+
+    def clean(self):
+        cleaned = super().clean()
+        program = cleaned.get("program")
+        code = cleaned.get("code")
+        if program and code:
+            clash = Subject.objects.filter(program=program, code=code)
+            if self.instance.pk:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                self.add_error(
+                    "code",
+                    f"Course code {code} already exists for this program.",
+                )
+        return cleaned
 
 
 class AcademicYearForm(forms.ModelForm):
@@ -1044,7 +1072,7 @@ class TeachingAssignmentForm(forms.Form):
     )
     subject = forms.ModelChoiceField(
         queryset=Subject.objects.none(),
-        label="Subject",
+        label="Course",
     )
     term = forms.ModelChoiceField(
         queryset=AcademicTerm.objects.select_related("academic_year").order_by(
@@ -1060,6 +1088,14 @@ class TeachingAssignmentForm(forms.Form):
         self.fields["program_sections"].widget.attrs["class"] = "exam-setup-topic-grid"
         dept_id = chairperson.department_id
         if dept_id:
+            self.fields["professor"].queryset = User.objects.filter(
+                role=User.Role.PROFESSOR,
+                is_active=True,
+                department_id=dept_id,
+            ).order_by("email")
+        elif chairperson.role == User.Role.PROGRAM_COORDINATOR:
+            self.fields["professor"].queryset = User.objects.none()
+        if dept_id:
             self.fields["program_sections"].queryset = (
                 ProgramSection.queryset_with_counts()
                 .filter(program__managing_department_id=dept_id, is_active=True)
@@ -1072,17 +1108,20 @@ class TeachingAssignmentForm(forms.Form):
         if dept_id:
             from apps.questions.models import Subject
 
-            subject_qs = Subject.objects.filter(
-                program__managing_department_id=dept_id,
-            ).select_related("program", "year_level")
-            if current_term:
-                from apps.questions.curriculum import term_semester
+            self.fields["subject"].queryset = (
+                Subject.objects.filter(
+                    program__managing_department_id=dept_id,
+                )
+                .select_related("program", "year_level")
+                .order_by("program__name", "year_level__order", "code")
+            )
+        else:
+            from apps.questions.models import Subject
 
-                semester = term_semester(current_term)
-                if semester is not None:
-                    subject_qs = subject_qs.filter(semester=semester)
-            self.fields["subject"].queryset = subject_qs.order_by(
-                "program__name", "year_level__order", "code"
+            self.fields["subject"].queryset = (
+                Subject.objects.all()
+                .select_related("program", "year_level")
+                .order_by("program__name", "year_level__order", "code")
             )
         section_ids = self.data.getlist("program_sections") if self.data else []
         term_id = self.data.get("term") if self.data else None
@@ -1136,47 +1175,15 @@ class TeachingAssignmentForm(forms.Form):
         return cleaned
 
 
+"""Retired: faculty subject creation moved to the program coordinator.
+
+Kept as a stub so old imports fail loudly instead of silently re-enabling
+self-serve subject creation.
+"""
+
+
 class FacultySelfServeCourseForm(forms.Form):
-    """Faculty creates a new BSED Math curriculum course (Subject)."""
+    """Retired — faculty can no longer add subjects."""
 
-    code = forms.CharField(
-        max_length=20,
-        label="Course Code",
-        widget=forms.TextInput(
-            attrs={"class": INPUT_CLASS, "placeholder": "e.g. BSEM 41"}
-        ),
-    )
-    name = forms.CharField(
-        max_length=200,
-        label="Course Title",
-        widget=forms.TextInput(
-            attrs={"class": INPUT_CLASS, "placeholder": "e.g. Advanced Calculus"}
-        ),
-    )
-    year_level = forms.ModelChoiceField(
-        queryset=YearLevel.objects.none(),
-        label="Year",
-        empty_label="— Select year —",
-        widget=forms.Select(attrs={"class": INPUT_CLASS}),
-    )
-    semester = forms.TypedChoiceField(
-        choices=Subject.Semester.choices,
-        coerce=int,
-        label="Semester",
-        widget=forms.Select(attrs={"class": INPUT_CLASS}),
-    )
-
-    def __init__(self, *args, professor: User | None = None, **kwargs):
-        self.professor = professor
-        super().__init__(*args, **kwargs)
-        _style_fields(self)
-        self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
-
-    def clean_code(self):
-        code = (self.cleaned_data.get("code") or "").strip().upper()
-        if not code:
-            raise forms.ValidationError("Course code is required.")
-        program = Program.objects.filter(slug=User.HomeDegreeProgram.BSED_MATH).first()
-        if program and Subject.objects.filter(program=program, code=code).exists():
-            raise forms.ValidationError(f"Course code {code} already exists.")
-        return code
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError("Only the program coordinator can add subjects.")

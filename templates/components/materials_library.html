@@ -21,21 +21,21 @@
                     <option value="title">Title A–Z</option>
                 </select>
             </label>
-            <div class="materials-library__filters" role="group" aria-label="Filter by type">
-                <button type="button" class="materials-filter-chip is-active" data-library-filter="">All</button>
-                {% for value, label in material_types %}
-                <button type="button" class="materials-filter-chip" data-library-filter="{{ value }}">{{ label }}</button>
-                {% endfor %}
-            </div>
             {% if faculty_mode %}
-            <label class="materials-library__archived">
+            <span class="materials-library__archived">
                 {% if include_archived %}
                 <a href="{% if hub_subject_pk %}?subject={{ hub_subject_pk }}{% else %}?{% endif %}" class="materials-library__archived-link">Hide archived</a>
                 {% else %}
                 <a href="{% if hub_subject_pk %}?subject={{ hub_subject_pk }}&amp;archived=1{% else %}?archived=1{% endif %}" class="materials-library__archived-link">Show archived</a>
                 {% endif %}
-            </label>
+            </span>
             {% endif %}
+        </div>
+        <div class="materials-library__filters" role="group" aria-label="Filter by file type">
+            <button type="button" class="materials-filter-chip is-active" data-library-filter="" data-ext="">All · {{ library_count }}</button>
+            {% for ext, count in ext_counts %}
+            <button type="button" class="materials-filter-chip" data-library-filter="{{ ext }}" data-ext="{{ ext }}">{{ ext }} · {{ count }}</button>
+            {% endfor %}
         </div>
     </div>
 
@@ -46,8 +46,10 @@
             data-library-item
             data-title="{{ doc.display_title|lower }}"
             data-type="{{ doc.material_type }}"
+            data-ext="{{ doc.file_type_label|upper }}"
             data-status="{{ doc.status }}"
             data-created="{{ doc.created|date:'c' }}">
+            <span class="materials-library__icon materials-library__icon--{{ doc.file_type_label|lower }}" aria-hidden="true">{{ doc.file_type_label|upper }}</span>
             <div class="materials-library__body">
                 {% if doc.status != "ready" or doc.is_archived %}
                 <div class="materials-library__meta-row">
@@ -67,51 +69,50 @@
                 <p class="materials-library__name">{{ doc.display_title }}</p>
                 {% endif %}
                 <p class="materials-library__meta">
-                    <span>{{ doc.get_material_type_display }}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ doc.file_type_label }}</span>
-                    {% if doc.page_count %}
-                    <span aria-hidden="true">·</span>
-                    <span>{{ doc.page_count }} page{{ doc.page_count|pluralize }}</span>
-                    {% endif %}
-                    {% if doc.file_size_bytes %}
-                    <span aria-hidden="true">·</span>
-                    <span>{{ doc.file_size_bytes|filesizeformat }}</span>
-                    {% endif %}
+                    {% if doc.file_size_bytes %}<span>{{ doc.file_size_bytes|filesizeformat }}</span><span aria-hidden="true">·</span>{% endif %}
+                    {% if doc.page_count %}<span>{{ doc.page_count }} page{{ doc.page_count|pluralize }}</span><span aria-hidden="true">·</span>{% endif %}
+                    <span>Uploaded {{ doc.created|date:"M j, Y" }}</span>
                 </p>
             </div>
-            <div class="materials-library__actions">
-                {% if faculty_mode and course %}
-                <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
-                   class="materials-download-btn">Download</a>
-                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}"
-                   class="materials-download-btn">Edit</a>
-                <form method="post"
-                      action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
-                      class="materials-archive-form">
-                    {% csrf_token %}
-                    {% if hub_subject_pk %}
-                    <input type="hidden" name="hub_return" value="1">
-                    <input type="hidden" name="subject_id" value="{{ hub_subject_pk }}">
-                    {% endif %}
-                    {% if doc.is_archived %}
-                    <input type="hidden" name="action" value="restore">
-                    <button type="submit" class="materials-archive-btn materials-archive-btn--restore">Restore</button>
-                    {% else %}
-                    <input type="hidden" name="action" value="archive">
-                    <button type="submit" class="materials-archive-btn">Archive</button>
-                    {% endif %}
-                </form>
-                {% elif download_url_name and subject %}
-                <a href="{% url download_url_name subject.pk doc.pk %}"
-                   class="materials-download-btn"
-                   aria-label="Download {{ doc.display_title }}">
-                    <span class="materials-download-btn__label">Download</span>
-                    <svg class="materials-download-btn__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>
-                    </svg>
-                </a>
+            <div class="materials-library__side">
+                {% if doc.subject %}
+                <span class="materials-course-chip">{{ doc.subject.code }}</span>
+                {% elif course %}
+                <span class="materials-course-chip">{{ course.code }}</span>
                 {% endif %}
+                <div class="materials-library__actions">
+                    {% if faculty_mode and course %}
+                    <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
+                       class="materials-download-btn">Download</a>
+                    <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}"
+                       class="materials-download-btn">Edit</a>
+                    <form method="post"
+                          action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
+                          class="materials-archive-form">
+                        {% csrf_token %}
+                        {% if hub_subject_pk %}
+                        <input type="hidden" name="hub_return" value="1">
+                        <input type="hidden" name="subject_id" value="{{ hub_subject_pk }}">
+                        {% endif %}
+                        {% if doc.is_archived %}
+                        <input type="hidden" name="action" value="restore">
+                        <button type="submit" class="materials-archive-btn materials-archive-btn--restore">Restore</button>
+                        {% else %}
+                        <input type="hidden" name="action" value="archive">
+                        <button type="submit" class="materials-archive-btn">Archive</button>
+                        {% endif %}
+                    </form>
+                    {% elif download_url_name and subject %}
+                    <a href="{% url download_url_name subject.pk doc.pk %}"
+                       class="materials-download-btn"
+                       aria-label="Download {{ doc.display_title }}">
+                        <span class="materials-download-btn__label">Download</span>
+                        <svg class="materials-download-btn__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>
+                        </svg>
+                    </a>
+                    {% endif %}
+                </div>
             </div>
         </li>
         {% endfor %}

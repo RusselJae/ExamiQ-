@@ -26,7 +26,7 @@ html {
 }
 
 .landing-body {
-    font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+    font-family: "Figtree", Inter, system-ui, sans-serif;
     background: var(--landing-bg);
     color: var(--landing-text);
     min-height: 100vh;
@@ -305,6 +305,7 @@ html {
 }
 
 .landing-logo__name {
+    font-family: var(--font-serif);
     font-size: 1.125rem;
     font-weight: 700;
     color: var(--landing-primary);
@@ -792,7 +793,7 @@ html {
 .auth-page {
     min-height: 100vh;
     position: relative;
-    font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+    font-family: "Figtree", Inter, system-ui, sans-serif;
     background: var(--landing-bg);
     color: var(--landing-text);
     overflow-x: hidden;
@@ -1619,4 +1620,30 @@ html:has(body.auth-page) {
         margin-top: 1rem;
         padding-top: 0;
     }
+}
+
+.auth-faculty-sections-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: 0.5rem;
+    max-height: 12rem;
+    overflow-y: auto;
+    border: 1px solid var(--landing-border, #e2e8f0);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.auth-faculty-section-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.auth-field__hint {
+    font-size: 0.75rem;
+    color: var(--landing-muted, #64748b);
+    margin-top: 0.25rem;
 }

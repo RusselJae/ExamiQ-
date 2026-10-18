@@ -44,9 +44,7 @@
             <thead>
                 <tr>
                     <th class="text-center">Question</th>
-                    <th class="text-center">No ratings</th>
                     <th class="text-center">Guessing</th>
-                    <th class="text-center">Not sure</th>
                     <th class="text-center">Sure</th>
                     <th class="text-center">Actions</th>
                 </tr>
@@ -60,9 +58,7 @@
                             <span class="text-examiq-navy">{{ question.question_stem }}</span>
                         </div>
                     </td>
-                    <td class="text-center"><div class="heatmap-cell heatmap-none">{{ question.none }}</div></td>
                     <td class="text-center"><div class="heatmap-cell heatmap-low">{{ question.low }}</div></td>
-                    <td class="text-center"><div class="heatmap-cell heatmap-average">{{ question.average }}</div></td>
                     <td class="text-center"><div class="heatmap-cell heatmap-high">{{ question.high }}</div></td>
                     <td class="text-center whitespace-nowrap">
                         <a href="{% url 'analytics_professor:question_edit' course.pk question.question_id %}"

@@ -68,7 +68,9 @@ class TestQuestionPartialView:
         assert response.status_code == 302
         assert response.url == reverse("reviews:session", kwargs={"pk": session.pk})
 
-    def test_renders_question_when_available(self, client, student, topic, mcq_question):
+    def test_renders_question_when_available(
+        self, client, student, topic, mcq_question
+    ):
         question, _ = mcq_question
         session = start_review_session(
             student=student,
@@ -123,7 +125,9 @@ class TestQuestionPartialView:
         assert "Mathematics in the Modern World" in content
         assert "Enumeration" in content
 
-    def test_timed_exam_shows_confidence_gate(self, client, student, topic, mcq_question):
+    def test_timed_exam_shows_confidence_gate(
+        self, client, student, topic, mcq_question
+    ):
         session = start_review_session(
             student=student,
             topic=topic,
@@ -145,7 +149,9 @@ class TestQuestionPartialView:
 
 @pytest.mark.django_db
 class TestReviewSessionFocusUI:
-    def test_session_page_loads_without_session_modals(self, client, student, topic, mcq_question):
+    def test_session_page_loads_without_session_modals(
+        self, client, student, topic, mcq_question
+    ):
         session = start_review_session(
             student=student,
             topic=topic,
@@ -175,7 +181,7 @@ class TestReviewSetupPage:
         content = response.content.decode()
         assert response.status_code == 200
         assert "id_setup_subjects" not in content
-        assert "Course subjects for your year" in content
+        assert "Courses for your year" in content
         assert "id_setup_difficulty" in content
         assert "id_setup_question_type" in content
         assert "How this works" in content
@@ -195,9 +201,7 @@ class TestReviewSetupPrefill:
     ):
         from conftest import make_bsed_student
 
-        make_bsed_student(
-            student, subject=topic.subject, bsed_program=bsed_program
-        )
+        make_bsed_student(student, subject=topic.subject, bsed_program=bsed_program)
 
         client.force_login(student)
         response = client.get(reverse("reviews:setup"))
@@ -205,7 +209,7 @@ class TestReviewSetupPrefill:
         content = response.content.decode()
         assert topic.subject.code in content
         assert "id_setup_subjects" not in content
-        assert "Course subjects for your year" in content
+        assert "Courses for your year" in content
         assert "exam-subject-card" in content
         assert "exam-subject-select-bar" in content
         assert "app-topbar-actions" in content
@@ -243,6 +247,7 @@ class TestReviewSetupPrefill:
         assert all(s.year_level_id == student.year_level_id for s in year_subjects)
         other_subjects = response.context["other_subjects"]
         assert any(s.code == "OTH-101" for s in other_subjects)
+
 
 @pytest.mark.django_db
 class TestSessionSummaryView:
@@ -309,7 +314,10 @@ class TestSubmitAnswerView:
             mode=ReviewSession.Mode.TIMED_EXAM,
         )
         client.force_login(student)
-        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        url = reverse(
+            "reviews:submit_answer",
+            kwargs={"pk": session.pk, "question_id": question.pk},
+        )
         response = client.post(
             url,
             {
@@ -328,7 +336,9 @@ class TestSubmitAnswerView:
         answer = session.answers.get()
         assert answer.confidence == 5
 
-    def test_timed_submit_returns_reveal_partial(self, client, student, topic, mcq_question):
+    def test_timed_submit_returns_reveal_partial(
+        self, client, student, topic, mcq_question
+    ):
         question, correct = mcq_question
         session = start_review_session(
             student=student,
@@ -339,7 +349,10 @@ class TestSubmitAnswerView:
         session.planned_question_count = 1
         session.save(update_fields=["planned_question_count"])
         client.force_login(student)
-        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        url = reverse(
+            "reviews:submit_answer",
+            kwargs={"pk": session.pk, "question_id": question.pk},
+        )
         response = client.post(
             url,
             {
@@ -366,7 +379,10 @@ class TestSubmitAnswerView:
             mode=ReviewSession.Mode.TIMED_EXAM,
         )
         client.force_login(student)
-        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        url = reverse(
+            "reviews:submit_answer",
+            kwargs={"pk": session.pk, "question_id": question.pk},
+        )
         response = client.post(
             url,
             {
@@ -393,7 +409,10 @@ class TestSubmitAnswerView:
             seconds_per_question=30,
         )
         client.force_login(student)
-        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        url = reverse(
+            "reviews:submit_answer",
+            kwargs={"pk": session.pk, "question_id": question.pk},
+        )
         response = client.post(
             url,
             {
@@ -420,7 +439,10 @@ class TestSubmitAnswerView:
             seconds_per_question=60,
         )
         client.force_login(student)
-        url = reverse("reviews:submit_answer", kwargs={"pk": session.pk, "question_id": question.pk})
+        url = reverse(
+            "reviews:submit_answer",
+            kwargs={"pk": session.pk, "question_id": question.pk},
+        )
         response = client.post(
             url,
             {
@@ -459,7 +481,8 @@ class TestTutorChat:
         chat_url = reverse("reviews:tutor_chat", kwargs={"pk": session.pk})
         response = client.post(
             chat_url,
-            data='{"message": "Why was my approach wrong?", "answer_id": %d}' % answer.pk,
+            data='{"message": "Why was my approach wrong?", "answer_id": %d}'
+            % answer.pk,
             content_type="application/json",
         )
         assert response.status_code == 200
@@ -516,7 +539,9 @@ class TestTutorChat:
         ).latest("pk")
         assert msg.image
 
-    def test_tutor_history_filters_by_answer_id(self, client, student, topic, mcq_question):
+    def test_tutor_history_filters_by_answer_id(
+        self, client, student, topic, mcq_question
+    ):
         question, correct = mcq_question
         wrong_choice = question.choices.filter(is_correct=False).first()
         session = start_review_session(
@@ -535,7 +560,10 @@ class TestTutorChat:
         session.status = ReviewSession.Status.COMPLETED
         session.save(update_fields=["status"])
 
-        from apps.reviews.tutor_services import get_or_create_conversation, process_tutor_chat
+        from apps.reviews.tutor_services import (
+            get_or_create_conversation,
+            process_tutor_chat,
+        )
 
         process_tutor_chat(session, "Help me understand", answer_id=answer.pk)
 
@@ -568,7 +596,10 @@ class TestTutorChat:
         session1.save(update_fields=["status"])
 
         from apps.questions.models import ExplanationStep
-        from apps.reviews.tutor_services import process_tutor_chat, tutor_history_payload
+        from apps.reviews.tutor_services import (
+            process_tutor_chat,
+            tutor_history_payload,
+        )
 
         ExplanationStep.objects.create(
             question=question,
@@ -597,9 +628,7 @@ class TestTutorChat:
         payload = tutor_history_payload(session2, answer_id=answer2.pk)
         assert payload["messages"] == []
         item = next(i for i in payload["items"] if i["answer_id"] == answer2.pk)
-        assert item["correction_steps"] == [
-            "Step 1: Add the numbers to find the sum."
-        ]
+        assert item["correction_steps"] == ["Step 1: Add the numbers to find the sum."]
         assert item["message_count"] == 0
 
     def test_tutor_history_with_correct_and_wrong_answers(
@@ -656,7 +685,9 @@ class TestTutorChat:
         assert any(item["is_correct"] for item in history_data["items"])
         assert any(not item["is_correct"] for item in history_data["items"])
 
-        feedback_url = reverse("reviews:session_generate_feedback", kwargs={"pk": session.pk})
+        feedback_url = reverse(
+            "reviews:session_generate_feedback", kwargs={"pk": session.pk}
+        )
         feedback_response = client.post(feedback_url)
         assert feedback_response.status_code == 200
         feedback_data = feedback_response.json()

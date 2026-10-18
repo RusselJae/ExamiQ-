@@ -18,10 +18,11 @@ from apps.core.filtering import (
     has_active_filters,
 )
 from apps.core.mixins import ChairpersonRequiredMixin
+from apps.questions.models import Subject
 from apps.research.models import SurveyResponse
 from apps.reviews.models import Answer, ReviewSession
 from apps.users.constants import PROGRAM_DEFINITIONS, home_programs_for_department, students_in_department
-from apps.users.models import Course, Program, User
+from apps.users.models import Course, Program, ProgramSection, User
 
 
 class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
@@ -48,6 +49,21 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
             "total_sessions": sum(row["sessions_completed"] for row in summaries),
             "total_answers": sum(row["total_answers"] for row in summaries),
         }
+        context["management_stats"] = {
+            "pending_count": User.objects.filter(
+                role=User.Role.PROFESSOR,
+                **({"department": department} if department else {}),
+                approval_status=User.ApprovalStatus.PENDING,
+            ).count(),
+            "faculty_count": User.objects.filter(
+                role=User.Role.PROFESSOR,
+                **({"department": department} if department else {}),
+            ).count(),
+            "course_count": Subject.objects.filter(program__in=programs).count(),
+            "section_count": ProgramSection.objects.filter(
+                program__in=programs, is_active=True
+            ).count(),
+        }
         context["all_programs"] = [
             {"slug": slug, "name": name}
             for slug, name, _dept in PROGRAM_DEFINITIONS
@@ -73,7 +89,12 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
 
     def get_queryset(self):
         department = self.request.user.department
-        student_ids = students_in_department(department).values_list("pk", flat=True)
+        if department:
+            student_ids = students_in_department(department).values_list("pk", flat=True)
+        else:
+            student_ids = User.objects.filter(role=User.Role.STUDENT).values_list(
+                "pk", flat=True
+            )
         queryset = (
             Course.objects.filter(review_sessions__student_id__in=student_ids)
             .select_related("professor", "program")
@@ -109,8 +130,18 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         department = self.request.user.department
-        programs = Program.objects.filter(managing_department=department).order_by("name")
-        student_ids = students_in_department(department).values_list("pk", flat=True)
+        if department:
+            programs = Program.objects.filter(managing_department=department).order_by(
+                "name"
+            )
+            student_ids = students_in_department(department).values_list(
+                "pk", flat=True
+            )
+        else:
+            programs = Program.objects.all().order_by("name")
+            student_ids = User.objects.filter(role=User.Role.STUDENT).values_list(
+                "pk", flat=True
+            )
         terms = (
             Course.objects.filter(review_sessions__student_id__in=student_ids)
             .values_list("term", flat=True)
@@ -163,10 +194,10 @@ class ResearchDataExportView(ChairpersonRequiredMixin, View):
         import hashlib
 
         department = request.user.department
-        if not department:
-            return HttpResponse("No department assigned.", status=403)
-
-        students = students_in_department(department).filter(role=User.Role.STUDENT)
+        if department:
+            students = students_in_department(department).filter(role=User.Role.STUDENT)
+        else:
+            students = User.objects.filter(role=User.Role.STUDENT)
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = 'attachment; filename="examiq_research_export.csv"'
         writer = csv.writer(response)

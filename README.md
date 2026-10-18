@@ -68,6 +68,58 @@ GEMINI_MODEL=gemini-2.0-flash
 
 Question Bank shows **AI: Ollama Cloud**, **AI: Gemini**, **AI: OpenAI**, or **AI: Off** based on configuration.
 
+## Learning Material Editing
+
+Two editors, chosen automatically per material:
+
+| Editor | Used for | Needs |
+| --- | --- | --- |
+| **Built-in HTML editor** | Everything, unless ONLYOFFICE is on | Nothing |
+| **ONLYOFFICE** | `.docx`, `.doc`, `.odt`, `.rtf`, `.xlsx`, `.pptx` | A running Document Server |
+
+The built-in editor stores editor HTML and re-exports it, so a complex Word file
+loses some fidelity. ONLYOFFICE round-trips the real binary file and keeps
+headings, styles, headers and tables intact.
+
+### ONLYOFFICE Document Server
+
+Leave `ONLYOFFICE_DOCUMENT_SERVER_URL` blank and nothing changes — the built-in
+editor is used for every material.
+
+```env
+ONLYOFFICE_DOCUMENT_SERVER_URL=https://onlyoffice.example.com
+ONLYOFFICE_JWT_SECRET=a-long-random-shared-secret
+ONLYOFFICE_JWT_ENABLED=True
+```
+
+Run the server as its own service (it cannot live inside a Nixpack):
+
+```bash
+docker run -d --name onlyoffice -p 8080:80 \
+  -e JWT_ENABLED=true -e JWT_SECRET=a-long-random-shared-secret \
+  -e JWT_HEADER=Authorization \
+  -v /data/onlyoffice:/var/www/onlyoffice/Data \
+  onlyoffice/documentserver
+```
+
+**The Document Server must be able to reach this app directly.** It calls back to
+`/professor/courses/<id>/materials/<id>/office/callback/` server-to-server, so
+the app needs a public hostname in production — not just a browser-reachable one.
+
+Security notes:
+
+- Editor config and every callback are JWT-signed; a callback with a missing or
+  invalid token is rejected.
+- The Document Server fetches the file through a signed, short-lived,
+  path-bound token instead of a session cookie.
+- Edited files are only downloaded from the Document Server's own origin, so the
+  callback cannot be used as an SSRF proxy.
+
+**PDFs always use the built-in editor.** A PDF has no paragraph model, so making
+one editable means a lossy PDF→DOCX conversion (`pdf2docx` or LibreOffice
+headless) first. Large scanned PDFs convert slowly and need manual cleanup, so
+this is not done automatically.
+
 ## Email (Brevo SMTP)
 
 Signup OTP and workflow emails use Django SMTP. Copy keys from `.env.example` into `.env`:

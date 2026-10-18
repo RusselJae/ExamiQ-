@@ -21,7 +21,7 @@ flowchart LR
 | Entity | Examples | Who manages |
 |--------|----------|-------------|
 | **Program** | CS, IT, BSEd Math, Psychology, … | Chairperson of program's managing department |
-| **Course offering** | MATH101-CS, 1st Sem 2026 | Professor (creates/clones/archives) |
+| **Course offering** | MATH101-CS, 1st Sem 2026 | Program Coordinator assigns Faculty to sections |
 | **Topics & questions** | Discrete Math, Business Math, … | Per program; professor proposes, chair approves |
 
 ### Eight programs
@@ -48,11 +48,18 @@ flowchart LR
 
 ---
 
-## Professor workflow
+## Program Coordinator workflow
+
+- Reviews and approves verified faculty account requests.
+- Creates the subject catalog for the program.
+- Creates program sections and assigns faculty to a subject, section, and term.
+- Does not receive faculty analytics or student records merely by holding this role.
+
+## Faculty workflow
 
 | Action | URL | Notes |
 |--------|-----|-------|
-| List / create | `/professor/courses/` | Term, year, section, **program** |
+| Subject catalog | `/professor/courses/` | View the coordinator-managed subjects used for question tools |
 | Course analytics | `/professor/courses/<id>/` | Roster from session participation |
 | Question bank | per course | Submissions go **pending** until chair approval |
 
@@ -74,5 +81,6 @@ Question approval is limited to chairs whose department **manages** the program.
 | Role | Can | Cannot |
 |------|-----|--------|
 | **Student** | Review within home program offerings | Access other programs' offerings |
-| **Professor** | Own course offerings, propose questions | Approve own questions |
+| **Program Coordinator** | Approve faculty requests, manage sections, create subjects, assign faculty | View faculty analytics by default |
+| **Professor** | Teach assigned sections, propose questions | Create subjects, approve own questions |
 | **Chairperson** | Dept analytics, program approval (if managing dept), course audit | Other departments' student data |

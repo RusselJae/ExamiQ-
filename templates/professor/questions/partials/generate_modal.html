@@ -1,85 +1,108 @@
 {% load examiq_tags %}
 <div class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" id="generate-modal">
-    <div class="bento-card bento-card--elevated p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto shadow-xl" role="dialog" aria-modal="true" aria-labelledby="generate-modal-title">
-        <div class="flex justify-between items-start mb-4">
+    <div class="bento-card bento-card--elevated gen-review shadow-xl" role="dialog" aria-modal="true" aria-labelledby="generate-modal-title">
+        <div class="gen-review__header">
             <div>
-                <h2 id="generate-modal-title" class="text-lg font-semibold text-examiq-navy">AI Generated Questions</h2>
-                <p class="text-sm text-examiq-slate mt-1">
-                    Topic: <strong>{{ topic.name }}</strong> &middot;
-                    Difficulty: <strong>{{ difficulty|difficulty_label }}</strong> &middot;
-                    Type: <strong>{{ question_type|default:"mcq"|title }}</strong>
+                <h2 id="generate-modal-title" class="gen-review__title">Review generated questions</h2>
+                <p class="gen-review__subtitle">
+                    {% if course %}{{ course.code }}{% if course.name %} &middot; {{ course.name }}{% endif %}{% endif %}{% if topic %} &middot; {{ topic.name }}{% endif %}
+                    &middot; {{ difficulty|difficulty_label }}
+                    &middot; {% if question_type == "mcq" %}Multiple choice{% else %}{{ question_type|title }}{% endif %}
                 </p>
             </div>
-            <button type="button" id="close-generate-modal" class="text-examiq-slate hover:text-examiq-navy text-2xl leading-none p-1" aria-label="Close">&times;</button>
+            <button type="button" id="close-generate-modal" class="gen-review__close" aria-label="Close">&times;</button>
         </div>
 
         {% if ai_error %}
-        <div class="bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 mb-4">
-            {{ ai_error }}
+        <div class="gen-review__alert">{{ ai_error }}</div>
+        <div class="gen-review__footer">
+            <div class="gen-review__footer-actions">
+                <button type="button" id="close-generate-modal-footer" class="btn-secondary">Close</button>
+            </div>
         </div>
         {% elif variations %}
-        <div class="space-y-3 mb-6">
+        <div class="gen-review__list">
             {% for variation in variations %}
-            <div class="border border-slate-200 p-4 bg-white">
-                <label class="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox"
-                           name="selected_variation"
-                           value="{{ forloop.counter0 }}"
-                           checked
-                           class="mt-1 rounded border-slate-300"
-                           data-stem="{{ variation.stem|escape }}"
-                           data-concept="{{ variation.concept_tag|default:''|escape }}"
-                           data-question-type="{{ variation.question_type|default:'mcq' }}"
-                           data-correct="{{ variation.correct_label|default:'A' }}"
-                           data-difficulty="{{ variation.difficulty|default:difficulty }}"
-                           data-expected="{{ variation.expected_answer|default:''|escape }}"
-                           data-solution="{{ variation.solution_summary|default:''|escape }}"
-                           data-what-went-wrong="{{ variation.what_went_wrong|default:''|escape }}"
-                           data-why="{{ variation.why|default:''|escape }}"
-                           data-quick-check="{{ variation.quick_check|default:''|escape }}"
-                           data-remember="{{ variation.remember|default:''|escape }}"
-                           data-worked-example="{{ variation.worked_example|default:''|escape }}"
-                           {% if variation.explanation_steps %}data-steps="{% for step in variation.explanation_steps %}{{ step|escape }}{% if not forloop.last %}|||{% endif %}{% endfor %}"{% endif %}
-                           {% for choice in variation.choices %}
-                           data-choice-{{ choice.label|lower }}="{{ choice.text|escape }}"
-                           {% endfor %}>
-                    <span class="flex-1 min-w-0">
-                        <span class="text-examiq-navy font-medium block">{{ variation.stem }}</span>
-                        <span class="text-xs text-examiq-slate mt-1 block">
-                            Difficulty:
-                            <strong>{{ variation.difficulty|default:difficulty|difficulty_label }}</strong>
-                        </span>
-                        {% if variation.concept_tag %}
-                        <span class="text-xs text-examiq-slate mt-1 block">Concept: {{ variation.concept_tag }}</span>
-                        {% endif %}
-                        {% if variation.choices %}
-                        <ul class="text-sm text-examiq-slate mt-2 space-y-1">
-                            {% for choice in variation.choices %}
-                            <li><strong>{{ choice.label }}.</strong> {{ choice.text }}{% if choice.is_correct %} &#10003;{% endif %}</li>
-                            {% endfor %}
-                        </ul>
-                        {% elif variation.expected_answer %}
-                        <p class="text-sm text-examiq-slate mt-2">
-                            <strong>Answer:</strong>
-                            {% if variation.question_type == "enumeration" %}
-                            {{ variation.expected_answer|linebreaksbr }}
-                            {% else %}
-                            {{ variation.expected_answer }}
-                            {% endif %}
-                        </p>
-                        {% endif %}
+            <article class="gen-card{% if variation.fit_meta.fit != "good" %} is-flagged{% endif %}"
+                     data-variation-index="{{ forloop.counter0 }}"
+                     data-fit="{{ variation.fit_meta.fit }}"
+                     {% if variation.fit_meta.fit == "good" %}data-selected="1"{% endif %}>
+                <div class="gen-card__head">
+                    <label class="gen-card__check" for="variation-{{ forloop.counter0 }}">
+                        <input type="checkbox"
+                               id="variation-{{ forloop.counter0 }}"
+                               class="gen-card__checkbox"
+                               name="selected_variation"
+                               value="{{ forloop.counter0 }}"
+                               {% if variation.fit_meta.fit == "good" %}checked{% endif %}
+                               data-stem="{{ variation.stem|escape }}"
+                               data-concept="{{ variation.concept_tag|default:''|escape }}"
+                               data-question-type="{{ variation.question_type|default:'mcq' }}"
+                               data-correct="{{ variation.correct_label|default:'A' }}"
+                               data-difficulty="{{ variation.difficulty|default:difficulty }}"
+                               data-expected="{{ variation.expected_answer|default:''|escape }}"
+                               data-solution="{{ variation.solution_summary|default:''|escape }}"
+                               data-what-went-wrong="{{ variation.what_went_wrong|default:''|escape }}"
+                               data-why="{{ variation.why|default:''|escape }}"
+                               data-quick-check="{{ variation.quick_check|default:''|escape }}"
+                               data-remember="{{ variation.remember|default:''|escape }}"
+                               data-worked-example="{{ variation.worked_example|default:''|escape }}"
+                               data-fit="{{ variation.fit_meta.fit }}"
+                               data-step-count="{{ variation.fit_meta.step_count }}"
+                               {% if variation.explanation_steps %}data-steps="{% for step in variation.explanation_steps %}{{ step|escape }}{% if not forloop.last %}|||{% endif %}{% endfor %}"{% endif %}
+                               {% for choice in variation.choices %}
+                               data-choice-{{ choice.label|lower }}="{{ choice.text|escape }}"
+                               {% endfor %}>
+                        <span class="gen-card__stem">{{ variation.stem }}</span>
+                    </label>
+                    {% if variation.fit_meta.can_regenerate_harder %}
+                    <button type="button"
+                            class="gen-card__regen"
+                            data-regenerate-index="{{ forloop.counter0 }}"
+                            data-regenerate-difficulty="{{ variation.fit_meta.next_difficulty }}">Regenerate harder</button>
+                    {% endif %}
+                </div>
+
+                {% if variation.choices %}
+                <ul class="gen-card__choices">
+                    {% for choice in variation.choices %}
+                    <li class="gen-choice{% if choice.is_correct %} is-correct{% endif %}">
+                        <span class="gen-choice__label">{{ choice.label }}.</span>
+                        <span class="gen-choice__text">{{ choice.text }}</span>
+                        {% if choice.is_correct %}<span class="gen-choice__mark" aria-label="correct">&#10003;</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% elif variation.expected_answer %}
+                <p class="gen-card__answer"><strong>Answer:</strong> {{ variation.expected_answer|linebreaksbr }}</p>
+                {% endif %}
+
+                <div class="gen-card__tags">
+                    <span class="difficulty-pill difficulty-pill--{{ variation.fit_meta.difficulty_code }}">{{ variation.fit_meta.difficulty_label }}</span>
+                    {% if variation.fit_meta.flag %}<span class="gen-card__flag">{{ variation.fit_meta.flag }}</span>{% else %}<span class="gen-card__flag" hidden></span>{% endif %}
+                    <span class="gen-card__note">
+                        {% if variation.concept_tag %}{{ variation.concept_tag }} &middot; {% endif %}{{ variation.fit_meta.reasoning_note }}{% if variation.fit_meta.fit == "good" %} &middot; Fit: good{% endif %}
                     </span>
-                </label>
-            </div>
+                </div>
+            </article>
             {% endfor %}
         </div>
-        <div class="flex flex-wrap gap-3">
-            <button type="button" id="apply-generated-btn" class="btn-primary">Apply selected to form</button>
-            <button type="button" id="close-generate-modal-footer" class="btn-secondary">Cancel</button>
+        <div class="gen-review__footer">
+            <div class="gen-review__footer-actions">
+                <button type="button" id="apply-generated-btn" class="btn-primary">
+                    Add <span data-selected-count>0</span> selected to batch
+                </button>
+                <button type="button" id="close-generate-modal-footer" class="btn-secondary">Cancel</button>
+            </div>
+            <p class="gen-review__hint">Added questions stay as drafts until validated.</p>
         </div>
         {% else %}
-        <p class="text-examiq-slate mb-4">No questions generated. Enable AI or try again.</p>
-        <button type="button" id="close-generate-modal-footer" class="btn-secondary">Close</button>
+        <p class="gen-review__empty">No questions generated. Enable AI or try again.</p>
+        <div class="gen-review__footer">
+            <div class="gen-review__footer-actions">
+                <button type="button" id="close-generate-modal-footer" class="btn-secondary">Close</button>
+            </div>
+        </div>
         {% endif %}
     </div>
 </div>

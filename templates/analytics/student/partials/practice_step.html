@@ -1,0 +1,52 @@
+<section class="concept-practice" id="concept-practice"
+         data-attempt-id="{% if practice_attempt %}{{ practice_attempt.pk }}{% endif %}"
+         data-resolved="{% if review.status == 'resolved' %}1{% else %}0{% endif %}"
+         data-hint="{{ practice_payload.hint|default:''|escape }}">
+    {% if review.status == 'resolved' %}
+    <div class="concept-panel concept-panel--success">
+        <h2 class="concept-panel__title">Concept resolved</h2>
+        <p>You got 3 correct on different questions. A re-check may be due later; missing this concept in an exam brings it back.</p>
+        <form method="post" action="{% url 'analytics_student:concept_review_again' review.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary">Review again</button>
+        </form>
+        <a class="btn-secondary" href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=resolved">
+            Back to resolved list
+        </a>
+    </div>
+    {% else %}
+    <div class="concept-panel">
+        <h2 class="concept-panel__title">Practice (no timer)</h2>
+        <p class="concept-practice__question" id="practice-question">{{ practice_payload.question }}</p>
+
+        <fieldset class="concept-options" id="practice-options">
+            <legend class="sr-only">Answer choices</legend>
+            {% for opt in practice_payload.options %}
+            <label class="concept-option" data-option-id="{{ opt.id }}">
+                <input type="radio" name="practice_choice" value="{{ opt.id }}">
+                <span>{{ opt.text }}</span>
+            </label>
+            {% endfor %}
+        </fieldset>
+
+        <div class="concept-try-it__actions">
+            <button type="button" class="btn-primary" id="practice-check">Check answer</button>
+            <button type="button" class="btn-secondary" id="practice-hint">Show hint</button>
+            <button type="button" class="btn-secondary concept-regen-btn" id="practice-regenerate"
+                    data-regen-label="Change question">
+                <span class="concept-regen-btn__spinner" aria-hidden="true"></span>
+                <span class="concept-regen-btn__text">Change question</span>
+            </button>
+        </div>
+
+        <div class="concept-panel concept-panel--warn hidden" id="practice-feedback" role="status"></div>
+        <p class="concept-hint hidden" id="practice-hint-text"></p>
+        <div class="concept-practice__solution hidden" id="practice-solution"></div>
+
+        <button type="button" class="btn-primary concept-flow__cta hidden" id="practice-next">
+            Next question
+        </button>
+    </div>
+    <p class="concept-flow__footnote">No timer. Clear this concept with 3 correct answers on different questions.</p>
+    {% endif %}
+</section>

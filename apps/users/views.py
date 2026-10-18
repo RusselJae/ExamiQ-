@@ -6,19 +6,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.views import View
 
-from apps.users.faculty_pin_services import get_faculty_signup_pin_status
 from apps.users.forms import (
     EmailChangeRequestForm,
     ExamiQChangePasswordForm,
-    FacultySignupPinForm,
     ProfileUpdateForm,
 )
 from apps.users.models import User
 from apps.users.services import get_account_activity
-
-
-def _user_can_manage_faculty_signup_pin(user: User) -> bool:
-    return user.role in (User.Role.PROFESSOR, User.Role.CHAIRPERSON)
 
 
 class ProfileView(LoginRequiredMixin, View):
@@ -30,8 +24,6 @@ class ProfileView(LoginRequiredMixin, View):
             "email_form": EmailChangeRequestForm(user=user),
             "password_form": ExamiQChangePasswordForm(user=user),
         }
-        if _user_can_manage_faculty_signup_pin(user):
-            forms["faculty_pin_form"] = FacultySignupPinForm(user=user)
         return forms
 
     def get_context(self, user, forms=None):
@@ -40,10 +32,7 @@ class ProfileView(LoginRequiredMixin, View):
             **forms,
             "pending_emails": EmailAddress.objects.filter(user=user, verified=False),
             "account_activity": get_account_activity(user),
-            "can_manage_faculty_signup_pin": _user_can_manage_faculty_signup_pin(user),
         }
-        if context["can_manage_faculty_signup_pin"]:
-            context["faculty_signup_pin_status"] = get_faculty_signup_pin_status()
         return context
 
     def get(self, request):
@@ -88,21 +77,6 @@ class ProfileView(LoginRequiredMixin, View):
             if form.is_valid():
                 form.save()
                 messages.success(request, "Password updated.")
-                return redirect("users:profile")
-            return render(request, self.template_name, self.get_context(user, forms))
-
-        if action == "update_faculty_pin":
-            if not _user_can_manage_faculty_signup_pin(user):
-                return redirect("users:profile")
-            form = FacultySignupPinForm(user=user, data=request.POST)
-            forms = self.get_forms(user)
-            forms["faculty_pin_form"] = form
-            if form.is_valid():
-                form.save()
-                messages.success(
-                    request,
-                    "Faculty signup PIN updated. Other faculty accounts were notified by email.",
-                )
                 return redirect("users:profile")
             return render(request, self.template_name, self.get_context(user, forms))
 

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Subject Catalog - EXAMIQ+{% endblock %}
+
+{% block content %}
+{% include "components/page_header.html" with title="Subject Catalog" subtitle="Add the subjects that faculty can be assigned to teach." %}
+
+<div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <section class="bento-card bento-card-inner overflow-x-auto">
+        <table class="data-table w-full">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Subject</th>
+                    <th>Year</th>
+                    <th>Semester</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for subject in subjects %}
+                <tr>
+                    <td class="font-semibold">{{ subject.code }}</td>
+                    <td>{{ subject.name }}</td>
+                    <td class="text-examiq-slate">{{ subject.year_level.name }}</td>
+                    <td class="text-examiq-slate">{{ subject.get_semester_display }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="py-8 text-center text-sm text-examiq-slate">No subjects yet. Add the first subject for your program.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if page_obj.has_other_pages %}
+        <div class="pagination-bar mt-4">
+            {% if page_obj.has_previous %}<a href="{% querystring page=page_obj.previous_page_number %}" class="text-link text-sm">Previous</a>{% endif %}
+            <span class="pagination-bar__info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}<a href="{% querystring page=page_obj.next_page_number %}" class="text-link text-sm">Next</a>{% endif %}
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="bento-card bento-card-inner h-fit">
+        <h2 class="text-lg font-semibold text-examiq-navy">Add subject</h2>
+        <p class="mt-1 text-sm text-examiq-slate">Subjects become available when assigning faculty to sections.</p>
+        <form method="post" class="mt-5" novalidate>
+            {% csrf_token %}
+            {{ form|crispy }}
+            <button type="submit" class="btn-primary btn-primary-sm mt-2">Add subject</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

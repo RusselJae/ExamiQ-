@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load static %}
+
+{# Shared shell for both question editors (single question + batch draft).
+   Screens extend this and fill in the field blocks; everything else - the
+   student preview, the readiness checklist, and the save actions - is shared. #}
+
+{% block title %}{{ editor_title|default:"Edit question" }} - EXAMIQ+{% endblock %}
+
+{% block main_class %}question-edit-page{% endblock %}
+
+{% block content %}
+<div class="qe-head" data-question-editor-shell>
+    {% if cancel_url %}
+    <a href="{{ cancel_url }}" class="overview-back-link">&larr; Back to saved questions</a>
+    {% endif %}
+    <nav class="qe-breadcrumb" aria-label="Breadcrumb">
+        {% for crumb in breadcrumbs %}
+        {% if crumb.url %}
+        <a href="{{ crumb.url }}" class="qe-breadcrumb__link">{{ crumb.label }}</a>
+        {% else %}
+        <span class="qe-breadcrumb__current" aria-current="page">{{ crumb.label }}</span>
+        {% endif %}
+        {% if not forloop.last %}<span class="qe-breadcrumb__sep" aria-hidden="true">/</span>{% endif %}
+        {% endfor %}
+    </nav>
+    <div class="qe-head__row">
+        <h1 class="qe-head__title">{{ editor_title|default:"Edit question" }}</h1>
+        <span class="qe-unsaved" data-unsaved-badge hidden>
+            <span class="qe-unsaved__dot" aria-hidden="true"></span>
+            Unsaved changes
+        </span>
+    </div>
+</div>
+
+{% block editor_notices %}{% endblock %}
+
+<form method="post"
+      id="question-edit-form"
+      class="question-editor"
+      data-question-editor
+      {% block editor_form_attrs %}{% endblock %}>
+    {% csrf_token %}
+
+    <div class="question-editor__layout">
+        <div class="question-editor__main">
+            {% block editor_fields %}{% endblock %}
+        </div>
+
+        <aside class="question-editor__side">
+            <section class="qe-student bento-card" aria-labelledby="qe-student-title">
+                <header class="qe-student__bar">
+                    <span class="qe-student__label" id="qe-student-title">Student view</span>
+                    <div class="qe-segmented" role="group" aria-label="Student view mode" data-student-mode>
+                        <button type="button" class="qe-segmented__btn is-active" data-student-mode-btn="question">Question</button>
+                        <button type="button" class="qe-segmented__btn" data-student-mode-btn="wrong">If wrong</button>
+                    </div>
+                </header>
+                <div class="qe-student__body" data-student-preview></div>
+            </section>
+
+            <section class="qe-ready bento-card" aria-labelledby="qe-ready-title">
+                <header class="qe-ready__bar">
+                    <h2 class="qe-ready__title" id="qe-ready-title">Ready to publish</h2>
+                </header>
+                <ul class="qe-ready__list" data-ready-list>
+                    <li class="qe-ready__item" data-ready-check="question">
+                        <span class="qe-ready__mark" aria-hidden="true"></span>
+                        <span class="qe-ready__label">Question</span>
+                    </li>
+                    <li class="qe-ready__item" data-ready-check="choices">
+                        <span class="qe-ready__mark" aria-hidden="true"></span>
+                        <span class="qe-ready__label">Choices</span>
+                    </li>
+                    <li class="qe-ready__item" data-ready-check="explanation">
+                        <span class="qe-ready__mark" aria-hidden="true"></span>
+                        <span class="qe-ready__label">Explanation</span>
+                    </li>
+                    <li class="qe-ready__item" data-ready-check="steps">
+                        <span class="qe-ready__mark" aria-hidden="true"></span>
+                        <span class="qe-ready__label">Steps</span>
+                    </li>
+                </ul>
+                <div class="qe-ready__actions">
+                    {% block editor_actions %}
+                    <button type="button" class="btn-secondary" data-editor-cancel
+                            {% if cancel_url %}data-cancel-url="{{ cancel_url }}"{% endif %}>Cancel</button>
+                    <button type="submit" class="btn-primary">Save changes</button>
+                    {% endblock %}
+                </div>
+            </section>
+        </aside>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/question-editor.js' %}"></script>
+{% block editor_js %}{% endblock %}
+{% endblock %}

@@ -35,7 +35,7 @@ class TestMaterialsHubAndUpload:
         assert response.status_code == 200
         assert "Content Management" in content
         assert subject.code in content
-        assert "Select a course subject" in content
+        assert "Select a course" in content
         assert "materials-library__empty" in content
 
     def test_hub_gated_until_subject_selected(
@@ -99,9 +99,7 @@ class TestMaterialsHubAndUpload:
         assert doc.subject_id == subject.pk
         assert doc.original_name == "hub-notes.txt"
 
-    def test_upload_accepts_subject_and_original_name(
-        self, client, professor, subject
-    ):
+    def test_upload_accepts_subject_and_original_name(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         upload = SimpleUploadedFile(
@@ -243,8 +241,8 @@ class TestMistakeThresholdAndFeedback:
         assert response.status_code == 200
         assert "should be revised" in content
         assert "Regenerate question" in content
-        assert "Adaptive explanation" in content
-        assert "Step-by-step" in content
+        assert "Solution steps" in content
+        assert "What went wrong" in content
         assert "Faculty expert attestation" not in content
         assert "Faculty feedback" not in content
 
@@ -342,8 +340,8 @@ class TestQuestionAdaptiveExplanationEdit:
         )
         assert get_response.status_code == 200
         content = get_response.content.decode()
-        assert "Adaptive explanation" in content
-        assert "Step-by-step" in content
+        assert "Explanation" in content
+        assert "Solution steps" in content
 
         choices = list(question.choices.order_by("label"))
         post_data = {
@@ -409,11 +407,9 @@ class TestQuestionAdaptiveExplanationEdit:
         )
         assert get_response.status_code == 200
         content = get_response.content.decode()
-        assert "Adaptive explanation" in content
-        assert "Step-by-step" in content
-        assert "1 Details" in content
-        assert "3 Explanation" in content
-        assert 'data-question-edit-tabs' in content
+        assert "Explanation" in content
+        assert "Solution steps" in content
+        assert "data-question-editor" in content
 
         post_data = {
             "topic": topic.pk,
@@ -464,9 +460,7 @@ class TestQuestionAdaptiveExplanationEdit:
             question=question, content__contains="ones place"
         ).exists()
 
-    def test_batch_draft_edit_shows_explanation_tabs(
-        self, client, professor, subject
-    ):
+    def test_batch_draft_edit_matches_reference_ui(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         response = client.get(
@@ -477,13 +471,41 @@ class TestQuestionAdaptiveExplanationEdit:
         )
         content = response.content.decode()
         assert response.status_code == 200
-        assert "1 Details" in content
-        assert "3 Explanation" in content
-        assert "4 Steps" in content
+
+        # Shared editor shell: breadcrumb header, student view, readiness panel.
+        assert "data-question-editor-shell" in content
+        assert "data-question-editor" in content
+        assert "data-student-preview" in content
+        assert "Ready to publish" in content
+        assert 'data-ready-check="question"' in content
+        assert 'data-ready-check="choices"' in content
+        assert 'data-ready-check="explanation"' in content
+        assert 'data-ready-check="steps"' in content
+
+        # Two inner tabs replace the old four numbered ones.
+        assert 'data-subtab="explanation"' in content
+        assert 'data-subtab="steps"' in content
+        assert "Explanation" in content
+        assert "Solution steps" in content
+
+        # Answer choice circles mark the correct answer.
+        assert 'name="edit-correct"' in content
+        assert content.count("data-choice-radio") == 4
+
         assert "What went wrong" in content
         assert "edit-adaptive-what-went-wrong" in content
         assert "edit-steps-list" in content
+        assert 'data-edit-difficulty="medium"' in content
 
+        # Cancel/Save live at the bottom of the readiness panel, and the back
+        # breadcrumb returns to the previous screen.
+        assert content.index("qe-ready__actions") < content.index("Save changes")
+        assert "data-cancel-url" in content
+
+        # The old four-tab chrome is gone.
+        assert "1 Details" not in content
+        assert "3 Explanation" not in content
+        assert "4 Steps" not in content
 
 
 @pytest.mark.django_db

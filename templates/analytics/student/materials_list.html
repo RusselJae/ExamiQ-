@@ -15,7 +15,7 @@
         </div>
     </header>
 
-    {% include "components/materials_library.html" with documents=documents library_count=library_count material_types=material_types faculty_mode=False subject=subject download_url_name="analytics_student:materials_download" %}
+    {% include "components/materials_library.html" with documents=documents library_count=library_count ext_counts=ext_counts faculty_mode=False subject=subject download_url_name="analytics_student:materials_download" %}
 </div>
 {% endblock %}
 

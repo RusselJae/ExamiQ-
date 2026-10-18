@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import itertools
+import logging
+
 from apps.ai.ingest import ingest_learning_upload
-from apps.ai.models import LearningDocument
+from apps.ai.models import LearningChunk, LearningDocument
 from apps.ai.source_extract import SourceMaterialError
+
+# Guardrail so a stray paste cannot rewrite a whole corpus through the editor.
+MAX_EDITABLE_CHARS = 400_000
+
+logger = logging.getLogger(__name__)
 
 
 def documents_for_course(course_id: int, *, include_archived: bool = False):
@@ -43,12 +51,23 @@ def ingest_course_material(
     material_type: str = LearningDocument.MaterialType.MODULE,
     subject=None,
     original_name: str = "",
+    pages=None,
+    extraction_error: str = "",
 ) -> LearningDocument:
-    """Upload + extract, then attach library metadata."""
+    """Upload + extract, then attach library metadata.
+
+    ``pages`` lets a caller that already extracted text (to gate on subject
+    relevance) hand it over instead of paying for extraction twice.
+    """
+    kwargs = {}
+    if pages is not None:
+        kwargs["pages"] = pages
+        kwargs["extraction_error"] = extraction_error
     document = ingest_learning_upload(
         uploaded_file=uploaded_file,
         course_id=course_id,
         user=user,
+        **kwargs,
     )
     cleaned_name = (original_name or "").strip()
     if cleaned_name:
@@ -99,6 +118,196 @@ def set_document_subject(document: LearningDocument, subject) -> LearningDocumen
     document.subject = subject
     document.save(update_fields=["subject", "updated"])
     return document
+
+
+# Formats the editor can regenerate on download. PDF has no faithful HTML
+# representation, so those keep serving the original upload.
+TEXT_FILE_SUFFIXES = (".txt", ".md", ".csv")
+DOCX_SUFFIX = ".docx"
+_MIN_OVERLAP_CHARS = 20
+
+
+def document_text_is_rewritable(document: LearningDocument) -> bool:
+    """True when the download can be regenerated from the editor content."""
+    name = (document.original_name or "").lower()
+    return name.endswith(TEXT_FILE_SUFFIXES) or name.endswith(DOCX_SUFFIX)
+
+
+def document_editor_html(document: LearningDocument) -> str:
+    """Editor HTML for a document, derived from plain text when absent.
+
+    Documents uploaded before this field existed (and formats with no markup)
+    still get a usable surface: the text is promoted to paragraphs.
+    """
+    from apps.ai.document_html import text_to_html
+
+    if document.content_html.strip():
+        return document.content_html
+    return text_to_html(document_plain_text(document))
+
+
+def document_plain_text(document: LearningDocument) -> str:
+    """Full editable text for a document.
+
+    Prefers the canonical ``source_text``; documents ingested before that field
+    existed fall back to reassembling their chunks (stripping the chunking
+    overlap so the result reads as the original prose).
+    """
+    if document.source_text:
+        return document.source_text
+
+    chunks = list(document.chunks.order_by("order"))
+    if not chunks:
+        return ""
+    if len(chunks) == 1:
+        return chunks[0].text
+
+    from apps.ai.source_extract import CHUNK_OVERLAP
+
+    parts = [chunks[0].text]
+    for previous, current in itertools.pairwise(chunks):
+        overlap = _shared_overlap(previous.text, current.text, CHUNK_OVERLAP)
+        parts.append(current.text[overlap:])
+    return "".join(parts)
+
+
+def _shared_overlap(previous: str, current: str, max_overlap: int) -> int:
+    """Length of the suffix of ``previous`` repeated at the start of ``current``."""
+    limit = min(len(previous), len(current), max_overlap)
+    for size in range(limit, _MIN_OVERLAP_CHARS - 1, -1):
+        if previous.endswith(current[:size]):
+            return size
+    return 0
+
+
+def replace_document_content(
+    document: LearningDocument,
+    *,
+    html: str | None = None,
+    text: str | None = None,
+    rewrite_file: bool = True,
+) -> dict:
+    """Replace a document's content, re-deriving chunks so AI sees the edit.
+
+    Accepts editor HTML (preferred) and/or plain text. Returns a small result
+    dict for the view layer to turn into messages. Raises
+    ``SourceMaterialError`` for unusable input.
+    """
+    from apps.ai.document_html import (
+        DocumentConversionError,
+        html_to_text,
+        sanitize_html,
+        text_to_html,
+    )
+
+    clean_html = ""
+    if html is not None:
+        clean_html = sanitize_html(html)
+        clean_text = html_to_text(clean_html)
+    else:
+        clean_text = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    if not clean_text.strip():
+        raise SourceMaterialError("Add some content before saving.")
+    if len(clean_text) > MAX_EDITABLE_CHARS:
+        raise SourceMaterialError(
+            f"That is too long to edit here (limit {MAX_EDITABLE_CHARS:,} characters). "
+            "Upload the document as a file instead."
+        )
+
+    if not clean_html:
+        try:
+            clean_html = text_to_html(clean_text)
+        except DocumentConversionError:
+            clean_html = ""
+
+    from apps.ai.source_extract import chunk_pages
+
+    chunks = chunk_pages([{"page": 1, "text": clean_text}])
+    document.chunks.all().delete()
+    LearningChunk.objects.bulk_create(
+        [
+            LearningChunk(
+                document=document,
+                order=item["order"],
+                page_start=item["page_start"],
+                page_end=item["page_end"],
+                text=item["text"],
+            )
+            for item in chunks
+        ]
+    )
+
+    document.source_text = clean_text
+    document.content_html = clean_html
+    document.chunk_count = len(chunks)
+    document.page_count = 1
+    document.status = LearningDocument.Status.READY
+    document.error_message = ""
+    document.save(
+        update_fields=[
+            "source_text",
+            "content_html",
+            "chunk_count",
+            "page_count",
+            "status",
+            "error_message",
+            "updated",
+        ]
+    )
+
+    result = {
+        "chunk_count": len(chunks),
+        "file_updated": False,
+        "file_kept_original": False,
+    }
+
+    if rewrite_file and document.file and document_text_is_rewritable(document):
+        result["file_updated"] = _rewrite_download(document, clean_text, clean_html)
+        result["file_kept_original"] = not result["file_updated"]
+    elif document.file:
+        result["file_kept_original"] = True
+
+    return result
+
+
+def _rewrite_download(document: LearningDocument, text: str, html: str) -> bool:
+    """Regenerate the stored download so it matches what the editor shows."""
+    import posixpath
+
+    from django.core.files.base import ContentFile
+
+    from apps.ai.document_html import DocumentConversionError
+
+    name = (document.original_name or "").lower()
+    if name.endswith(DOCX_SUFFIX):
+        from apps.ai.document_html import html_to_docx_bytes
+
+        try:
+            payload = html_to_docx_bytes(html, title=document.display_title)
+        except DocumentConversionError as exc:
+            logger.warning("DOCX export failed for document %s: %s", document.pk, exc)
+            return False
+    else:
+        payload = text.encode("utf-8")
+
+    # Pass only the basename: FileField.save re-applies upload_to, so a
+    # full storage path would nest the directory twice.
+    basename = posixpath.basename(document.file.name) or "material.txt"
+    try:
+        document.file.delete(save=False)
+        document.file.save(basename, ContentFile(payload), save=False)
+        document.save(update_fields=["file", "updated"])
+        return True
+    except (OSError, ValueError):
+        # The old bytes are already gone; leave the row consistent rather than
+        # pointing downloads at a file that no longer exists.
+        document.file = None
+        try:
+            document.save(update_fields=["file", "updated"])
+        except Exception:  # pragma: no cover - best effort cleanup
+            logger.exception("Could not clear stored file for document %s", document.pk)
+        return False
 
 
 def archive_document(document: LearningDocument) -> LearningDocument:
@@ -157,14 +366,19 @@ def document_download_name(document: LearningDocument) -> str:
 
 
 __all__ = [
+    "MAX_EDITABLE_CHARS",
     "SourceMaterialError",
     "archive_document",
     "document_download_name",
+    "document_editor_html",
+    "document_plain_text",
+    "document_text_is_rewritable",
     "documents_for_course",
     "documents_for_subject",
     "ingest_course_material",
     "ready_documents_for_course",
     "ready_documents_for_subject",
+    "replace_document_content",
     "restore_document",
     "set_document_subject",
     "update_document_metadata",

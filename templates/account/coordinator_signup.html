@@ -1,0 +1,60 @@
+{% extends "account/auth_base.html" %}
+
+{% block title %}Program Coordinator Sign Up - EXAMIQ+{% endblock %}
+
+{% block auth_nav %}{% include "components/auth_nav_signup.html" %}{% endblock %}
+
+{% block auth_card_class %} auth-page__card--signup{% endblock %}
+
+{% block auth_content %}
+<h2 class="auth-page__heading">Create your coordinator account</h2>
+<p class="auth-page__subheading">This private link is for program coordinators only. Your request will need approval before you can sign in.</p>
+
+<form method="post" action="{% url 'account_coordinator_signup' token=coordinator_token %}" class="auth-form" novalidate id="signup-form">
+    {% csrf_token %}
+    {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+    {% if form.non_field_errors %}
+    <div class="auth-form__errors" role="alert">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="auth-form-row auth-form-row--2">
+        {% include "components/auth_field.html" with field=form.first_name %}
+        {% include "components/auth_field.html" with field=form.last_name %}
+    </div>
+    <div class="auth-form-row auth-form-row--2">
+        {% include "components/auth_field.html" with field=form.middle_name %}
+        {% include "components/auth_field.html" with field=form.suffix %}
+    </div>
+    {% include "components/auth_field.html" with field=form.employee_id %}
+
+    <label class="auth-field{% if form.department.errors %} auth-field--error{% endif %}" for="{{ form.department.id_for_label }}">
+        <span class="auth-field__label">{{ form.department.label }}</span>
+        {{ form.department }}
+        {% if form.department.errors %}<p class="auth-field__error">{{ form.department.errors.0 }}</p>{% endif %}
+    </label>
+
+    <div class="auth-form-row auth-form-row--2">
+        <label class="auth-field{% if form.phone_number.errors %} auth-field--error{% endif %}" for="id_phone_display">
+            <span class="auth-field__label">{{ form.phone_number.label }}</span>
+            <div class="auth-phone-wrap">
+                <span class="auth-phone-prefix"><span class="auth-phone-flag" aria-hidden="true">🇵🇭</span><span class="auth-phone-code">+63</span></span>
+                <input type="tel" id="id_phone_display" class="auth-field__input" inputmode="numeric" maxlength="10" placeholder="9XX XXX XXXX" autocomplete="tel" required>
+            </div>
+            {% if form.phone_number.errors %}<p class="auth-field__error">{{ form.phone_number.errors.0 }}</p>{% endif %}
+        </label>
+        {% include "components/auth_field.html" with field=form.email %}
+    </div>
+
+    <hr class="auth-form__divider" aria-hidden="true">
+    {% include "components/auth_password_field.html" with field=form.password1 strength_target=True %}
+    {% include "components/auth_password_strength.html" with compact=True %}
+    {% include "components/auth_password_field.html" with field=form.password2 %}
+    <button type="submit" class="auth-btn-submit">Send account request</button>
+</form>
+{% endblock %}
+
+{% block auth_footer %}
+<p class="auth-page__footer">Already requested? <a href="{% url 'account_login' %}">Sign in</a></p>
+{% endblock %}

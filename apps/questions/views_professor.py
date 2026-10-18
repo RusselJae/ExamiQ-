@@ -52,6 +52,7 @@ from apps.questions.services import (
     create_question,
     deactivate_question,
     find_duplicate_question,
+    generation_fit_meta,
     mistake_student_threshold,
     question_feedback_summary,
 )
@@ -229,6 +230,13 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
         context["adaptive_explanation"] = clean_adaptive_explanation({})
 
+        context.update(_editor_shell_context(self.course, "Create question"))
+        context["difficulty_choices"] = [
+            (Question.Difficulty.EASY, "Beginner"),
+            (Question.Difficulty.MEDIUM, "Intermediate"),
+            (Question.Difficulty.HARD, "Advanced"),
+        ]
+
         return context
 
     def form_valid(self, form):
@@ -363,6 +371,13 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
                 "question_pk": self.object.pk,
             },
         )
+
+        context.update(_editor_shell_context(self.course, "Edit question"))
+        context["difficulty_choices"] = [
+            (Question.Difficulty.EASY, "Beginner"),
+            (Question.Difficulty.MEDIUM, "Intermediate"),
+            (Question.Difficulty.HARD, "Advanced"),
+        ]
 
         return context
 
@@ -557,17 +572,18 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
     template_name = "professor/questions/batch_question_edit.html"
 
     def get(self, request, course_pk, question_index):
-        return render(
-            request,
-            self.template_name,
-            {
-                "course": self.course,
-                "active_tab": "questions",
-                "form_title": "Edit Question",
-                "question_index": question_index,
-                "question_number": question_index + 1,
-            },
-        )
+        context = {
+            "course": self.course,
+            "active_tab": "questions",
+            "form_title": "Edit Question",
+            "question_index": question_index,
+            "question_number": question_index + 1,
+            # The draft itself lives in sessionStorage; the page patches the
+            # real total in on load.
+            "total_questions": None,
+        }
+        context.update(_editor_shell_context(self.course, "Edit question"))
+        return render(request, self.template_name, context)
 
 
 class QuestionBatchCreateView(ProfessorCourseMixin, View):
@@ -877,7 +893,7 @@ class QuestionCSVImportView(ProfessorCourseMixin, View):
 
 
 def _hub_course_options(professor):
-    """Course subject options for the top-level Add Questions filter."""
+    """Course options for the top-level Add Questions filter."""
     subjects = (
         Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
         .select_related("program", "year_level")
@@ -1099,6 +1115,10 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                 "job_id": job.pk,
                 "status": job.status,
                 "topic_id": topic.pk,
+                # Lets the batch UI promote a just-uploaded file into the saved
+                # "Source material" picker instead of re-uploading it each run.
+                "learning_document_id": document.pk if document else None,
+                "learning_document_title": (document.display_title if document else ""),
                 "status_url": reverse(
                     "analytics_professor:question_ai_generate_status",
                     kwargs={"course_pk": self.course.pk, "job_id": job.pk},
@@ -1210,6 +1230,7 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
             )
 
         variations = []
+        requested_bands: list[str] = []
         if job.status == AIGenerationJob.Status.SUCCEEDED:
             variations = normalize_generated_questions(
                 job.result.get("variations") or [],
@@ -1217,11 +1238,22 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
             )
             from apps.ai.job_services import parse_job_difficulties
 
-            fallback = parse_job_difficulties(job.difficulty)[0]
+            requested_bands = parse_job_difficulties(job.difficulty)
+            fallback = requested_bands[0]
             for item in variations:
                 code = (item.get("difficulty") or "").strip()
                 if code not in Question.Difficulty.values:
                     item["difficulty"] = fallback
+
+        if not requested_bands:
+            from apps.ai.job_services import parse_job_difficulties
+
+            requested_bands = parse_job_difficulties(job.difficulty)
+        variation_meta = []
+        for item in variations:
+            meta = generation_fit_meta(item, requested_bands)
+            item["fit_meta"] = meta
+            variation_meta.append(meta)
 
         wants_json = "application/json" in (request.headers.get("Accept") or "")
         if wants_json and request.GET.get("html") != "1":
@@ -1232,6 +1264,8 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
                     "done": True,
                     "error": job.error_message or None,
                     "variations": variations,
+                    "variation_meta": variation_meta,
+                    "requested_difficulties": requested_bands,
                 }
             )
 
@@ -1240,6 +1274,8 @@ class QuestionAIGenerateStatusView(ProfessorCourseMixin, View):
             "professor/questions/partials/generate_modal.html",
             {
                 "variations": variations,
+                "variation_meta": variation_meta,
+                "requested_difficulties": requested_bands,
                 "course": self.course,
                 "topic": topic,
                 "difficulty": job.difficulty or Question.Difficulty.EASY,
@@ -1365,6 +1401,27 @@ def _get_program_subject(course, subject_id, professor=None):
     ):
         return None
     return subject
+
+
+def _editor_shell_context(course, title: str) -> dict:
+    """Breadcrumb/cancel context shared by both question editors.
+
+    The Cancel action prefers browser history (the user may have arrived from
+    the batch draft, analytics, or the question list); these URLs are only the
+    fallback for a fresh tab with no history to pop.
+    """
+    list_url = reverse(
+        "analytics_professor:question_list", kwargs={"course_pk": course.pk}
+    )
+    return {
+        "editor_title": title,
+        "breadcrumbs": [
+            {"label": course.code, "url": list_url},
+            {"label": "Saved questions", "url": list_url},
+            {"label": "Edit" if "edit" in title.lower() else "New", "url": None},
+        ],
+        "cancel_url": list_url,
+    }
 
 
 def _subject_for_course(course):

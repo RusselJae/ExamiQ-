@@ -7,7 +7,8 @@
 {% block auth_content %}
 <h2 class="auth-page__heading">Check your email</h2>
 <p class="auth-page__subheading">
-    We sent a 6-digit code to <strong>{{ email }}</strong>. Enter it below to activate your account.
+    We sent a 6-digit code to <strong>{{ email }}</strong>. Enter it below to verify your email.
+    {% if awaiting_approval %}Your faculty request will then wait for program coordinator approval.{% endif %}
 </p>
 
 {% if error %}

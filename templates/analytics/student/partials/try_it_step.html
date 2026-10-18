@@ -1,0 +1,32 @@
+<section class="concept-try-it" id="concept-try-it" data-hint="{{ try_it.hint|default:''|escape }}">
+    <div class="concept-panel">
+        <h2 class="concept-panel__title">Try it: just the first step</h2>
+        {% if try_it.problem %}
+        <p class="concept-try-it__problem">{{ try_it.problem }}</p>
+        {% endif %}
+
+        <fieldset class="concept-options" id="try-it-options">
+            <legend class="sr-only">First step choices</legend>
+            {% for choice in try_it.first_step_choices %}
+            <label class="concept-option">
+                <input type="radio" name="try_it_choice" value="{{ forloop.counter0 }}">
+                <span>{{ choice }}</span>
+            </label>
+            {% endfor %}
+        </fieldset>
+
+        <div class="concept-try-it__actions">
+            <button type="button" class="btn-primary" id="try-it-check">Check answer</button>
+            <button type="button" class="btn-secondary" id="try-it-hint">Show hint</button>
+        </div>
+
+        <div class="concept-panel concept-panel--warn hidden" id="try-it-feedback" role="status"></div>
+        <p class="concept-hint hidden" id="try-it-hint-text"></p>
+
+        <a class="btn-primary concept-flow__cta hidden" id="try-it-continue"
+           href="{% url 'analytics_student:concept_review' review.pk %}?step=practice">
+            Continue to Practice
+        </a>
+    </div>
+    <p class="concept-flow__footnote">No timer here. Hints are free and do not count against you.</p>
+</section>

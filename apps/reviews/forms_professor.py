@@ -39,8 +39,12 @@ class ExamSetupForm(forms.ModelForm):
             "allowed_difficulties",
         ]
         widgets = {
-            "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
-            "seconds_per_question": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}),
+            "is_enabled": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300"}
+            ),
+            "seconds_per_question": forms.NumberInput(
+                attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}
+            ),
         }
         labels = {
             "seconds_per_question": "Time per question (seconds)",
@@ -62,7 +66,9 @@ class ExamSetupForm(forms.ModelForm):
         cleaned = super().clean()
         seconds = cleaned.get("seconds_per_question")
         if seconds is not None and not 10 <= seconds <= 120:
-            raise forms.ValidationError("Seconds per question must be between 10 and 120.")
+            raise forms.ValidationError(
+                "Seconds per question must be between 10 and 120."
+            )
         difficulties = cleaned.get("allowed_difficulties")
         if not difficulties:
             raise forms.ValidationError("Select at least one difficulty level.")
@@ -85,7 +91,11 @@ class ReviewWindowForm(forms.ModelForm):
     allowed_difficulties = forms.MultipleChoiceField(
         choices=Question.Difficulty.choices,
         widget=forms.CheckboxSelectMultiple,
-        initial=[Question.Difficulty.EASY, Question.Difficulty.MEDIUM, Question.Difficulty.HARD],
+        initial=[
+            Question.Difficulty.EASY,
+            Question.Difficulty.MEDIUM,
+            Question.Difficulty.HARD,
+        ],
     )
 
     class Meta:
@@ -114,15 +124,21 @@ class ReviewWindowForm(forms.ModelForm):
                 format="%Y-%m-%dT%H:%M",
             ),
             "duration_minutes": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS}),
-            "seconds_per_question": forms.NumberInput(attrs={"class": FORM_INPUT_CLASS}),
+            "seconds_per_question": forms.NumberInput(
+                attrs={"class": FORM_INPUT_CLASS}
+            ),
             "mode": forms.Select(attrs={"class": FORM_INPUT_CLASS}),
-            "is_active": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "is_active": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300"}
+            ),
         }
 
     def __init__(self, *args, course=None, **kwargs):
         super().__init__(*args, **kwargs)
         if course and course.program_id:
-            self.fields["topics"].queryset = Topic.objects.filter(subject__program=course.program)
+            self.fields["topics"].queryset = Topic.objects.filter(
+                subject__program=course.program
+            )
 
     def clean(self):
         cleaned = super().clean()
@@ -135,7 +151,9 @@ class ReviewWindowForm(forms.ModelForm):
             raise forms.ValidationError("Duration must be between 5 and 120 minutes.")
         seconds = cleaned.get("seconds_per_question")
         if seconds is not None and not 10 <= seconds <= 120:
-            raise forms.ValidationError("Seconds per question must be between 10 and 120.")
+            raise forms.ValidationError(
+                "Seconds per question must be between 10 and 120."
+            )
         difficulties = cleaned.get("allowed_difficulties")
         if not difficulties:
             raise forms.ValidationError("Select at least one difficulty level.")
@@ -176,7 +194,7 @@ class ProgramExamSetupForm(forms.ModelForm):
                 "size": "8",
             }
         ),
-        label="Course subjects available for exams",
+        label="Courses available for exams",
         help_text="Students pick at least 1 from this list. Leave empty to allow the full BSED Math catalog.",
     )
     allowed_difficulties = forms.MultipleChoiceField(
@@ -195,7 +213,9 @@ class ProgramExamSetupForm(forms.ModelForm):
             "allowed_difficulties",
         ]
         widgets = {
-            "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "is_enabled": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300"}
+            ),
             "seconds_per_question": forms.NumberInput(
                 attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}
             ),
@@ -211,8 +231,8 @@ class ProgramExamSetupForm(forms.ModelForm):
             .select_related("year_level")
             .order_by("year_level__order", "semester", "code")
         )
-        self.fields["subjects"].label_from_instance = (
-            lambda obj: f"{obj.code} — {obj.name}"
+        self.fields["subjects"].label_from_instance = lambda obj: (
+            f"{obj.code} — {obj.name}"
         )
         if self.instance and self.instance.pk:
             self.fields["subjects"].initial = self.instance.subjects.all()
@@ -220,7 +240,9 @@ class ProgramExamSetupForm(forms.ModelForm):
     def clean_seconds_per_question(self):
         seconds = self.cleaned_data.get("seconds_per_question")
         if seconds is not None and not 10 <= seconds <= 120:
-            raise forms.ValidationError("Seconds per question must be between 10 and 120.")
+            raise forms.ValidationError(
+                "Seconds per question must be between 10 and 120."
+            )
         return seconds
 
     def clean_allowed_difficulties(self):
@@ -262,7 +284,9 @@ class SectionExamSetupForm(forms.ModelForm):
             "allowed_difficulties",
         ]
         widgets = {
-            "is_enabled": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "is_enabled": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300"}
+            ),
             "seconds_per_question": forms.NumberInput(
                 attrs={"class": FORM_INPUT_CLASS, "min": 10, "max": 120}
             ),
@@ -278,8 +302,8 @@ class SectionExamSetupForm(forms.ModelForm):
             .select_related("year_level")
             .order_by("year_level__order", "semester", "code")
         )
-        self.fields["subjects"].label_from_instance = (
-            lambda obj: f"{obj.code} — {obj.name}"
+        self.fields["subjects"].label_from_instance = lambda obj: (
+            f"{obj.code} — {obj.name}"
         )
         if self.instance and self.instance.pk:
             self.fields["subjects"].initial = self.instance.subjects.all()
@@ -287,7 +311,9 @@ class SectionExamSetupForm(forms.ModelForm):
     def clean_seconds_per_question(self):
         seconds = self.cleaned_data.get("seconds_per_question")
         if seconds is not None and not 10 <= seconds <= 120:
-            raise forms.ValidationError("Seconds per question must be between 10 and 120.")
+            raise forms.ValidationError(
+                "Seconds per question must be between 10 and 120."
+            )
         return seconds
 
     def clean_allowed_difficulties(self):

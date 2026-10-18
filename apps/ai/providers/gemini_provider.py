@@ -9,6 +9,8 @@ from apps.ai.helpers import calibration_narrative_from_matrix, course_review_nar
 from apps.ai.interfaces import (
     AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
+    ConceptPracticeGenerator,
+    ConceptRemediationGenerator,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -301,3 +303,35 @@ class GeminiErrorClassifier(ErrorClassifier):
             return None
         slug = result.lower().strip().strip(".")
         return ErrorType.objects.filter(slug=slug).first()
+
+
+class GeminiConceptRemediationGenerator(ConceptRemediationGenerator):
+    def generate(self, **kwargs) -> dict:
+        from apps.ai.concept_ai_services import generate_validated_concept_remediation
+
+        def chat_json(system: str, prompt: str, max_tokens: int) -> str | None:
+            result = gemini_client.chat_with_fallback(
+                prompt,
+                system=system,
+                max_output_tokens=max_tokens,
+                json_mode=True,
+            )
+            return result.text
+
+        return generate_validated_concept_remediation(chat_json=chat_json, **kwargs)
+
+
+class GeminiConceptPracticeGenerator(ConceptPracticeGenerator):
+    def generate(self, **kwargs) -> dict:
+        from apps.ai.concept_ai_services import generate_validated_concept_practice
+
+        def chat_json(system: str, prompt: str, max_tokens: int) -> str | None:
+            result = gemini_client.chat_with_fallback(
+                prompt,
+                system=system,
+                max_output_tokens=max_tokens,
+                json_mode=True,
+            )
+            return result.text
+
+        return generate_validated_concept_practice(chat_json=chat_json, **kwargs)

@@ -645,6 +645,25 @@ def build_explanation_generation_prompt(question) -> tuple[str, str, int]:
     math_rules = _explanation_math_rules(subject)
     system = EXPLANATION_GENERATION_SYSTEM
 
+    # Faculty-authored steps are the basis for generation: the model improves
+    # and expands them instead of inventing a solution from scratch. Always
+    # included (even with zero mistakes so far) so faculty can seed steps first.
+    faculty_steps = list(
+        question.explanation_steps.order_by("order").values_list("content", flat=True)
+    )
+    faculty_steps = [str(s).strip() for s in faculty_steps if str(s or "").strip()]
+    if faculty_steps:
+        numbered = "\n".join(
+            f"  {index}. {step}" for index, step in enumerate(faculty_steps, start=1)
+        )
+        faculty_block = (
+            "Faculty-authored solution steps (use as the basis — keep what is "
+            "correct, fix what is not, and expand into fuller teaching steps):\n"
+            f"{numbered}\n"
+        )
+    else:
+        faculty_block = ""
+
     user_prompt = (
         f"Write explanation_steps, solution_summary, and a shared adaptive explanation "
         f"for students who miss this {qtype} question.\n"
@@ -652,6 +671,7 @@ def build_explanation_generation_prompt(question) -> tuple[str, str, int]:
         f"Difficulty: {difficulty_label(question.difficulty)}\n"
         f"Stem: {question.stem}\n"
         f"{answer_block}\n"
+        f"{faculty_block}"
         f"{type_guidance}"
         f"{math_rules}"
         "Write a complete worked solution a student can study after a mistake — concrete, "
@@ -1325,3 +1345,204 @@ def build_question_subject_relevance_prompt(
         f"Return JSON only matching:\n{SUBJECT_RELEVANCE_JSON_SCHEMA}"
     )
     return SUBJECT_RELEVANCE_SYSTEM, user
+
+
+# ---------------------------------------------------------------------------
+# Concept remediation (Learn + Try it) and untimed practice questions
+# ---------------------------------------------------------------------------
+
+CONCEPT_REMEDIATION_JSON_SCHEMA = """\
+{
+  "diagnosis": {
+    "type": "misconception | knowledge_gap | careless_error",
+    "what_went_wrong": "1-2 sentences naming the specific error, addressed to the student",
+    "prerequisite_flag": "concept name or null"
+  },
+  "explanation": {
+    "style_used": "worked_example | analogy | mistakes_first | backwards",
+    "core_idea": "2-4 sentences",
+    "key_rules": ["max 3 short rules"]
+  },
+  "worked_example": {
+    "problem": "...",
+    "steps": [{"step": "...", "why": "one short reason"}],
+    "final_answer": "..."
+  },
+  "common_mistakes": [
+    {"mistake": "...", "why_it_fails": "...", "fix": "..."}
+  ],
+  "try_it": {
+    "problem": "a problem similar to the worked example",
+    "first_step_choices": ["3 options, one correct"],
+    "correct_index": 0,
+    "hint": "one sentence",
+    "feedback_if_wrong": "name the error behind the wrong choice"
+  },
+  "check_yourself": "one sentence the student can use to verify any answer to this concept"
+}"""
+
+CONCEPT_REMEDIATION_SYSTEM = (
+    f"You are a math tutor inside {EXAMIQ_PERSONA}, a review system for college students. "
+    "A student keeps missing the same concept in timed multiple-choice exams. "
+    "Your job is to teach the concept in a NEW way, because the earlier feedback did not work.\n"
+    "Write math in LaTeX between $...$. Plain text only outside JSON.\n"
+    "Return ONLY valid JSON matching the schema. No markdown fences, no prose outside JSON."
+)
+
+CONCEPT_PRACTICE_JSON_SCHEMA = """\
+{
+  "concept": "concept name",
+  "difficulty": "beginner | intermediate | advanced",
+  "question": "...",
+  "options": [
+    {"id": "A", "text": "...", "is_correct": false, "error_tag": "sign_error", "why_wrong": "1-2 sentences"},
+    {"id": "B", "text": "...", "is_correct": true, "error_tag": null, "why_wrong": null},
+    {"id": "C", "text": "...", "is_correct": false, "error_tag": "...", "why_wrong": "..."},
+    {"id": "D", "text": "...", "is_correct": false, "error_tag": "...", "why_wrong": "..."}
+  ],
+  "hint": "one sentence that points to the first step without revealing the answer",
+  "solution_steps": ["short steps, 5 max"],
+  "final_answer": "...",
+  "self_check": "one sentence the student can use to verify their own answer"
+}"""
+
+CONCEPT_PRACTICE_SYSTEM = (
+    f"You write ONE multiple-choice math practice question for {EXAMIQ_PERSONA}, "
+    "a review system for college students. The student has just reviewed this concept "
+    "after repeatedly missing it in timed exams. This question is untimed practice. "
+    "Its job is to check real understanding, not to trick the student.\n"
+    "Write math in LaTeX between $...$. Plain text only outside JSON.\n"
+    "Return ONLY valid JSON matching the schema. No markdown fences, no prose outside JSON."
+)
+
+
+def concept_remediation_max_tokens() -> int:
+    """Budget for Learn / Try it remediation JSON."""
+    from django.conf import settings
+
+    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
+    return min(max(cap, 1600), 2400)
+
+
+def concept_practice_max_tokens() -> int:
+    """Budget for a single concept practice MCQ JSON."""
+    from django.conf import settings
+
+    cap = getattr(settings, "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", 2048)
+    return min(cap, 1600)
+
+
+def build_concept_remediation_prompt(
+    *,
+    concept_name: str,
+    subject: str,
+    topic: str,
+    difficulty: str = "beginner",
+    miss_count: int = 1,
+    missed_questions: list[dict[str, Any]] | None = None,
+    previous_feedback_styles: list[str] | None = None,
+    student_stage: str = "first_review",
+    prerequisites: list[str] | None = None,
+    preferred_style: str = "worked_example",
+) -> tuple[str, str]:
+    """Build Learn + Try it remediation JSON prompt."""
+    missed_json = json.dumps(missed_questions or [], ensure_ascii=False)
+    styles_json = json.dumps(previous_feedback_styles or [], ensure_ascii=False)
+    prereq_json = json.dumps(prerequisites or [], ensure_ascii=False)
+    user_prompt = f"""\
+## INPUT
+- Concept: {concept_name}
+- Subject / topic: {subject} / {topic}
+- Difficulty level the student was taking: {difficulty}
+- Number of misses: {miss_count}
+- Missed questions, with the student's chosen answer, the correct answer, and their confidence (Sure/Guessing):
+  {missed_json}
+- Feedback styles already shown to this student: {styles_json}
+- Student stage: {student_stage}
+- Prerequisite concepts (if known): {prereq_json}
+- Preferred style for this pass (use this if possible): {preferred_style}
+
+## HOW TO DIAGNOSE
+1. Compare each chosen wrong answer with the correct one. Work out the most likely error \
+(sign error, forgot to distribute, wrong formula, wrong order of operations, and so on).
+2. If the student picked the same wrong answer more than once, or marked "Sure" on a wrong answer, \
+treat it as a MISCONCEPTION. Name the faulty belief directly and explain why it fails.
+3. If the answers were varied or marked "Guessing", treat it as a KNOWLEDGE GAP and teach from the basics.
+4. If you suspect a missing prerequisite, say so in "prerequisite_flag".
+
+## HOW TO TEACH
+- Use a different style from the styles already shown. Prefer: {preferred_style}. \
+Choose one of: worked_example, analogy, mistakes_first, or backwards.
+- Write for a college student: clear, calm, not condescending. No filler or praise.
+- Plain text only. Write math in LaTeX between $...$.
+- Keep each section short. Do not exceed the length limits below.
+- Do NOT reuse the numbers from the student's missed questions. Use fresh numbers.
+- Never reveal or hint at a practice question's answer.
+
+## OUTPUT
+Return ONLY valid JSON matching:
+{CONCEPT_REMEDIATION_JSON_SCHEMA}
+
+Limits: core_idea 60 words max, worked_example 5 steps max, common_mistakes 2 items max.
+try_it.first_step_choices must have exactly 3 options; correct_index is 0-based."""
+    return CONCEPT_REMEDIATION_SYSTEM, user_prompt
+
+
+def build_concept_practice_question_prompt(
+    *,
+    concept_name: str,
+    subject: str,
+    topic: str,
+    difficulty: str = "beginner",
+    attempt_number: int = 1,
+    known_error_tags: list[str] | None = None,
+    previous_questions: list[dict[str, Any]] | None = None,
+    prerequisite_mode: bool = False,
+    prerequisite_concept: str = "",
+) -> tuple[str, str]:
+    """Build untimed concept practice MCQ JSON prompt."""
+    tags_json = json.dumps(known_error_tags or [], ensure_ascii=False)
+    prev_json = json.dumps(previous_questions or [], ensure_ascii=False)
+    prereq_line = (
+        f"- Prerequisite mode: true (test {prerequisite_concept} instead)\n"
+        if prerequisite_mode and prerequisite_concept
+        else "- Prerequisite mode: false\n"
+    )
+    user_prompt = f"""\
+## INPUT
+- Concept: {concept_name}
+- Subject / topic: {subject} / {topic}
+- Target difficulty: {difficulty}
+- Attempt number in this practice session: {attempt_number}
+- Student's misconceptions found so far (error tags): {tags_json}
+- Questions already shown to this student for this concept (never repeat or closely copy these):
+  {prev_json}
+{prereq_line}
+## QUESTION RULES
+1. Test exactly one concept. Do not combine it with unrelated skills.
+2. Change the surface features from the previous questions (numbers, context, variable names, form) \
+while keeping the same underlying skill. Do not reuse any number set from previous questions.
+3. Match the target difficulty:
+   - beginner: one or two steps, small whole numbers, direct wording
+   - intermediate: two or three steps, some negatives or fractions, short context
+   - advanced: multi-step, conceptual or mixed forms, less direct wording
+4. Make the question solvable by hand in under 3 minutes. State everything needed. Avoid ambiguity.
+5. If attempt_number is 2 or more, make it slightly more scaffolded than the previous one \
+without giving away the answer.
+
+## OPTION RULES
+1. Exactly 4 options, one correct.
+2. Each wrong option must come from a specific, realistic error. Tag each with a short error_tag.
+3. If known_error_tags is not empty, include at least one distractor that matches one of those errors.
+4. All options must look equally plausible: similar length, format and precision. \
+Never use "all of the above" or "none of the above".
+5. Randomize the position of the correct option.
+
+## VERIFY BEFORE ANSWERING
+Solve the problem yourself step by step. Compute every option's value from its stated error \
+and confirm that the correct option is correct and no wrong option is accidentally also correct.
+
+## OUTPUT
+Return ONLY valid JSON matching:
+{CONCEPT_PRACTICE_JSON_SCHEMA}"""
+    return CONCEPT_PRACTICE_SYSTEM, user_prompt

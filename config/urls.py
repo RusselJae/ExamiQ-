@@ -5,7 +5,12 @@ from django.contrib import admin
 from django.urls import include, path
 
 from apps.core.views import HealthCheckView
-from apps.users.allauth_views import ExamiQLoginView, ExamiQSignupView
+from apps.users.allauth_views import (
+    CoordinatorSignupView,
+    ExamiQFacultySignupView,
+    ExamiQLoginView,
+    ExamiQSignupView,
+)
 from apps.users.views_password_reset import ExamiQPasswordResetView
 
 urlpatterns = [
@@ -21,8 +26,25 @@ urlpatterns = [
     # bounce every GET back to the verification-code screen.
     path("accounts/login/", ExamiQLoginView.as_view(), name="account_login"),
     path("accounts/signup/", ExamiQSignupView.as_view(), name="account_signup"),
+    path(
+        "accounts/faculty/<str:token>/signup/",
+        ExamiQFacultySignupView.as_view(),
+        name="account_faculty_signup",
+    ),
+    # Unlisted coordinator registration — not linked anywhere; share privately.
+    path(
+        "accounts/coordinator/<str:token>/signup/",
+        CoordinatorSignupView.as_view(),
+        name="account_coordinator_signup",
+    ),
     path("accounts/", include("allauth.urls")),
     path("profile/", include("apps.users.urls")),
+    path("coordinator/", include("apps.users.urls_campus", namespace="campus")),
+    path(
+        "coordinator/",
+        include("apps.analytics.urls_chairperson", namespace="analytics_chairperson"),
+    ),
+    path("coordinator/", include("apps.users.urls_coordinator", namespace="coordinator")),
     path("", include("apps.core.urls")),
     path("student/", include("apps.reviews.urls", namespace="reviews")),
     path("student/", include("apps.analytics.urls_student", namespace="analytics_student")),

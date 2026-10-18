@@ -3,12 +3,9 @@
 {% block title %}Saved Questions - {{ course.code }}{% endblock %}
 
 {% block content %}
-{% include "components/professor_section_header.html" with course=course page_label="Saved Questions" %}
+{% url 'analytics_professor:question_create' course.pk as add_question_url %}
+{% include "components/professor_section_header.html" with course=course page_label="Saved Questions" cta_url=add_question_url cta_label="Add Question" %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
-
-<div class="flex justify-end items-center mb-4">
-    <a href="{% url 'analytics_professor:question_create' course.pk %}" class="btn-primary">Add question</a>
-</div>
 
 <div class="bento-grid{% if filter_bar_single_row %} filter-bar-grid--single-row{% endif %}">
     {% include "components/filter_bar.html" %}

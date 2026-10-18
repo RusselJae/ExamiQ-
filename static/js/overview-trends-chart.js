@@ -567,7 +567,7 @@
             var n = points.length;
             var mistStat = n + (n === 1 ? " question" : " questions");
             var mistDetail = flat
-                ? "Bar = times incorrect · tap Q# to review the answer."
+                ? "Bar = times incorrect · tap a bar to open the question."
                 : "Bar = unique students (≥15) · tap Q# to open the question.";
             return (
                 '<div class="overview-chart-hint__row">' +

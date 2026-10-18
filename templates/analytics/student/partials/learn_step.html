@@ -1,0 +1,66 @@
+{% with diagnosis=learn.diagnosis explanation=learn.explanation worked=learn.worked_example %}
+<section class="concept-learn">
+    {% if diagnosis.what_went_wrong %}
+    <div class="concept-panel concept-panel--warn">
+        <h2 class="concept-panel__title">Why your answer did not work</h2>
+        <p>{{ diagnosis.what_went_wrong }}</p>
+    </div>
+    {% endif %}
+
+    <div class="concept-panel">
+        <h2 class="concept-panel__title">The idea</h2>
+        {% if explanation.core_idea %}
+        <p class="concept-learn__core">{{ explanation.core_idea }}</p>
+        {% endif %}
+        {% if explanation.key_rules %}
+        <ul class="concept-learn__rules">
+            {% for rule in explanation.key_rules %}
+            <li>{{ rule }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if worked.problem %}
+        <h3 class="concept-learn__example-label">Worked example</h3>
+        <p class="concept-learn__problem">{{ worked.problem }}</p>
+        {% if worked.steps %}
+        <ol class="concept-learn__steps">
+            {% for item in worked.steps %}
+            <li>
+                <span>{{ item.step }}</span>
+                {% if item.why %}<span class="concept-learn__why">{{ item.why }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ol>
+        {% endif %}
+        {% if worked.final_answer %}
+        <p class="concept-learn__final"><strong>Answer:</strong> {{ worked.final_answer }}</p>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    {% if learn.common_mistakes %}
+    <div class="concept-panel">
+        <h2 class="concept-panel__title">Common mistakes</h2>
+        <ul class="concept-learn__mistakes">
+            {% for m in learn.common_mistakes %}
+            <li>
+                <strong>{{ m.mistake }}</strong>
+                <span>{{ m.why_it_fails }}</span>
+                {% if m.fix %}<span class="concept-learn__fix">Fix: {{ m.fix }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if learn.check_yourself %}
+    <p class="concept-learn__check">{{ learn.check_yourself }}</p>
+    {% endif %}
+
+    <form method="post" action="{% url 'analytics_student:concept_review_continue' review.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn-primary concept-flow__cta">Continue to Try it</button>
+    </form>
+</section>
+{% endwith %}

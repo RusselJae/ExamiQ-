@@ -154,6 +154,12 @@ LOGIN_OTP_EXEMPT_EMAILS = {
     for address in env.list("LOGIN_OTP_EXEMPT_EMAILS", default=[])
     if address.strip()
 }
+# Secret token gating the unlisted coordinator signup page.
+# Share the full URL (including the token) privately; it is not linked
+# anywhere in the site. Leave empty to disable coordinator self-signup.
+COORDINATOR_PORTAL_TOKEN = env("COORDINATOR_PORTAL_TOKEN", default="").strip()
+# Secret token gating the unlisted faculty signup page. Same handling as above.
+FACULTY_PORTAL_TOKEN = env("FACULTY_PORTAL_TOKEN", default="").strip()
 ACCOUNT_FORMS = {
     "login": "apps.users.forms.ExamiQLoginForm",
     "signup": "apps.users.forms.ExamiQSignupForm",
@@ -189,14 +195,33 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=15)
 # Prefer HTTPS (works on Railway). Falls back to EMAIL_HOST_PASSWORD if it starts with re_.
 RESEND_API_KEY = env("RESEND_API_KEY", default="")
-# Shared PIN required for Faculty role on public signup. Empty = faculty signup blocked.
-FACULTY_SIGNUP_PIN = env("FACULTY_SIGNUP_PIN", default="")
-
 # Password reset throttling (per email address).
 PASSWORD_RESET_COOLDOWN_SECONDS = env.int("PASSWORD_RESET_COOLDOWN_SECONDS", default=30)
 PASSWORD_RESET_DAILY_LIMIT = env.int("PASSWORD_RESET_DAILY_LIMIT", default=3)
 
 AI_ENABLED = env.bool("AI_ENABLED", default=False)
+
+# ---------------------------------------------------------------------------
+# ONLYOFFICE Document Server (self-hosted, Community edition)
+#
+# Leave ONLYOFFICE_DOCUMENT_SERVER_URL empty to disable the embedded editor;
+# the built-in HTML material editor is used instead. When set, the material
+# detail page embeds ONLYOFFICE for Office formats and a signed callback
+# writes the edited file back over the stored one.
+# ---------------------------------------------------------------------------
+ONLYOFFICE_DOCUMENT_SERVER_URL = env(
+    "ONLYOFFICE_DOCUMENT_SERVER_URL", default=""
+).strip().rstrip("/")
+ONLYOFFICE_JWT_SECRET = env("ONLYOFFICE_JWT_SECRET", default="")
+ONLYOFFICE_JWT_ENABLED = env.bool("ONLYOFFICE_JWT_ENABLED", default=True)
+# Public origin the Document Server uses to fetch files and post callbacks.
+# Needed only when the app is not already publicly reachable (local dev behind
+# an ngrok/cloudflared tunnel). Leave blank in production.
+ONLYOFFICE_PUBLIC_BASE_URL = env("ONLYOFFICE_PUBLIC_BASE_URL", default="").rstrip("/")
+# Formats ONLYOFFICE can reflow-edit. PDFs are excluded on purpose: they have
+# no real paragraph model, so editing them needs a lossy conversion first.
+ONLYOFFICE_EDITABLE_SUFFIXES = (".docx", ".doc", ".odt", ".rtf", ".xlsx", ".pptx")
+
 LLM_PROVIDER = env("LLM_PROVIDER", default="openai")
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 OPENAI_MODEL = env("OPENAI_MODEL", default="gpt-4o-mini")

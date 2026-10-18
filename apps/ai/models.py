@@ -112,6 +112,22 @@ class LearningDocument(models.Model):
     )
     original_name = models.CharField(max_length=255, blank=True, default="")
     file = models.FileField(upload_to="learning_modules/%Y/%m/", blank=True)
+    source_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Canonical extracted text. Faculty edits land here; LearningChunk "
+            "rows are re-derived from it so AI retrieval follows the edits."
+        ),
+    )
+    content_html = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Editor-facing HTML (headings, lists, bold, images) derived from "
+            "the upload. source_text stays the plain-text projection for AI."
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -135,6 +151,19 @@ class LearningDocument(models.Model):
     @property
     def display_title(self) -> str:
         return self.title or self.original_name or f"Document #{self.pk}"
+
+    @property
+    def suffix(self) -> str:
+        """Lowercase file extension including the dot, e.g. ``.pdf``."""
+        name = (self.original_name or self.file.name or "").lower()
+        if "." not in name:
+            return ""
+        return name.rsplit(".", 1)[-1]
+
+    @property
+    def is_pdf(self) -> bool:
+        """True for PDF uploads, which are view/download only for now."""
+        return self.suffix == "pdf"
 
     @property
     def file_type_label(self) -> str:

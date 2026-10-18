@@ -103,7 +103,9 @@ class TestConfidenceMatrix:
 
 @pytest.mark.django_db
 class TestExamSetupProfessor:
-    def test_professor_exam_setup_redirects(self, client, professor, teaching_assignment):
+    def test_professor_exam_setup_redirects(
+        self, client, professor, teaching_assignment
+    ):
         course = teaching_assignment.course
         client.force_login(professor)
         response = client.get(
@@ -124,7 +126,9 @@ class TestExamSetupProfessor:
 
 @pytest.mark.django_db
 class TestProfessorRoster:
-    def test_roster_lists_practicing_students(self, client, professor, student, program, topic):
+    def test_roster_lists_practicing_students(
+        self, client, professor, student, program, topic
+    ):
         course = Course.objects.create(
             program=program,
             code="ROST101",
@@ -142,10 +146,16 @@ class TestProfessorRoster:
             status=ReviewSession.Status.COMPLETED,
         )
         client.force_login(professor)
-        response = client.get(reverse("analytics_professor:course_roster", kwargs={"course_pk": course.pk}))
+        response = client.get(
+            reverse(
+                "analytics_professor:course_roster", kwargs={"course_pk": course.pk}
+            )
+        )
         assert response.status_code == 404
 
-    def test_student_detail_ok_without_session(self, client, professor, student, program):
+    def test_student_detail_ok_without_session(
+        self, client, professor, student, program
+    ):
         """Faculty can open student detail even with no practice yet."""
         course = Course.objects.create(
             program=program,
@@ -244,7 +254,9 @@ class TestSidebarContext:
 
 @pytest.mark.django_db
 class TestHeatmap:
-    def test_heatmap_counts_confidence_tiers(self, student, mcq_question, program, professor):
+    def test_heatmap_counts_confidence_tiers(
+        self, student, mcq_question, program, professor
+    ):
         question, _ = mcq_question
         course = Course.objects.create(
             program=program,
@@ -259,7 +271,9 @@ class TestHeatmap:
             course=course,
             status=ReviewSession.Status.COMPLETED,
         )
-        Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
+        Answer.objects.create(
+            session=session, question=question, confidence=5, is_correct=False
+        )
         heatmap = get_topic_mastery_heatmap(course)
         question_row = next(
             q for q in heatmap["questions"] if q["question_id"] == question.pk
@@ -267,7 +281,9 @@ class TestHeatmap:
         assert question_row["high"] >= 1
         assert question_row["mistakes"] >= 1
 
-    def test_student_rows_include_practicing_student(self, student, mcq_question, program, professor):
+    def test_student_rows_include_practicing_student(
+        self, student, mcq_question, program, professor
+    ):
         question, _ = mcq_question
         course = Course.objects.create(
             program=program,
@@ -282,15 +298,52 @@ class TestHeatmap:
             course=course,
             status=ReviewSession.Status.COMPLETED,
         )
-        Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
+        Answer.objects.create(
+            session=session, question=question, confidence=5, is_correct=False
+        )
         heatmap = get_topic_mastery_heatmap(course)
         assert any(row["student_id"] == student.pk for row in heatmap["student_rows"])
+
+    def test_breakdown_shows_only_guessing_and_sure(
+        self, client, student, mcq_question, program, professor
+    ):
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=program,
+            code="HEAT103",
+            name="Heatmap Breakdown",
+            professor=professor,
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            course=course,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(
+            session=session, question=question, confidence=5, is_correct=False
+        )
+        client.force_login(professor)
+        content = client.get(
+            reverse("analytics_professor:course_heatmap", kwargs={"pk": course.pk})
+        ).content.decode()
+
+        assert "Guessing" in content
+        assert "Sure" in content
+        # Retired tiers must not appear as chart series or table columns.
+        assert "No ratings" not in content
+        assert "Not sure" not in content
+        assert "heatmap-average" not in content
+        assert "heatmap-none" not in content
 
 
 @pytest.mark.django_db
 class TestQuestionCRUD:
     @override_settings(AI_ENABLED=False)
-    def test_professor_can_create_question(self, client, professor, topic, program, subject):
+    def test_professor_can_create_question(
+        self, client, professor, topic, program, subject
+    ):
         course = Course.objects.create(
             program=program,
             code=subject.code,
@@ -299,7 +352,9 @@ class TestQuestionCRUD:
         )
         client.force_login(professor)
         response = client.post(
-            reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+            reverse(
+                "analytics_professor:question_create", kwargs={"course_pk": course.pk}
+            ),
             {
                 "topic": topic.id,
                 "difficulty": Question.Difficulty.EASY,
@@ -328,7 +383,9 @@ class TestQuestionCRUD:
         )
         client.force_login(professor)
         response = client.post(
-            reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+            reverse(
+                "analytics_professor:question_create", kwargs={"course_pk": course.pk}
+            ),
             {
                 "topic": topic.id,
                 "difficulty": Question.Difficulty.EASY,
@@ -358,7 +415,9 @@ class TestQuestionCRUD:
         assert medium_q.difficulty == Question.Difficulty.MEDIUM
 
     @override_settings(AI_ENABLED=False)
-    def test_batch_skips_duplicate_question(self, client, professor, topic, program, subject):
+    def test_batch_skips_duplicate_question(
+        self, client, professor, topic, program, subject
+    ):
         course = Course.objects.create(
             program=program,
             code=subject.code,
@@ -386,7 +445,9 @@ class TestQuestionCRUD:
         )
         client.force_login(professor)
         response = client.post(
-            reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+            reverse(
+                "analytics_professor:question_create", kwargs={"course_pk": course.pk}
+            ),
             {
                 "topic": topic.id,
                 "difficulty": Question.Difficulty.EASY,
@@ -428,11 +489,18 @@ class TestQuestionCRUD:
 
         with (
             patch("apps.ai.job_services.is_ai_configured", return_value=True),
-            patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline),
-            patch("apps.ai.job_services.get_explanation_generator", return_value=generator),
+            patch(
+                "apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline
+            ),
+            patch(
+                "apps.ai.job_services.get_explanation_generator", return_value=generator
+            ),
         ):
             response = client.post(
-                reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk}),
+                reverse(
+                    "analytics_professor:question_create",
+                    kwargs={"course_pk": course.pk},
+                ),
                 {
                     "topic": topic.id,
                     "difficulty": Question.Difficulty.EASY,
@@ -466,7 +534,10 @@ class TestQuestionCRUD:
         )
         client.force_login(professor)
         response = client.post(
-            reverse("analytics_professor:question_ai_validate", kwargs={"course_pk": course.pk}),
+            reverse(
+                "analytics_professor:question_ai_validate",
+                kwargs={"course_pk": course.pk},
+            ),
             {
                 "topic": topic.id,
                 "difficulty": Question.Difficulty.EASY,
@@ -484,17 +555,24 @@ class TestQuestionCRUD:
         assert "is_valid" in data
         assert "feedback" in data
 
-    def test_professor_can_create_question_with_error_type(self, client, professor, topic, program):
+    def test_professor_can_create_question_with_error_type(
+        self, client, professor, topic, program
+    ):
         course = Course.objects.create(
             program=program,
             code="QB102",
             name="QB Course 2",
             professor=professor,
         )
-        error_type = ErrorType.objects.create(slug="unit", label="Unit error", category="procedural")
+        error_type = ErrorType.objects.create(
+            slug="unit", label="Unit error", category="procedural"
+        )
         client.force_login(professor)
         response = client.post(
-            reverse("analytics_professor:question_create_single", kwargs={"course_pk": course.pk}),
+            reverse(
+                "analytics_professor:question_create_single",
+                kwargs={"course_pk": course.pk},
+            ),
             {
                 "topic": topic.id,
                 "difficulty": Question.Difficulty.EASY,
@@ -526,7 +604,9 @@ class TestQuestionCRUD:
         wrong = question.choices.filter(label="B").first()
         assert wrong.error_type == error_type
 
-    def test_professor_cannot_edit_other_course_questions(self, client, professor, chairperson, topic, program):
+    def test_professor_cannot_edit_other_course_questions(
+        self, client, professor, chairperson, topic, program
+    ):
         course = Course.objects.create(
             program=program,
             code="OTH101",
@@ -550,11 +630,35 @@ class TestQuestionCRUD:
 
 
 @pytest.mark.django_db
+class TestQuestionEditorBackLink:
+    """Both question editors expose a back link in the shared shell."""
+
+    def test_single_question_editor_has_back_link(
+        self, client, professor, mcq_question, program
+    ):
+        question, _topic = mcq_question
+        course = Course.objects.create(
+            program=program, code="BK101", name="Back Link", professor=professor
+        )
+        client.force_login(professor)
+        content = client.get(
+            reverse(
+                "analytics_professor:question_edit",
+                kwargs={"course_pk": course.pk, "question_pk": question.pk},
+            )
+        ).content.decode()
+        assert "overview-back-link" in content
+        assert "Back to saved questions" in content
+
+
+@pytest.mark.django_db
 class TestErrorTypes:
     def test_log_mistake_copies_choice_error_type(self, student, mcq_question):
         question, correct = mcq_question
         wrong = question.choices.exclude(is_correct=True).first()
-        error_type = ErrorType.objects.create(slug="sign", label="Sign error", category="procedural")
+        error_type = ErrorType.objects.create(
+            slug="sign", label="Sign error", category="procedural"
+        )
         wrong.error_type = error_type
         wrong.save()
         session = ReviewSession.objects.create(
@@ -577,7 +681,9 @@ class TestErrorTypes:
 class TestStepFeedbackStats:
     def test_step_views_counted(self, mcq_question, student):
         question, _ = mcq_question
-        step = ExplanationStep.objects.create(question=question, order=1, content="Explain")
+        step = ExplanationStep.objects.create(
+            question=question, order=1, content="Explain"
+        )
         session = ReviewSession.objects.create(
             student=student,
             topic=question.topic,
@@ -609,7 +715,9 @@ class TestCourseInsights:
             reverse("analytics_professor:course_insights", kwargs={"pk": course.pk})
         )
         assert response.status_code == 302
-        assert response.url == reverse("analytics_professor:course_detail", kwargs={"pk": course.pk})
+        assert response.url == reverse(
+            "analytics_professor:course_detail", kwargs={"pk": course.pk}
+        )
 
     def test_analytics_does_not_auto_show_narrative(self, client, professor, program):
         course = Course.objects.create(
@@ -636,7 +744,9 @@ class TestCourseInsights:
         )
         client.force_login(professor)
         response = client.post(
-            reverse("analytics_professor:course_summary_generate", kwargs={"pk": course.pk})
+            reverse(
+                "analytics_professor:course_summary_generate", kwargs={"pk": course.pk}
+            )
         )
         assert response.status_code == 200
         data = response.json()
@@ -646,13 +756,17 @@ class TestCourseInsights:
 
 @pytest.mark.django_db
 class TestProfessorOverviewSummary:
-    def test_avg_mistakes_per_session(self, professor, bsed_program, student, mcq_question):
+    def test_avg_mistakes_per_session(
+        self, professor, bsed_program, student, mcq_question
+    ):
         from apps.analytics.models import MistakeRecord
         from apps.analytics.services import professor_overview_summary
         from apps.reviews.models import Answer, ReviewSession
 
         question, _correct = mcq_question
-        make_bsed_student(student, subject=question.topic.subject, bsed_program=bsed_program)
+        make_bsed_student(
+            student, subject=question.topic.subject, bsed_program=bsed_program
+        )
         course = Course.objects.create(
             program=bsed_program,
             code="AVG101",
@@ -691,7 +805,9 @@ class TestProfessorOverviewSummary:
 
 @pytest.mark.django_db
 class TestProfessorHighMistakeQuestions:
-    def test_filters_by_threshold(self, professor, bsed_program, mcq_question, settings):
+    def test_filters_by_threshold(
+        self, professor, bsed_program, mcq_question, settings
+    ):
         from apps.analytics.models import MistakeRecord
         from apps.analytics.services import professor_high_mistake_questions
         from apps.reviews.models import Answer, ReviewSession
@@ -711,7 +827,9 @@ class TestProfessorHighMistakeQuestions:
                 password="pass",
                 role=User.Role.STUDENT,
             )
-            make_bsed_student(student, subject=question.topic.subject, bsed_program=bsed_program)
+            make_bsed_student(
+                student, subject=question.topic.subject, bsed_program=bsed_program
+            )
             session = ReviewSession.objects.create(
                 student=student,
                 course=course,
@@ -741,8 +859,69 @@ class TestProfessorHighMistakeQuestions:
 
 
 @pytest.mark.django_db
+class TestProfessorMistakeTrend:
+    def test_trend_buckets_mistakes_and_exam_takers(
+        self, professor, bsed_program, mcq_question
+    ):
+        from apps.analytics.models import MistakeRecord
+        from apps.analytics.services import professor_overview_trends
+        from apps.reviews.models import Answer, ReviewSession
+        from apps.users.models import User
+
+        question, _ = mcq_question
+        course = Course.objects.create(
+            program=bsed_program,
+            code="MT201",
+            name="Mistake Trend Course",
+            professor=professor,
+        )
+        student = User.objects.create_user(
+            email="mt-student@test.edu",
+            password="pass",
+            role=User.Role.STUDENT,
+        )
+        make_bsed_student(
+            student, subject=question.topic.subject, bsed_program=bsed_program
+        )
+        session = ReviewSession.objects.create(
+            student=student,
+            course=course,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        answer = Answer.objects.create(
+            session=session,
+            question=question,
+            is_correct=False,
+            confidence=3,
+        )
+        MistakeRecord.objects.create(
+            student=student,
+            question=question,
+            topic=question.topic,
+            answer=answer,
+        )
+
+        trends = professor_overview_trends(professor)
+        for range_key, expected_points in (
+            ("weekly", 12),
+            ("monthly", 12),
+            ("yearly", 5),
+        ):
+            points = trends[range_key]["mistake_trend"]
+            assert len(points) == expected_points
+            assert points[-1]["value"] == 1
+            assert points[-1]["mistake_students"] == 1
+            assert points[-1]["student_count"] == 1
+            assert points[0]["value"] == 0
+
+
+@pytest.mark.django_db
 class TestProfessorOverviewUX:
-    def test_overview_includes_dates_and_course_stats(self, client, professor, bsed_program):
+    def test_overview_includes_dates_and_course_stats(
+        self, client, professor, bsed_program
+    ):
         Course.objects.create(
             program=bsed_program,
             code="OV101",
@@ -754,12 +933,24 @@ class TestProfessorOverviewUX:
         assert response.status_code == 200
         content = response.content.decode()
         assert "Week of" in content
-        assert "overviewTrendsChart" in content
-        assert "overview-trend-metric" in content
+        # "Over time" panel holds two separate line charts behind one range switcher.
+        assert "studentsOverTimeChart" in content
+        assert "mistakesOverTimeChart" in content
+        assert "over-time-range" in content
+        assert "mistake-trend-chart.js" in content
+        assert "Students over time" in content
+        assert "Mistakes over time" in content
+        # The combined bar chart is gone.
+        assert "mistakeTrendChart" not in content
+        assert "Students and mistakes over time" not in content
         assert "Jump to offering" not in content
         assert "Your courses" not in content
-        assert "Course subjects" in content or "Course Subjects" in content
-        assert "Students handled" in content or "Students Handled" in content or "Students practicing" in content
+        assert "Course" in content
+        assert (
+            "Students handled" in content
+            or "Students Handled" in content
+            or "Students practicing" in content
+        )
         # Confidence moved to its own donut, so the pill is gone from this chart.
         assert "Feeling sure vs. being right" not in content
         assert "overviewDonutChart" in content
@@ -774,7 +965,9 @@ class TestProfessorOverviewUX:
         assert "Cross-course snapshot" not in content
         assert "sidebar-link-active" in content or "Dashboard" in content
 
-    def test_summary_courses_json_is_array(self, client, professor, bsed_program, subject):
+    def test_summary_courses_json_is_array(
+        self, client, professor, bsed_program, subject
+    ):
         from apps.questions.models import Subject
 
         Subject.objects.filter(pk=subject.pk).update(program=bsed_program)
@@ -854,7 +1047,9 @@ class TestProfessorOverviewTrends:
                     assert "student_count" in trends[range_key][metric][0]
                     assert "sure" in trends[range_key][metric][0]
 
-    def test_overview_summary_includes_expected_students(self, professor, program, student):
+    def test_overview_summary_includes_expected_students(
+        self, professor, program, student
+    ):
         from apps.analytics.services import professor_overview_summary
 
         student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
@@ -951,7 +1146,12 @@ class TestAIStubs:
 
 @pytest.mark.django_db
 class TestAIFactoryOpenAI:
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key", OPENAI_MODEL="gpt-4o-mini")
+    @override_settings(
+        AI_ENABLED=True,
+        LLM_PROVIDER="openai",
+        OPENAI_API_KEY="test-key",
+        OPENAI_MODEL="gpt-4o-mini",
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_openai_difficulty_tagger_when_enabled(self, mock_chat):
         from apps.ai.factory import get_difficulty_tagger
@@ -960,9 +1160,14 @@ class TestAIFactoryOpenAI:
         mock_chat.return_value = "hard"
         tagger = get_difficulty_tagger()
         assert isinstance(tagger, OpenAIDifficultyTagger)
-        assert tagger.tag("A very long and complex calculus proof question", "easy") == "hard"
+        assert (
+            tagger.tag("A very long and complex calculus proof question", "easy")
+            == "hard"
+        )
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_openai_failure_falls_back_in_generator(self, mock_chat):
         from apps.ai.factory import get_question_generator
@@ -973,7 +1178,9 @@ class TestAIFactoryOpenAI:
 
 @pytest.mark.django_db
 class TestSessionHistoryHelpers:
-    def test_build_session_history_rows_includes_fraction_and_status(self, student, mcq_question, program, professor):
+    def test_build_session_history_rows_includes_fraction_and_status(
+        self, student, mcq_question, program, professor
+    ):
         question, _correct = mcq_question
         course = Course.objects.create(
             program=program,
@@ -988,7 +1195,9 @@ class TestSessionHistoryHelpers:
             course=course,
             status=ReviewSession.Status.COMPLETED,
         )
-        Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
+        Answer.objects.create(
+            session=session, question=question, confidence=5, is_correct=False
+        )
         rows = build_session_history_rows([session])
         assert len(rows) == 1
         assert rows[0]["score_display"] == "0/1"
@@ -996,7 +1205,9 @@ class TestSessionHistoryHelpers:
         assert rows[0]["status_label"] == "Needs review"
         assert rows[0]["confidence_label"] == "Sure"
 
-    def test_build_confidence_performance_series(self, student, mcq_question, program, professor):
+    def test_build_confidence_performance_series(
+        self, student, mcq_question, program, professor
+    ):
         question, _correct = mcq_question
         course = Course.objects.create(
             program=program,
@@ -1011,14 +1222,18 @@ class TestSessionHistoryHelpers:
             course=course,
             status=ReviewSession.Status.COMPLETED,
         )
-        Answer.objects.create(session=session, question=question, confidence=3, is_correct=True)
+        Answer.objects.create(
+            session=session, question=question, confidence=3, is_correct=True
+        )
         series = build_confidence_performance_series([session])
         assert len(series) == 1
         assert series[0]["performance"] == 100.0
         # Stored confidence 3 (medium) maps to chart scale 2 on 0–3.
         assert series[0]["confidence"] == 2.0
 
-    def test_student_course_summary_includes_session_rows(self, student, mcq_question, program, professor):
+    def test_student_course_summary_includes_session_rows(
+        self, student, mcq_question, program, professor
+    ):
         question, _correct = mcq_question
         course = Course.objects.create(
             program=program,
@@ -1033,13 +1248,17 @@ class TestSessionHistoryHelpers:
             course=course,
             status=ReviewSession.Status.COMPLETED,
         )
-        Answer.objects.create(session=session, question=question, confidence=3, is_correct=True)
+        Answer.objects.create(
+            session=session, question=question, confidence=3, is_correct=True
+        )
         summary = student_course_summary(student, course)
         assert len(summary["session_history_rows"]) == 1
         assert len(summary["confidence_performance_series"]) == 1
         assert summary["calibration_max"] >= 1
 
-    def test_student_detail_renders_session_history(self, client, professor, student, mcq_question, program):
+    def test_student_detail_renders_session_history(
+        self, client, professor, student, mcq_question, program
+    ):
         question, _correct = mcq_question
         course = Course.objects.create(
             program=program,
@@ -1057,7 +1276,9 @@ class TestSessionHistoryHelpers:
             course=course,
             status=ReviewSession.Status.COMPLETED,
         )
-        Answer.objects.create(session=session, question=question, confidence=5, is_correct=False)
+        Answer.objects.create(
+            session=session, question=question, confidence=5, is_correct=False
+        )
         client.force_login(professor)
         response = client.get(
             reverse(
@@ -1080,7 +1301,14 @@ class TestSessionHistoryHelpers:
         assert "Confidence trend" not in content
 
     def test_student_detail_allows_profile_scoped_professor(
-        self, client, professor, student, mcq_question, program, program_section, department
+        self,
+        client,
+        professor,
+        student,
+        mcq_question,
+        program,
+        program_section,
+        department,
     ):
         """New faculty with section/subject profile can open roster students."""
         question, _correct = mcq_question
@@ -1164,10 +1392,13 @@ class TestProfessorSessionReview:
         assert "calibration-matrix" not in content
         assert "Topics to revisit" not in content
         assert "ai-tutor-modal" not in content
-        assert reverse(
-            "analytics_professor:professor_student_detail",
-            kwargs={"student_pk": student.pk},
-        ) in content
+        assert (
+            reverse(
+                "analytics_professor:professor_student_detail",
+                kwargs={"student_pk": student.pk},
+            )
+            in content
+        )
 
     def test_professor_can_open_answer_detail(
         self, client, professor, student, mcq_question, program
@@ -1192,10 +1423,13 @@ class TestProfessorSessionReview:
         content = response.content.decode()
         assert "Student answer" in content
         assert "Back to session review" in content
-        assert reverse(
-            "analytics_professor:session_review",
-            kwargs={"student_pk": student.pk, "session_pk": session.pk},
-        ) in content
+        assert (
+            reverse(
+                "analytics_professor:session_review",
+                kwargs={"student_pk": student.pk, "session_pk": session.pk},
+            )
+            in content
+        )
 
     def test_other_professor_cannot_review_session(
         self, client, professor, department, student, mcq_question, program

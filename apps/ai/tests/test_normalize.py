@@ -7,6 +7,8 @@ from apps.ai.normalize import (
     normalize_generated_questions,
     randomize_choice_positions,
     reconcile_question_choices,
+    validate_concept_practice_question,
+    validate_concept_remediation,
 )
 
 
@@ -289,3 +291,113 @@ def test_normalize_feedback_prefers_structured_fields():
     text = normalize_feedback_text(raw)
     assert "Chose non-singular" in text
     assert "Det 0 means singular" in text
+
+
+def _valid_remediation() -> dict:
+    return {
+        "diagnosis": {
+            "type": "misconception",
+            "what_went_wrong": "You chose x=11, which usually means you added instead of subtracting.",
+            "prerequisite_flag": None,
+        },
+        "explanation": {
+            "style_used": "worked_example",
+            "core_idea": "Undo operations in reverse order.",
+            "key_rules": ["Undo +/- first", "Then divide"],
+        },
+        "worked_example": {
+            "problem": "Solve $3x+5=20$",
+            "steps": [
+                {"step": "Subtract 5", "why": "Undo addition"},
+                {"step": "Divide by 3", "why": "Undo multiply"},
+            ],
+            "final_answer": "$x=5$",
+        },
+        "common_mistakes": [
+            {
+                "mistake": "Add instead of subtract",
+                "why_it_fails": "Moves constant the wrong way",
+                "fix": "Use the opposite operation",
+            }
+        ],
+        "try_it": {
+            "problem": "Solve $4x+9=33$. First step?",
+            "first_step_choices": [
+                "Divide by 4",
+                "Add 9",
+                "Subtract 9",
+            ],
+            "correct_index": 2,
+            "hint": "Undo the constant first.",
+            "feedback_if_wrong": "To undo +9, subtract 9.",
+        },
+        "check_yourself": "Substitute back into the original equation.",
+    }
+
+
+def test_validate_concept_remediation_accepts_valid():
+    assert validate_concept_remediation(_valid_remediation()) is not None
+
+
+def test_validate_concept_remediation_rejects_bad_try_it_count():
+    data = _valid_remediation()
+    data["try_it"]["first_step_choices"] = ["Only one"]
+    assert validate_concept_remediation(data) is None
+
+
+def _valid_practice() -> dict:
+    return {
+        "concept": "Two-step equations",
+        "difficulty": "beginner",
+        "question": "Solve $2x+3=11$. What is $x$?",
+        "options": [
+            {
+                "id": "A",
+                "text": "8",
+                "is_correct": False,
+                "error_tag": "forgot_to_divide",
+                "why_wrong": "Subtracted but did not divide.",
+            },
+            {
+                "id": "B",
+                "text": "4",
+                "is_correct": True,
+                "error_tag": None,
+                "why_wrong": None,
+            },
+            {
+                "id": "C",
+                "text": "7",
+                "is_correct": False,
+                "error_tag": "sign_error",
+                "why_wrong": "Added instead of subtracting.",
+            },
+            {
+                "id": "D",
+                "text": "14",
+                "is_correct": False,
+                "error_tag": "wrong_operation_order",
+                "why_wrong": "Divided before undoing the constant.",
+            },
+        ],
+        "hint": "Undo +3 first.",
+        "solution_steps": ["Subtract 3", "Divide by 2", "Check"],
+        "final_answer": "$x=4$",
+        "self_check": "Plug x=4 back into 2x+3.",
+    }
+
+
+def test_validate_concept_practice_accepts_valid():
+    assert validate_concept_practice_question(_valid_practice()) is not None
+
+
+def test_validate_concept_practice_rejects_two_corrects():
+    data = _valid_practice()
+    data["options"][0]["is_correct"] = True
+    assert validate_concept_practice_question(data) is None
+
+
+def test_validate_concept_practice_rejects_duplicate_texts():
+    data = _valid_practice()
+    data["options"][2]["text"] = data["options"][1]["text"]
+    assert validate_concept_practice_question(data) is None

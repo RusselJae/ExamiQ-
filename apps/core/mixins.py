@@ -22,6 +22,12 @@ class ProfessorRequiredMixin(RoleRequiredMixin):
     required_role = User.Role.PROFESSOR
 
 
+class ProgramCoordinatorRequiredMixin(RoleRequiredMixin):
+    """Require the program coordinator role."""
+
+    required_role = User.Role.PROGRAM_COORDINATOR
+
+
 class FacultyLegacyRosterBlockedMixin:
     """Raise 404 for retired section/masterlist analytics screens."""
 
@@ -34,13 +40,28 @@ class ChairpersonRequiredMixin(RoleRequiredMixin):
 
 
 class CampusAdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    """Require campus administrator role or Django superuser."""
+    """Require a program coordinator, legacy campus administrator, or superuser."""
 
     def test_func(self) -> bool:
         user = self.request.user
         return user.is_authenticated and (
-            user.is_superuser or user.role == User.Role.CAMPUS_ADMIN
+            user.is_superuser
+            or user.role in {
+                User.Role.PROGRAM_COORDINATOR,
+                User.Role.CAMPUS_ADMIN,
+            }
         )
+
+
+class AcademicManagerRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """Allow program coordinators and legacy chairpersons to manage teaching loads."""
+
+    def test_func(self) -> bool:
+        user = self.request.user
+        return user.is_authenticated and user.role in {
+            User.Role.PROGRAM_COORDINATOR,
+            User.Role.CHAIRPERSON,
+        }
 
 
 class ProfessorCourseMixin(ProfessorRequiredMixin):
@@ -72,11 +93,10 @@ class ChairpersonProgramMixin(ChairpersonRequiredMixin):
     program: Program | None = None
 
     def dispatch(self, request, *args, **kwargs):
-        self.program = get_object_or_404(
-            Program,
-            pk=self.kwargs["program_pk"],
-            managing_department=request.user.department,
-        )
+        filters: dict = {"pk": self.kwargs["program_pk"]}
+        if request.user.department_id:
+            filters["managing_department"] = request.user.department
+        self.program = get_object_or_404(Program, **filters)
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -90,17 +110,23 @@ class QuestionApprovalMixin(ChairpersonRequiredMixin):
 
     def can_approve_questions(self) -> bool:
         user = self.request.user
-        if not user.department_id:
-            return False
         from apps.questions.models import Question
 
         question_pk = self.kwargs.get("question_pk")
         if question_pk:
-            return Question.objects.filter(
-                pk=question_pk,
-                topic__subject__program__managing_department_id=user.department_id,
+            filters: dict = {"pk": question_pk}
+            if user.department_id:
+                filters["topic__subject__program__managing_department_id"] = (
+                    user.department_id
+                )
+            return Question.objects.filter(**filters).exists()
+        if user.department_id:
+            return Program.objects.filter(
+                managing_department_id=user.department_id
             ).exists()
-        return Program.objects.filter(managing_department_id=user.department_id).exists()
+        from apps.questions.models import Question as QuestionModel
+
+        return Program.objects.exists() or QuestionModel.objects.exists()
 
     def test_func(self) -> bool:
         return super().test_func() and self.can_approve_questions()

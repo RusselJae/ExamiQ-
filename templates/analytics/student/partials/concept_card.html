@@ -1,0 +1,42 @@
+<article class="concept-card">
+    <div class="concept-card__main">
+        <div class="concept-card__badges">
+            <span class="concept-badge concept-badge--{{ card.badge_class }}">{{ card.badge }}</span>
+            {% if card.review.status == 'resolved' and card.review.recheck_due_at %}
+            <span class="concept-badge concept-badge--recheck">
+                Re-check due {{ card.review.recheck_due_at|date:"M j" }}
+            </span>
+            {% endif %}
+        </div>
+        <h3 class="concept-card__title">{{ card.review.concept_name }}</h3>
+        {% if card.subject_label %}
+        <p class="concept-card__meta">{{ card.subject_label }}</p>
+        {% endif %}
+        <p class="concept-card__blurb">
+            {% if card.review.status == 'resolved' and card.review.resolved_at %}
+            Resolved {{ card.review.resolved_at|date:"M j" }} · {{ card.progress_label }} on different questions
+            {% else %}
+            {{ card.miss_blurb }}
+            {% endif %}
+        </p>
+        <div class="concept-progress" aria-label="{{ card.progress_label }}">
+            <div class="concept-progress__track">
+                <span class="concept-progress__fill" style="width: {{ card.progress_pct }}%;"></span>
+            </div>
+            <span class="concept-progress__label">{{ card.progress_label }}</span>
+        </div>
+    </div>
+    <div class="concept-card__action">
+        {% if card.review.status == 'resolved' %}
+        <form method="post" action="{% url 'analytics_student:concept_review_again' card.review.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary">{{ card.cta }}</button>
+        </form>
+        {% else %}
+        <a class="btn-primary"
+           href="{% url 'analytics_student:concept_review' card.review.pk %}?step={{ card.review.current_step }}">
+            {{ card.cta }}
+        </a>
+        {% endif %}
+    </div>
+</article>

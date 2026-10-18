@@ -18,7 +18,7 @@
 </div>
 
     <div class="overview-kpi-grid mb-8">
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course subjects" icon="book" variant="teal" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course" icon="book" variant="teal" %}</div>
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}</div>
 </div>
 
@@ -93,44 +93,41 @@
     </div>
 </div>
 
-<div class="bento-card p-6 overview-trends-card">
+<div class="bento-card p-6 overview-trends-card mb-6">
     <div class="overview-trends-card__intro">
-        <h2 class="overview-trends-card__title" id="overview-trends-title">Students over time</h2>
-        <p class="overview-trends-card__subtitle" id="overview-trends-subtitle">How many students participated in each period.</p>
+        <h2 class="overview-trends-card__title">Over time</h2>
+        <p class="overview-trends-card__subtitle" id="over-time-subtitle">Students who took an exam and mistakes recorded.</p>
     </div>
-    <div class="overview-trends-filters" id="overview-trends-filters" data-overview-pills>
-        <div class="overview-trends-filter">
-            <span class="overview-trends-filter__label" id="overview-metric-label">Metric</span>
-            <select id="overview-trend-metric" class="sr-only" tabindex="-1" aria-labelledby="overview-metric-label">
-                <option value="students" selected>Students participating</option>
-                <option value="mistakes">Mistakes per question</option>
-            </select>
-            <div class="overview-pill-group" role="group" aria-labelledby="overview-metric-label" data-pill-target="overview-trend-metric">
-                <button type="button" class="overview-pill is-selected" data-pill-value="students" aria-pressed="true">Students</button>
-                <button type="button" class="overview-pill" data-pill-value="mistakes" aria-pressed="false">Mistakes</button>
-            </div>
-        </div>
-        <div class="overview-trends-filter" id="overview-range-filter">
-            <span class="overview-trends-filter__label" id="overview-range-label">Range</span>
-            <select id="overview-trend-range" class="sr-only" tabindex="-1" aria-labelledby="overview-range-label">
+    <div class="overview-trends-filters">
+        <div class="overview-trends-filter" id="over-time-range-filter">
+            <span class="overview-trends-filter__label" id="over-time-range-label">Range</span>
+            <select id="over-time-range" class="sr-only" tabindex="-1" aria-labelledby="over-time-range-label">
                 <option value="weekly" selected>Weekly</option>
                 <option value="monthly">Monthly</option>
                 <option value="yearly">Yearly</option>
             </select>
-            <div class="overview-pill-group" role="group" aria-labelledby="overview-range-label" data-pill-target="overview-trend-range">
+            <div class="overview-pill-group" role="group" aria-labelledby="over-time-range-label" data-pill-target="over-time-range">
                 <button type="button" class="overview-pill is-selected" data-pill-value="weekly" aria-pressed="true">Weekly</button>
                 <button type="button" class="overview-pill" data-pill-value="monthly" aria-pressed="false">Monthly</button>
                 <button type="button" class="overview-pill" data-pill-value="yearly" aria-pressed="false">Yearly</button>
             </div>
         </div>
     </div>
-    <div class="overview-gap-status-row" id="overview-gap-status" hidden></div>
-    <div class="overview-trends-chart-wrap" id="overviewTrendsChartWrap">
-        <canvas id="overviewTrendsChart" aria-label="Dashboard trend chart"></canvas>
-    </div>
-    <div class="overview-trends-chart-footer">
-        <div class="overview-confidence-legend" id="overview-confidence-legend" hidden></div>
-        <div class="overview-chart-hint" id="overview-chart-hint" hidden></div>
+    <div class="overview-trends-grid">
+        <section class="overview-trends-panel" aria-labelledby="over-time-students-title">
+            <h3 class="overview-trends-panel__title" id="over-time-students-title">Students over time</h3>
+            <p class="overview-trends-panel__subtitle">Distinct students who sat an exam.</p>
+            <div class="overview-trends-chart-wrap overview-trends-chart-wrap--panel">
+                <canvas id="studentsOverTimeChart" aria-label="Students over time line chart"></canvas>
+            </div>
+        </section>
+        <section class="overview-trends-panel" aria-labelledby="over-time-mistakes-title">
+            <h3 class="overview-trends-panel__title" id="over-time-mistakes-title">Mistakes over time</h3>
+            <p class="overview-trends-panel__subtitle">Mistake records logged by period.</p>
+            <div class="overview-trends-chart-wrap overview-trends-chart-wrap--panel">
+                <canvas id="mistakesOverTimeChart" aria-label="Mistakes over time line chart"></canvas>
+            </div>
+        </section>
     </div>
 </div>
 {% endblock %}
@@ -140,7 +137,7 @@
 {{ overview_donut|json_script:"overview-donut-data" }}
 <script src="{% static 'js/student-performance-donut.js' %}"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
-<script src="{% static 'js/overview-trends-chart.js' %}"></script>
+<script src="{% static 'js/mistake-trend-chart.js' %}"></script>
 <script>
 (function () {
     function bindOverviewPills(root) {
@@ -166,44 +163,18 @@
             });
         });
     }
-    bindOverviewPills(document.getElementById("overview-trends-filters"));
-
-    var metricSelect = document.getElementById("overview-trend-metric");
-    var rangeFilter = document.getElementById("overview-range-filter");
-    function syncRangeVisibility() {
-        if (!rangeFilter || !metricSelect) return;
-        rangeFilter.hidden = metricSelect.value === "mistakes";
-    }
-    if (metricSelect) {
-        metricSelect.addEventListener("change", syncRangeVisibility);
-        syncRangeVisibility();
-    }
+    bindOverviewPills(document.getElementById("over-time-range-filter"));
 
     var el = document.getElementById("overview-trends-data");
-    if (!el || !window.ExamiQUI || !window.ExamiQUI.renderOverviewTrendsChart) return;
-    window.ExamiQUI.renderOverviewTrendsChart({
-        canvas: "overviewTrendsChart",
-        metricSelect: "overview-trend-metric",
-        rangeSelect: "overview-trend-range",
-        expectedStudents: {{ overview.expected_students|default:0 }},
-        data: JSON.parse(el.textContent),
-        gapStatusEl: "overview-gap-status",
-        legendEl: "overview-confidence-legend",
-        chartHintEl: "overview-chart-hint",
-        titleEl: "overview-trends-title",
-        subtitleEl: "overview-trends-subtitle",
-        metricLabels: {
-            students: "Students participating",
-            mistakes: "Unique students wrong",
-        },
-        titleByMetric: {
-            mistakes: {
-                title: "Mistakes per question",
-                subtitle: "Questions missed by 15+ unique students.",
-            },
-        },
-        defaultMetric: "students",
-    });
+    if (el && window.ExamiQUI && window.ExamiQUI.renderOverTimeCharts) {
+        window.ExamiQUI.renderOverTimeCharts({
+            studentsCanvas: "studentsOverTimeChart",
+            mistakesCanvas: "mistakesOverTimeChart",
+            rangeSelect: "over-time-range",
+            subtitleEl: "over-time-subtitle",
+            data: JSON.parse(el.textContent),
+        });
+    }
 })();
 </script>
 {% endblock %}

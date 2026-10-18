@@ -1,0 +1,26 @@
+{% comment %}
+Breadcrumbs for the navbar. Built by apps.core.breadcrumbs.build_nav_breadcrumbs.
+Shows: Home > First Link > Second Link > Third Link (if any)
+{% endcomment %}
+<nav class="nav-breadcrumbs" aria-label="Breadcrumb">
+    <ol class="nav-breadcrumbs__list">
+        {% for crumb in nav_breadcrumbs %}
+        {% if not forloop.first %}
+        <li class="nav-breadcrumbs__item" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </li>
+        {% endif %}
+        <li class="nav-breadcrumbs__item">
+            {% if crumb.url and not forloop.last %}
+            <a href="{{ crumb.url }}" class="nav-breadcrumbs__link">{{ crumb.label }}</a>
+            {% else %}
+            <span class="nav-breadcrumbs__link nav-breadcrumbs__current" {% if forloop.last %}aria-current="page"{% endif %}>{{ crumb.label }}</span>
+            {% endif %}
+        </li>
+        {% empty %}
+        <li class="nav-breadcrumbs__item">
+            <a href="{% url 'core:home' %}" class="nav-breadcrumbs__link nav-breadcrumbs__current" aria-current="page">Home</a>
+        </li>
+        {% endfor %}
+    </ol>
+</nav>

@@ -1,25 +1,21 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Teaching Assignments - Chairperson{% endblock %}
+{% block title %}Faculty Sections - Chairperson{% endblock %}
 
 {% block content %}
 <div class="overview-header mb-6">
     <div class="overview-header__main">
-        <h1 class="overview-title">Teaching assignments</h1>
-        <p class="overview-as-of">Assign faculty to sections and subjects for the current term.</p>
+        <h1 class="overview-title">Faculty Sections</h1>
     </div>
 </div>
 
 <div class="overview-kpi-grid mb-6">
     <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=assignment_stats.total label="Assignments" icon="book" variant="neutral" %}
+        {% include "components/overview_stat_card.html" with value=assignment_stats.faculty label="Faculty" icon="users" variant="blue" %}
     </div>
     <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=assignment_stats.faculty label="Faculty" icon="users" variant="accent" %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=assignment_stats.sections label="Sections covered" icon="target" variant="neutral" %}
+        {% include "components/overview_stat_card.html" with value=assignment_stats.sections label="Sections covered" icon="target" variant="teal" %}
     </div>
 </div>
 
@@ -27,7 +23,7 @@
     <div class="assign-panel__header assign-panel__header--row">
         <div>
             <h2 class="assign-panel__title">New assignment</h2>
-            <p class="assign-panel__subtitle">Select faculty, subject, and one or more sections.</p>
+            <p class="assign-panel__subtitle">Select faculty, course, and one or more sections.</p>
         </div>
         <span class="assign-term-pill" aria-label="Current term">{{ current_term_label }}</span>
     </div>
@@ -52,7 +48,7 @@
             <div class="assign-field">
                 <label class="assign-field__label" for="id_subject">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                    Subject
+                    Course
                 </label>
                 {{ assignment_form.subject }}
             </div>
@@ -125,7 +121,7 @@
         <div class="assign-table__head" role="row">
             <span role="columnheader">Faculty</span>
             <span role="columnheader">Section</span>
-            <span role="columnheader">Subject</span>
+            <span role="columnheader">Course</span>
             <span role="columnheader">Term</span>
             <span role="columnheader" class="sr-only">Actions</span>
         </div>

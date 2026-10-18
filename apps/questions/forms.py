@@ -131,7 +131,9 @@ class SimplifiedQuestionChoiceForm(forms.ModelForm):
         model = QuestionChoice
         fields = ["text", "is_correct", "error_type"]
         widgets = {
-            "text": forms.TextInput(attrs={"class": INPUT_CLASS}),
+            # data-choice-input drives the shared question editor's live
+            # student preview and readiness checklist.
+            "text": forms.TextInput(attrs={"class": INPUT_CLASS, "data-choice-input": ""}),
             "is_correct": forms.CheckboxInput(attrs={"class": "rounded border-slate-300 correct-choice-cb"}),
             "error_type": forms.Select(attrs={"class": INPUT_CLASS}),
         }
@@ -202,7 +204,9 @@ ExplanationStepFormSet = inlineformset_factory(
     can_delete=True,
     widgets={
         "order": forms.NumberInput(attrs={"class": INPUT_CLASS}),
-        "content": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 3}),
+        # data-step-input drives the shared question editor's step count,
+        # readiness checklist, and unsaved-changes tracking.
+        "content": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 3, "data-step-input": ""}),
         "professor_note": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 2}),
     },
 )

@@ -6,6 +6,41 @@
 {% block content %}
 {% include "components/page_header.html" with title="Mistake Log" subtitle="Every wrong answer is a lesson. Review them." %}
 
+{% if active_tab == 'concepts' %}
+<div class="concept-review-list">
+    <div class="concept-status-chips" role="group" aria-label="Concept status">
+        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=needs_review"
+           class="concept-status-chip{% if concept_status == 'needs_review' %} is-active{% endif %}">
+            Needs Review {{ concept_counts.needs_review }}
+        </a>
+        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=practicing"
+           class="concept-status-chip{% if concept_status == 'practicing' %} is-active{% endif %}">
+            Practicing {{ concept_counts.practicing }}
+        </a>
+        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=resolved"
+           class="concept-status-chip{% if concept_status == 'resolved' %} is-active{% endif %}">
+            Resolved {{ concept_counts.resolved }}
+        </a>
+    </div>
+
+    {% if concept_cards %}
+    <div class="concept-card-list">
+        {% for card in concept_cards %}
+        {% include "analytics/student/partials/concept_card.html" with card=card %}
+        {% endfor %}
+    </div>
+    <p class="concept-review-list__note">
+        {% if concept_status == 'resolved' %}
+        A resolved concept reopens automatically if you miss it again in an exam or a re-check.
+        {% else %}
+        Resolved concepts move out of this list. If you miss one again in an exam, it comes back here.
+        {% endif %}
+    </p>
+    {% else %}
+    {% include "components/empty_state.html" with compact=True title="No concepts here" body="Missed exam questions for a concept will appear in this list." %}
+    {% endif %}
+</div>
+{% else %}
 <div class="bento-grid">
     {% include "components/filter_bar.html" %}
 
@@ -81,6 +116,7 @@
     </div>
     {% endif %}
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

@@ -12,6 +12,8 @@ from apps.users.notification_services import (
 
 def navigation_context(request):
     """Provide professor sidebar course list and active course context."""
+    from apps.core.breadcrumbs import build_nav_breadcrumbs
+
     context = {
         "professor_courses": [],
         "professor_section_nav": [],
@@ -19,6 +21,7 @@ def navigation_context(request):
         "sidebar_section": None,
         "sidebar_section_label": "",
         "sidebar_subject": None,
+        "sidebar_concept_count": 0,
         "summary_courses": [],
         "unread_notification_count": 0,
         "recent_notifications": [],
@@ -39,13 +42,19 @@ def navigation_context(request):
         "chat_self_avatar_url": "",
         "chat_self_initials": "",
         "chat_self_name": "",
+        "nav_breadcrumbs": [],
     }
     user = request.user
+    context["nav_breadcrumbs"] = build_nav_breadcrumbs(request)
     if not user.is_authenticated:
         return context
 
     context["unread_notification_count"] = unread_notification_count(user)
+    from apps.users.notification_services import notification_icon_kind
+
     context["recent_notifications"] = recent_notifications(user, limit=8)
+    for _notification in context["recent_notifications"]:
+        _notification.icon_kind = notification_icon_kind(_notification)
     context["chat_self_name"] = user.get_full_name() or user.email
     context["chat_self_initials"] = user.initials
     if user.profile_photo:
@@ -56,8 +65,11 @@ def navigation_context(request):
 
     if user.role == User.Role.STUDENT:
         from apps.analytics.chat_services import pending_chat_count_for_student
+        from apps.analytics.concept_review_services import concept_status_counts
         from apps.reviews.models import ReviewSession
 
+        # Action Plan badge: concepts the student still has to practise.
+        context["sidebar_concept_count"] = concept_status_counts(user)["active"]
         context["pending_concern_count"] = pending_chat_count_for_student(user)
         context["chat_inbox_url"] = reverse("analytics_student:chat_inbox")
         context["chat_conversations_url"] = reverse(

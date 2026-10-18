@@ -18,7 +18,7 @@ from apps.core.filtering import (
 )
 from apps.core.audit import log_audit_event
 from apps.core.models import AuditLog
-from apps.core.mixins import ChairpersonRequiredMixin
+from apps.core.mixins import AcademicManagerRequiredMixin
 from apps.questions.curriculum import subjects_for_teaching_assignment
 from apps.questions.models import Subject
 from apps.users.assignment_services import create_teaching_assignments
@@ -26,7 +26,7 @@ from apps.users.forms import TeachingAssignmentForm
 from apps.users.models import AcademicTerm, ProgramSection, TeachingAssignment
 
 
-class ChairpersonAssignmentListView(ChairpersonRequiredMixin, ListView):
+class ChairpersonAssignmentListView(AcademicManagerRequiredMixin, ListView):
     template_name = "chairperson/assignments/list.html"
     context_object_name = "assignments"
     paginate_by = 25
@@ -107,7 +107,7 @@ class ChairpersonAssignmentListView(ChairpersonRequiredMixin, ListView):
         return context
 
 
-class ChairpersonAssignmentCreateView(ChairpersonRequiredMixin, FormView):
+class ChairpersonAssignmentCreateView(AcademicManagerRequiredMixin, FormView):
     form_class = TeachingAssignmentForm
     template_name = "chairperson/assignments/list.html"
     success_url = reverse_lazy("analytics_chairperson:assignments")
@@ -161,7 +161,7 @@ class ChairpersonAssignmentCreateView(ChairpersonRequiredMixin, FormView):
         return redirect("analytics_chairperson:assignments")
 
 
-class ChairpersonAssignmentDeleteView(ChairpersonRequiredMixin, View):
+class ChairpersonAssignmentDeleteView(AcademicManagerRequiredMixin, View):
     def post(self, request, pk):
         assignment = TeachingAssignment.objects.select_related(
             "program_section__program"
@@ -189,7 +189,7 @@ class ChairpersonAssignmentDeleteView(ChairpersonRequiredMixin, View):
         return redirect_preserving_filters(request, "analytics_chairperson:assignments")
 
 
-class ChairpersonAssignmentSubjectsAPIView(ChairpersonRequiredMixin, View):
+class ChairpersonAssignmentSubjectsAPIView(AcademicManagerRequiredMixin, View):
     """GET ?section=<pk>&term=<pk> — subjects for a program section and term."""
 
     def get(self, request):
@@ -225,7 +225,7 @@ class ChairpersonAssignmentSubjectsAPIView(ChairpersonRequiredMixin, View):
         })
 
 
-class ChairpersonAssignmentSectionsAPIView(ChairpersonRequiredMixin, View):
+class ChairpersonAssignmentSectionsAPIView(AcademicManagerRequiredMixin, View):
     """GET ?subject=&term= — sections grouped by year with assignment state."""
 
     def get(self, request):

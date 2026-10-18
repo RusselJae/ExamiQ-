@@ -5,187 +5,152 @@
 
 {% block content %}
 {% if hub_mode %}
-{% include "components/page_header.html" with title="Add Questions" subtitle="Pick a course subject, then build or generate questions for it." %}
+{% include "components/page_header.html" with title="Add Questions" subtitle="AI drafts the questions. You review and validate before anything is published." %}
 {% else %}
-{% include "components/professor_section_header.html" with course=course page_label=form_title %}
-{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+    {% include "components/professor_section_header.html" with course=course page_label=form_title %}
+    {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+</div>
 {% endif %}
 
 <form method="post" id="batch-question-form" class="space-y-6" enctype="multipart/form-data"{% if form_action %} action="{{ form_action }}"{% endif %}>
     {% csrf_token %}
 
     <div class="bento-card bento-card--elevated batch-setup-card p-6 sm:p-8 shadow-sm">
-        <header class="batch-setup-card__header">
-            <h2 class="batch-setup-card__title">Set up this batch</h2>
-            <p class="batch-setup-card__subtitle">These settings apply to everything you generate or add below.</p>
-        </header>
-
         <div class="batch-setup-stack">
-            {% if hub_mode %}
-            <div class="batch-settings-field">
-                <label for="hub-course-search" class="batch-setup-label">Course subject</label>
-                <div
-                    class="searchable-select searchable-select--batch"
-                    data-searchable-select
-                    data-navigate-url="{% url 'analytics_professor:question_add' %}?course={id}"
-                    data-navigate-clear="{% url 'analytics_professor:question_add' %}"
-                >
-                    <input type="hidden" id="hub-course-filter" value="{% if selected_course_pk %}{{ selected_course_pk }}{% endif %}">
-                    <button type="button" class="searchable-select__trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-course-search">
-                        <span class="searchable-select__icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-                        </span>
-                        <span class="searchable-select__value{% if not selected_course_pk %} is-placeholder{% endif %}">
-                            {% if selected_course_pk %}
+            <div class="batch-setup-grid">
+                {% if hub_mode %}
+                <div class="batch-settings-field">
+                    <label for="hub-course-search" class="batch-setup-label">Course</label>
+                    <div
+                        class="searchable-select searchable-select--batch"
+                        data-searchable-select
+                        data-navigate-url="{% url 'analytics_professor:question_add' %}?course={id}"
+                        data-navigate-clear="{% url 'analytics_professor:question_add' %}"
+                    >
+                        <input type="hidden" id="hub-course-filter" value="{% if selected_course_pk %}{{ selected_course_pk }}{% endif %}">
+                        <button type="button" class="searchable-select__trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-course-search">
+                            <span class="searchable-select__icon" aria-hidden="true">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                            </span>
+                            <span class="searchable-select__value{% if not selected_course_pk %} is-placeholder{% endif %}">
+                                {% if selected_course_pk %}
+                                    {% for opt in course_options %}
+                                        {% if opt.course.pk == selected_course_pk %}{{ opt.label }}{% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    Search or select a course…
+                                {% endif %}
+                            </span>
+                            <span class="searchable-select__chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="searchable-select__panel hidden" role="presentation">
+                            <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
+                            <ul class="searchable-select__list" role="listbox" aria-label="Courses">
+                                <li class="searchable-select__option{% if not selected_course_pk %} is-selected{% endif %}"
+                                    role="option"
+                                    data-value=""
+                                    data-label="Search or select a course subject…"
+                                    data-search="">
+                                    Clear selection
+                                </li>
                                 {% for opt in course_options %}
-                                    {% if opt.course.pk == selected_course_pk %}{{ opt.label }}{% endif %}
+                                <li class="searchable-select__option{% if selected_course_pk == opt.course.pk %} is-selected{% endif %}"
+                                    role="option"
+                                    data-value="{{ opt.course.pk }}"
+                                    data-label="{{ opt.label }}"
+                                    data-search="{{ opt.label|lower }}">
+                                    {{ opt.label }}
+                                </li>
                                 {% endfor %}
-                            {% else %}
-                                Search or select a course subject…
-                            {% endif %}
-                        </span>
-                        <span class="searchable-select__chevron" aria-hidden="true">▾</span>
-                    </button>
-                    <div class="searchable-select__panel hidden" role="presentation">
-                        <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
-                        <ul class="searchable-select__list" role="listbox" aria-label="Course subjects">
-                            <li class="searchable-select__option{% if not selected_course_pk %} is-selected{% endif %}"
-                                role="option"
-                                data-value=""
-                                data-label="Search or select a course subject…"
-                                data-search="">
-                                Clear selection
-                            </li>
-                            {% for opt in course_options %}
-                            <li class="searchable-select__option{% if selected_course_pk == opt.course.pk %} is-selected{% endif %}"
-                                role="option"
-                                data-value="{{ opt.course.pk }}"
-                                data-label="{{ opt.label }}"
-                                data-search="{{ opt.label|lower }}">
-                                {{ opt.label }}
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            {% elif course %}
-            <div class="batch-settings-field">
-                <span class="batch-setup-label">Course subject</span>
-                <div class="batch-setup-readonly" aria-live="polite">
-                    <span class="batch-setup-readonly__icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-                    </span>
-                    <span>{{ course.code }}{% if course.name %} — {{ course.name }}{% endif %}</span>
-                </div>
-            </div>
-            {% endif %}
-
-            <div class="batch-settings-field">
-                <span class="batch-setup-label" id="difficulty-label">Difficulty</span>
-                <p class="batch-setup-hint text-xs text-examiq-slate mb-2">
-                    Select 1–3 levels. Generated questions are split across the ones you pick
-                    (e.g. 9 questions → 3 Beginner, 3 Intermediate, 3 Advanced).
-                </p>
-                <select id="settings-difficulty"
-                        name="difficulty"
-                        multiple
-                        required
-                        class="sr-only"
-                        aria-labelledby="difficulty-label"
-                        tabindex="-1"
-                        size="{{ difficulty_choices|length }}">
-                    {% for value, label in difficulty_choices %}
-                    <option value="{{ value }}"{% if value == "medium" %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                <div class="batch-pill-group"
-                     role="group"
-                     aria-labelledby="difficulty-label"
-                     data-pill-group
-                     data-pill-multi="1"
-                     data-pill-min="1"
-                     data-pill-max="3"
-                     data-pill-target="settings-difficulty">
-                    {% for value, label in difficulty_choices %}
-                    <button type="button"
-                            class="batch-pill{% if value == "medium" %} is-selected{% endif %}"
-                            data-pill-value="{{ value }}"
-                            aria-pressed="{% if value == "medium" %}true{% else %}false{% endif %}">
-                        {{ label }}
-                    </button>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <input type="hidden" id="settings-question-type" value="mcq">
-
-            <div class="batch-source-section" data-source-tabs>
-                <div class="batch-source-divider" role="separator">
-                    <span>Source material</span>
-                </div>
-
-                <div class="batch-source-tabs" role="tablist" aria-label="Source material">
-                    <button type="button"
-                            class="batch-source-tab is-selected"
-                            role="tab"
-                            id="source-tab-saved"
-                            aria-selected="true"
-                            aria-controls="source-panel-saved"
-                            data-source-tab="saved">
-                        Saved material
-                    </button>
-                    <button type="button"
-                            class="batch-source-tab"
-                            role="tab"
-                            id="source-tab-upload"
-                            aria-selected="false"
-                            aria-controls="source-panel-upload"
-                            data-source-tab="upload">
-                        Upload a file
-                    </button>
-                </div>
-
-                <div class="batch-source-panels">
-                    <div class="batch-source-panel"
-                         role="tabpanel"
-                         id="source-panel-saved"
-                         aria-labelledby="source-tab-saved"
-                         data-source-panel="saved">
-                        <label for="ai-library-document" class="sr-only">Saved material</label>
-                        <select id="ai-library-document" class="batch-setup-select">
-                            <option value="">Choose saved material…</option>
-                            {% for doc in learning_documents %}
-                            <option value="{{ doc.pk }}">{{ doc.display_title }}</option>
-                            {% empty %}
-                            <option value="" disabled>No saved materials yet</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="batch-source-panel hidden"
-                         role="tabpanel"
-                         id="source-panel-upload"
-                         aria-labelledby="source-tab-upload"
-                         data-source-panel="upload"
-                         hidden>
-                        <div class="batch-dropzone" data-dropzone>
-                            <input
-                                type="file"
-                                id="ai-source-file"
-                                accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                class="sr-only"
-                            >
-                            <button type="button" class="batch-dropzone__choose" data-dropzone-choose>Choose file</button>
-                            <p class="batch-dropzone__text">
-                                Drop a syllabus, textbook chapter, or notes here
-                            </p>
-                            <p class="batch-dropzone__filename text-xs text-examiq-slate hidden" data-dropzone-filename></p>
+                            </ul>
                         </div>
                     </div>
+                </div>
+                {% elif course %}
+                <div class="batch-settings-field">
+                    <span class="batch-setup-label">Course</span>
+                    <div class="batch-setup-readonly" aria-live="polite">
+                        <span class="batch-setup-readonly__icon" aria-hidden="true">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                        </span>
+                        <span>{{ course.code }}{% if course.name %} — {{ course.name }}{% endif %}</span>
+                    </div>
+                </div>
+                {% endif %}
 
+                <div class="batch-settings-field batch-source-field" data-source-select>
+                    <label for="ai-library-document" class="batch-setup-label">Source material</label>
+                    <select id="ai-library-document" class="batch-setup-select" data-source-select-control>
+                        <option value="">Select source material…</option>
+                        <option value="__upload__" data-source-upload-option>＋ Upload a file…</option>
+                        {% if learning_documents %}
+                        <optgroup label="Saved material" data-source-saved-group>
+                            {% for doc in learning_documents %}
+                            <option value="{{ doc.pk }}">{{ doc.display_title }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endif %}
+                        <optgroup label="New uploads" data-source-upload-group></optgroup>
+                    </select>
+                    <input
+                        type="file"
+                        id="ai-source-file"
+                        class="sr-only"
+                        accept=".txt,.md,.csv,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    >
+                    <div class="batch-dropzone batch-dropzone--compact hidden" data-dropzone data-dropzone-input="ai-source-file" data-source-dropzone>
+                        <button type="button" class="batch-dropzone__choose" data-dropzone-choose>Replace file</button>
+                        <p class="batch-dropzone__text">Drop another file to swap it out</p>
+                        <p class="batch-dropzone__filename text-xs text-examiq-slate hidden" data-dropzone-filename></p>
+                        <button type="button" class="batch-dropzone__clear hidden" data-source-clear-upload aria-label="Remove uploaded file">Remove</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="batch-setup-grid batch-setup-grid--actions">
+                <div class="batch-settings-field">
+                    <span class="batch-setup-label" id="difficulty-label">Difficulty</span>
+                    <select id="settings-difficulty"
+                            name="difficulty"
+                            multiple
+                            required
+                            class="sr-only"
+                            aria-labelledby="difficulty-label"
+                            tabindex="-1"
+                            size="{{ difficulty_choices|length }}">
+                        {% for value, label in difficulty_choices %}
+                        <option value="{{ value }}"{% if value == "medium" %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="batch-pill-group"
+                         role="group"
+                         aria-labelledby="difficulty-label"
+                         data-pill-group
+                         data-pill-multi="1"
+                         data-pill-min="1"
+                         data-pill-max="3"
+                         data-pill-target="settings-difficulty">
+                        {% for value, label in difficulty_choices %}
+                        <button type="button"
+                                class="batch-pill{% if value == "medium" %} is-selected{% endif %}"
+                                data-pill-value="{{ value }}"
+                                aria-pressed="{% if value == "medium" %}true{% else %}false{% endif %}">
+                            {{ label }}
+                        </button>
+                        {% endfor %}
+                        <button type="button"
+                                class="batch-pill batch-pill--auto"
+                                data-difficulty-auto
+                                aria-pressed="false">
+                            AI decides
+                        </button>
+                    </div>
+                </div>
+
+                <div class="batch-settings-field">
+                    <span class="batch-setup-label" id="generate-count-label">Questions</span>
                     <div class="batch-generate-count batch-generate-count--inline">
-                        <label for="ai-generate-count" class="batch-generate-count__label"># to generate</label>
                         <div class="batch-stepper" data-stepper data-stepper-min="1" data-stepper-max="50">
                             <button type="button" class="batch-stepper__btn" data-stepper-dec aria-label="Decrease count">−</button>
                             <input
@@ -193,63 +158,71 @@
                                 id="ai-generate-count"
                                 min="1"
                                 max="50"
-                                value="10"
+                                value="3"
                                 class="batch-stepper__input"
                                 inputmode="numeric"
+                                aria-labelledby="generate-count-label"
                             >
                             <button type="button" class="batch-stepper__btn" data-stepper-inc aria-label="Increase count">+</button>
                         </div>
                     </div>
                 </div>
+
+                <div class="batch-settings-field batch-settings-field--generate">
+                    <button type="button"
+                            id="ai-generate-btn"
+                            class="btn-ai-generate"
+                            {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                        <span aria-hidden="true">+</span> Generate questions
+                    </button>
+                </div>
             </div>
 
-            <div class="batch-setup-generate">
-                <button type="button"
-                        id="ai-generate-btn"
-                        class="btn-ai-generate"
-                        {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
-                    <span aria-hidden="true">+</span> Generate questions
-                </button>
+            <div class="batch-setup-foot">
                 <button type="button"
                         id="show-generate-modal-btn"
                         class="gen-progress-show-btn hidden"
                         hidden>
                     Show generation progress
                 </button>
+                {% if not hub_mode %}
                 <p class="batch-setup-disclaimer">AI drafts the questions — you review and confirm before anything is published.</p>
+                {% endif %}
             </div>
-        </div>
 
-        {% if hub_mode and not hub_subject_selected %}
-        <p class="text-xs text-amber-700 mt-3">Select a course subject to save questions.</p>
-        {% elif hub_mode %}
-        <p class="text-xs text-examiq-slate mt-3">Questions you add are saved under the selected subject.</p>
-        {% endif %}
-        {% if hub_subject_selected and not course_subject %}
-        <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
-        {% elif hub_subject_selected and not topics %}
-        <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
-        {% elif not hub_mode and not course_subject %}
-        <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
-        {% elif not hub_mode and not topics %}
-        <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
-        {% endif %}
-        <input type="hidden" id="settings-topic" name="topic" value="{% if topics %}{{ topics.0.pk }}{% endif %}">
+            <input type="hidden" id="settings-question-type" value="mcq">
+
+            {% if hub_subject_selected and not course_subject %}
+            <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
+            {% elif hub_subject_selected and not topics %}
+            <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
+            {% elif not hub_mode and not course_subject %}
+            <p class="text-xs text-amber-700 mt-3">Link a subject to this course before generating.</p>
+            {% elif not hub_mode and not topics %}
+            <p class="text-xs text-amber-700 mt-3">No topics yet. Create one under Topics first.</p>
+            {% endif %}
+            <input type="hidden" id="settings-topic" name="topic" value="{% if topics %}{{ topics.0.pk }}{% endif %}">
+        </div>
     </div>
 
     <div id="generate-modal-container"></div>
     <div id="validate-modal-container"></div>
 
-    <div class="bento-card p-6 overflow-x-auto shadow-sm">
+    <div class="bento-card p-6 overflow-x-auto shadow-sm" id="draft-batch-card">
         <div class="batch-questions-toolbar">
-            <h2 class="text-lg font-semibold text-examiq-navy">Questions</h2>
+            <div class="batch-questions-toolbar__copy">
+                <h2 class="batch-draft-title">Draft batch</h2>
+                <p id="question-count-label" class="batch-draft-count">0 questions &middot; 0 validated</p>
+            </div>
             <div class="batch-questions-toolbar__actions">
-                <span id="question-count-label" class="text-sm text-examiq-slate rounded-full bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1">0 questions</span>
                 <button type="button" id="validate-all-btn" class="btn-secondary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
-                    Validate All
+                    Validate selected
+                </button>
+                <button type="button" id="delete-selected-btn" class="btn-danger-ghost batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+                    Delete selected
                 </button>
                 <button type="button" id="publish-all-btn" class="btn-secondary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
-                    Publish All
+                    <span id="publish-validated-count">Publish validated (0)</span>
                 </button>
                 <button type="submit" class="btn-primary batch-toolbar-btn" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
                     Submit all
@@ -266,24 +239,27 @@
             </div>
         </div>
 
-        <table id="questions-table" class="data-table hidden">
-            <thead>
-                <tr>
-                    <th class="w-12">#</th>
-                    <th>Question</th>
-                    <th class="w-28">Type</th>
-                    <th class="w-28">Difficulty</th>
-                    <th class="w-20">Answer</th>
-                    <th class="w-40">Concept</th>
-                    <th class="w-28">Status</th>
-                    <th class="batch-col-validate">Faculty validation</th>
-                    <th class="w-36"></th>
-                </tr>
-            </thead>
-            <tbody id="questions-table-body"></tbody>
-        </table>
+        <div id="questions-table-scroll" class="batch-table-scroll hidden">
+            <table id="questions-table" class="data-table data-table--batch">
+                <thead>
+                    <tr>
+                        <th class="batch-col-select">
+                            <label class="sr-only" for="select-all-questions">Select all questions</label>
+                            <input type="checkbox" id="select-all-questions" data-select-all>
+                        </th>
+                        <th class="batch-col-index">#</th>
+                        <th>Question</th>
+                        <th class="batch-col-difficulty">Difficulty</th>
+                        <th class="batch-col-answer">Correct answer</th>
+                        <th class="batch-col-concept">Concept</th>
+                        <th class="batch-col-validate">Validation</th>
+                    </tr>
+                </thead>
+                <tbody id="questions-table-body"></tbody>
+            </table>
+        </div>
         <button type="button" id="add-question-row-btn" class="batch-add-row text-link text-sm font-medium hidden">
-            + Add another row
+            + Add another question
         </button>
     </div>
 
@@ -292,10 +268,10 @@
     <input type="hidden" name="question_count" id="question-count" value="0">
 
     <div class="flex flex-col sm:flex-row gap-3 justify-between">
-        <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+        <button type="button" id="add-question-btn" class="btn-secondary inline-flex items-center gap-2 px-3 py-1.5 text-sm" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
             <span>+</span> Add Another Question
         </button>
-        <button type="submit" class="btn-primary inline-flex items-center gap-2" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
+        <button type="submit" class="btn-primary inline-flex items-center gap-2 px-3 py-1.5 text-sm" {% if hub_mode and not hub_subject_selected %}disabled{% endif %}>
             Submit All Questions
         </button>
     </div>
@@ -326,7 +302,7 @@
     const questionTypeSelect = document.getElementById("settings-question-type");
     const fieldsStore = document.getElementById("question-fields-store");
     const tableBody = document.getElementById("questions-table-body");
-    const questionsTable = document.getElementById("questions-table");
+    const questionsTable = document.getElementById("questions-table-scroll");
     const questionsEmpty = document.getElementById("questions-empty");
     const countInput = document.getElementById("question-count");
     const countLabel = document.getElementById("question-count-label");
@@ -336,10 +312,29 @@
     const emptyAddManualBtn = document.getElementById("empty-add-manual-btn");
     const validateAllBtn = document.getElementById("validate-all-btn");
     const publishAllBtn = document.getElementById("publish-all-btn");
+    const publishCountEl = document.getElementById("publish-validated-count");
+    const deleteSelectedBtn = document.getElementById("delete-selected-btn");
+    const selectAllBox = document.querySelector("[data-select-all]");
     const batchForm = document.getElementById("batch-question-form");
     const sourceInput = document.getElementById("ai-source-file");
     const librarySelect = document.getElementById("ai-library-document");
+    const uploadOption = document.querySelector("[data-source-upload-option]");
+    const uploadGroup = document.querySelector("[data-source-upload-group]");
+    const sourceDropzone = document.querySelector("[data-source-dropzone]");
+    const sourceClearBtn = document.querySelector("[data-source-clear-upload]");
     const generateCountInput = document.getElementById("ai-generate-count");
+
+    const UPLOAD_PREFIX = "upload:";
+    const UPLOAD_TRIGGER = "__upload__";
+
+    function escapeHtml(value) {
+        return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
 
     function getGenerateCount() {
         let n = parseInt(generateCountInput && generateCountInput.value, 10);
@@ -358,6 +353,7 @@
     let restoring = false;
     let formDirty = false;
     const validationState = {};
+    const selectedRows = new Set();
     const showGenerateModalBtn = document.getElementById("show-generate-modal-btn");
     let generateModalHidden = false;
     let lastGenerateProgress = { written: 0, total: 0, status: "pending" };
@@ -370,6 +366,150 @@
         if (validationState[index]) {
             delete validationState[index];
             renderTableRow(index);
+        }
+        syncBatchChrome();
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Source material: one picker holding saved modules *and* the file the
+     * professor just uploaded, so an unsaved upload is immediately usable
+     * (and promoted to a saved module once generation ingests it).
+     * ------------------------------------------------------------------ */
+    function currentSourceKind() {
+        if (!librarySelect) return "none";
+        const value = String(librarySelect.value || "");
+        if (!value || value === UPLOAD_TRIGGER) return "none";
+        if (value.indexOf(UPLOAD_PREFIX) === 0) return "upload";
+        return "library";
+    }
+
+    function registerPendingUpload(name) {
+        if (!librarySelect || !uploadGroup) return;
+        uploadGroup.innerHTML = "";
+        const option = document.createElement("option");
+        option.value = UPLOAD_PREFIX + name;
+        option.textContent = name;
+        option.setAttribute("data-pending-upload", "1");
+        uploadGroup.appendChild(option);
+        librarySelect.value = option.value;
+        if (sourceDropzone) {
+            sourceDropzone.classList.remove("hidden");
+            const filenameEl = sourceDropzone.querySelector("[data-dropzone-filename]");
+            if (filenameEl) {
+                filenameEl.textContent = name;
+                filenameEl.classList.remove("hidden");
+            }
+        }
+        if (sourceClearBtn) sourceClearBtn.classList.remove("hidden");
+    }
+
+    function clearPendingUpload() {
+        if (sourceInput) sourceInput.value = "";
+        if (uploadGroup) uploadGroup.innerHTML = "";
+        if (librarySelect) librarySelect.value = "";
+        if (sourceDropzone) {
+            sourceDropzone.classList.add("hidden");
+            const filenameEl = sourceDropzone.querySelector("[data-dropzone-filename]");
+            if (filenameEl) {
+                filenameEl.textContent = "";
+                filenameEl.classList.add("hidden");
+            }
+        }
+        if (sourceClearBtn) sourceClearBtn.classList.add("hidden");
+    }
+
+    function promoteUploadToSaved(docId, title) {
+        if (!librarySelect || !docId) return;
+        if (uploadGroup) uploadGroup.innerHTML = "";
+        let savedGroup = librarySelect.querySelector('optgroup[data-source-saved-group]');
+        if (!savedGroup) {
+            savedGroup = document.createElement("optgroup");
+            savedGroup.label = "Saved material";
+            savedGroup.setAttribute("data-source-saved-group", "1");
+            const anchor = uploadGroup || uploadOption || null;
+            if (anchor && anchor.parentNode) {
+                librarySelect.insertBefore(savedGroup, anchor);
+            } else {
+                librarySelect.appendChild(savedGroup);
+            }
+        }
+        Array.prototype.forEach.call(librarySelect.options, function (option) {
+            if (option.value === String(docId)) option.remove();
+        });
+        const saved = document.createElement("option");
+        saved.value = String(docId);
+        saved.textContent = title || "Material #" + docId;
+        savedGroup.appendChild(saved);
+        librarySelect.value = String(docId);
+        if (sourceDropzone) sourceDropzone.classList.add("hidden");
+        if (sourceClearBtn) sourceClearBtn.classList.add("hidden");
+    }
+
+    function appendSourceTo(formData) {
+        const kind = currentSourceKind();
+        if (kind === "library") {
+            formData.append("learning_document_id", librarySelect.value);
+        } else if (kind === "upload" && sourceInput && sourceInput.files && sourceInput.files[0]) {
+            formData.append("source_file", sourceInput.files[0]);
+        }
+    }
+
+    if (librarySelect) {
+        librarySelect.addEventListener("change", function () {
+            if (librarySelect.value === UPLOAD_TRIGGER) {
+                librarySelect.value = "";
+                if (sourceInput) sourceInput.click();
+            }
+        });
+    }
+
+    if (uploadOption) {
+        uploadOption.addEventListener("dblclick", function () {
+            if (sourceInput) sourceInput.click();
+        });
+    }
+
+    if (sourceClearBtn) {
+        sourceClearBtn.addEventListener("click", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            clearPendingUpload();
+        });
+    }
+
+    if (sourceInput) {
+        sourceInput.addEventListener("change", function () {
+            const file = sourceInput.files && sourceInput.files[0];
+            if (file) registerPendingUpload(file.name);
+        });
+    }
+
+    function selectedRowIndexes() {
+        const out = [];
+        selectedRows.forEach(function (index) {
+            if (index >= 0 && index < questionIndex) out.push(index);
+        });
+        out.sort(function (a, b) { return a - b; });
+        return out;
+    }
+
+    function syncBatchChrome() {
+        let validated = 0;
+        for (let i = 0; i < questionIndex; i++) {
+            if (validationState[i] && validationState[i].is_valid === true) validated += 1;
+        }
+        const n = questionIndex;
+        if (countLabel) {
+            countLabel.textContent =
+                n + (n === 1 ? " question" : " questions") + " · " + validated + " validated";
+        }
+        if (publishCountEl) {
+            publishCountEl.textContent = "Publish validated (" + validated + ")";
+        }
+        const picked = selectedRowIndexes().length;
+        if (selectAllBox) {
+            selectAllBox.checked = n > 0 && picked === n;
+            selectAllBox.indeterminate = picked > 0 && picked < n;
         }
     }
 
@@ -391,27 +531,27 @@
         return '<svg class="validate-btn__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>';
     }
 
-    function xIconSvg() {
-        return '<svg class="validate-btn__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 18L18 6M6 6l12 12"/></svg>';
-    }
-
-    function validateButtonHtml(index) {
-        const validation = validationState[index];
-        if (validation && validation.is_valid === true) {
-            return '<button type="button" class="validate-btn validate-btn--valid text-sm font-medium mr-2 inline-flex items-center gap-1" data-index="' + index + '">Valid ' + checkIconSvg() + "</button>";
-        }
-        if (validation && validation.is_valid === false) {
-            return '<button type="button" class="validate-btn validate-btn--invalid text-sm font-medium mr-2 inline-flex items-center gap-1" data-index="' + index + '">Invalid ' + xIconSvg() + "</button>";
-        }
-        return '<button type="button" class="validate-btn text-link text-sm font-medium mr-2" data-index="' + index + '">Validate</button>';
-    }
-
+    /* The VALIDATION cell doubles as the row's validate affordance: click a
+     * status badge to (re)validate that one question, or to open the
+     * Correct / Regenerate choices when it failed. */
     function statusBadgeHtml(index) {
         const validation = validationState[index];
         if (validation && validation.is_valid === true) {
-            return '<span class="batch-status-badge batch-status-badge--valid">Valid ' + checkIconSvg() + "</span>";
+            return (
+                '<button type="button" class="batch-status-badge batch-status-badge--valid" data-index="' +
+                index + '">Validated ' + checkIconSvg() + "</button>"
+            );
         }
-        return '<span class="batch-status-badge batch-status-badge--draft">Draft</span>';
+        if (validation && validation.is_valid === false) {
+            return (
+                '<button type="button" class="batch-status-badge batch-status-badge--invalid" data-index="' +
+                index + '">Needs review</button>'
+            );
+        }
+        return (
+            '<button type="button" class="batch-status-badge batch-status-badge--draft" data-index="' +
+            index + '">Draft</button>'
+        );
     }
 
     function showValidateModal(result) {
@@ -480,9 +620,7 @@
             if (window.showToast) window.showToast("Select a course subject first.", "warning");
             return;
         }
-        const hasLibrary = librarySelect && librarySelect.value;
-        const hasUpload = sourceInput && sourceInput.files && sourceInput.files[0];
-        if (!hasLibrary && !hasUpload) {
+        if (currentSourceKind() === "none") {
             if (window.showToast) {
                 window.showToast("Pick a saved learning material or upload a file first.", "warning");
             }
@@ -492,12 +630,7 @@
         if (window.showToast) window.showToast("Regenerating question…", "info");
         const fd = getSettingsFormData();
         fd.append("count", "1");
-        const libraryId = librarySelect && librarySelect.value ? librarySelect.value : "";
-        if (libraryId) {
-            fd.append("learning_document_id", libraryId);
-        } else if (sourceInput && sourceInput.files && sourceInput.files[0]) {
-            fd.append("source_file", sourceInput.files[0]);
-        }
+        appendSourceTo(fd);
         const resp = await fetch(generateUrl, {
             method: "POST",
             body: fd,
@@ -579,12 +712,12 @@
     function syncCountInput() {
         countInput.value = questionIndex;
         const n = questionIndex;
-        countLabel.textContent = n + (n === 1 ? " question" : " questions");
         const hasQuestions = n > 0;
         questionsTable.classList.toggle("hidden", !hasQuestions);
         questionsEmpty.classList.toggle("hidden", hasQuestions);
         const addRowBtn = document.getElementById("add-question-row-btn");
         if (addRowBtn) addRowBtn.classList.toggle("hidden", !hasQuestions);
+        syncBatchChrome();
     }
 
     function getField(name) {
@@ -595,9 +728,6 @@
         easy: "Beginner",
         medium: "Intermediate",
         hard: "Advanced",
-    };
-    const TYPE_LABELS = {
-        mcq: "Multiple Choice",
     };
 
     function selectedDifficulties() {
@@ -637,17 +767,31 @@
         return '<span class="difficulty-pill difficulty-pill--' + key + '">' + label + "</span>";
     }
 
-    function typeBadgeHtml(questionType) {
-        const key = normalizeQuestionType(questionType);
-        return '<span class="exam-type-badge exam-type-badge--table">' + (TYPE_LABELS[key] || key) + "</span>";
-    }
-
     function answerPreview(data) {
         const type = normalizeQuestionType(data.question_type);
-        if (type === "mcq") return data.stem ? (data.correct || "—") : "—";
-        if (type === "true_false") return data.expected_answer || "—";
-        if (data.expected_answer) return truncate(data.expected_answer, 24);
+        if (type === "mcq") {
+            if (!data.stem) return "—";
+            const letter = data.correct || "A";
+            const text = (data.choices && data.choices[letter]) || "";
+            return letter + (text ? ". " + truncate(text, 28) : "");
+        }
+        if (data.expected_answer) return truncate(data.expected_answer, 28);
         return "—";
+    }
+
+    function choicesStripHtml(data) {
+        const parts = [];
+        ["A", "B", "C", "D"].forEach(function (letter) {
+            const text = (data.choices && data.choices[letter]) || "";
+            if (!text.trim()) return;
+            parts.push(
+                '<span class="batch-choice' + (letter === data.correct ? " is-correct" : "") + '">' +
+                '<span class="batch-choice__label">' + letter + ".</span> " +
+                escapeHtml(truncate(text.trim(), 32)) +
+                "</span>"
+            );
+        });
+        return parts.join("");
     }
 
     function ensureFieldsForIndex(index) {
@@ -768,11 +912,12 @@
 
     function facultyValidationCellHtml(index, data) {
         return (
-            '<div class="batch-row-validate" role="group" aria-label="Faculty validation for question ' + (index + 1) + '">' +
+            '<div class="batch-row-validate" role="group" aria-label="Validation for question ' + (index + 1) + '">' +
+            statusBadgeHtml(index) +
             '<label class="batch-row-validate__row">' +
             '<input type="checkbox" class="batch-row-validate__input" data-faculty-attest="' + index + '"' +
             (data.faculty_attest ? " checked" : "") + ">" +
-            "<span>Validated by faculty (publish)</span>" +
+            "<span>Publish</span>" +
             "</label>" +
             "</div>"
         );
@@ -791,24 +936,27 @@
             row.className = "";
             tableBody.appendChild(row);
         }
+        const picked = selectedRows.has(index);
+        row.classList.toggle("is-selected", picked);
         row.innerHTML =
+            '<td class="batch-col-select">' +
+            '<label class="sr-only" for="row-select-' + index + '">Select question ' + (index + 1) + "</label>" +
+            '<input type="checkbox" id="row-select-' + index + '" class="batch-row-select" data-row-select="' + index + '"' +
+            (picked ? " checked" : "") + "></td>" +
             '<td class="text-examiq-slate font-medium">' + (index + 1) + "</td>" +
-            '<td class="max-w-md">' +
-            (data.stem ? truncate(data.stem, 80) : '<span class="text-examiq-slate italic">Click to write question text…</span>') +
+            '<td class="batch-question-cell">' +
+            (data.stem
+                ? '<p class="batch-question-stem">' + escapeHtml(data.stem) + "</p>"
+                : '<span class="text-examiq-slate italic">Click to write question text…</span>') +
+            '<div class="batch-question-choices">' + choicesStripHtml(data) +
+            '<a href="' + editUrlFor(index) + '" class="batch-question-edit">Edit</a></div>' +
             "</td>" +
-            "<td>" + typeBadgeHtml(data.question_type) + "</td>" +
-            '<td>' + difficultyPillHtml(data.difficulty) + "</td>" +
-            '<td class="font-medium">' + answerPreview(data) + "</td>" +
-            '<td class="text-examiq-slate max-w-[10rem] truncate">' +
-            (data.concept ? truncate(data.concept, 24) : '<span class="text-examiq-slate">— select —</span>') +
+            "<td>" + difficultyPillHtml(data.difficulty) + "</td>" +
+            '<td class="font-medium">' + escapeHtml(answerPreview(data)) + "</td>" +
+            '<td class="text-examiq-slate">' +
+            (data.concept ? escapeHtml(truncate(data.concept, 24)) : '<span class="text-examiq-slate">— select —</span>') +
             "</td>" +
-            "<td>" + statusBadgeHtml(index) + "</td>" +
-            '<td class="batch-col-validate">' + facultyValidationCellHtml(index, data) + "</td>" +
-            '<td class="whitespace-nowrap">' +
-            '<a href="' + editUrlFor(index) + '" class="text-link text-sm font-medium mr-3">Edit</a>' +
-            validateButtonHtml(index) +
-            '<button type="button" class="delete-question-btn btn-icon-delete" data-index="' + index + '" aria-label="Delete question">' +
-            window.ExamiQBatch.trashIconSvg() + "</button></td>";
+            '<td class="batch-col-validate">' + facultyValidationCellHtml(index, data) + "</td>";
     }
 
     function addQuestion(data, openEdit) {
@@ -875,10 +1023,10 @@
             });
             difficultySelect.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        window.ExamiQBatch.syncDomFromDraft(batchConfig, draft);
-        draft.questions.forEach(function(q, i) {
+        draft.questions.forEach(function (q, i) {
             if (q.validation) validationState[i] = q.validation;
         });
+        window.ExamiQBatch.syncDomFromDraft(batchConfig, draft);
         restoring = false;
     }
 
@@ -996,7 +1144,7 @@
     if (topicSelect) topicSelect.addEventListener("change", onSettingsChange);
     difficultySelect.addEventListener("change", onSettingsChange);
 
-    async function validateAllPending() {
+    function pendingIndexes() {
         const pending = [];
         for (let i = 0; i < questionIndex; i++) {
             const data = getQuestionData(i);
@@ -1004,22 +1152,26 @@
             if (validationState[i] && validationState[i].is_valid === true) continue;
             pending.push(i);
         }
+        return pending;
+    }
+
+    async function runValidationBatch(pending, triggerBtn) {
         if (!pending.length) {
             if (window.showToast) {
                 window.showToast("Nothing left to validate.", "info");
             }
             return;
         }
-        if (validateAllBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-            window.ExamiQUI.setButtonLoading(validateAllBtn, true, "Validating…");
+        if (triggerBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(triggerBtn, true, "Validating…");
         }
         let failed = 0;
         for (let j = 0; j < pending.length; j++) {
             const result = await runValidate(pending[j], null, false);
             if (!result || !result.is_valid) failed += 1;
         }
-        if (validateAllBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-            window.ExamiQUI.setButtonLoading(validateAllBtn, false);
+        if (triggerBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
+            window.ExamiQUI.setButtonLoading(triggerBtn, false);
         }
         if (window.showToast) {
             if (failed) {
@@ -1032,15 +1184,29 @@
 
     if (validateAllBtn) {
         validateAllBtn.addEventListener("click", function () {
-            validateAllPending();
+            const selected = selectedRowIndexes().filter(function (i) {
+                return getQuestionData(i).stem.trim();
+            });
+            if (!selected.length) {
+                if (window.showToast) {
+                    window.showToast(
+                        "No questions selected — validating everything pending.",
+                        "info"
+                    );
+                }
+                runValidationBatch(pendingIndexes(), validateAllBtn);
+                return;
+            }
+            runValidationBatch(selected, validateAllBtn);
         });
     }
 
-    function publishAllQuestions() {
+    function publishValidatedQuestions() {
         let count = 0;
         for (let i = 0; i < questionIndex; i++) {
             const data = getQuestionData(i);
             if (!data.stem.trim()) continue;
+            if (!validationState[i] || validationState[i].is_valid !== true) continue;
             ensureFieldsForIndex(i);
             getField("faculty_attest_" + i).value = "1";
             const attestBox = tableBody.querySelector(
@@ -1051,7 +1217,7 @@
         }
         if (!count) {
             if (window.showToast) {
-                window.showToast("Add questions before marking for publish.", "info");
+                window.showToast("Validate a question before publishing it.", "info");
             }
             return;
         }
@@ -1059,7 +1225,7 @@
         window.ExamiQBatch.persist(batchConfig);
         if (window.showToast) {
             window.showToast(
-                "Marked " + count + " question(s) for publish on submit.",
+                "Marked " + count + " validated question(s) for publish on submit.",
                 "success"
             );
         }
@@ -1067,7 +1233,52 @@
 
     if (publishAllBtn) {
         publishAllBtn.addEventListener("click", function () {
-            publishAllQuestions();
+            publishValidatedQuestions();
+        });
+    }
+
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener("click", function () {
+            const picked = selectedRowIndexes();
+            if (!picked.length) {
+                if (window.showToast) {
+                    window.showToast("Select the questions you want to delete.", "info");
+                }
+                return;
+            }
+            showConfirm({
+                title: "Delete " + picked.length + " question(s)?",
+                message:
+                    "This removes the selected questions from the batch. They are not saved yet.",
+                type: "warning",
+                confirmLabel: "Delete",
+            }).then(function (ok) {
+                if (!ok) return;
+                markDirty();
+                picked
+                    .slice()
+                    .reverse()
+                    .forEach(function (index) {
+                        window.ExamiQBatch.removeQuestion(batchConfig, index);
+                    });
+                selectedRows.clear();
+                syncCountInput();
+                window.ExamiQBatch.persist(batchConfig);
+                if (window.showToast) {
+                    window.showToast("Removed " + picked.length + " question(s).", "success");
+                }
+            });
+        });
+    }
+
+    if (selectAllBox) {
+        selectAllBox.addEventListener("change", function () {
+            selectedRows.clear();
+            if (selectAllBox.checked) {
+                for (let i = 0; i < questionIndex; i++) selectedRows.add(i);
+            }
+            for (let i = 0; i < questionIndex; i++) renderTableRow(i);
+            syncBatchChrome();
         });
     }
 
@@ -1271,6 +1482,7 @@
             if (abortGeneratePoll) return;
             const wasHidden = generateModalHidden;
             document.getElementById("generate-modal-container").innerHTML = await resp.text();
+            syncGenerateReview();
             if (wasHidden) {
                 const modal = document.getElementById("generate-modal");
                 if (modal) {
@@ -1297,12 +1509,7 @@
     async function postGenerate() {
         const fd = getSettingsFormData();
         fd.append("count", String(getGenerateCount()));
-        const libraryId = librarySelect && librarySelect.value ? librarySelect.value : "";
-        if (libraryId) {
-            fd.append("learning_document_id", libraryId);
-        } else if (sourceInput && sourceInput.files && sourceInput.files[0]) {
-            fd.append("source_file", sourceInput.files[0]);
-        }
+        appendSourceTo(fd);
         const resp = await fetch(generateUrl, {
             method: "POST",
             body: fd,
@@ -1318,9 +1525,8 @@
             if (window.showToast) window.showToast("Select a course subject to save questions.", "warning");
             return;
         }
-        const hasLibrary = librarySelect && librarySelect.value;
-        const hasUpload = sourceInput && sourceInput.files && sourceInput.files[0];
-        if (!hasLibrary && !hasUpload) {
+        const hasLibrary = currentSourceKind() !== "none";
+        if (!hasLibrary) {
             if (window.showToast) {
                 window.showToast("Pick a saved learning material or upload a file first.", "warning");
             }
@@ -1346,6 +1552,12 @@
             if (result.data.topic_id) {
                 setTopicId(result.data.topic_id);
                 onSettingsChange();
+            }
+            if (result.data.learning_document_id) {
+                promoteUploadToSaved(
+                    result.data.learning_document_id,
+                    result.data.learning_document_title
+                );
             }
             await pollGenerateJob(result.data.status_url);
         } catch (err) {
@@ -1392,35 +1604,28 @@
     }
 
     tableBody.addEventListener("click", function(e) {
-        const deleteBtn = e.target.closest(".delete-question-btn");
-        if (deleteBtn) {
-            const index = parseInt(deleteBtn.dataset.index, 10);
-            showConfirm({
-                title: "Delete question?",
-                message: "This removes the question from the batch. It is not saved yet.",
-                type: "warning",
-                confirmLabel: "Delete",
-            }).then(function (ok) {
-                if (ok) {
-                    markDirty();
-                    window.ExamiQBatch.removeQuestion(batchConfig, index);
-                }
-            });
-            return;
-        }
-        const validateBtn = e.target.closest(".validate-btn");
-        if (validateBtn) {
-            const index = parseInt(validateBtn.dataset.index, 10);
-            const state = validationState[index];
-            if (state && state.is_valid === false) {
-                showInvalidActionModal(index);
-            } else {
-                runValidate(index, validateBtn);
-            }
+        const badge = e.target.closest(".batch-status-badge");
+        if (!badge) return;
+        const index = parseInt(badge.getAttribute("data-index"), 10);
+        const state = validationState[index];
+        if (state && state.is_valid === false) {
+            showInvalidActionModal(index);
+        } else {
+            runValidate(index, badge);
         }
     });
 
     tableBody.addEventListener("change", function(e) {
+        const rowSelect = e.target.closest("[data-row-select]");
+        if (rowSelect) {
+            const index = parseInt(rowSelect.getAttribute("data-row-select"), 10);
+            if (rowSelect.checked) selectedRows.add(index);
+            else selectedRows.delete(index);
+            const row = tableBody.querySelector('tr[data-index="' + index + '"]');
+            if (row) row.classList.toggle("is-selected", rowSelect.checked);
+            syncBatchChrome();
+            return;
+        }
         const attest = e.target.closest("[data-faculty-attest]");
         if (attest) {
             const index = parseInt(attest.getAttribute("data-faculty-attest"), 10);
@@ -1432,9 +1637,155 @@
         }
     });
 
+    /* ------------------------------------------------------------------ *
+     * Review modal (generated questions) — selection counter + harder retry
+     * ------------------------------------------------------------------ */
+    function syncGenerateReview() {
+        const container = document.getElementById("generate-modal-container");
+        if (!container) return;
+        let count = 0;
+        container.querySelectorAll('input[name="selected_variation"]').forEach(function (cb) {
+            const card = cb.closest(".gen-card");
+            if (card) card.classList.toggle("is-selected", cb.checked);
+            if (cb.checked) count += 1;
+        });
+        const counter = container.querySelector("[data-selected-count]");
+        if (counter) counter.textContent = String(count);
+        const applyBtn = container.querySelector("#apply-generated-btn");
+        if (applyBtn) applyBtn.disabled = count === 0;
+    }
+
+    function applyVariationToCard(card, variation, meta) {
+        const box = card.querySelector('input[name="selected_variation"]');
+        if (!box || !variation) return;
+        box.dataset.stem = variation.stem || "";
+        box.dataset.concept = variation.concept_tag || "";
+        box.dataset.correct = variation.correct_label || "A";
+        box.dataset.difficulty = variation.difficulty || box.dataset.difficulty;
+        box.dataset.solution = variation.solution_summary || "";
+        box.dataset.steps = Array.isArray(variation.explanation_steps)
+            ? variation.explanation_steps.join("|||")
+            : "";
+        ["a", "b", "c", "d"].forEach(function (letter) {
+            box.dataset["choice" + letter] = "";
+        });
+        (variation.choices || []).forEach(function (choice) {
+            if (!choice || !choice.label) return;
+            box.dataset["choice" + String(choice.label).toLowerCase()] = choice.text || "";
+        });
+
+        const stemEl = card.querySelector(".gen-card__stem");
+        if (stemEl) stemEl.textContent = variation.stem || "";
+
+        const choicesEl = card.querySelector(".gen-card__choices");
+        if (choicesEl) {
+            choicesEl.innerHTML = (variation.choices || [])
+                .map(function (choice) {
+                    if (!choice || !choice.label) return "";
+                    return (
+                        '<li class="gen-choice' + (choice.is_correct ? " is-correct" : "") + '">' +
+                        '<span class="gen-choice__label">' + escapeHtml(choice.label) + ".</span>" +
+                        '<span class="gen-choice__text">' + escapeHtml(choice.text || "") + "</span>" +
+                        (choice.is_correct
+                            ? '<span class="gen-choice__mark" aria-label="correct">&#10003;</span>'
+                            : "") +
+                        "</li>"
+                    );
+                })
+                .join("");
+        }
+
+        if (meta) {
+            card.setAttribute("data-fit", meta.fit);
+            card.classList.toggle("is-flagged", meta.fit !== "good");
+            const pill = card.querySelector(".difficulty-pill");
+            if (pill) {
+                pill.textContent = meta.difficulty_label;
+                pill.className =
+                    "difficulty-pill difficulty-pill--" + meta.difficulty_code;
+            }
+            const note = card.querySelector(".gen-card__note");
+            if (note) {
+                const concept = variation.concept_tag
+                    ? variation.concept_tag + " · "
+                    : "";
+                note.textContent =
+                    concept +
+                    meta.reasoning_note +
+                    (meta.fit === "good" ? " · Fit: good" : "");
+            }
+            const flag = card.querySelector(".gen-card__flag");
+            if (flag) {
+                flag.textContent = meta.flag || "";
+                flag.hidden = !meta.flag;
+            }
+            const regen = card.querySelector("[data-regenerate-index]");
+            if (regen) {
+                regen.hidden = !meta.can_regenerate_harder;
+                regen.setAttribute("data-regenerate-difficulty", meta.next_difficulty);
+            }
+        }
+        syncGenerateReview();
+    }
+
+    async function regenerateVariationCard(card, btn) {
+        const index = card.getAttribute("data-variation-index");
+        const difficulty = btn.getAttribute("data-regenerate-difficulty") || "hard";
+        if (!generateUrl) {
+            if (window.showToast) window.showToast("Select a course subject first.", "warning");
+            return;
+        }
+        if (currentSourceKind() === "none") {
+            if (window.showToast) {
+                window.showToast("Pick a source material first.", "warning");
+            }
+            return;
+        }
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Regenerating…";
+        try {
+            const fd = new FormData();
+            fd.append("csrfmiddlewaretoken", csrfToken);
+            fd.append("topic", topicSelect.value);
+            fd.append("difficulty", difficulty);
+            fd.append("count", "1");
+            fd.append("question_type", questionTypeSelect ? questionTypeSelect.value : "mcq");
+            appendSourceTo(fd);
+            const resp = await fetch(generateUrl, {
+                method: "POST",
+                body: fd,
+                headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+                credentials: "same-origin",
+            });
+            const data = await resp.json().catch(function () { return {}; });
+            if (!resp.ok || !data.status_url) {
+                throw new Error(data.error || "Regeneration failed.");
+            }
+            const job = await pollGenerateJobJson(data.status_url);
+            const variation = (job && job.variations) || [];
+            if (!variation.length) {
+                throw new Error("No replacement question was generated.");
+            }
+            const meta =
+                (job.variation_meta && job.variation_meta[0]) || null;
+            applyVariationToCard(card, variation[0], meta);
+            if (window.showToast) {
+                window.showToast("Draft " + (index || "") + " regenerated harder.", "success");
+            }
+        } catch (err) {
+            if (window.showToast) {
+                window.showToast(err.message || "Regeneration failed.", "error");
+            }
+        } finally {
+            btn.disabled = false;
+            btn.textContent = label;
+        }
+    }
+
     let applyInFlight = false;
     document.addEventListener("click", function(e) {
-        if (e.target.id === "apply-generated-btn") {
+        if (e.target.closest("#apply-generated-btn")) {
             if (applyInFlight) return;
             applyInFlight = true;
             const checked = document.querySelectorAll('input[name="selected_variation"]:checked');
@@ -1541,6 +1892,18 @@
                 }
             });
             return;
+        }
+        const harderBtn = e.target.closest("[data-regenerate-index]");
+        if (harderBtn) {
+            const card = harderBtn.closest(".gen-card");
+            if (card) regenerateVariationCard(card, harderBtn);
+            return;
+        }
+    });
+
+    document.addEventListener("change", function (e) {
+        if (e.target.name === "selected_variation") {
+            syncGenerateReview();
         }
     });
 

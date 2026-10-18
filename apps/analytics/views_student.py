@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.contrib import messages
@@ -9,8 +10,21 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView, RedirectView, TemplateView
 
+from apps.analytics.concept_review_services import (
+    CORRECT_TO_RESOLVE,
+    advance_to_try_it,
+    build_concept_card_context,
+    concept_status_counts,
+    ensure_learn_content,
+    list_concept_reviews,
+    miss_history_for_sidebar,
+    restart_concept_review,
+    start_or_next_practice,
+    submit_practice_answer,
+    submit_try_it,
+)
 from apps.analytics.forms import MistakeConcernForm
-from apps.analytics.models import MistakeRecord
+from apps.analytics.models import ConceptReview, MistakeRecord
 from apps.analytics.services import (
     annotate_session_metrics,
     build_session_history_rows,
@@ -57,15 +71,14 @@ class MistakeListView(StudentRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = (
-            MistakeRecord.objects.filter(student=self.request.user)
-            .select_related(
-                "question",
-                "topic",
-                "topic__subject",
-                "answer",
-                "answer__session",
-            )
+        queryset = MistakeRecord.objects.filter(
+            student=self.request.user
+        ).select_related(
+            "question",
+            "topic",
+            "topic__subject",
+            "answer",
+            "answer__session",
         )
         queryset = apply_date_range(queryset, self.request, "occurred_at")
         queryset = apply_sort(
@@ -94,33 +107,63 @@ class MistakeListView(StudentRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        filter_names = ["q", "confidence", "date_from", "date_to", "sort"]
-        context["filter_form_fields"] = build_filter_fields(
-            self.request,
-            [
-                {
-                    "type": "search",
-                    "name": "q",
-                    "label": "Search",
-                    "placeholder": "Topic or question text",
-                },
-                {
-                    "type": "select",
-                    "name": "confidence",
-                    "label": "Confidence",
-                    "choices": [
-                        ("none", "No Confidence"),
-                        ("none", "No ratings"),
-                        ("low", "Guessing"),
-                        ("average", "Guessing"),
-                        ("high", "Sure"),
-                    ],
-                },
-                *STANDARD_DATE_SORT_FILTER_SPECS,
-            ],
-        )
-        context["filter_has_active"] = has_active_filters(self.request, filter_names)
-        context["filter_bar_compact"] = True
+        tab = self.request.GET.get("tab", "all")
+        if tab not in {"all", "concepts"}:
+            tab = "all"
+        status = self.request.GET.get("status", "")
+        counts = concept_status_counts(self.request.user)
+        context["active_tab"] = tab
+        context["concept_status"] = status
+        context["concept_counts"] = counts
+        context["concept_active_count"] = counts.get("active", 0)
+
+        if tab == "concepts":
+            filter_status = status or None
+            if filter_status not in {
+                ConceptReview.Status.NEEDS_REVIEW,
+                ConceptReview.Status.PRACTICING,
+                ConceptReview.Status.RESOLVED,
+                None,
+            }:
+                filter_status = None
+            # Default list shows non-resolved when no status chip selected.
+            reviews = list_concept_reviews(self.request.user, status=filter_status)
+            if not filter_status:
+                reviews = reviews.exclude(status=ConceptReview.Status.RESOLVED)
+            context["concept_cards"] = [
+                build_concept_card_context(review) for review in reviews
+            ]
+            context["filter_form_fields"] = []
+            context["filter_has_active"] = False
+        else:
+            filter_names = ["q", "confidence", "date_from", "date_to", "sort"]
+            context["filter_form_fields"] = build_filter_fields(
+                self.request,
+                [
+                    {
+                        "type": "search",
+                        "name": "q",
+                        "label": "Search",
+                        "placeholder": "Topic or question text",
+                    },
+                    {
+                        "type": "select",
+                        "name": "confidence",
+                        "label": "Confidence",
+                        "choices": [
+                            ("none", "No Confidence"),
+                            ("none", "No ratings"),
+                            ("low", "Guessing"),
+                            ("average", "Guessing"),
+                            ("high", "Sure"),
+                        ],
+                    },
+                    *STANDARD_DATE_SORT_FILTER_SPECS,
+                ],
+            )
+            context["filter_has_active"] = has_active_filters(self.request, filter_names)
+            context["filter_bar_compact"] = True
+
         context["tutor_url_templates"] = {
             "history": reverse("reviews:tutor_history", kwargs={"pk": 0}).replace(
                 "/0/", "/{pk}/"
@@ -163,13 +206,10 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = (
-            ReviewSession.objects.filter(
-                student=self.request.user,
-                status__in=[ReviewSession.Status.COMPLETED, ReviewSession.Status.EXPIRED],
-            )
-            .select_related("topic", "course")
-        )
+        queryset = ReviewSession.objects.filter(
+            student=self.request.user,
+            status__in=[ReviewSession.Status.COMPLETED, ReviewSession.Status.EXPIRED],
+        ).select_related("topic", "course")
         queryset = apply_date_range(queryset, self.request, "started_at")
         queryset = apply_sort(
             queryset,
@@ -391,7 +431,10 @@ class StudentChatMessageView(StudentRequiredMixin, View):
         form = MistakeConcernForm(request.POST, request.FILES)
         if not form.is_valid():
             return JsonResponse(
-                {"ok": False, "error": form.errors.as_text() or "Message cannot be empty."},
+                {
+                    "ok": False,
+                    "error": form.errors.as_text() or "Message cannot be empty.",
+                },
                 status=400,
             )
         post_chat_message(
@@ -469,7 +512,6 @@ class StudentMaterialListView(StudentRequiredMixin, View):
 
     def get(self, request, subject_pk):
         from apps.ai.material_services import ready_documents_for_subject
-        from apps.ai.models import LearningDocument
         from apps.questions.models import Subject
 
         subject = get_object_or_404(
@@ -479,6 +521,10 @@ class StudentMaterialListView(StudentRequiredMixin, View):
         if not _student_can_access_subject(request.user, subject):
             raise Http404
         documents = ready_documents_for_subject(subject)
+        ext_counts: dict[str, int] = {}
+        for doc in documents:
+            ext = (doc.file_type_label or "FILE").upper()
+            ext_counts[ext] = ext_counts.get(ext, 0) + 1
         return render(
             request,
             self.template_name,
@@ -486,7 +532,7 @@ class StudentMaterialListView(StudentRequiredMixin, View):
                 "subject": subject,
                 "documents": documents,
                 "library_count": len(documents),
-                "material_types": LearningDocument.MaterialType.choices,
+                "ext_counts": sorted(ext_counts.items()),
             },
         )
 
@@ -525,4 +571,173 @@ class StudentMaterialDownloadView(StudentRequiredMixin, View):
             as_attachment=True,
             filename=filename,
             content_type=content_type or "application/octet-stream",
+        )
+
+
+def _student_concept_review(request, pk: int) -> ConceptReview:
+    return get_object_or_404(
+        ConceptReview.objects.select_related("topic", "topic__subject"),
+        pk=pk,
+        student=request.user,
+    )
+
+
+class ConceptReviewDetailView(StudentRequiredMixin, View):
+    """Learn → Try it → Practice flow for one concept."""
+
+    template_name = "analytics/student/concept_review.html"
+
+    def get(self, request, pk: int):
+        review = _student_concept_review(request, pk)
+        step = request.GET.get("step") or review.current_step
+        if step not in {
+            ConceptReview.Step.LEARN,
+            ConceptReview.Step.TRY_IT,
+            ConceptReview.Step.PRACTICE,
+        }:
+            step = review.current_step
+
+        if review.status == ConceptReview.Status.RESOLVED and step != ConceptReview.Step.PRACTICE:
+            # Allow viewing learn content after resolve; default stay on practice summary.
+            pass
+
+        ensure_learn_content(review)
+        review.refresh_from_db()
+
+        practice_attempt = None
+        if step == ConceptReview.Step.PRACTICE:
+            if review.status != ConceptReview.Status.RESOLVED:
+                practice_attempt = start_or_next_practice(review)
+                review.refresh_from_db()
+            else:
+                practice_attempt = (
+                    review.practice_attempts.filter(is_correct=True)
+                    .order_by("-attempt_number")
+                    .first()
+                )
+
+        learn = review.learn_payload or {}
+        return render(
+            request,
+            self.template_name,
+            {
+                "review": review,
+                "step": step,
+                "learn": learn,
+                "try_it": review.try_it_payload,
+                "practice_attempt": practice_attempt,
+                "practice_payload": (
+                    (practice_attempt.question_payload if practice_attempt else {}) or {}
+                ),
+                "history_lines": miss_history_for_sidebar(review),
+                "card": build_concept_card_context(review),
+                "concept_correct_target": CORRECT_TO_RESOLVE,
+            },
+        )
+
+
+class ConceptReviewContinueView(StudentRequiredMixin, View):
+    """Advance from Learn to Try it."""
+
+    def post(self, request, pk: int):
+        review = _student_concept_review(request, pk)
+        advance_to_try_it(review)
+        return redirect(
+            reverse("analytics_student:concept_review", kwargs={"pk": pk})
+            + "?step=try_it"
+        )
+
+
+class ConceptReviewTryItView(StudentRequiredMixin, View):
+    """Submit Try it first-step choice (JSON)."""
+
+    def post(self, request, pk: int):
+        review = _student_concept_review(request, pk)
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            body = {}
+        choice_raw = body.get("choice_index", request.POST.get("choice_index"))
+        try:
+            choice_index = int(choice_raw)
+        except (TypeError, ValueError):
+            return JsonResponse({"ok": False, "error": "Invalid choice."}, status=400)
+        result = submit_try_it(review, choice_index)
+        return JsonResponse({"ok": True, **result})
+
+
+class ConceptReviewPracticeView(StudentRequiredMixin, View):
+    """Submit practice answer or request next question (JSON)."""
+
+    def post(self, request, pk: int):
+        review = _student_concept_review(request, pk)
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            body = {}
+        action = body.get("action") or request.POST.get("action") or "check"
+
+        if action == "next":
+            attempt = start_or_next_practice(review)
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "attempt_id": attempt.pk,
+                    "payload": attempt.question_payload,
+                    "correct_streak": review.correct_streak,
+                    "resolved": review.status == ConceptReview.Status.RESOLVED,
+                }
+            )
+
+        if action == "regenerate":
+            # Discard the unanswered question so a fresh one is generated.
+            # Answered attempts stay, so the 3-correct streak is preserved.
+            review.practice_attempts.filter(is_correct__isnull=True).delete()
+            attempt = start_or_next_practice(review)
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "attempt_id": attempt.pk,
+                    "payload": attempt.question_payload,
+                    "correct_streak": review.correct_streak,
+                    "resolved": review.status == ConceptReview.Status.RESOLVED,
+                }
+            )
+
+        attempt_id = body.get("attempt_id") or request.POST.get("attempt_id")
+        option_id = body.get("option_id") or request.POST.get("option_id") or ""
+        attempt = get_object_or_404(
+            review.practice_attempts,
+            pk=attempt_id,
+        )
+        if attempt.is_correct is not None:
+            return JsonResponse(
+                {"ok": False, "error": "This question was already answered."},
+                status=400,
+            )
+        result = submit_practice_answer(review, attempt, str(option_id))
+        review.refresh_from_db()
+        return JsonResponse(
+            {
+                "ok": True,
+                **result,
+                "status": review.status,
+                "redirect_url": (
+                    reverse("analytics_student:mistakes") + "?tab=concepts&status=resolved"
+                    if result.get("resolved")
+                    else None
+                ),
+            }
+        )
+
+
+class ConceptReviewAgainView(StudentRequiredMixin, View):
+    """Restart a resolved (or any) concept from Learn."""
+
+    def post(self, request, pk: int):
+        review = _student_concept_review(request, pk)
+        restart_concept_review(review)
+        return redirect(
+            reverse("analytics_student:concept_review", kwargs={"pk": pk})
+            + "?step=learn"
         )

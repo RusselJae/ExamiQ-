@@ -123,7 +123,9 @@ class AcademicTerm(models.Model):
 
     @classmethod
     def get_current(cls) -> "AcademicTerm | None":
-        return cls.objects.filter(is_current=True).select_related("academic_year").first()
+        return (
+            cls.objects.filter(is_current=True).select_related("academic_year").first()
+        )
 
 
 class ProgramSection(models.Model):
@@ -195,6 +197,7 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         STUDENT = "student", "Student"
         PROFESSOR = "professor", "Faculty"
+        PROGRAM_COORDINATOR = "program_coordinator", "Program Coordinator"
         CHAIRPERSON = "chairperson", "Department Chairperson"
         CAMPUS_ADMIN = "campus_admin", "Campus Administrator"
 
@@ -260,7 +263,7 @@ class User(AbstractUser):
         "questions.Subject",
         blank=True,
         related_name="assigned_faculty",
-        help_text="Course subjects this faculty member handles for chat and roster.",
+        help_text="Courses this faculty member handles for chat and roster.",
     )
     password_changed_at = models.DateTimeField(
         null=True,
@@ -274,7 +277,9 @@ class User(AbstractUser):
         default="",
         help_text='Name suffix, e.g. "Jr.", "Sr.", "III".',
     )
-    profile_photo = models.ImageField(upload_to="profile_photos/", blank=True, null=True)
+    profile_photo = models.ImageField(
+        upload_to="profile_photos/", blank=True, null=True
+    )
     student_number = models.CharField(
         max_length=9,
         unique=True,
@@ -457,7 +462,13 @@ class TeachingAssignment(models.Model):
         null=True,
         blank=True,
         related_name="assignments_created",
-        limit_choices_to={"role__in": [User.Role.PROFESSOR, User.Role.CHAIRPERSON]},
+        limit_choices_to={
+            "role__in": [
+                User.Role.PROFESSOR,
+                User.Role.PROGRAM_COORDINATOR,
+                User.Role.CHAIRPERSON,
+            ]
+        },
     )
     course = models.OneToOneField(
         Course,
@@ -471,7 +482,11 @@ class TeachingAssignment(models.Model):
     class Meta:
         verbose_name = "Teaching Assignment"
         verbose_name_plural = "Teaching Assignments"
-        ordering = ["-term__academic_year__label", "term__name", "program_section__label"]
+        ordering = [
+            "-term__academic_year__label",
+            "term__name",
+            "program_section__label",
+        ]
         unique_together = [
             ["professor", "program_section", "subject", "term"],
         ]
@@ -537,37 +552,6 @@ class EmailSignupOTP(models.Model):
 
     def __str__(self) -> str:
         return f"OTP for {self.user_id} @ {self.created_at}"
-
-
-class FacultySignupPinSettings(models.Model):
-    """Singleton row for the shared faculty public-signup PIN."""
-
-    SINGLETON_PK = 1
-
-    pin_hash = models.CharField(max_length=128, blank=True, default="")
-    updated_at = models.DateTimeField(null=True, blank=True)
-    updated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="faculty_signup_pin_updates",
-    )
-
-    class Meta:
-        verbose_name = "Faculty signup PIN"
-        verbose_name_plural = "Faculty signup PIN"
-
-    def __str__(self) -> str:
-        return "Faculty signup PIN settings"
-
-    @classmethod
-    def load(cls) -> "FacultySignupPinSettings":
-        obj, _created = cls.objects.get_or_create(
-            pk=cls.SINGLETON_PK,
-            defaults={"pin_hash": ""},
-        )
-        return obj
 
 
 class PasswordResetRequestLog(models.Model):

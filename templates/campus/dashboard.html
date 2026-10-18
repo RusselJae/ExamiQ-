@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load humanize %}
 
-{% block title %}Campus Admin - EXAMIQ+{% endblock %}
+{% block title %}Program Coordinator - EXAMIQ+{% endblock %}
 
 {% block content %}
 <div class="overview-header mb-6">
     <div class="overview-header__main">
-        <h1 class="overview-title">Campus admin</h1>
-        <p class="overview-as-of">Provision faculty accounts, manage sections, and approve registrations.</p>
+        <h1 class="overview-title">Program coordinator</h1>
+        <p class="overview-as-of">Approve faculty accounts, manage sections, subjects, and teaching assignments.</p>
     </div>
 </div>
 
@@ -39,9 +39,6 @@
     <div class="overview-kpi-grid__item">
         {% include "components/overview_stat_card.html" with value=professor_count label="Faculty" subtext=professor_subtext icon="book" variant="accent" %}
     </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=chairperson_count label="Chairpersons" subtext=chairperson_subtext icon="target" variant="neutral" %}
-    </div>
 </div>
 
 <div class="campus-dashboard-grid">
@@ -65,6 +62,26 @@
                 <span class="campus-action-item__body">
                     <span class="campus-action-item__title">Sections ({{ section_count }})</span>
                     <span class="campus-action-item__desc">Create and manage program cohorts</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            <a href="{% url 'analytics_chairperson:assignments' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--faculty" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Faculty sections</span>
+                    <span class="campus-action-item__desc">Assign faculty to a subject and section</span>
+                </span>
+                <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+            <a href="{% url 'coordinator:subject_list' %}" class="campus-action-item">
+                <span class="campus-action-item__icon campus-action-item__icon--faculty" aria-hidden="true">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                </span>
+                <span class="campus-action-item__body">
+                    <span class="campus-action-item__title">Subject catalog</span>
+                    <span class="campus-action-item__desc">Add subjects for faculty assignments</span>
                 </span>
                 <svg class="campus-action-item__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </a>

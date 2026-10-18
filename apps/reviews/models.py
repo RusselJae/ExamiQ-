@@ -30,7 +30,9 @@ class ReviewWindow(TimeStampedModel):
         limit_choices_to={"role": User.Role.PROFESSOR},
     )
     title = models.CharField(max_length=200)
-    exam_type = models.CharField(max_length=20, choices=ExamType.choices, default=ExamType.CUSTOM)
+    exam_type = models.CharField(
+        max_length=20, choices=ExamType.choices, default=ExamType.CUSTOM
+    )
     opens_at = models.DateTimeField()
     closes_at = models.DateTimeField()
     topics = models.ManyToManyField(Topic, blank=True, related_name="review_windows")
@@ -112,7 +114,11 @@ class ExamSetup(TimeStampedModel):
             code=self.course.code,
             program=self.course.program,
         ).first()
-        base = Topic.objects.filter(subject=subject, parent__isnull=True) if subject else Topic.objects.none()
+        base = (
+            Topic.objects.filter(subject=subject, parent__isnull=True)
+            if subject
+            else Topic.objects.none()
+        )
         if self.topics.exists():
             return base.filter(pk__in=self.topics.values_list("pk", flat=True))
         return base
@@ -171,7 +177,7 @@ class ProgramExamSetup(TimeStampedModel):
         Subject,
         blank=True,
         related_name="program_exam_setups",
-        help_text="Course subjects students may select for exams. Empty = full catalog.",
+        help_text="Courses students may select for exams. Empty = full catalog.",
     )
     seconds_per_question = models.PositiveIntegerField(
         default=30,
@@ -384,7 +390,9 @@ class StepFeedbackView(models.Model):
         ordering = ["-viewed_at"]
 
     def __str__(self) -> str:
-        return f"Step view for Answer #{self.answer_id} step #{self.explanation_step_id}"
+        return (
+            f"Step view for Answer #{self.answer_id} step #{self.explanation_step_id}"
+        )
 
 
 class TutorConversation(TimeStampedModel):

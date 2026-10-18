@@ -103,7 +103,7 @@
 
         <div class="exam-setup-layout">
             <div class="exam-setup-card exam-setup-card--table exam-setup-step" data-step-panel="1">
-                <h2 class="sr-only">Course subjects for your year</h2>
+                <h2 class="sr-only">Courses for your year</h2>
                 <div class="exam-table-toolbar">
                     <div class="exam-tabs exam-tabs--segmented" role="tablist" aria-label="Subject filter tabs">
                         <button type="button"
@@ -134,11 +134,13 @@
                                id="subject-search-input"
                                class="exam-search-input"
                                placeholder="Search subjects..."
-                               aria-label="Search subjects">
+                               aria-label="Search subjects"
+                               autocomplete="off">
                         <button type="button"
                                 id="subject-search-clear"
                                 class="exam-clear-btn"
-                                aria-label="Clear search">Clear</button>
+                                aria-label="Clear search"
+                                tabindex="-1">&times;</button>
                     </div>
                 </div>
 
@@ -274,25 +276,18 @@
                     </div>
 
                     <div class="exam-sidebar-section" data-timer-section{% if timer_locked_by_instructor %} data-timer-locked="1" data-instructor-seconds="{{ instructor_timer_seconds }}"{% endif %}>
-                        <div class="exam-timer-header">
+                        <div class="exam-stepper-header">
                             <div class="exam-sidebar-title">Time per question</div>
-                            <span id="timer-display-label" class="exam-timer-label">{% if estimate_seconds == 0 %}No timer{% else %}{{ estimate_seconds|default:15 }} sec{% endif %}</span>
+                            <div class="exam-stepper" data-timer-stepper>
+                                <button type="button" id="t-stepper-minus" class="exam-stepper-btn" aria-label="Decrease time per question"{% if timer_locked_by_instructor %} disabled{% endif %}>−</button>
+                                <span id="t-stepper-display" class="exam-stepper-val">{% if estimate_seconds == 0 %}Off{% else %}{{ estimate_seconds|default:15 }}s{% endif %}</span>
+                                <button type="button" id="t-stepper-plus" class="exam-stepper-btn" aria-label="Increase time per question"{% if timer_locked_by_instructor %} disabled{% endif %}>+</button>
+                            </div>
                         </div>
-                        <div class="exam-timer-manual" data-timer-manual>
-                            <label class="sr-only" for="id_setup_seconds">Seconds per question (0 = no timer)</label>
-                            <input type="number"
-                                   name="seconds_per_question"
-                                   id="id_setup_seconds"
-                                   class="exam-timer-input"
-                                   min="0"
-                                   max="120"
-                                   step="1"
-                                   inputmode="numeric"
-                                   value="{{ estimate_seconds|default:15 }}"
-                                   aria-describedby="timer-display-label"
-                                   {% if timer_locked_by_instructor %}readonly disabled{% endif %}>
-                            <span class="exam-timer-input-suffix">sec</span>
-                        </div>
+                        <input type="hidden"
+                               name="seconds_per_question"
+                               id="id_setup_seconds"
+                               value="{{ estimate_seconds|default:15 }}">
                         <div class="exam-timer-pills" role="group" aria-label="Time per question presets">
                             <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 0 %} is-selected{% endif %}" data-timer-preset="0"{% if timer_locked_by_instructor %} disabled{% endif %}>Off</button>
                             <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 10 %} is-selected{% endif %}" data-timer-preset="10"{% if timer_locked_by_instructor %} disabled{% endif %}>10s</button>
@@ -301,7 +296,6 @@
                             <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 45 %} is-selected{% endif %}" data-timer-preset="45"{% if timer_locked_by_instructor %} disabled{% endif %}>45s</button>
                             <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 60 %} is-selected{% endif %}" data-timer-preset="60"{% if timer_locked_by_instructor %} disabled{% endif %}>60s</button>
                             <button type="button" class="exam-timer-pill exam-pill{% if estimate_seconds == 90 %} is-selected{% endif %}" data-timer-preset="90"{% if timer_locked_by_instructor %} disabled{% endif %}>90s</button>
-                            <button type="button" class="exam-timer-pill exam-pill exam-timer-pill--custom" data-timer-preset="custom"{% if timer_locked_by_instructor %} disabled{% endif %}>Custom</button>
                         </div>
                         {% if timer_locked_by_instructor %}
                         <p class="exam-timer-hint">Set by your instructor — you cannot change this timer.</p>

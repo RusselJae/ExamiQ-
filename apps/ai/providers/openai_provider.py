@@ -20,6 +20,8 @@ from apps.ai.prompts import (
 from apps.ai.interfaces import (
     AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
+    ConceptPracticeGenerator,
+    ConceptRemediationGenerator,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -317,3 +319,33 @@ class OpenAIErrorClassifier(ErrorClassifier):
             return None
         slug = result.lower().strip().strip(".")
         return ErrorType.objects.filter(slug=slug).first()
+
+
+class OpenAIConceptRemediationGenerator(ConceptRemediationGenerator):
+    def generate(self, **kwargs) -> dict:
+        from apps.ai.concept_ai_services import generate_validated_concept_remediation
+
+        def chat_json(system: str, prompt: str, max_tokens: int) -> str | None:
+            return _chat(
+                prompt,
+                system=system,
+                max_output_tokens=max_tokens,
+                json_mode=True,
+            )
+
+        return generate_validated_concept_remediation(chat_json=chat_json, **kwargs)
+
+
+class OpenAIConceptPracticeGenerator(ConceptPracticeGenerator):
+    def generate(self, **kwargs) -> dict:
+        from apps.ai.concept_ai_services import generate_validated_concept_practice
+
+        def chat_json(system: str, prompt: str, max_tokens: int) -> str | None:
+            return _chat(
+                prompt,
+                system=system,
+                max_output_tokens=max_tokens,
+                json_mode=True,
+            )
+
+        return generate_validated_concept_practice(chat_json=chat_json, **kwargs)

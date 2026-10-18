@@ -3,9 +3,9 @@
 {% block title %}Learning materials - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Learning materials" subtitle="Browse modules and resources for each course subject, then download what you need." %}
+{% include "components/page_header.html" with title="Learning materials" subtitle="Browse modules and resources for each course, then download what you need." %}
 
-{# Same table + filter pattern as faculty Course subjects — clear hierarchy, one Open action #}
+{# Same table + filter pattern as faculty Course — clear hierarchy, one Open action #}
 <div class="course-subjects-toolbar mb-4">
     <div class="course-subjects-toolbar__filters">
         <label class="sr-only" for="materials-subject-search">Search</label>
@@ -40,7 +40,8 @@
             <tr>
                 <th>Code</th>
                 <th>Name</th>
-                <th>Year / Sem</th>
+                <th>Year</th>
+                <th>Semester</th>
                 <th class="text-right">Files</th>
                 <th class="text-right">Actions</th>
             </tr>
@@ -56,9 +57,8 @@
             >
                 <td class="font-semibold">{{ card.subject.code }}</td>
                 <td>{{ card.subject.name }}</td>
-                <td class="text-examiq-slate">
-                    {{ card.subject.year_level.name }} · {{ card.subject.get_semester_display }}
-                </td>
+                <td class="text-examiq-slate">{{ card.subject.year_level.name }}</td>
+                <td class="text-examiq-slate">{{ card.subject.get_semester_display }}</td>
                 <td class="text-right font-medium">{{ card.document_count }}</td>
                 <td class="text-right whitespace-nowrap">
                     <a href="{% url 'analytics_student:materials_list' card.subject.pk %}"
