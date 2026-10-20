@@ -29,6 +29,7 @@ from apps.analytics.services import (
     section_heatmap_subjects,
     section_performance_summary,
     student_course_summary,
+    student_performance_donut,
     student_professor_summary,
     student_section_summary,
     student_subject_summary,
@@ -102,6 +103,41 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         context["donut_section"] = context["overview_donut"].get("section", "")
         context["donut_sections"] = professor_donut_sections(self.request.user)
         return context
+
+
+class ProfessorDonutDataView(ProfessorRequiredMixin, View):
+    """JSON payload for the professor overview donut.
+
+    The range/section filters fetch this so the chart updates in place
+    instead of reloading the page.
+    """
+
+    def get(self, request):
+        donut = professor_confidence_donut(
+            request.user,
+            period=request.GET.get("donut_period"),
+            section=request.GET.get("donut_section"),
+        )
+        return JsonResponse({"donut": donut})
+
+
+class ProfessorStudentDonutDataView(ProfessorRequiredMixin, View):
+    """JSON payload for one student's confidence donut (faculty student detail)."""
+
+    def get(self, request, student_pk):
+        student = get_object_or_404(
+            User, pk=student_pk, role=User.Role.STUDENT
+        )
+        if not professor_can_view_student(request.user, student):
+            from django.http import Http404
+
+            raise Http404()
+        donut = student_performance_donut(
+            student,
+            for_professor=True,
+            period=request.GET.get("donut_period"),
+        )
+        return JsonResponse({"donut": donut})
 
 
 class ExamSetupHubView(ProfessorRequiredMixin, View):
@@ -332,6 +368,10 @@ class ProfessorStudentDetailView(ProfessorRequiredMixin, DetailView):
         donut = summary.get("dashboard_trends", {}).get("donut") or {}
         context["donut_period"] = donut.get("period", "all")
         context["donut_period_choices"] = DONUT_PERIOD_CHOICES
+        context["donut_data_url"] = reverse(
+            "analytics_professor:student_donut_data",
+            kwargs={"student_pk": self.object.pk},
+        )
 
         if summary["accuracy"] < peer_accuracy and summary["total_answers"]:
             context["accuracy_subtext"] = "Below class average"

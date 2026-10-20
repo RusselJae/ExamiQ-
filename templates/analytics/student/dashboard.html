@@ -36,13 +36,18 @@
                 <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-trends-scope">
                     {{ dashboard_trends.donut.scope_line }}
                 </p>
-                <div class="overview-trends-filters student-confidence-card__filters">
+                <div class="overview-trends-filters student-confidence-card__filters"
+                     data-donut-filters
+                     data-donut-canvas="studentTrendsChart"
+                     data-donut-data-url="{% url 'analytics_student:donut_data' %}">
                     <div class="overview-trends-filter">
                         <span class="overview-trends-filter__label" id="student-donut-range-label">Range</span>
-                        <div class="overview-pill-group" role="group" aria-labelledby="student-donut-range-label">
+                        <div class="overview-pill-group" role="group" aria-labelledby="student-donut-range-label" data-donut-param="period">
                             {% for value, label in donut_period_choices %}
                             <a href="?period={{ value }}"
-                               class="overview-pill{% if donut_period == value %} is-selected{% endif %}">{{ label }}</a>
+                               class="overview-pill{% if donut_period == value %} is-selected{% endif %}"
+                               data-donut-value="{{ value }}"
+                               aria-pressed="{% if donut_period == value %}true{% else %}false{% endif %}">{{ label }}</a>
                             {% endfor %}
                         </div>
                     </div>
@@ -110,6 +115,7 @@
 {% block extra_js %}
 {{ dashboard_trends|json_script:"student-trends-data" }}
 <script src="{% static 'js/student-performance-donut.js' %}"></script>
+<script src="{% static 'js/donut-filters.js' %}"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
 <script src="{% static 'js/student-mistakes-chart.js' %}"></script>
 <script>

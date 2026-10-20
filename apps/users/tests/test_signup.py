@@ -254,6 +254,8 @@ class TestSignupRoles:
     def test_otp_verify_activates_account(
         self, client, bsed_program, signup_year_level, signup_section
     ):
+        from allauth.account.models import EmailAddress
+
         client.post(
             reverse("account_signup"),
             _student_data(signup_year_level, signup_section),
@@ -268,6 +270,71 @@ class TestSignupRoles:
         assert response.status_code == 302
         user.refresh_from_db()
         assert user.is_active is True
+        email_addr = EmailAddress.objects.get(user=user, email=user.email)
+        assert email_addr.verified is True
+        assert email_addr.primary is True
+
+    def test_verified_student_can_login_without_500(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        from allauth.account.models import EmailAddress
+
+        client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        code = _otp_code_from_mailbox()
+        client.post(
+            reverse("users:signup_verify"),
+            {"action": "verify", "code": code},
+        )
+        client.logout()
+
+        user = User.objects.get(email="newstudent@test.edu")
+        assert user.is_active is True
+        assert EmailAddress.objects.filter(
+            user=user, email=user.email, verified=True, primary=True
+        ).exists()
+
+        response = client.post(
+            reverse("account_login"),
+            {"login": "newstudent@test.edu", "password": "strongpass123!"},
+        )
+        assert response.status_code == 302
+        assert response.status_code != 500
+        assert "_auth_user_id" in client.session
+
+    def test_student_signup_needs_no_faculty_activation(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        """Students sign up freely: the email OTP is the only step."""
+        coordinator = User.objects.create_user(
+            email="coordinator@test.edu",
+            password="testpass123",
+            role=User.Role.PROGRAM_COORDINATOR,
+        )
+        client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        user = User.objects.get(email="newstudent@test.edu")
+        # No approval gate and no activation request mailed to the coordinator.
+        assert user.approval_status == User.ApprovalStatus.APPROVED
+        assert user.is_active is False
+        assert len(mail.outbox) == 1
+        assert "verification code" in mail.outbox[0].subject.lower()
+        assert all(coordinator.email not in message.to for message in mail.outbox)
+
+        # The OTP alone activates the account — no faculty action needed.
+        code = _otp_code_from_mailbox()
+        response = client.post(
+            reverse("users:signup_verify"),
+            {"action": "verify", "code": code},
+        )
+        assert response.status_code == 302
+        user.refresh_from_db()
+        assert user.is_active is True
+        assert user.approval_status == User.ApprovalStatus.APPROVED
 
     def test_otp_wrong_code_keeps_inactive(
         self, client, bsed_program, signup_year_level, signup_section

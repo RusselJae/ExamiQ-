@@ -24,6 +24,16 @@ urlpatterns = [
         name="account_toggle_active",
     ),
     path(
+        "accounts/<int:pk>/archive/",
+        chairperson_users.ChairpersonArchiveUserView.as_view(),
+        name="account_archive",
+    ),
+    path(
+        "accounts/<int:pk>/restore/",
+        chairperson_users.ChairpersonRestoreUserView.as_view(),
+        name="account_restore",
+    ),
+    path(
         "courses/subjects/",
         chairperson_users.ChairpersonSubjectListView.as_view(),
         name="subjects",

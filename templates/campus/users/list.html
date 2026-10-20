@@ -26,6 +26,15 @@
             </select>
         </div>
         <div>
+            <label for="active" class="block text-xs font-medium text-examiq-slate mb-1">Account</label>
+            <select name="active" id="active" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+                <option value="">All accounts</option>
+                <option value="active" {% if active_filter == "active" %}selected{% endif %}>Active</option>
+                <option value="inactive" {% if active_filter == "inactive" %}selected{% endif %}>Inactive</option>
+                <option value="archived" {% if active_filter == "archived" %}selected{% endif %}>Archived</option>
+            </select>
+        </div>
+        <div>
             <label for="status" class="block text-xs font-medium text-examiq-slate mb-1">Status</label>
             <select name="status" id="status" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
                 <option value="">All statuses</option>
@@ -51,6 +60,7 @@
                 <th>Name</th>
                 <th>Role</th>
                 <th>Details</th>
+                <th>Sections</th>
                 <th>Phone</th>
                 <th>Status</th>
                 <th></th>
@@ -71,9 +81,18 @@
                         {{ campus_user.department.name|default:"—" }}
                     {% endif %}
                 </td>
+                <td class="text-sm text-examiq-slate">
+                    {% if campus_user.assigned_section_labels %}
+                    {{ campus_user.assigned_section_labels|join:", " }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
                 <td>{{ campus_user.phone_number|default:"—" }}</td>
                 <td>
-                    {% if campus_user.approval_status == "pending" %}
+                    {% if campus_user.is_archived %}
+                    <span class="profile-pill">Archived</span>
+                    {% elif campus_user.approval_status == "pending" %}
                     <span class="profile-pill">Pending</span>
                     {% elif campus_user.approval_status == "rejected" %}
                     <span class="profile-pill">Rejected</span>
@@ -84,7 +103,12 @@
                     {% endif %}
                 </td>
                 <td class="whitespace-nowrap">
-                    {% if campus_user.approval_status == "pending" %}
+                    {% if campus_user.is_archived %}
+                    <form method="post" action="{% url 'campus:restore_user' campus_user.pk %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-link">Restore</button>
+                    </form>
+                    {% elif campus_user.approval_status == "pending" %}
                     <form method="post" action="{% url 'campus:approve_user' campus_user.pk %}" class="inline">
                         {% csrf_token %}
                         <button type="submit" class="text-sm text-link">Accept</button>
@@ -100,12 +124,16 @@
                             {% if campus_user.is_active %}Deactivate{% else %}Activate{% endif %}
                         </button>
                     </form>
+                    <form method="post" action="{% url 'campus:archive_user' campus_user.pk %}" class="inline ml-2">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="7" class="text-center text-sm text-examiq-slate py-8">No users match your filters.</td>
+                <td colspan="8" class="text-center text-sm text-examiq-slate py-8">No users match your filters.</td>
             </tr>
             {% endfor %}
         </tbody>

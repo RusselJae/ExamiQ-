@@ -518,3 +518,126 @@ def test_professor_overview_renders_donut_filters(
     assert "donut_period=all" in content
     assert "All sections" in content
     assert student.section.display_label in content
+
+
+@pytest.mark.django_db
+def test_donut_filters_are_wired_for_in_place_updates(
+    client, professor, course, student, topic, mcq_question
+):
+    """The pills point at the JSON endpoint so the page need not reload."""
+    question, _correct = mcq_question
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+
+    client.force_login(professor)
+    content = client.get(reverse("analytics_professor:overview")).content.decode()
+    assert "data-donut-filters" in content
+    assert "data-donut-canvas=\"overviewDonutChart\"" in content
+    assert reverse("analytics_professor:donut_data") in content
+    assert 'data-donut-param="donut_period"' in content
+    assert 'data-donut-param="donut_section"' in content
+    assert "donut-filters.js" in content
+
+
+@pytest.mark.django_db
+def test_professor_donut_data_endpoint(
+    client, professor, course, student, topic, mcq_question
+):
+    """The JSON endpoint re-scopes the donut for the filter."""
+    question, _correct = mcq_question
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+
+    client.force_login(professor)
+    response = client.get(
+        reverse("analytics_professor:donut_data"),
+        {"donut_period": "7", "donut_section": str(student.section_id)},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["donut"]["total"] == 1
+    assert data["donut"]["period"] == "7"
+    assert data["donut"]["section"] == student.section_id
+    # The explanation travels with the payload.
+    assert data["donut"]["calibration"]["status"] in {
+        "overconfident",
+        "underconfident",
+        "confident",
+    }
+
+
+@pytest.mark.django_db
+def test_student_donut_data_endpoint(client, student, topic, mcq_question):
+    """Students get the same in-place payload for their own donut."""
+    question, _correct = mcq_question
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+
+    client.force_login(student)
+    response = client.get(
+        reverse("analytics_student:donut_data"), {"period": "7"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["donut"]["total"] == 1
+    assert data["donut"]["period"] == "7"
+
+
+@pytest.mark.django_db
+def test_calibration_payload_explains_the_verdict(
+    professor, course, student, topic, mcq_question, numeric_question
+):
+    """The modal payload spells out the numbers and the rule applied."""
+    question, _correct = mcq_question
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=session, question=numeric_question, confidence=5, is_correct=False
+    )
+
+    donut = professor_confidence_donut(professor)
+    calibration = donut["calibration"]
+    assert calibration["status"] == "overconfident"
+    assert calibration["label"] == "Overconfident"
+    assert calibration["driver"] == "sure_incorrect"
+    assert "50%" in calibration["rule"]
+    assert calibration["summary"]
+    # One metric per rule driver plus the two remaining measures.
+    assert len(calibration["metrics"]) == 4
+    wrong_sure = calibration["metrics"][0]
+    assert wrong_sure["label"] == "Wrong answers rated Sure"
+    assert wrong_sure["value"] == 1
+    assert wrong_sure["total"] == 1
+    assert wrong_sure["percent"] == 100.0
+    assert "were rated Sure" in wrong_sure["sentence"]

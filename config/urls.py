@@ -7,6 +7,7 @@ from django.urls import include, path
 from apps.core.views import HealthCheckView
 from apps.users.allauth_views import (
     CoordinatorSignupView,
+    ExamiQConfirmLoginCodeView,
     ExamiQFacultySignupView,
     ExamiQLoginView,
     ExamiQSignupView,
@@ -25,6 +26,13 @@ urlpatterns = [
     # Override allauth sign-in/sign-up so a pending login-by-code stage does not
     # bounce every GET back to the verification-code screen.
     path("accounts/login/", ExamiQLoginView.as_view(), name="account_login"),
+    # Override the sign-in code screen so a failed email delivery shows a
+    # message instead of an Internal Server Error.
+    path(
+        "accounts/login/code/confirm/",
+        ExamiQConfirmLoginCodeView.as_view(),
+        name="account_confirm_login_code",
+    ),
     path("accounts/signup/", ExamiQSignupView.as_view(), name="account_signup"),
     path(
         "accounts/faculty/<str:token>/signup/",

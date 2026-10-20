@@ -70,25 +70,34 @@
         <p class="overview-trends-card__subtitle student-confidence-card__scope" id="overview-donut-scope">
             {{ overview_donut.scope_line }}
         </p>
-        <div class="overview-trends-filters student-confidence-card__filters">
+        <div class="overview-trends-filters student-confidence-card__filters"
+             data-donut-filters
+             data-donut-canvas="overviewDonutChart"
+             data-donut-data-url="{% url 'analytics_professor:donut_data' %}">
             <div class="overview-trends-filter">
                 <span class="overview-trends-filter__label" id="overview-donut-range-label">Range</span>
-                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-range-label">
+                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-range-label" data-donut-param="donut_period">
                     {% for value, label in donut_period_choices %}
                     <a href="?donut_period={{ value }}{% if donut_section %}&amp;donut_section={{ donut_section }}{% endif %}"
-                       class="overview-pill{% if donut_period == value %} is-selected{% endif %}">{{ label }}</a>
+                       class="overview-pill{% if donut_period == value %} is-selected{% endif %}"
+                       data-donut-value="{{ value }}"
+                       aria-pressed="{% if donut_period == value %}true{% else %}false{% endif %}">{{ label }}</a>
                     {% endfor %}
                 </div>
             </div>
             {% if donut_sections %}
             <div class="overview-trends-filter">
                 <span class="overview-trends-filter__label" id="overview-donut-section-label">Sections</span>
-                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-section-label">
+                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-section-label" data-donut-param="donut_section">
                     <a href="?donut_period={{ donut_period }}"
-                       class="overview-pill{% if not donut_section %} is-selected{% endif %}">All sections</a>
+                       class="overview-pill{% if not donut_section %} is-selected{% endif %}"
+                       data-donut-value=""
+                       aria-pressed="{% if not donut_section %}true{% else %}false{% endif %}">All sections</a>
                     {% for section in donut_sections %}
                     <a href="?donut_period={{ donut_period }}&amp;donut_section={{ section.pk }}"
-                       class="overview-pill{% if donut_section == section.pk %} is-selected{% endif %}">{{ section.label }}</a>
+                       class="overview-pill{% if donut_section == section.pk %} is-selected{% endif %}"
+                       data-donut-value="{{ section.pk }}"
+                       aria-pressed="{% if donut_section == section.pk %}true{% else %}false{% endif %}">{{ section.label }}</a>
                     {% endfor %}
                 </div>
             </div>
@@ -153,6 +162,7 @@
 {{ overview_trends|json_script:"overview-trends-data" }}
 {{ overview_donut|json_script:"overview-donut-data" }}
 <script src="{% static 'js/student-performance-donut.js' %}"></script>
+<script src="{% static 'js/donut-filters.js' %}"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
 <script src="{% static 'js/mistake-trend-chart.js' %}"></script>
 <script>

@@ -387,11 +387,7 @@ def archive_section_student(
     """Hide a student from rosters and block login."""
     if not faculty_can_manage_section_student(professor, section, student):
         raise PermissionError("Faculty cannot archive this student.")
-    if student.is_archived:
-        return
-    student.is_archived = True
-    student.is_active = False
-    student.save(update_fields=["is_archived", "is_active"])
+    archive_user(student)
 
 
 def restore_section_student(
@@ -402,11 +398,93 @@ def restore_section_student(
     """Restore an archived student to active roster and login."""
     if not faculty_can_manage_section_student(professor, section, student):
         raise PermissionError("Faculty cannot restore this student.")
-    if not student.is_archived:
+    restore_user(student)
+
+
+def archive_user(user: User) -> None:
+    """Archive an account: hide from active lists and block login."""
+    if user.is_archived:
         return
-    student.is_archived = False
-    student.is_active = True
-    student.save(update_fields=["is_archived", "is_active"])
+    user.is_archived = True
+    user.is_active = False
+    user.save(update_fields=["is_archived", "is_active"])
+
+
+def restore_user(user: User) -> None:
+    """Restore an archived account to active login."""
+    if not user.is_archived:
+        return
+    user.is_archived = False
+    user.is_active = True
+    user.save(update_fields=["is_archived", "is_active"])
+
+
+def faculty_assigned_section_labels(user: User, *, limit: int = 8) -> list[str]:
+    """Return compact section labels for a faculty member's teaching assignments."""
+    if user.role != User.Role.PROFESSOR:
+        return []
+    qs = (
+        TeachingAssignment.objects.filter(professor=user)
+        .select_related(
+            "program_section__program",
+            "program_section__year_level",
+            "program_section__academic_year",
+            "term__academic_year",
+        )
+        .order_by(
+            "-term__academic_year__label",
+            "program_section__year_level__order",
+            "program_section__label",
+        )
+    )
+    labels: list[str] = []
+    seen: set[str] = set()
+    for assignment in qs:
+        section = assignment.program_section
+        label = section.display_label
+        if label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+        if len(labels) >= limit:
+            break
+    return labels
+
+
+def annotate_users_with_section_labels(users) -> None:
+    """Attach ``assigned_section_labels`` list onto each user in ``users``."""
+    professor_ids = [u.pk for u in users if u.role == User.Role.PROFESSOR]
+    by_prof: dict[int, list[str]] = {pk: [] for pk in professor_ids}
+    if professor_ids:
+        assignments = (
+            TeachingAssignment.objects.filter(professor_id__in=professor_ids)
+            .select_related(
+                "program_section__program",
+                "program_section__year_level",
+                "program_section__academic_year",
+            )
+            .order_by(
+                "professor_id",
+                "program_section__year_level__order",
+                "program_section__label",
+            )
+        )
+        seen: dict[int, set[str]] = {pk: set() for pk in professor_ids}
+        for assignment in assignments:
+            pid = assignment.professor_id
+            label = assignment.program_section.display_label
+            if label in seen[pid]:
+                continue
+            seen[pid].add(label)
+            if len(by_prof[pid]) < 8:
+                by_prof[pid].append(label)
+    for user in users:
+        if user.role == User.Role.PROFESSOR:
+            user.assigned_section_labels = by_prof.get(user.pk, [])
+        elif user.role == User.Role.STUDENT and user.section_id:
+            user.assigned_section_labels = [user.section.display_label]
+        else:
+            user.assigned_section_labels = []
 
 
 def professor_can_view_student(professor: User, student: User) -> bool:

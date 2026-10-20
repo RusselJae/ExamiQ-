@@ -58,14 +58,19 @@
         <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-detail-donut-scope">
             {{ summary.dashboard_trends.donut.scope_line }}
         </p>
-        {% if donut_period %}
-        <div class="overview-trends-filters student-confidence-card__filters">
+        {% if donut_period and donut_data_url %}
+        <div class="overview-trends-filters student-confidence-card__filters"
+             data-donut-filters
+             data-donut-canvas="studentDetailDonut"
+             data-donut-data-url="{{ donut_data_url }}">
             <div class="overview-trends-filter">
                 <span class="overview-trends-filter__label" id="student-detail-donut-range-label">Range</span>
-                <div class="overview-pill-group" role="group" aria-labelledby="student-detail-donut-range-label">
+                <div class="overview-pill-group" role="group" aria-labelledby="student-detail-donut-range-label" data-donut-param="donut_period">
                     {% for value, label in donut_period_choices %}
                     <a href="?donut_period={{ value }}"
-                       class="overview-pill{% if donut_period == value %} is-selected{% endif %}">{{ label }}</a>
+                       class="overview-pill{% if donut_period == value %} is-selected{% endif %}"
+                       data-donut-value="{{ value }}"
+                       aria-pressed="{% if donut_period == value %}true{% else %}false{% endif %}">{{ label }}</a>
                     {% endfor %}
                 </div>
             </div>

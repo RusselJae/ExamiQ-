@@ -125,6 +125,110 @@ class TestChairpersonAccounts:
         faculty.refresh_from_db()
         assert faculty.is_active is True
 
+    def test_can_deactivate_and_archive_student(
+        self, client, program_section
+    ):
+        edu, _ = Department.objects.get_or_create(name="College of Education")
+        chairperson = User.objects.create_user(
+            email="edu-chair@test.edu",
+            password="testpass123",
+            role=User.Role.CHAIRPERSON,
+            department=edu,
+        )
+        student = User.objects.create_user(
+            email="chair-student@test.edu",
+            password="testpass123",
+            role=User.Role.STUDENT,
+            department=edu,
+            home_degree_program=User.HomeDegreeProgram.BSED_MATH,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=True,
+            section=program_section,
+            year_level=program_section.year_level,
+        )
+        client.force_login(chairperson)
+        content = client.get(reverse("analytics_chairperson:accounts")).content.decode()
+        assert "chair-student@test.edu" in content
+        assert "Deactivate" in content
+        assert "Archive" in content
+        assert program_section.display_label in content
+
+        response = client.post(
+            reverse("analytics_chairperson:account_toggle_active", args=[student.pk])
+        )
+        assert response.status_code == 302
+        student.refresh_from_db()
+        assert student.is_active is False
+
+        response = client.post(
+            reverse("analytics_chairperson:account_archive", args=[student.pk])
+        )
+        assert response.status_code == 302
+        student.refresh_from_db()
+        assert student.is_archived is True
+        assert student.is_active is False
+
+        archived_page = client.get(
+            reverse("analytics_chairperson:accounts"), {"active": "archived"}
+        )
+        assert "chair-student@test.edu" in archived_page.content.decode()
+        assert "Archived" in archived_page.content.decode()
+
+        response = client.post(
+            reverse("analytics_chairperson:account_restore", args=[student.pk])
+        )
+        assert response.status_code == 302
+        student.refresh_from_db()
+        assert student.is_archived is False
+        assert student.is_active is True
+
+    def test_accounts_list_shows_faculty_section_labels(
+        self,
+        client,
+        chairperson,
+        chair_department,
+        chair_program,
+        year_level,
+        academic_year,
+        academic_term,
+    ):
+        from apps.questions.models import Subject
+        from apps.users.models import ProgramSection, TeachingAssignment
+
+        section = ProgramSection.objects.create(
+            program=chair_program,
+            year_level=year_level,
+            label="1A",
+            academic_year=academic_year,
+            is_active=True,
+        )
+        subject = Subject.objects.create(
+            program=chair_program,
+            code="CHAIR-SEC",
+            name="Chair Section Subject",
+            year_level=year_level,
+            semester=1,
+        )
+        faculty = User.objects.create_user(
+            email="assigned-faculty@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+            department=chair_department,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=True,
+        )
+        TeachingAssignment.objects.create(
+            professor=faculty,
+            program_section=section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=chairperson,
+        )
+        client.force_login(chairperson)
+        content = client.get(reverse("analytics_chairperson:accounts")).content.decode()
+        assert faculty.email in content
+        assert section.display_label in content
+
 
 @pytest.mark.django_db
 class TestChairpersonSubjects:

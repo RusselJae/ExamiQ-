@@ -23,6 +23,16 @@ urlpatterns = [
         name="toggle_active",
     ),
     path(
+        "users/<int:pk>/archive/",
+        views_campus.CampusArchiveUserView.as_view(),
+        name="archive_user",
+    ),
+    path(
+        "users/<int:pk>/restore/",
+        views_campus.CampusRestoreUserView.as_view(),
+        name="restore_user",
+    ),
+    path(
         "users/<int:pk>/approve/",
         views_campus.CampusApproveUserView.as_view(),
         name="approve_user",

@@ -7,6 +7,7 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import FormView, ListView
 
+from apps.core.audit import log_audit_event
 from apps.core.filtering import (
     STANDARD_DATE_SORT_FILTER_SPECS,
     apply_date_range,
@@ -16,9 +17,8 @@ from apps.core.filtering import (
     has_active_filters,
     redirect_preserving_filters,
 )
-from apps.core.audit import log_audit_event
-from apps.core.models import AuditLog
 from apps.core.mixins import AcademicManagerRequiredMixin
+from apps.core.models import AuditLog
 from apps.questions.curriculum import subjects_for_teaching_assignment
 from apps.questions.models import Subject
 from apps.users.assignment_services import create_teaching_assignments
@@ -157,7 +157,19 @@ class ChairpersonAssignmentCreateView(AcademicManagerRequiredMixin, FormView):
         return super().form_valid(form)
 
     def form_invalid(self, form):
-        messages.error(self.request, "Could not create assignment. Check the form.")
+        detail = ""
+        for errors in form.errors.values():
+            if errors:
+                detail = str(errors[0])
+                break
+        if not detail and form.non_field_errors():
+            detail = str(form.non_field_errors()[0])
+        if detail:
+            messages.error(self.request, detail)
+        else:
+            messages.error(
+                self.request, "Could not create assignment. Check the form."
+            )
         return redirect("analytics_chairperson:assignments")
 
 
@@ -248,9 +260,14 @@ class ChairpersonAssignmentSectionsAPIView(AcademicManagerRequiredMixin, View):
         if not term:
             return JsonResponse({"groups": []})
 
+        # Match validate_assignment_subject: only sections for this subject's year.
         sections = (
             ProgramSection.queryset_with_counts()
-            .filter(program=subject.program, is_active=True)
+            .filter(
+                program=subject.program,
+                is_active=True,
+                year_level_id=subject.year_level_id,
+            )
             .select_related("year_level")
             .order_by("year_level__order", "label")
         )

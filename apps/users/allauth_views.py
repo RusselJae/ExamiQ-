@@ -13,10 +13,16 @@ that trap while keeping every other allauth behaviour intact.
 
 from __future__ import annotations
 
+import logging
+
 from allauth.account import views as allauth_views
 from allauth.account.internal.stagekit import clear_login, get_pending_stage
+from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
+from django.urls import reverse
 
+from apps.users.adapters import EmailDeliveryError
 from apps.users.forms import (
     CoordinatorSignupForm,
     ExamiQSignupForm,
@@ -25,10 +31,20 @@ from apps.users.forms import (
 
 __all__ = [
     "CoordinatorSignupView",
+    "ExamiQConfirmLoginCodeView",
     "ExamiQFacultySignupView",
     "ExamiQLoginView",
     "ExamiQSignupView",
 ]
+
+logger = logging.getLogger(__name__)
+
+DELIVERY_ERROR_MESSAGE = (
+    "We could not send the sign-in code right now. Please try again in a moment."
+)
+LOGIN_ERROR_MESSAGE = (
+    "We could not complete sign-in right now. Please try again in a moment."
+)
 
 
 class ClearPendingLoginCodeMixin:
@@ -43,6 +59,37 @@ class ClearPendingLoginCodeMixin:
 
 class ExamiQLoginView(ClearPendingLoginCodeMixin, allauth_views.LoginView):
     """Sign-in page that always renders, even mid sign-in-code stage."""
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        try:
+            return super().post(request, *args, **kwargs)
+        except EmailDeliveryError:
+            # The sign-in code could not be sent: never 500 the sign-in.
+            clear_login(request)
+            messages.error(request, DELIVERY_ERROR_MESSAGE)
+            return redirect(reverse("account_login"))
+        except Exception:
+            logger.exception("Unexpected error during login POST")
+            clear_login(request)
+            messages.error(request, LOGIN_ERROR_MESSAGE)
+            return redirect(reverse("account_login"))
+
+
+class ExamiQConfirmLoginCodeView(allauth_views.ConfirmLoginCodeView):
+    """Sign-in code screen that survives an email delivery failure."""
+
+    def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except EmailDeliveryError:
+            clear_login(request)
+            messages.error(request, DELIVERY_ERROR_MESSAGE)
+            return redirect(reverse("account_login"))
+        except Exception:
+            logger.exception("Unexpected error during login-code confirm")
+            clear_login(request)
+            messages.error(request, LOGIN_ERROR_MESSAGE)
+            return redirect(reverse("account_login"))
 
 
 class ExamiQSignupView(ClearPendingLoginCodeMixin, allauth_views.SignupView):

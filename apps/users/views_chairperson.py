@@ -11,8 +11,11 @@ from apps.core.filtering import redirect_preserving_filters
 from apps.core.mixins import ChairpersonRequiredMixin
 from apps.questions.models import Subject
 from apps.users.assignment_services import (
+    annotate_users_with_section_labels,
+    archive_user,
     create_curriculum_subject,
     delete_curriculum_subject,
+    restore_user,
 )
 from apps.users.email_services import (
     send_account_approved_email,
@@ -59,18 +62,24 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = _managed_users(self.request.user).select_related(
-            "department", "year_level", "section"
+            "department", "year_level", "section", "section__program", "section__year_level"
         )
         role = self.request.GET.get("role", "")
         if role in {User.Role.STUDENT, User.Role.PROFESSOR}:
             qs = qs.filter(role=role)
         active = self.request.GET.get("active", "")
         if active == "active":
-            qs = qs.filter(is_active=True, approval_status=User.ApprovalStatus.APPROVED)
+            qs = qs.filter(
+                is_active=True,
+                is_archived=False,
+                approval_status=User.ApprovalStatus.APPROVED,
+            )
         elif active == "inactive":
-            qs = qs.exclude(
+            qs = qs.filter(is_archived=False).exclude(
                 is_active=True, approval_status=User.ApprovalStatus.APPROVED
             )
+        elif active == "archived":
+            qs = qs.filter(is_archived=True)
         status = self.request.GET.get("status", "")
         if status in {
             User.ApprovalStatus.PENDING,
@@ -91,6 +100,7 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        annotate_users_with_section_labels(context["users"])
         context["role_filter"] = self.request.GET.get("role", "")
         context["active_filter"] = self.request.GET.get("active", "")
         context["status_filter"] = self.request.GET.get("status", "")
@@ -155,11 +165,42 @@ class ChairpersonToggleUserActiveView(ChairpersonRequiredMixin, View):
             return redirect_preserving_filters(
                 request, "analytics_chairperson:accounts"
             )
+        if user.is_archived:
+            messages.error(request, "Restore the archived account before changing access.")
+            return redirect_preserving_filters(
+                request, "analytics_chairperson:accounts"
+            )
 
         user.is_active = not user.is_active
         user.save(update_fields=["is_active"])
         state = "activated" if user.is_active else "deactivated"
         messages.success(request, f"{user.email} has been {state}.")
+        return redirect_preserving_filters(request, "analytics_chairperson:accounts")
+
+
+class ChairpersonArchiveUserView(ChairpersonRequiredMixin, View):
+    def post(self, request, pk):
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
+        if user.approval_status == User.ApprovalStatus.PENDING:
+            messages.error(request, "Reject pending registrations instead of archiving.")
+            return redirect_preserving_filters(
+                request, "analytics_chairperson:accounts"
+            )
+        archive_user(user)
+        messages.success(request, f"{user.email} has been archived.")
+        return redirect_preserving_filters(request, "analytics_chairperson:accounts")
+
+
+class ChairpersonRestoreUserView(ChairpersonRequiredMixin, View):
+    def post(self, request, pk):
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
+        if not user.is_archived:
+            messages.info(request, f"{user.email} is not archived.")
+            return redirect_preserving_filters(
+                request, "analytics_chairperson:accounts"
+            )
+        restore_user(user)
+        messages.success(request, f"{user.email} has been restored.")
         return redirect_preserving_filters(request, "analytics_chairperson:accounts")
 
 

@@ -2,13 +2,8 @@ import pytest
 from django.core import mail
 from django.urls import reverse
 
-from apps.questions.models import YearLevel
-from apps.users.models import AcademicTerm, AcademicYear, ProgramSection, User
-from apps.questions.models import Subject
-
-pytestmark = pytest.mark.skip(
-    reason="Campus/Chairperson assignment UIs removed; faculty self-serves courses"
-)
+from apps.questions.models import Subject, YearLevel
+from apps.users.models import AcademicTerm, ProgramSection, User
 
 
 @pytest.mark.django_db
@@ -22,7 +17,7 @@ class TestCampusSections:
         response = client.get(reverse("campus:section_list"))
         assert response.status_code == 200
         assert program_section.display_label in response.content.decode()
-        assert program_section.display_label == "BSCS 2-A"
+        assert program_section.display_label == "BSCS 2-1M"
         assert "Computer Science ·" not in response.content.decode()
 
     def test_bulk_create_sections(self, client, program, year_level, academic_year):
@@ -189,6 +184,8 @@ class TestTeachingAssignments:
     ):
         chairperson.department = program.managing_department
         chairperson.save(update_fields=["department"])
+        professor.department = program.managing_department
+        professor.save(update_fields=["department"])
         term = AcademicTerm.objects.create(
             academic_year=program_section.academic_year,
             name="1st Sem",
@@ -207,11 +204,88 @@ class TestTeachingAssignments:
         assert response.status_code == 302
         assert professor.teaching_assignments.count() == 1
 
+    def test_sections_api_filters_by_subject_year_level(
+        self, client, chairperson, professor, program_section, subject, program, year_level
+    ):
+        chairperson.department = program.managing_department
+        chairperson.save(update_fields=["department"])
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=99, defaults={"name": "4th Year"}
+        )
+        wrong_year_section = ProgramSection.objects.create(
+            program=program,
+            year_level=other_year,
+            label="4X",
+            academic_year=program_section.academic_year,
+            is_active=True,
+        )
+        term = AcademicTerm.objects.create(
+            academic_year=program_section.academic_year,
+            name="1st Sem",
+            is_current=True,
+        )
+        client.force_login(chairperson)
+        response = client.get(
+            reverse("analytics_chairperson:assignment_sections_api"),
+            {"subject": subject.pk, "term": term.pk},
+        )
+        assert response.status_code == 200
+        section_ids = {
+            s["id"]
+            for group in response.json()["groups"]
+            for s in group["sections"]
+        }
+        assert program_section.pk in section_ids
+        assert wrong_year_section.pk not in section_ids
+
+    def test_year_mismatch_surfaces_real_error(
+        self, client, chairperson, professor, program_section, subject, program
+    ):
+        chairperson.department = program.managing_department
+        chairperson.save(update_fields=["department"])
+        professor.department = program.managing_department
+        professor.save(update_fields=["department"])
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=98, defaults={"name": "3rd Year"}
+        )
+        wrong_section = ProgramSection.objects.create(
+            program=program,
+            year_level=other_year,
+            label="3Z",
+            academic_year=program_section.academic_year,
+            is_active=True,
+        )
+        term = AcademicTerm.objects.create(
+            academic_year=program_section.academic_year,
+            name="1st Sem",
+            is_current=True,
+        )
+        client.force_login(chairperson)
+        # Matching-year section first keeps the subject in the form queryset;
+        # the wrong-year section then fails validate_assignment_subject.
+        response = client.post(
+            reverse("analytics_chairperson:assignment_create"),
+            {
+                "professor": professor.pk,
+                "program_sections": [program_section.pk, wrong_section.pk],
+                "subject": subject.pk,
+                "term": term.pk,
+            },
+            follow=True,
+        )
+        assert response.status_code == 200
+        assert professor.teaching_assignments.count() == 0
+        content = response.content.decode()
+        assert "year level" in content.lower()
+        assert "Could not create assignment. Check the form." not in content
+
     def test_chairperson_can_assign_multiple_sections(
         self, client, chairperson, professor, program_section, subject, program, year_level
     ):
         chairperson.department = program.managing_department
         chairperson.save(update_fields=["department"])
+        professor.department = program.managing_department
+        professor.save(update_fields=["department"])
         second_section = ProgramSection.objects.create(
             program=program,
             year_level=year_level,
@@ -247,6 +321,8 @@ class TestTeachingAssignments:
 
         chairperson.department = program.managing_department
         chairperson.save(update_fields=["department"])
+        professor.department = program.managing_department
+        professor.save(update_fields=["department"])
         cross_subject = SubjectModel.objects.create(
             program=program,
             code="COSC-60",

@@ -598,48 +598,113 @@ def _donut_range_label(period_key: str) -> str:
 
 def _calibration_status(
     buckets: dict, correct_total: int, incorrect_total: int
-) -> tuple[str, str]:
+) -> dict:
     """Classify how well confidence matches correctness.
 
-    Returns ``(status_key, computation_detail)`` where ``status_key`` is one of
-    ``overconfident`` / ``underconfident`` / ``confident`` and the detail spells
-    out the numbers behind the call (shown on hover). Overconfidence wins ties
-    because asserting wrong knowledge is the costlier mis-calibration.
+    Returns a payload with the verdict, the numbers behind it and the rule
+    that produced it, so the UI can explain the call in plain language.
+    Overconfidence wins ties because asserting wrong knowledge is the costlier
+    mis-calibration.
     """
     sure_wrong = buckets.get("sure_incorrect", 0)
     sure_right = buckets.get("sure_correct", 0)
     guess_right = buckets.get("guessing_correct", 0)
+    guess_wrong = buckets.get("guessing_incorrect", 0)
 
     wrong_sure_pct = (100.0 * sure_wrong / incorrect_total) if incorrect_total else 0.0
+    wrong_guess_pct = (100.0 * guess_wrong / incorrect_total) if incorrect_total else 0.0
+    right_sure_pct = (100.0 * sure_right / correct_total) if correct_total else 0.0
     right_guess_pct = (100.0 * guess_right / correct_total) if correct_total else 0.0
 
+    metrics = [
+        {
+            "key": "sure_incorrect",
+            "label": "Wrong answers rated Sure",
+            "sentence": "wrong answers were rated Sure",
+            "value": sure_wrong,
+            "total": incorrect_total,
+            "percent": round(wrong_sure_pct, 1),
+        },
+        {
+            "key": "guessing_correct",
+            "label": "Right answers rated Guessing",
+            "sentence": "right answers were rated Guessing",
+            "value": guess_right,
+            "total": correct_total,
+            "percent": round(right_guess_pct, 1),
+        },
+        {
+            "key": "sure_correct",
+            "label": "Right answers rated Sure",
+            "sentence": "right answers were rated Sure",
+            "value": sure_right,
+            "total": correct_total,
+            "percent": round(right_sure_pct, 1),
+        },
+        {
+            "key": "guessing_incorrect",
+            "label": "Wrong answers rated Guessing",
+            "sentence": "wrong answers were rated Guessing",
+            "value": guess_wrong,
+            "total": incorrect_total,
+            "percent": round(wrong_guess_pct, 1),
+        },
+    ]
+
     if incorrect_total and wrong_sure_pct >= 50:
-        return (
-            "overconfident",
-            (
-                f"{wrong_sure_pct:g}% of wrong answers were rated Sure "
-                f"({sure_wrong} of {incorrect_total}). "
-                f"{sure_right} of {correct_total} right answers were rated Sure."
-            ),
+        status = "overconfident"
+        label = "Overconfident"
+        summary = (
+            "Most wrong answers were rated Sure — students feel certain about "
+            "answers that are actually wrong."
         )
-    if correct_total and right_guess_pct >= 50:
-        return (
-            "underconfident",
-            (
-                f"{right_guess_pct:g}% of right answers were rated Guessing "
-                f"({guess_right} of {correct_total}). "
-                f"{sure_wrong} of {incorrect_total} wrong answers were rated Sure."
-            ),
+        rule = (
+            "Overconfident when at least half (50%) of the wrong answers were "
+            "rated Sure."
         )
-    return (
-        "confident",
-        (
-            f"{wrong_sure_pct:g}% of wrong answers were rated Sure "
-            f"({sure_wrong} of {incorrect_total}); "
-            f"{right_guess_pct:g}% of right answers were rated Guessing "
-            f"({guess_right} of {correct_total})."
-        ),
+        driver = "sure_incorrect"
+    elif correct_total and right_guess_pct >= 50:
+        status = "underconfident"
+        label = "Underconfident"
+        summary = (
+            "Most right answers were rated Guessing — students doubt answers "
+            "they actually got right."
+        )
+        rule = (
+            "Underconfident when at least half (50%) of the right answers were "
+            "rated Guessing."
+        )
+        driver = "guessing_correct"
+    else:
+        status = "confident"
+        label = "Confident"
+        summary = (
+            "Confidence lines up with correctness — there is no clear "
+            "mis-calibration to chase."
+        )
+        rule = (
+            "Overconfident needs 50%+ of wrong answers rated Sure; "
+            "Underconfident needs 50%+ of right answers rated Guessing. "
+            "Neither is met."
+        )
+        driver = ""
+
+    detail = (
+        f"{wrong_sure_pct:g}% of wrong answers were rated Sure "
+        f"({sure_wrong} of {incorrect_total}); "
+        f"{right_guess_pct:g}% of right answers were rated Guessing "
+        f"({guess_right} of {correct_total})."
     )
+
+    return {
+        "status": status,
+        "label": label,
+        "summary": summary,
+        "rule": rule,
+        "detail": detail,
+        "driver": driver,
+        "metrics": metrics,
+    }
 
 
 def student_performance_donut(
@@ -773,9 +838,7 @@ def student_performance_donut(
             "were rated Guessing"
         )
 
-    calibration_key, calibration_detail = _calibration_status(
-        buckets, correct_total, incorrect_total
-    )
+    calibration = _calibration_status(buckets, correct_total, incorrect_total)
 
     return {
         "total": total,
@@ -793,8 +856,9 @@ def student_performance_donut(
         "insight": insight,
         "insight_url": review_url,
         "insight_link_label": "Review those questions" if review_url else "",
-        "calibration_status": calibration_key,
-        "calibration_detail": calibration_detail,
+        "calibration_status": calibration["status"],
+        "calibration_detail": calibration["detail"],
+        "calibration": calibration,
     }
 
 
@@ -1674,9 +1738,7 @@ def professor_confidence_donut(
     else:
         insight = ""
 
-    calibration_key, calibration_detail = _calibration_status(
-        buckets, correct_total, incorrect_total
-    )
+    calibration = _calibration_status(buckets, correct_total, incorrect_total)
 
     return {
         "total": total,
@@ -1694,8 +1756,9 @@ def professor_confidence_donut(
         "insight": insight,
         "insight_url": "",
         "insight_link_label": "",
-        "calibration_status": calibration_key,
-        "calibration_detail": calibration_detail,
+        "calibration_status": calibration["status"],
+        "calibration_detail": calibration["detail"],
+        "calibration": calibration,
         "section": section_id or "",
     }
 

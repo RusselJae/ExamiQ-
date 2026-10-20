@@ -31,6 +31,7 @@ from apps.analytics.services import (
     build_session_history_rows,
     generate_mistake_feedback,
     student_dashboard_trends,
+    student_performance_donut,
     student_performance_summary,
     topic_progress_summary,
 )
@@ -64,6 +65,20 @@ class StudentDashboardView(StudentRequiredMixin, TemplateView):
             self.request.user, limit=5
         )
         return context
+
+
+class StudentDonutDataView(StudentRequiredMixin, View):
+    """JSON payload for the student dashboard donut.
+
+    The range filter fetches this so the chart updates in place instead of
+    reloading the page.
+    """
+
+    def get(self, request):
+        donut = student_performance_donut(
+            request.user, period=request.GET.get("period", "all")
+        )
+        return JsonResponse({"donut": donut})
 
 
 class MistakeListView(StudentRequiredMixin, ListView):

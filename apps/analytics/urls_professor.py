@@ -12,12 +12,22 @@ app_name = "analytics_professor"
 
 urlpatterns = [
     path("overview/", views_professor.ProfessorOverviewView.as_view(), name="overview"),
+    path(
+        "overview/donut-data/",
+        views_professor.ProfessorDonutDataView.as_view(),
+        name="donut_data",
+    ),
     path("dashboard/", views_professor.ProfessorDashboardView.as_view(), name="dashboard"),
     path("students/", views_professor.ProfessorStudentsView.as_view(), name="students"),
     path(
         "students/<int:student_pk>/",
         views_professor.ProfessorStudentDetailView.as_view(),
         name="professor_student_detail",
+    ),
+    path(
+        "students/<int:student_pk>/donut-data/",
+        views_professor.ProfessorStudentDonutDataView.as_view(),
+        name="student_donut_data",
     ),
     path(
         "students/<int:student_pk>/sessions/<int:session_pk>/review/",

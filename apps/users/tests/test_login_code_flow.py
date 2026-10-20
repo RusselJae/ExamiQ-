@@ -117,3 +117,72 @@ class TestSignupOTPExit:
         page = client.get(reverse("users:signup_verify"))
         assert page.status_code == 200
         assert b"Cancel and go to sign in" in page.content
+
+
+@pytest.mark.django_db
+class TestEmailDeliveryFailure:
+    """A mail-server failure must not turn sign-in into a 500."""
+
+    @pytest.fixture(autouse=True)
+    def _broken_mail(self, monkeypatch, settings):
+        import smtplib
+
+        from django.core.mail.backends.locmem import EmailBackend as LocmemBackend
+        from django.core.mail.backends.smtp import EmailBackend as SmtpBackend
+
+        from apps.users import adapters
+
+        def boom(self, email_messages):
+            raise smtplib.SMTPException("Connection refused")
+
+        def resend_boom(**kwargs):
+            raise adapters.SignupOTPError("Resend unreachable")
+
+        # Django swaps in the locmem backend while testing, so break both.
+        monkeypatch.setattr(LocmemBackend, "send_messages", boom)
+        monkeypatch.setattr(SmtpBackend, "send_messages", boom)
+        monkeypatch.setattr(adapters, "_send_via_resend_api", resend_boom)
+
+    def test_login_shows_message_instead_of_erroring(self, client, professor, settings):
+        settings.LOGIN_OTP_EXEMPT_EMAILS = set()
+        response = client.post(
+            reverse("account_login"),
+            {"login": professor.email, "password": "testpass123"},
+        )
+        assert response.status_code == 302
+        assert response.url == reverse("account_login")
+
+        page = client.get(response.url)
+        assert page.status_code == 200
+        assert b"could not send the sign-in code" in page.content
+
+    def test_password_reset_shows_message_instead_of_erroring(
+        self, client, professor
+    ):
+        response = client.post(
+            reverse("account_reset_password"), {"email": professor.email}
+        )
+        assert response.status_code == 302
+        assert response.url == reverse("account_reset_password")
+        page = client.get(response.url)
+        assert page.status_code == 200
+        assert b"could not send the reset email" in page.content
+
+    def test_unexpected_login_exception_shows_safe_message(
+        self, client, professor, monkeypatch
+    ):
+        from allauth.account import views as allauth_views
+
+        def boom(self, request, *args, **kwargs):
+            raise RuntimeError("simulated auth failure")
+
+        monkeypatch.setattr(allauth_views.LoginView, "post", boom)
+        response = client.post(
+            reverse("account_login"),
+            {"login": professor.email, "password": "testpass123"},
+        )
+        assert response.status_code == 302
+        assert response.url == reverse("account_login")
+        page = client.get(response.url)
+        assert page.status_code == 200
+        assert b"could not complete sign-in" in page.content

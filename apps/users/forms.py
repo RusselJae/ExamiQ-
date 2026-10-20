@@ -409,6 +409,8 @@ class ExamiQSignupForm(SignupForm):
         user.employee_id = ""
         user.year_level = self.cleaned_data["year_level"]
         user.section = self.cleaned_data["section"]
+        # Students sign up freely: the account is approved and only needs the
+        # email OTP before it can be used. No faculty activation step.
         user.approval_status = User.ApprovalStatus.APPROVED
         user.is_active = False
 
@@ -416,11 +418,9 @@ class ExamiQSignupForm(SignupForm):
 
         from django.contrib import messages
 
-        from apps.users.email_services import send_pending_registration_alert
         from apps.users.otp_services import SIGNUP_OTP_SESSION_KEY, send_signup_otp
 
         request.session[SIGNUP_OTP_SESSION_KEY] = user.pk
-        send_pending_registration_alert(user)
         try:
             send_signup_otp(user, force=True)
         except Exception:

@@ -6,6 +6,11 @@ app_name = "analytics_student"
 
 urlpatterns = [
     path("dashboard/", views_student.StudentDashboardView.as_view(), name="dashboard"),
+    path(
+        "dashboard/donut-data/",
+        views_student.StudentDonutDataView.as_view(),
+        name="donut_data",
+    ),
     path("sessions/", views_student.SessionHistoryView.as_view(), name="session_history"),
     path("chat/", views_student.StudentChatInboxView.as_view(), name="chat_inbox"),
     path(

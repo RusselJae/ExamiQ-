@@ -223,6 +223,12 @@
                 "error"
             );
         }
+        if (params.get("archived") === "1") {
+            showToast(
+                "This account has been archived. Contact your program coordinator to restore access.",
+                "error"
+            );
+        }
     }
 
     function initUi() {

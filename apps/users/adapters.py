@@ -19,10 +19,24 @@ from apps.users.otp_services import (
     login_otp_exempt,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Faculty roles that must complete email OTP after password login.
 _LOGIN_OTP_ROLES = frozenset(
     {User.Role.PROFESSOR, User.Role.PROGRAM_COORDINATOR, User.Role.CHAIRPERSON}
 )
+
+
+class EmailDeliveryError(Exception):
+    """A transactional email could not be delivered.
+
+    Transport failures (SMTP refused, Resend unreachable, bad credentials)
+    used to escape as raw ``smtplib``/``OSError`` exceptions and turn the
+    sign-in POST into an Internal Server Error. The auth views catch this and
+    show a friendly message instead.
+    """
 
 
 class ExamiQAccountAdapter(DefaultAccountAdapter):
@@ -57,6 +71,16 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
             return False
         return getattr(user, "role", None) in _LOGIN_OTP_ROLES
 
+    def _deliver(self, msg) -> None:
+        """Send a message, turning transport failures into EmailDeliveryError."""
+        try:
+            msg.send()
+        except Exception as exc:  # noqa: BLE001 — never 500 the auth flow
+            logger.warning("Email delivery failed: %s", exc)
+            raise EmailDeliveryError(
+                "We could not send the email right now. Please try again shortly."
+            ) from exc
+
     def send_mail(self, template_prefix: str, email: str, context: dict) -> None:
         """Send allauth mail via Resend HTTPS when configured (same path as OTP)."""
         request = allauth_context.request
@@ -69,7 +93,7 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
         msg = self.render_mail(template_prefix, email, ctx)
 
         if not _should_use_resend_api():
-            msg.send()
+            self._deliver(msg)
             return
 
         text_body = msg.body or ""
@@ -88,7 +112,7 @@ class ExamiQAccountAdapter(DefaultAccountAdapter):
                 to_email=to_email,
             )
         except SignupOTPError:
-            msg.send()
+            self._deliver(msg)
 
     def respond_user_inactive(
         self, request: HttpRequest, user: AbstractBaseUser

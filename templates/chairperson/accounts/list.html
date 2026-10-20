@@ -37,6 +37,7 @@
                 <option value="">All accounts</option>
                 <option value="active" {% if active_filter == "active" %}selected{% endif %}>Active</option>
                 <option value="inactive" {% if active_filter == "inactive" %}selected{% endif %}>Inactive</option>
+                <option value="archived" {% if active_filter == "archived" %}selected{% endif %}>Archived</option>
             </select>
         </div>
         <div>
@@ -63,6 +64,7 @@
                 <th>Name</th>
                 <th>Role</th>
                 <th>ID number</th>
+                <th>Sections</th>
                 <th>Status</th>
                 <th></th>
             </tr>
@@ -74,8 +76,17 @@
                 <td class="whitespace-nowrap">{{ managed_user.get_full_name|default:"—" }}</td>
                 <td>{{ managed_user.get_role_display }}</td>
                 <td class="text-sm text-examiq-slate">{{ managed_user.employee_id|default:managed_user.student_number|default:"—" }}</td>
+                <td class="text-sm text-examiq-slate">
+                    {% if managed_user.assigned_section_labels %}
+                    {{ managed_user.assigned_section_labels|join:", " }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </td>
                 <td>
-                    {% if managed_user.approval_status == "pending" %}
+                    {% if managed_user.is_archived %}
+                    <span class="profile-pill">Archived</span>
+                    {% elif managed_user.approval_status == "pending" %}
                     <span class="profile-pill">Pending</span>
                     {% elif managed_user.approval_status == "rejected" %}
                     <span class="profile-pill">Rejected</span>
@@ -86,7 +97,12 @@
                     {% endif %}
                 </td>
                 <td class="whitespace-nowrap">
-                    {% if managed_user.approval_status == "pending" %}
+                    {% if managed_user.is_archived %}
+                    <form method="post" action="{% url 'analytics_chairperson:account_restore' managed_user.pk %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-link">Restore</button>
+                    </form>
+                    {% elif managed_user.approval_status == "pending" %}
                     <form method="post" action="{% url 'analytics_chairperson:account_approve' managed_user.pk %}" class="inline">
                         {% csrf_token %}
                         <button type="submit" class="text-sm text-link">Accept</button>
@@ -102,12 +118,16 @@
                             {% if managed_user.is_active %}Deactivate{% else %}Activate{% endif %}
                         </button>
                     </form>
+                    <form method="post" action="{% url 'analytics_chairperson:account_archive' managed_user.pk %}" class="inline ml-2">
+                        {% csrf_token %}
+                        <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="6" class="text-center text-sm text-examiq-slate py-8">No user accounts match your filters.</td>
+                <td colspan="7" class="text-center text-sm text-examiq-slate py-8">No user accounts match your filters.</td>
             </tr>
             {% endfor %}
         </tbody>

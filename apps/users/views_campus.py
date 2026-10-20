@@ -24,6 +24,11 @@ from apps.core.filtering import (
 )
 from apps.core.mixins import CampusAdminRequiredMixin
 from apps.questions.models import YearLevel
+from apps.users.assignment_services import (
+    annotate_users_with_section_labels,
+    archive_user,
+    restore_user,
+)
 from apps.users.email_services import (
     send_account_approved_email,
     send_account_rejected_email,
@@ -168,7 +173,11 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = _managed_users(self.request.user).select_related(
-            "department", "year_level", "section"
+            "department",
+            "year_level",
+            "section",
+            "section__program",
+            "section__year_level",
         )
         qs = apply_date_range(qs, self.request, "date_joined")
         qs = apply_sort(
@@ -180,6 +189,19 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
         role = self.request.GET.get("role", "")
         if role in {choice[0] for choice in User.Role.choices}:
             qs = qs.filter(role=role)
+        active = self.request.GET.get("active", "")
+        if active == "active":
+            qs = qs.filter(
+                is_active=True,
+                is_archived=False,
+                approval_status=User.ApprovalStatus.APPROVED,
+            )
+        elif active == "inactive":
+            qs = qs.filter(is_archived=False).exclude(
+                is_active=True, approval_status=User.ApprovalStatus.APPROVED
+            )
+        elif active == "archived":
+            qs = qs.filter(is_archived=True)
         status = self.request.GET.get("status", "")
         if status in {
             User.ApprovalStatus.PENDING,
@@ -199,7 +221,9 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        annotate_users_with_section_labels(context["users"])
         context["role_filter"] = self.request.GET.get("role", "")
+        context["active_filter"] = self.request.GET.get("active", "")
         context["status_filter"] = self.request.GET.get("status", "")
         context["search_query"] = self.request.GET.get("q", "")
         context["role_choices"] = [
@@ -208,7 +232,7 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
         ]
         context["status_choices"] = User.ApprovalStatus.choices
         context["filter_has_active"] = has_active_filters(
-            self.request, ["q", "role", "status"]
+            self.request, ["q", "role", "status", "active"]
         )
         return context
 
@@ -251,11 +275,43 @@ class CampusToggleUserActiveView(CampusAdminRequiredMixin, View):
         if user.approval_status == User.ApprovalStatus.PENDING:
             messages.error(request, "Use Accept or Reject for pending registrations.")
             return redirect_preserving_filters(request, "campus:user_list")
+        if user.is_archived:
+            messages.error(
+                request, "Restore the archived account before changing access."
+            )
+            return redirect_preserving_filters(request, "campus:user_list")
 
         user.is_active = not user.is_active
         user.save(update_fields=["is_active"])
         state = "activated" if user.is_active else "deactivated"
         messages.success(request, f"{user.email} has been {state}.")
+        return redirect_preserving_filters(request, "campus:user_list")
+
+
+class CampusArchiveUserView(CampusAdminRequiredMixin, View):
+    def post(self, request, pk):
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
+        if user == request.user:
+            messages.error(request, "You cannot archive your own account.")
+            return redirect_preserving_filters(request, "campus:user_list")
+        if user.approval_status == User.ApprovalStatus.PENDING:
+            messages.error(
+                request, "Reject pending registrations instead of archiving."
+            )
+            return redirect_preserving_filters(request, "campus:user_list")
+        archive_user(user)
+        messages.success(request, f"{user.email} has been archived.")
+        return redirect_preserving_filters(request, "campus:user_list")
+
+
+class CampusRestoreUserView(CampusAdminRequiredMixin, View):
+    def post(self, request, pk):
+        user = get_object_or_404(_managed_users(request.user), pk=pk)
+        if not user.is_archived:
+            messages.info(request, f"{user.email} is not archived.")
+            return redirect_preserving_filters(request, "campus:user_list")
+        restore_user(user)
+        messages.success(request, f"{user.email} has been restored.")
         return redirect_preserving_filters(request, "campus:user_list")
 
 
