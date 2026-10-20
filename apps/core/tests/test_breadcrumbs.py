@@ -62,8 +62,10 @@ class TestBuildNavBreadcrumbs:
         labels = [c["label"] for c in build_nav_breadcrumbs(request)]
         assert labels[0] == "Home"
         assert "Courses" in labels
-        assert "GNED 03" in labels
-        assert labels[-1] == "Saved Questions"
+        # Course code and page label are combined into a single crumb.
+        assert "GNED 03 - Saved Questions" in labels
+        assert "GNED 03" not in labels
+        assert "Saved Questions" not in labels
         assert "Questionlist" not in "".join(labels)
 
     def test_professor_add_question_trail(self, professor, program):
@@ -89,8 +91,9 @@ class TestBuildNavBreadcrumbs:
             kwargs={"course_pk": course.pk},
         )
         labels = [c["label"] for c in build_nav_breadcrumbs(request)]
-        assert "Saved Questions" in labels
-        assert labels[-1] == "Add Question"
+        assert "GNED 03 - Add Question" in labels
+        assert "Saved Questions" not in labels
+        assert labels[-1] == "GNED 03 - Add Question"
         assert "Questionadd" not in "".join(labels)
 
     def test_student_concepts_tab_trail(self, student):

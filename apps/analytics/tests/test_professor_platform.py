@@ -754,7 +754,7 @@ class TestCourseInsights:
 @pytest.mark.django_db
 class TestProfessorOverviewSummary:
     def test_avg_mistakes_per_session(
-        self, professor, bsed_program, student, mcq_question
+        self, professor, bsed_program, student, mcq_question, program_section
     ):
         from apps.analytics.models import MistakeRecord
         from apps.analytics.services import professor_overview_summary
@@ -764,6 +764,10 @@ class TestProfessorOverviewSummary:
         make_bsed_student(
             student, subject=question.topic.subject, bsed_program=bsed_program
         )
+        # The Students table (and therefore the dashboard KPIs) is scoped by
+        # the faculty profile: assigned sections + assigned subjects.
+        professor.assigned_sections.add(program_section)
+        professor.assigned_subjects.add(question.topic.subject)
         course = Course.objects.create(
             program=bsed_program,
             code="AVG101",
@@ -930,13 +934,11 @@ class TestProfessorOverviewUX:
         assert response.status_code == 200
         content = response.content.decode()
         assert "Week of" in content
-        # "Over time" panel holds two separate line charts behind one range switcher.
-        assert "studentsOverTimeChart" in content
-        assert "mistakesOverTimeChart" in content
-        assert "over-time-range" in content
-        assert "mistake-trend-chart.js" in content
-        assert "Students over time" in content
-        assert "Mistakes over time" in content
+        # The "Over time" line charts were replaced by a "Recent activity"
+        # table listing each student's latest completed exam.
+        assert "studentsOverTimeChart" not in content
+        assert "mistakesOverTimeChart" not in content
+        assert "Recent activity" in content
         # The combined bar chart is gone.
         assert "mistakeTrendChart" not in content
         assert "Students and mistakes over time" not in content
@@ -1088,6 +1090,10 @@ class TestProfessorOverviewTrends:
             term=term,
             assigned_by=professor,
         )
+        # Dashboard KPIs follow the faculty profile scope (assigned section +
+        # subject), the same scope the Students table uses.
+        professor.assigned_sections.add(program_section)
+        professor.assigned_subjects.add(question.topic.subject)
         ReviewSession.objects.create(
             student=student,
             course=course,
@@ -1156,6 +1162,10 @@ class TestProfessorOverviewTrends:
             term=academic_term,
             assigned_by=professor,
         )
+        # Dashboard KPIs follow the faculty profile scope (assigned section +
+        # subject), the same scope the Students table uses.
+        professor.assigned_sections.add(program_section)
+        professor.assigned_subjects.add(question.topic.subject)
         ReviewSession.objects.create(
             student=student,
             course=course,

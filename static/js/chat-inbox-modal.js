@@ -207,15 +207,40 @@
     }
 
     function openModal() {
+        // Close all other nav elements before opening chat modal
+        if (window.ExamiQCloseAllNavElements) {
+            window.ExamiQCloseAllNavElements();
+        }
         var modal = document.getElementById("examiq-chat-modal");
-        if (modal) modal.classList.remove("hidden");
+        if (modal) {
+            modal.classList.remove("hidden");
+            /* Narrow screens show the conversation list first; the back arrow
+               switches to the thread. */
+            modal.classList.remove("is-thread-view");
+        }
         document.documentElement.classList.add("examiq-chat-open");
+        document.querySelectorAll("[data-open-chat-modal]").forEach(function (el) {
+            el.classList.add("is-active");
+        });
     }
 
     function closeModal() {
         var modal = document.getElementById("examiq-chat-modal");
-        if (modal) modal.classList.add("hidden");
+        if (modal) {
+            modal.classList.add("hidden");
+            modal.classList.remove("is-thread-view");
+        }
         document.documentElement.classList.remove("examiq-chat-open");
+        document.querySelectorAll("[data-open-chat-modal]").forEach(function (el) {
+            el.classList.remove("is-active");
+        });
+    }
+
+    /* Narrow screens: swap between the conversation list and the thread. */
+    function showThreadView(on) {
+        var modal = document.getElementById("examiq-chat-modal");
+        if (!modal) return;
+        modal.classList.toggle("is-thread-view", !!on);
     }
 
     function listItemName(item) {
@@ -704,6 +729,11 @@
         document.querySelectorAll("[data-dismiss-chat-modal]").forEach(function (el) {
             el.addEventListener("click", closeModal);
         });
+        document.querySelectorAll("[data-chat-back]").forEach(function (el) {
+            el.addEventListener("click", function () {
+                showThreadView(false);
+            });
+        });
         document.querySelectorAll("[data-chat-tab]").forEach(function (btn) {
             btn.addEventListener("click", function () {
                 var tab = btn.getAttribute("data-chat-tab") || "students";
@@ -721,6 +751,8 @@
                 state.activePeerId = peerId && !convId ? parseInt(peerId, 10) : null;
                 renderList();
                 renderThread();
+                /* Narrow screens: swap the list for the thread. */
+                showThreadView(true);
             });
         }
         var search = document.getElementById("examiq-chat-search");

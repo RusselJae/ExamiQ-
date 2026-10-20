@@ -1038,79 +1038,83 @@ def enrolled_bsed_students_by_year_level() -> list[dict]:
     return rows
 
 
-def handled_students_by_year_level(professor: User) -> list[dict]:
-    """Students with completed exams in this professor's assigned scope, by year level.
+def professor_scope_student_ids(professor: User) -> set[int]:
+    """Student IDs visible to this professor in the Students table.
 
-    Mirrors the logic in ``get_professor_students_with_exams`` so the KPI grid
-    and the Students table show consistent counts.
-
-    Only year levels the faculty handles (via teaching assignments or assigned
-    sections) are included. If the faculty has no assignments, an empty list
-    is returned — no grids are shown.
+    Mirrors the scope used by :func:`get_professor_students_with_exams`:
+    students in the professor's assigned sections who completed a session on
+    one of their assigned subjects. The dashboard KPIs and the year-level grid
+    reuse this so the card, the grid and the table always agree.
     """
-    from django.db.models import Count, Q
-
-    from apps.questions.models import YearLevel
     from apps.users.assignment_services import (
         faculty_has_chat_scope,
         get_faculty_profile_section_ids,
         get_faculty_profile_subject_ids,
     )
-    from apps.reviews.models import ReviewSession
-    from apps.questions.models import Subject
 
     if not faculty_has_chat_scope(professor):
-        return []
+        return set()
 
     section_ids = get_faculty_profile_section_ids(professor)
     subject_ids = get_faculty_profile_subject_ids(professor)
+    if not section_ids or not subject_ids:
+        return set()
 
-    # If no section assignments, the faculty handles no year levels.
-    if not section_ids:
-        return []
-
-    student_ids = (
+    return set(
         ReviewSession.objects.filter(
             student__section_id__in=section_ids,
             status=ReviewSession.Status.COMPLETED,
+            student__is_archived=False,
         )
         .filter(
             Q(subjects__in=subject_ids)
             | Q(topic__subject_id__in=subject_ids)
-            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
+            | Q(
+                course__code__in=Subject.objects.filter(
+                    pk__in=subject_ids
+                ).values("code")
+            )
         )
         .values_list("student_id", flat=True)
         .distinct()
     )
 
+
+def handled_students_by_year_level(professor: User) -> list[dict]:
+    """Students with completed exams in this professor's assigned scope, by year level.
+
+    Mirrors the logic in ``get_professor_students_with_exams`` so the KPI grid
+    and the Students table show consistent counts. Only year levels the
+    professor actually has students for are listed — years they do not handle
+    (or that have no students) are omitted entirely.
+    """
+    from django.db.models import Count
+
+    from apps.questions.models import YearLevel
+
+    student_ids = professor_scope_student_ids(professor)
+    if not student_ids:
+        return []
+
     raw = (
-        User.objects.filter(pk__in=student_ids, is_archived=False)
+        User.objects.filter(pk__in=student_ids)
         .values("year_level_id")
         .annotate(count=Count("id"))
     )
-    counts_by_id = {row["year_level_id"]: row["count"] for row in raw}
+    counts_by_id = {
+        row["year_level_id"]: row["count"] for row in raw if row["year_level_id"]
+    }
 
-    # Collect year levels from assigned sections only.
-    handled_year_ids = set()
-    from apps.users.models import ProgramSection
-    for sid in section_ids:
-        ps = ProgramSection.objects.filter(pk=sid).values_list("year_level_id", flat=True).first()
-        if ps:
-            handled_year_ids.add(ps)
-
-    # Only return year levels the faculty handles with at least one student.
     rows: list[dict] = []
-    for yl in YearLevel.objects.filter(pk__in=handled_year_ids).order_by("order"):
-        count = counts_by_id.get(yl.pk, 0)
-        if count > 0:
-            rows.append(
-                {
-                    "id": yl.pk,
-                    "name": yl.name,
-                    "order": yl.order,
-                    "count": count,
-                }
-            )
+    for yl in YearLevel.objects.filter(pk__in=counts_by_id).order_by("order"):
+        rows.append(
+            {
+                "id": yl.pk,
+                "name": yl.name,
+                "order": yl.order,
+                "count": counts_by_id[yl.pk],
+            }
+        )
     return rows
 
 
@@ -1162,15 +1166,7 @@ def professor_overview_summary(professor: User) -> dict:
         round(mistake_count / total_sessions, 1) if total_sessions else 0.0
     )
 
-    student_count = (
-        ReviewSession.objects.filter(
-            course__professor=professor,
-            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
-        )
-        .values("student")
-        .distinct()
-        .count()
-    )
+    student_count = len(professor_scope_student_ids(professor))
 
     return {
         "course_count": subject_count,

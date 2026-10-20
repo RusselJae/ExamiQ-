@@ -201,10 +201,17 @@
     }
 
     function openModal() {
+        // Close all other nav elements before opening AI tutor modal
+        if (window.ExamiQCloseAllNavElements) {
+            window.ExamiQCloseAllNavElements();
+        }
         var modal = document.getElementById("ai-tutor-modal");
         if (!modal) return;
         modal.classList.remove("hidden");
         document.body.classList.add("ai-tutor-modal-open");
+        document.querySelectorAll("[data-open-ai-tutor]").forEach(function (el) {
+            el.classList.add("is-active");
+        });
     }
 
     function closeModal() {
@@ -212,6 +219,9 @@
         if (!modal) return;
         modal.classList.add("hidden");
         document.body.classList.remove("ai-tutor-modal-open");
+        document.querySelectorAll("[data-open-ai-tutor]").forEach(function (el) {
+            el.classList.remove("is-active");
+        });
     }
 
     function showError(message) {

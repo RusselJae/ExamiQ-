@@ -18,20 +18,23 @@ from apps.users.assignment_services import get_or_create_catalog_course
 from conftest import make_bsed_student
 
 
-def _make_ready_doc(*, course, subject, user, title="Module overview", archived=False):
+def _make_ready_doc(
+    *, course, subject, user, title="Module overview", archived=False, filename=None
+):
+    name = filename or f"{title}.txt"
     doc = LearningDocument.objects.create(
         course_id=course.pk,
         subject=subject,
         created_by=user,
         title=title,
-        original_name=f"{title}.txt",
+        original_name=name,
         material_type=LearningDocument.MaterialType.MODULE,
         status=LearningDocument.Status.READY,
         page_count=1,
         chunk_count=1,
         is_archived=archived,
     )
-    doc.file.save(f"{title}.txt", ContentFile(b"Sample module content."), save=True)
+    doc.file.save(name, ContentFile(b"Sample module content."), save=True)
     return doc
 
 
@@ -69,17 +72,45 @@ class TestFacultyMaterialsUI:
         )
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Content management" in content
+        # The page label is just "Content" — "management" was dropped.
+        assert "- Content" in content
+        assert "Content management" not in content
         assert "materials-library" in content
         # Course sub-navigation was dropped; the sidebar owns those links now.
         assert "course-nav-link" not in content
         assert ">Download</a>" in content
-        assert ">Edit</a>" in content
+        # Edit is only offered for formats ONLYOFFICE can open.
+        assert ">Edit</a>" not in content
         # Course-scoped page: no course picker, supported-types hint present.
         assert "materials-hub-upload-row" in content
         assert "Supported: TXT, MD, CSV, PDF, DOCX." in content
         assert "Choose file" in content
         assert "<select" not in content.split("materials-library")[0]
+
+    def test_course_list_offers_edit_for_office_formats(
+        self, client, professor, subject, settings
+    ):
+        """A DOCX material is editable in ONLYOFFICE, so the Edit link shows."""
+        settings.ONLYOFFICE_DOCUMENT_SERVER_URL = "https://office.example.com"
+        course = get_or_create_catalog_course(professor, subject)
+        _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Lecture notes",
+            filename="Lecture notes.docx",
+        )
+
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:material_list", kwargs={"course_pk": course.pk}
+            )
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert ">Download</a>" in content
+        assert ">Edit</a>" in content
 
     def test_hub_with_subject_shows_download_and_edit(
         self, client, professor, subject, bsed_program
@@ -97,7 +128,8 @@ class TestFacultyMaterialsUI:
         assert response.status_code == 200
         assert "materials-library" in content
         assert ">Download</a>" in content
-        assert ">Edit</a>" in content
+        # A .txt upload cannot be opened by ONLYOFFICE, so no Edit link.
+        assert ">Edit</a>" not in content
         assert "Archive" in content
         assert "Content Management" in content
 

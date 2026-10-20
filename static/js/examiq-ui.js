@@ -238,6 +238,7 @@
         initAppSidebar();
         initConfirmForms();
         initMobileNavSearch();
+        initTopbarHeight();
     }
 
     /* Also boot immediately when the document is already parsed, otherwise a
@@ -276,6 +277,76 @@
         });
     }
 
+    function closeAllNavElements() {
+        // Close profile dropdowns
+        document.querySelectorAll("[data-dropdown].open").forEach(function (dropdown) {
+            dropdown.classList.remove("open");
+            var menu = dropdown.querySelector("[data-dropdown-menu]");
+            var toggle = dropdown.querySelector("[data-dropdown-toggle]");
+            if (menu) menu.classList.add("hidden");
+            if (toggle) toggle.setAttribute("aria-expanded", "false");
+        });
+
+        // Close notifications dropdown
+        document.querySelectorAll("[data-notifications-dropdown]").forEach(function (root) {
+            var menu = root.querySelector("[data-notifications-menu]");
+            var toggle = root.querySelector("[data-notifications-toggle]");
+            if (menu) menu.classList.add("hidden");
+            if (toggle) toggle.setAttribute("aria-expanded", "false");
+        });
+
+        // Close mobile search floating
+        var floating = document.getElementById("nav-search-floating");
+        var searchToggle = document.querySelector("[data-nav-search-toggle]");
+        if (floating && !floating.classList.contains("hidden")) {
+            floating.classList.add("hidden");
+            if (searchToggle) searchToggle.setAttribute("aria-expanded", "false");
+        }
+
+        // Close chat modal
+        var chatModal = document.getElementById("examiq-chat-modal");
+        if (chatModal && !chatModal.classList.contains("hidden")) {
+            chatModal.classList.add("hidden");
+            document.documentElement.classList.remove("examiq-chat-open");
+        }
+        document.querySelectorAll("[data-open-chat-modal]").forEach(function (el) {
+            el.classList.remove("is-active");
+        });
+
+        // Close AI tutor modal
+        var aiTutorModal = document.getElementById("ai-tutor-modal");
+        if (aiTutorModal && !aiTutorModal.classList.contains("hidden")) {
+            aiTutorModal.classList.add("hidden");
+            document.body.classList.remove("ai-tutor-modal-open");
+        }
+        document.querySelectorAll("[data-open-ai-tutor]").forEach(function (el) {
+            el.classList.remove("is-active");
+        });
+    }
+
+    // Expose globally for other modules
+    window.ExamiQCloseAllNavElements = closeAllNavElements;
+
+    /* Publish the height of the fixed top bar so the page content can be
+       offset by exactly the right amount. */
+    function initTopbarHeight() {
+        var topbar = document.getElementById("app-topbar");
+        if (!topbar) return;
+        function update() {
+            var height = topbar.getBoundingClientRect().height;
+            document.documentElement.style.setProperty(
+                "--app-topbar-h",
+                height + "px"
+            );
+        }
+        update();
+        window.addEventListener("resize", update);
+        window.addEventListener("orientationchange", update);
+        if (window.ResizeObserver) {
+            new ResizeObserver(update).observe(topbar);
+        }
+    }
+
     function initMobileNavSearch() {
         var toggle = document.querySelector("[data-nav-search-toggle]");
         var floating = document.getElementById("nav-search-floating");
@@ -290,7 +361,11 @@
         }
         toggle.addEventListener("click", function (e) {
             e.stopPropagation();
-            setSearchOpen(floating.classList.contains("hidden"));
+            var willOpen = floating.classList.contains("hidden");
+            if (willOpen) {
+                closeAllNavElements();
+            }
+            setSearchOpen(willOpen);
         });
         document.addEventListener("click", function (e) {
             if (floating.classList.contains("hidden")) return;
@@ -314,7 +389,7 @@
                     e.preventDefault();
                 }
                 const isOpen = dropdown.classList.contains("open");
-                closeAllDropdowns();
+                closeAllNavElements();
                 if (!isOpen) {
                     openDropdown(dropdown);
                 }
@@ -332,11 +407,15 @@
                expanded section: they stay open until their own toggle is
                clicked again, so skip dismiss-on-outside-click entirely. */
             if (document.querySelector("[data-dropdown-sticky].open")) return;
+            /* Only close profile dropdowns here. The notifications dropdown
+               owns its own outside-click handler, and it runs before this
+               one — closing it here would immediately dismiss the panel the
+               user just opened. */
             closeAllDropdowns();
         });
 
         document.addEventListener("keydown", function (e) {
-            if (e.key === "Escape") closeAllDropdowns();
+            if (e.key === "Escape") closeAllNavElements();
         });
     }
 
@@ -396,6 +475,8 @@
 
         if (toggleBtn) {
             toggleBtn.addEventListener("click", function () {
+                /* Mobile only: the button opens/closes the slide-in drawer.
+                   On desktop the sidebar's own chevron handles collapsing. */
                 if (sidebar.classList.contains("open")) {
                     closeSidebar();
                 } else {
