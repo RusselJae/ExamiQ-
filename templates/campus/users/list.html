@@ -70,7 +70,7 @@
             {% for campus_user in users %}
             <tr>
                 <td>{{ campus_user.email }}</td>
-                <td>{{ campus_user.get_full_name|default:"—" }}</td>
+                <td class="max-w-[16rem] truncate" title="{{ campus_user.get_full_name|default:"—" }}">{{ campus_user.get_full_name|default:"—" }}</td>
                 <td>{{ campus_user.get_role_display }}</td>
                 <td class="text-sm text-examiq-slate">
                     {% if campus_user.role == "student" %}

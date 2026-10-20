@@ -163,9 +163,21 @@ def public_base_url() -> str:
     so it cannot use the request's host when that is a private address such as
     ``127.0.0.1``. Set ``ONLYOFFICE_PUBLIC_BASE_URL`` (e.g. an ngrok tunnel) to
     override; otherwise the request host is used.
+
+    On Railway, if ``ONLYOFFICE_PUBLIC_BASE_URL`` is not set, try to auto-detect
+    the public domain from Railway environment variables.
     """
     configured = (getattr(settings, "ONLYOFFICE_PUBLIC_BASE_URL", "") or "").strip()
-    return configured.rstrip("/")
+    if configured:
+        return configured.rstrip("/")
+
+    # Auto-detect Railway public URL
+    import os
+    railway_public = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
+    if railway_public:
+        return railway_public.rstrip("/")
+
+    return ""
 
 
 def absolute_url(request, path: str) -> str:

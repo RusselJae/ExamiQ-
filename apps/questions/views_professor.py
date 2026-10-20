@@ -75,7 +75,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
 
     context_object_name = "questions"
 
-    paginate_by = 25
+    paginate_by = 10
 
     def get_queryset(self):
 

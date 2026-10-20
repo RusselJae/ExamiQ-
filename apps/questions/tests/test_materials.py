@@ -37,6 +37,26 @@ def _make_ready_doc(*, course, subject, user, title="Module overview", archived=
 
 @pytest.mark.django_db
 class TestFacultyMaterialsUI:
+    def test_detail_course_dropdown_lists_bsed_subject(
+        self, client, professor, subject
+    ):
+        """Catalog materials must show the document subject, not 'No courses'."""
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            )
+            + "?from=hub"
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "No courses available" not in content
+        assert subject.code in content
+        assert f'value="{subject.pk}"' in content
+
     def test_course_list_keeps_course_chrome(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         _make_ready_doc(course=course, subject=subject, user=professor)

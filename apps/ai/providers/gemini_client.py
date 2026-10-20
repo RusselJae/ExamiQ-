@@ -143,21 +143,30 @@ def _generate_with_model(
     max_output_tokens: int,
     json_mode: bool = False,
 ) -> str:
-    import google.generativeai as genai
+    """Call Gemini via the supported ``google-genai`` SDK (not deprecated generativeai)."""
+    from google import genai
+    from google.genai import types
 
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel(model_name)
-    generation_config: dict = {
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    config_kwargs: dict = {
         "temperature": 0.3,
         "max_output_tokens": max_output_tokens,
+        "system_instruction": system,
     }
     if json_mode:
-        generation_config["response_mime_type"] = "application/json"
-    response = model.generate_content(
-        f"{system}\n\n{prompt}",
-        generation_config=generation_config,
+        config_kwargs["response_mime_type"] = "application/json"
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(**config_kwargs),
     )
-    return response.text.strip()
+    text = (getattr(response, "text", None) or "").strip()
+    if not text:
+        raise AIServiceUnavailableError(
+            "Gemini returned an empty response.",
+            detail=f"empty response from {model_name}",
+        )
+    return text
 
 
 def chat_with_fallback(

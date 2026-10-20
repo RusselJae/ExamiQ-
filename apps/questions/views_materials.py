@@ -77,15 +77,19 @@ from apps.users.assignment_services import (
 from apps.users.models import User
 
 
-def _bsed_subject_options(professor):
-    """BSED Math subjects with catalog courses for the materials hub."""
-    subjects = (
+def _bsed_subjects_queryset():
+    """All BSEd Mathematics curriculum subjects for materials UI selects."""
+    return (
         Subject.objects.filter(program__slug=User.HomeDegreeProgram.BSED_MATH)
         .select_related("program", "year_level")
         .order_by("year_level__order", "semester", "code")
     )
+
+
+def _bsed_subject_options(professor):
+    """BSED Math subjects with catalog courses for the materials hub."""
     options = []
-    for subject in subjects:
+    for subject in _bsed_subjects_queryset():
         course = get_or_create_catalog_course(professor, subject)
         options.append(
             {
@@ -95,6 +99,33 @@ def _bsed_subject_options(professor):
             }
         )
     return options
+
+
+def _subjects_for_material_detail(course, professor, document):
+    """Subjects for the material detail course dropdown.
+
+    Catalog hub offerings often yield an empty ``subjects_for_course_section``
+    list; always expose BSEd Math subjects and ensure the document's subject
+    remains selectable.
+    """
+    subjects = list(_bsed_subjects_queryset())
+    section_subjects = subjects_for_course_section(course, professor).filter(
+        program__slug=User.HomeDegreeProgram.BSED_MATH
+    )
+    by_id = {s.pk: s for s in subjects}
+    for subject in section_subjects:
+        by_id[subject.pk] = subject
+    if document.subject_id and document.subject_id not in by_id:
+        if document.subject is not None:
+            by_id[document.subject_id] = document.subject
+    return sorted(
+        by_id.values(),
+        key=lambda s: (
+            getattr(s.year_level, "order", 0) or 0,
+            s.semester or 0,
+            s.code or "",
+        ),
+    )
 
 
 MATH_ONLY_UPLOAD_MESSAGE = "Content management accepts BSEd Mathematics subjects only."
@@ -448,7 +479,9 @@ class MaterialDetailView(ProfessorCourseMixin, View):
                 "course": self.course,
                 "active_tab": "materials",
                 "document": document,
-                "subjects": subjects_for_course_section(self.course, request.user),
+                "subjects": _subjects_for_material_detail(
+                    self.course, request.user, document
+                ),
                 "chunks_preview": document.chunks.order_by("order")[:5],
                 "document_text": document_plain_text(document),
                 "document_html": document_editor_html(document),

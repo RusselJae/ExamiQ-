@@ -129,7 +129,7 @@
         <div class="assign-table__row" role="row">
             <div class="assign-table__cell assign-table__cell--faculty" role="cell">
                 <span class="assign-avatar" aria-hidden="true">{{ assignment.professor.initials }}</span>
-                <span class="assign-faculty-name">{{ assignment.professor.get_full_name|default:assignment.professor.email }}</span>
+                <span class="assign-faculty-name truncate" title="{{ assignment.professor.get_full_name|default:assignment.professor.email }}">{{ assignment.professor.get_full_name|default:assignment.professor.email }}</span>
             </div>
             <div class="assign-table__cell assign-table__cell--section" role="cell">
                 <span class="assign-section-title">{{ assignment.program_section.program.name }}</span>

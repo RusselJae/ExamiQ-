@@ -73,7 +73,7 @@
             {% for managed_user in users %}
             <tr>
                 <td class="break-all">{{ managed_user.email }}</td>
-                <td class="whitespace-nowrap">{{ managed_user.get_full_name|default:"—" }}</td>
+                <td class="max-w-[16rem] truncate" title="{{ managed_user.get_full_name|default:"—" }}">{{ managed_user.get_full_name|default:"—" }}</td>
                 <td>{{ managed_user.get_role_display }}</td>
                 <td class="text-sm text-examiq-slate">{{ managed_user.employee_id|default:managed_user.student_number|default:"—" }}</td>
                 <td class="text-sm text-examiq-slate">

@@ -8281,6 +8281,11 @@ html.examiq-chat-open .focus-exit-fab {
     .overview-year-levels__list {
         grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
     }
+    /* When only one item, match KPI grid item width (half container) */
+    .overview-year-levels__list > li:only-child {
+        width: 50%;
+        min-width: 0;
+    }
 }
 
 .overview-year-levels__item {

@@ -1039,56 +1039,78 @@ def enrolled_bsed_students_by_year_level() -> list[dict]:
 
 
 def handled_students_by_year_level(professor: User) -> list[dict]:
-    """Students with sessions on this professor's BSED courses, by taught year.
+    """Students with completed exams in this professor's assigned scope, by year level.
 
-    Only year levels the faculty handles (teaching assignments and/or profile
-    sections) appear in the KPI grid — not every curriculum year.
+    Mirrors the logic in ``get_professor_students_with_exams`` so the KPI grid
+    and the Students table show consistent counts.
+
+    Only year levels the faculty handles (via teaching assignments or assigned
+    sections) are included. If the faculty has no assignments, an empty list
+    is returned — no grids are shown.
     """
-    from django.db.models import Count
+    from django.db.models import Count, Q
 
     from apps.questions.models import YearLevel
-    from apps.users.models import TeachingAssignment
-
-    handled_year_ids = set(
-        TeachingAssignment.objects.filter(professor=professor).values_list(
-            "program_section__year_level_id", flat=True
-        )
+    from apps.users.assignment_services import (
+        faculty_has_chat_scope,
+        get_faculty_profile_section_ids,
+        get_faculty_profile_subject_ids,
     )
-    if hasattr(professor, "assigned_sections"):
-        handled_year_ids.update(
-            professor.assigned_sections.values_list("year_level_id", flat=True)
-        )
-    handled_year_ids.discard(None)
+    from apps.reviews.models import ReviewSession
+    from apps.questions.models import Subject
+
+    if not faculty_has_chat_scope(professor):
+        return []
+
+    section_ids = get_faculty_profile_section_ids(professor)
+    subject_ids = get_faculty_profile_subject_ids(professor)
+
+    # If no section assignments, the faculty handles no year levels.
+    if not section_ids:
+        return []
 
     student_ids = (
         ReviewSession.objects.filter(
-            course__professor=professor,
-            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+            student__section_id__in=section_ids,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .filter(
+            Q(subjects__in=subject_ids)
+            | Q(topic__subject_id__in=subject_ids)
+            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
         )
         .values_list("student_id", flat=True)
         .distinct()
     )
+
     raw = (
-        User.objects.filter(pk__in=student_ids)
+        User.objects.filter(pk__in=student_ids, is_archived=False)
         .values("year_level_id")
         .annotate(count=Count("id"))
     )
     counts_by_id = {row["year_level_id"]: row["count"] for row in raw}
 
-    if not handled_year_ids:
-        # Legacy faculty without assignments: show only years with activity.
-        handled_year_ids = {yl_id for yl_id in counts_by_id if yl_id is not None}
+    # Collect year levels from assigned sections only.
+    handled_year_ids = set()
+    from apps.users.models import ProgramSection
+    for sid in section_ids:
+        ps = ProgramSection.objects.filter(pk=sid).values_list("year_level_id", flat=True).first()
+        if ps:
+            handled_year_ids.add(ps)
 
+    # Only return year levels the faculty handles with at least one student.
     rows: list[dict] = []
     for yl in YearLevel.objects.filter(pk__in=handled_year_ids).order_by("order"):
-        rows.append(
-            {
-                "id": yl.pk,
-                "name": yl.name,
-                "order": yl.order,
-                "count": counts_by_id.get(yl.pk, 0),
-            }
-        )
+        count = counts_by_id.get(yl.pk, 0)
+        if count > 0:
+            rows.append(
+                {
+                    "id": yl.pk,
+                    "name": yl.name,
+                    "order": yl.order,
+                    "count": count,
+                }
+            )
     return rows
 
 
@@ -1627,6 +1649,114 @@ def professor_overview_trends(professor: User) -> dict:
             "mistake_trend": mistake_trend.get(range_key, []),
         }
 
+    return result
+
+
+def professor_latest_student_sessions(professor: User, limit: int = 20) -> list[dict]:
+    """Return latest completed session for each student in professor's scope.
+
+    Used for the "Recent Activity" table on the professor overview dashboard.
+    Returns a list of dicts with: student, latest_session, course, subject, accuracy, time_ago.
+    Ordered by session ended_at descending (most recent first).
+    """
+    from apps.users.assignment_services import (
+        faculty_has_chat_scope,
+        get_faculty_profile_section_ids,
+        get_faculty_profile_subject_ids,
+    )
+    from apps.reviews.models import ReviewSession
+    from apps.questions.models import Subject
+
+    if not faculty_has_chat_scope(professor):
+        return []
+
+    section_ids = get_faculty_profile_section_ids(professor)
+    subject_ids = get_faculty_profile_subject_ids(professor)
+
+    if not section_ids:
+        return []
+
+    # Get latest completed session per student in scope (DB-agnostic approach)
+    # First, get the max ended_at per student
+    from django.db.models import Max, OuterRef, Subquery
+
+    latest_sessions_subq = (
+        ReviewSession.objects.filter(
+            student_id=OuterRef("student_id"),
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .filter(
+            Q(subjects__in=subject_ids)
+            | Q(topic__subject_id__in=subject_ids)
+            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
+        )
+        .values("student_id")
+        .annotate(max_ended=Max("ended_at"))
+        .values("max_ended")
+    )
+
+    sessions = (
+        ReviewSession.objects.filter(
+            student__section_id__in=section_ids,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .filter(
+            Q(subjects__in=subject_ids)
+            | Q(topic__subject_id__in=subject_ids)
+            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
+        )
+        .filter(ended_at=Subquery(latest_sessions_subq[:1]))
+        .select_related("student", "student__section", "course", "topic", "topic__subject")
+        .order_by("-ended_at")[:limit]
+    )
+
+    # Annotate with accuracy for this session - use names that don't conflict with model properties
+    from django.db.models import Count, IntegerField
+
+    correct_subq = (
+        Answer.objects.filter(session_id=OuterRef("pk"), is_correct=True)
+        .values("session_id")
+        .annotate(c=Count("id"))
+        .values("c")[:1]
+    )
+    total_subq = (
+        Answer.objects.filter(session_id=OuterRef("pk"))
+        .values("session_id")
+        .annotate(c=Count("id"))
+        .values("c")[:1]
+    )
+
+    sessions = sessions.annotate(
+        annotated_correct=Subquery(correct_subq, output_field=IntegerField()),
+        annotated_total=Subquery(total_subq, output_field=IntegerField()),
+    )
+
+    result = []
+    for session in sessions:
+        total = session.annotated_total or 0
+        correct = session.annotated_correct or 0
+        accuracy = round(correct / total * 100, 1) if total else 0.0
+
+        subject_name = "—"
+        if session.topic and session.topic.subject:
+            subject_name = session.topic.subject.code
+        elif session.course:
+            subject_name = session.course.code
+
+        result.append(
+            {
+                "student": session.student,
+                "section": session.student.section,
+                "latest_session": session,
+                "subject": subject_name,
+                "accuracy": accuracy,
+                "total_questions": total,
+                "correct_questions": correct,
+                "ended_at": session.ended_at or session.started_at,
+            }
+        )
+
+    # Already ordered by -ended_at from the query
     return result
 
 

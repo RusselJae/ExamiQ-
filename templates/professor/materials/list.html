@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Content Management — {{ course.code }}{% endblock %}
+{% block title %}Content Management - {{ course.code }}{% endblock %}
 
 {% block content %}
-{% include "components/professor_section_header.html" with course=course page_label="Content management" %}
+{% include "components/professor_section_header.html" with course=course page_label="Content" %}
 {% include "components/professor_course_nav.html" with course=course active_tab="materials" %}
 
 <div class="materials-page">

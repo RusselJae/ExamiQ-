@@ -114,7 +114,7 @@ def _professor_course_trail(course) -> list[dict[str, Any]]:
         _crumb("Courses", _safe_reverse("analytics_professor:course_list")),
     ]
     if course:
-        label = (course.code or "").strip() or "Course"
+        label = (course.code or "").strip().upper() or "Course"
         crumbs.append(
             _crumb(label, _safe_reverse("analytics_professor:course_detail", pk=course.pk))
         )
@@ -159,46 +159,26 @@ def _build_professor_crumbs(
         if url_name == "course_detail" and "course_pk" not in course_kwargs:
             course_kwargs["course_pk"] = course_kwargs.get("pk")
         course = _course_from_kwargs(course_kwargs)
-        crumbs.extend(_professor_course_trail(course))
-        if url_name == "course_detail":
-            return crumbs  # last crumb is already the course / Overview via code label
-        if url_name in {"question_create", "question_create_single", "question_edit", "question_batch_edit"}:
-            if course:
-                crumbs.append(
-                    _crumb(
-                        "Saved Questions",
-                        _safe_reverse(
-                            "analytics_professor:question_list",
-                            course_pk=course.pk,
-                        ),
-                    )
-                )
+
+        # Build combined label: "CODE - Page Label"
+        if course:
+            course_code = (course.code or "").strip().upper()
+            page_label = humanize_url_name(url_name)
+            if url_name == "course_detail":
+                combined_label = f"{course_code} - Overview"
+            elif url_name == "material_list":
+                combined_label = f"{course_code} - Content"
+            elif url_name == "question_list":
+                combined_label = f"{course_code} - Saved Questions"
+            else:
+                combined_label = f"{course_code} - {page_label}"
+            crumbs.extend(_professor_course_trail(course))
+            # Replace the last crumb (course code) with combined label
+            if crumbs and crumbs[-1]["label"] == course_code:
+                crumbs[-1]["label"] = combined_label
+                crumbs[-1]["url"] = None
+        else:
             crumbs.append(_crumb(humanize_url_name(url_name), None))
-            return crumbs
-        if url_name in {"topic_create", "topic_edit"}:
-            if course:
-                crumbs.append(
-                    _crumb(
-                        "Topics",
-                        _safe_reverse("analytics_professor:topic_list", course_pk=course.pk),
-                    )
-                )
-            crumbs.append(_crumb(humanize_url_name(url_name), None))
-            return crumbs
-        if url_name in {"material_upload", "material_detail"}:
-            if course:
-                crumbs.append(
-                    _crumb(
-                        "Content",
-                        _safe_reverse(
-                            "analytics_professor:materials_hub",
-                            course_pk=course.pk,
-                        ),
-                    )
-                )
-            crumbs.append(_crumb(humanize_url_name(url_name), None))
-            return crumbs
-        crumbs.append(_crumb(humanize_url_name(url_name), None))
         return crumbs
 
     if url_name == "professor_student_detail":

@@ -1,19 +1,18 @@
 {# Course/catalog page chrome for faculty tools (Overview-style). #}
 {# Optional: page_label (e.g. "Saved Questions"), show_subject_subtitle (default true) #}
-{# Optional: cta_url, cta_label — same-row action (e.g. Add Question) #}
+{# Optional: cta_url, cta_label - same-row action (e.g. Add Question) #}
 <div class="overview-header mb-6">
-    <a href="{% url 'analytics_professor:course_list' %}" class="overview-back-link">&larr; Back to course</a>
     <div class="overview-header__main">
         <div class="overview-header__copy">
             <h1 class="overview-title">
                 {% if course.section == "Catalog" %}
-                    {{ course.code }}{% if page_label %} · {{ page_label }}{% endif %}
+                    {{ course.code }}{% if page_label %} - {{ page_label }}{% endif %}
                 {% else %}
-                    {{ course.section|default:course.code }}{% if page_label %} · {{ page_label }}{% endif %}
+                    {{ course.section|default:course.code }}{% if page_label %} - {{ page_label }}{% endif %}
                 {% endif %}
             </h1>
             {% if show_subject_subtitle != False %}
-            <p class="overview-as-of">{{ course.code }} — {{ course.name }}</p>
+            <p class="overview-as-of">{{ course.code }} - {{ course.name }}</p>
             {% endif %}
         </div>
         {% if cta_url and cta_label %}

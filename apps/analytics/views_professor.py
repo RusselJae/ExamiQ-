@@ -26,6 +26,7 @@ from apps.analytics.services import (
     professor_confidence_donut,
     professor_donut_sections,
     professor_overview_trends,
+    professor_latest_student_sessions,
     section_heatmap_subjects,
     section_performance_summary,
     student_course_summary,
@@ -102,6 +103,7 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         context["donut_period_choices"] = DONUT_PERIOD_CHOICES
         context["donut_section"] = context["overview_donut"].get("section", "")
         context["donut_sections"] = professor_donut_sections(self.request.user)
+        context["latest_student_sessions"] = professor_latest_student_sessions(self.request.user)
         return context
 
 

@@ -84,8 +84,10 @@
                     {% if faculty_mode and course %}
                     <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
                        class="materials-download-btn">Download</a>
+                    {% if doc.is_editable_by_office %}
                     <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}"
                        class="materials-download-btn">Edit</a>
+                    {% endif %}
                     <form method="post"
                           action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
                           class="materials-archive-form">

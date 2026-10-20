@@ -182,6 +182,12 @@ class LearningDocument(models.Model):
         except (OSError, ValueError, TypeError):
             return None
 
+    @property
+    def is_editable_by_office(self) -> bool:
+        """True when the file format is supported by ONLYOFFICE for editing."""
+        from apps.ai.office_editor import is_editable
+        return is_editable(self)
+
 
 class LearningChunk(models.Model):
     """Text chunk from a learning document for topic-scoped retrieval."""
