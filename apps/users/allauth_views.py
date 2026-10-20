@@ -60,6 +60,13 @@ class ClearPendingLoginCodeMixin:
 class ExamiQLoginView(ClearPendingLoginCodeMixin, allauth_views.LoginView):
     """Sign-in page that always renders, even mid sign-in-code stage."""
 
+    def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        if request.method == "GET":
+            from apps.users.otp_services import maybe_cleanup_abandoned_signups
+
+            maybe_cleanup_abandoned_signups()
+        return super().dispatch(request, *args, **kwargs)
+
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
             return super().post(request, *args, **kwargs)

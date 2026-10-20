@@ -411,6 +411,41 @@ class TestMaterialUploadRelevanceGate:
         doc = LearningDocument.objects.get(course_id=course.pk)
         assert doc.subject == subject
 
+    def test_hub_subject_id_accepted_when_section_queryset_misses(
+        self, client, professor, subject
+    ):
+        """Catalog hub posts subject_id even if section subject list is empty."""
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+
+        with (
+            patch(
+                "apps.questions.views_materials.subjects_for_course_section",
+                return_value=Subject.objects.none(),
+            ),
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                _AlwaysRelated(),
+            ),
+        ):
+            response = client.post(
+                self._upload_url(course),
+                {
+                    "subject_id": subject.pk,
+                    "hub_return": "1",
+                    "source_file": SimpleUploadedFile(
+                        "trig.txt", RELATED_UPLOAD, content_type="text/plain"
+                    ),
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Select a BSEd Mathematics course subject" not in content
+        doc = LearningDocument.objects.get(course_id=course.pk)
+        assert doc.subject_id == subject.pk
+
 
 @pytest.mark.django_db
 class TestMaterialUploadFormTrimmed:

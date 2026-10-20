@@ -718,7 +718,6 @@ def student_performance_donut(
     ``for_professor`` keeps the insight text but drops the student-area
     "review those questions" link, which faculty cannot open.
     """
-    from django.utils import timezone
 
     from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
 
@@ -1040,10 +1039,26 @@ def enrolled_bsed_students_by_year_level() -> list[dict]:
 
 
 def handled_students_by_year_level(professor: User) -> list[dict]:
-    """Students with sessions on this professor's BSED courses, grouped by year level."""
+    """Students with sessions on this professor's BSED courses, by taught year.
+
+    Only year levels the faculty handles (teaching assignments and/or profile
+    sections) appear in the KPI grid — not every curriculum year.
+    """
     from django.db.models import Count
 
     from apps.questions.models import YearLevel
+    from apps.users.models import TeachingAssignment
+
+    handled_year_ids = set(
+        TeachingAssignment.objects.filter(professor=professor).values_list(
+            "program_section__year_level_id", flat=True
+        )
+    )
+    if hasattr(professor, "assigned_sections"):
+        handled_year_ids.update(
+            professor.assigned_sections.values_list("year_level_id", flat=True)
+        )
+    handled_year_ids.discard(None)
 
     student_ids = (
         ReviewSession.objects.filter(
@@ -1060,8 +1075,12 @@ def handled_students_by_year_level(professor: User) -> list[dict]:
     )
     counts_by_id = {row["year_level_id"]: row["count"] for row in raw}
 
+    if not handled_year_ids:
+        # Legacy faculty without assignments: show only years with activity.
+        handled_year_ids = {yl_id for yl_id in counts_by_id if yl_id is not None}
+
     rows: list[dict] = []
-    for yl in YearLevel.objects.order_by("order"):
+    for yl in YearLevel.objects.filter(pk__in=handled_year_ids).order_by("order"):
         rows.append(
             {
                 "id": yl.pk,
@@ -1076,7 +1095,6 @@ def handled_students_by_year_level(professor: User) -> list[dict]:
 def professor_overview_summary(professor: User) -> dict:
     """Aggregate KPIs for the professor overview dashboard."""
     from django.db.models import Max
-    from django.utils import timezone
 
     from apps.questions.models import Subject
     from apps.reviews.models import ExamSetup
@@ -1159,7 +1177,6 @@ def professor_overview_summary(professor: User) -> dict:
 
 def professor_overview_course_cards(professor: User) -> list[dict]:
     """Return per-course stats for the professor overview page."""
-    from django.utils import timezone
 
     from apps.reviews.models import ExamSetup
 
@@ -1354,7 +1371,6 @@ def professor_overview_trends(professor: User) -> dict:
 
     Returns all metrics × ranges so the client can switch without refetching.
     """
-    from django.utils import timezone
 
     now = timezone.now()
     course_filter = Q(course__professor=professor, course__is_archived=False)
@@ -1626,7 +1642,6 @@ def professor_confidence_donut(
     dashboard. ``section`` narrows the scope to one program section (the
     students' cohort section); unknown or missing values mean "all sections".
     """
-    from django.utils import timezone
 
     from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
 
@@ -2715,7 +2730,6 @@ def get_step_feedback_stats(question: Question) -> list[dict]:
 
 def get_intervention_list(course: Course) -> list[dict]:
     """Return students flagged for professor intervention in a course."""
-    from django.utils import timezone
 
     from apps.analytics.confidence import (
         CLASSIFICATION_LUCKY_GUESS,

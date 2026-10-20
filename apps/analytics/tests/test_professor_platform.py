@@ -4,16 +4,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.test import override_settings
 from django.urls import reverse
-from django.utils import timezone
-from datetime import timedelta
 
 from apps.analytics.confidence import (
     CLASSIFICATION_LUCKY_GUESS,
     CLASSIFICATION_MASTERY,
     CLASSIFICATION_MISCONCEPTION,
-    CONFIDENCE_TIER_HIGH,
-    CONFIDENCE_TIER_LOW,
     CONFIDENCE_TIER_AVERAGE,
+    CONFIDENCE_TIER_HIGH,
     classify_answer,
     confidence_accuracy_matrix,
     confidence_tier_matrix,
@@ -979,7 +976,6 @@ class TestProfessorOverviewUX:
         )
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:overview"))
-        import json
         import re
 
         match = re.search(
@@ -1059,12 +1055,17 @@ class TestProfessorOverviewTrends:
         assert summary["expected_students"] >= 1
 
     def test_overview_summary_includes_students_by_year_level(
-        self, professor, student, year_level, bsed_program, mcq_question
+        self, professor, student, year_level, bsed_program, mcq_question, program_section
     ):
         from apps.analytics.services import professor_overview_summary
+        from apps.questions.models import YearLevel
         from apps.reviews.models import ReviewSession
+        from apps.users.models import AcademicTerm, TeachingAssignment
 
         question, _ = mcq_question
+        other_year, _ = YearLevel.objects.get_or_create(
+            order=99, defaults={"name": "Unused Year"}
+        )
         student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
         student.year_level = year_level
         student.is_active = True
@@ -1074,6 +1075,18 @@ class TestProfessorOverviewTrends:
             code="YL101",
             name="Year Level Course",
             professor=professor,
+        )
+        term, _ = AcademicTerm.objects.get_or_create(
+            academic_year=program_section.academic_year,
+            name="1st Sem KPI",
+            defaults={"is_current": True},
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=question.topic.subject,
+            term=term,
+            assigned_by=professor,
         )
         ReviewSession.objects.create(
             student=student,
@@ -1085,6 +1098,9 @@ class TestProfessorOverviewTrends:
         summary = professor_overview_summary(professor)
         by_year = summary["students_by_year_level"]
         assert isinstance(by_year, list)
+        year_ids = {row["id"] for row in by_year}
+        assert year_level.pk in year_ids
+        assert other_year.pk not in year_ids
         assert any(
             row["name"] == year_level.name
             and row["count"] >= 1
@@ -1108,12 +1124,45 @@ class TestProfessorOverviewTrends:
             assert isinstance(trends[range_key]["mistakes"], list)
 
     def test_overview_renders_year_level_breakdown(
-        self, client, professor, student, year_level
+        self,
+        client,
+        professor,
+        student,
+        year_level,
+        program_section,
+        subject,
+        academic_term,
+        bsed_program,
+        mcq_question,
     ):
+        from apps.reviews.models import ReviewSession
+        from apps.users.models import TeachingAssignment
+
+        question, _ = mcq_question
         student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
         student.year_level = year_level
         student.is_active = True
         student.save(update_fields=["home_degree_program", "year_level", "is_active"])
+        course = Course.objects.create(
+            program=bsed_program,
+            code="YL-RENDER",
+            name="Year Render Course",
+            professor=professor,
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
+        ReviewSession.objects.create(
+            student=student,
+            course=course,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            status=ReviewSession.Status.COMPLETED,
+        )
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:overview"))
         assert response.status_code == 200

@@ -96,10 +96,16 @@
                     <span class="profile-pill">Pending</span>
                     {% elif campus_user.approval_status == "rejected" %}
                     <span class="profile-pill">Rejected</span>
+                    {% elif campus_user.role == "student" %}
+                        {% if campus_user.is_active %}
+                        <span class="profile-pill profile-pill--role">Active</span>
+                        {% else %}
+                        <span class="profile-pill">Inactive</span>
+                        {% endif %}
                     {% elif campus_user.is_active %}
-                    <span class="profile-pill profile-pill--role">Active</span>
+                    <span class="profile-pill profile-pill--role">Approved</span>
                     {% else %}
-                    <span class="profile-pill">Inactive</span>
+                    <span class="profile-pill">Deactivated</span>
                     {% endif %}
                 </td>
                 <td class="whitespace-nowrap">

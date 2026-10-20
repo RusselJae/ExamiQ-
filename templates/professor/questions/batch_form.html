@@ -1315,25 +1315,73 @@
         });
     }
 
-    function postDraftStemsForExclusion(stems) {
-        // Fire-and-forget: record deleted draft stems so AI generation avoids
-        // repeating them later. Draft removal itself must not depend on this
-        // succeeding, so failures are only logged.
-        if (!draftDeleteUrl) return;
+    function collectGenerateModalStems(onlyUnchecked) {
+        const container = document.getElementById("generate-modal-container");
+        if (!container) return [];
+        const stems = [];
+        container.querySelectorAll('input[name="selected_variation"]').forEach(function (cb) {
+            if (onlyUnchecked && cb.checked) return;
+            const stem = (cb.dataset.stem || "").trim();
+            if (stem) stems.push(stem);
+        });
+        return stems;
+    }
+
+    async function postDraftStemsForExclusion(stems) {
+        // Record deleted/discarded stems so AI generation never exact-repeats them.
+        if (!stems || !stems.length) return true;
+        if (!draftDeleteUrl) {
+            if (window.showToast) {
+                window.showToast(
+                    "Select a course subject before deleting so AI will not regenerate these stems.",
+                    "warning"
+                );
+            }
+            return false;
+        }
         const topicId = topicSelect ? topicSelect.value : "";
-        if (!topicId || !stems.length) return;
+        if (!topicId) {
+            if (window.showToast) {
+                window.showToast(
+                    "Select a topic before deleting so AI will not regenerate these stems.",
+                    "warning"
+                );
+            }
+            return false;
+        }
         const fd = new FormData();
         fd.append("csrfmiddlewaretoken", csrfToken);
         fd.append("topic_id", String(topicId));
         fd.append("stems_json", JSON.stringify(stems));
-        fetch(draftDeleteUrl, {
-            method: "POST",
-            body: fd,
-            headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
-            credentials: "same-origin",
-        }).catch(function (err) {
+        try {
+            let resp = await fetch(draftDeleteUrl, {
+                method: "POST",
+                body: fd,
+                headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+                credentials: "same-origin",
+            });
+            if (!resp.ok) {
+                resp = await fetch(draftDeleteUrl, {
+                    method: "POST",
+                    body: fd,
+                    headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+                    credentials: "same-origin",
+                });
+            }
+            if (!resp.ok) {
+                throw new Error("exclusion failed");
+            }
+            return true;
+        } catch (err) {
             console.warn("Could not record deleted draft stems for exclusion:", err);
-        });
+            if (window.showToast) {
+                window.showToast(
+                    "Removed from the batch, but AI may regenerate these stems. Try again later.",
+                    "warning"
+                );
+            }
+            return false;
+        }
     }
 
     if (deleteSelectedBtn) {
@@ -1345,13 +1393,22 @@
                 }
                 return;
             }
+            if (!draftDeleteUrl || !(topicSelect && topicSelect.value)) {
+                if (window.showToast) {
+                    window.showToast(
+                        "Select a course subject and topic before deleting questions.",
+                        "warning"
+                    );
+                }
+                return;
+            }
             showConfirm({
                 title: "Delete " + picked.length + " question(s)?",
                 message:
                     "This removes the selected questions from the batch. They are not saved yet.",
                 type: "warning",
                 confirmLabel: "Delete",
-            }).then(function (ok) {
+            }).then(async function (ok) {
                 if (!ok) return;
                 markDirty();
                 // Read stems before indexes shift so the backend can remember
@@ -1361,7 +1418,7 @@
                         return (getQuestionData(index).stem || "").trim();
                     })
                     .filter(function (stem) { return stem; });
-                postDraftStemsForExclusion(stems);
+                await postDraftStemsForExclusion(stems);
                 picked
                     .slice()
                     .reverse()
@@ -1762,10 +1819,19 @@
             if (card) card.classList.toggle("is-selected", cb.checked);
             if (cb.checked) count += 1;
         });
-        const counter = container.querySelector("[data-selected-count]");
-        if (counter) counter.textContent = String(count);
         const applyBtn = container.querySelector("#apply-generated-btn");
-        if (applyBtn) applyBtn.disabled = count === 0;
+        if (applyBtn) {
+            applyBtn.disabled = count === 0;
+            const label = applyBtn.hasAttribute("data-selected-label")
+                ? applyBtn
+                : applyBtn.querySelector("[data-selected-label]");
+            if (label) {
+                label.textContent = "Add " + count + " selected to batch";
+            } else {
+                const legacy = applyBtn.querySelector("[data-selected-count]");
+                if (legacy) legacy.textContent = String(count);
+            }
+        }
     }
 
     function applyVariationToCard(card, variation, meta) {
@@ -1843,6 +1909,11 @@
 
     async function regenerateVariationCard(card, btn) {
         const index = card.getAttribute("data-variation-index");
+        const priorBox = card.querySelector('input[name="selected_variation"]');
+        const priorStem = priorBox ? (priorBox.dataset.stem || "").trim() : "";
+        if (priorStem) {
+            await postDraftStemsForExclusion([priorStem]);
+        }
         const difficulty = btn.getAttribute("data-regenerate-difficulty") || "hard";
         if (!generateUrl) {
             if (window.showToast) window.showToast("Select a course subject first.", "warning");
@@ -1897,10 +1968,14 @@
     }
 
     let applyInFlight = false;
-    document.addEventListener("click", function(e) {
+    document.addEventListener("click", async function(e) {
         if (e.target.closest("#apply-generated-btn")) {
             if (applyInFlight) return;
             applyInFlight = true;
+            const discarded = collectGenerateModalStems(true);
+            if (discarded.length) {
+                await postDraftStemsForExclusion(discarded);
+            }
             const checked = document.querySelectorAll('input[name="selected_variation"]:checked');
             const existingStems = {};
             for (let i = 0; i < questionIndex; i++) {
@@ -1977,10 +2052,19 @@
         }
         if (e.target.id === "cancel-generate-modal") {
             abortGeneratePoll = true;
+            const allStems = collectGenerateModalStems(false);
+            if (allStems.length) {
+                await postDraftStemsForExclusion(allStems);
+            }
             clearGenerateModal();
             return;
         }
         if (e.target.id === "close-generate-modal" || e.target.id === "close-generate-modal-footer") {
+            // Closing the review without applying still locks out unselected stems.
+            const leftover = collectGenerateModalStems(true);
+            if (leftover.length) {
+                await postDraftStemsForExclusion(leftover);
+            }
             hideGenerateModal();
             return;
         }

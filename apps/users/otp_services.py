@@ -25,6 +25,8 @@ OTP_MAX_ATTEMPTS = 5
 OTP_RESEND_COOLDOWN = timedelta(seconds=60)
 SIGNUP_OTP_SESSION_KEY = "signup_otp_user_id"
 RESEND_API_URL = "https://api.resend.com/emails"
+# Inactive accounts that never finished email OTP are removed after this window.
+ABANDONED_SIGNUP_RETENTION = timedelta(hours=24)
 
 
 class SignupOTPError(Exception):
@@ -293,3 +295,70 @@ def login_otp_exempt(user) -> bool:
     if not email:
         return False
     return email in {str(item).strip().lower() for item in exempt}
+
+
+def cleanup_abandoned_signups(
+    *,
+    older_than: timedelta | None = None,
+    limit: int = 200,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Delete inactive users who never verified signup OTP past ``older_than``.
+
+    Targets students and faculty who abandoned email verification. Users with a
+    verified ``EmailAddress`` (OTP completed) are kept even if still inactive
+    (e.g. pending faculty approval). Also drops stale non-primary unverified
+    ``EmailAddress`` rows. Returns ``{"users": N, "emails": M}``.
+    """
+    from allauth.account.models import EmailAddress
+
+    retention = older_than if older_than is not None else ABANDONED_SIGNUP_RETENTION
+    cutoff = timezone.now() - retention
+
+    verified_user_ids = set(
+        EmailAddress.objects.filter(verified=True).values_list("user_id", flat=True)
+    )
+    user_ids = list(
+        User.objects.filter(is_active=False, date_joined__lt=cutoff)
+        .exclude(pk__in=verified_user_ids)
+        .exclude(is_superuser=True)
+        .order_by("date_joined")
+        .values_list("pk", flat=True)[:limit]
+    )
+    pending_email_count = EmailAddress.objects.filter(
+        user_id__in=user_ids, verified=False
+    ).count()
+    stale_secondary = EmailAddress.objects.filter(
+        verified=False,
+        primary=False,
+        user__date_joined__lt=cutoff,
+    )
+
+    if dry_run:
+        return {
+            "users": len(user_ids),
+            "emails": pending_email_count + stale_secondary.count(),
+        }
+
+    deleted_users = 0
+    if user_ids:
+        User.objects.filter(pk__in=user_ids).delete()
+        deleted_users = len(user_ids)
+
+    deleted_emails, _ = stale_secondary.delete()
+    total_emails = pending_email_count + deleted_emails
+
+    logger.info(
+        "cleanup_abandoned_signups: users=%s emails≈%s",
+        deleted_users,
+        total_emails,
+    )
+    return {"users": deleted_users, "emails": total_emails}
+
+
+def maybe_cleanup_abandoned_signups() -> None:
+    """Best-effort capped cleanup for local/dev without requiring cron."""
+    try:
+        cleanup_abandoned_signups(limit=25, dry_run=False)
+    except Exception:
+        logger.exception("Opportunistic abandoned-signup cleanup failed")

@@ -70,7 +70,10 @@ from apps.questions.views_professor import (
     _subject_for_course,
     subjects_for_course_section,
 )
-from apps.users.assignment_services import get_or_create_catalog_course
+from apps.users.assignment_services import (
+    get_or_create_catalog_course,
+    professor_can_access_subject,
+)
 from apps.users.models import User
 
 
@@ -113,7 +116,12 @@ def _requested_subject(subject_id: str):
 
 
 def _resolve_upload_subject(course, professor, subject_id: str):
-    """Pick a BSEd Mathematics subject from the request for this course section."""
+    """Pick a BSEd Mathematics subject from the request for this course.
+
+    Hub uploads post an explicit ``subject_id``. Trust that when the subject is
+    math and the professor may access it (catalog hub / assignments), even if
+    ``subjects_for_course_section`` does not list it for the catalog shell.
+    """
     subjects = subjects_for_course_section(course, professor).filter(
         program__slug=User.HomeDegreeProgram.BSED_MATH
     )
@@ -124,6 +132,11 @@ def _resolve_upload_subject(course, professor, subject_id: str):
         match = subjects.filter(pk=requested.pk).first()
         if match is not None:
             return match
+        if professor_can_access_subject(professor, requested, course=course):
+            return requested
+        course_subject = _subject_for_course(course)
+        if course_subject is not None and course_subject.pk == requested.pk:
+            return requested
         return None
     course_subject = _subject_for_course(course)
     if _is_math_subject(course_subject):

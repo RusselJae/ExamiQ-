@@ -90,6 +90,12 @@
                     <span class="profile-pill">Pending</span>
                     {% elif managed_user.approval_status == "rejected" %}
                     <span class="profile-pill">Rejected</span>
+                    {% elif managed_user.role == "student" %}
+                        {% if managed_user.is_active %}
+                        <span class="profile-pill profile-pill--role">Active</span>
+                        {% else %}
+                        <span class="profile-pill">Inactive</span>
+                        {% endif %}
                     {% elif managed_user.is_active %}
                     <span class="profile-pill profile-pill--role">Approved</span>
                     {% else %}
