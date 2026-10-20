@@ -3,7 +3,9 @@
 
 <div class="overview-header mb-6">
     <p class="overview-eyebrow">Student</p>
+    {% if detail_scope != "professor" %}
     <a href="{{ back_url }}" class="overview-back-link">&larr; {{ back_label|default:"Back to students" }}</a>
+    {% endif %}
     <div class="overview-header__main">
         <div class="overview-header__copy student-detail-header__identity">
             <div class="student-detail-avatar" aria-hidden="true">{{ student_initials }}</div>
@@ -56,14 +58,26 @@
         <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-detail-donut-scope">
             {{ summary.dashboard_trends.donut.scope_line }}
         </p>
+        {% if donut_period %}
+        <div class="overview-trends-filters student-confidence-card__filters">
+            <div class="overview-trends-filter">
+                <span class="overview-trends-filter__label" id="student-detail-donut-range-label">Range</span>
+                <div class="overview-pill-group" role="group" aria-labelledby="student-detail-donut-range-label">
+                    {% for value, label in donut_period_choices %}
+                    <a href="?donut_period={{ value }}"
+                       class="overview-pill{% if donut_period == value %} is-selected{% endif %}">{{ label }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
-    <div class="overview-trends-chart-wrap student-donut-wrap" id="studentDetailDonutWrap">
-        <canvas id="studentDetailDonut" aria-label="Confidence performance donut chart"></canvas>
-        <div class="student-donut-center" id="student-detail-donut-center" aria-hidden="true"></div>
-    </div>
-    <div class="overview-trends-chart-footer">
+    <div class="student-donut-layout">
+        <div class="overview-trends-chart-wrap student-donut-wrap" id="studentDetailDonutWrap">
+            <canvas id="studentDetailDonut" aria-label="Confidence performance donut chart"></canvas>
+            <div class="student-donut-center" id="student-detail-donut-center" aria-hidden="true"></div>
+        </div>
         <div class="student-donut-legend overview-confidence-legend" id="student-detail-donut-legend" hidden></div>
-        <p class="student-confidence-card__insight" id="student-detail-donut-insight" hidden></p>
     </div>
     <div id="student-detail-donut-empty" class="chart-empty-state hidden">
         <p class="empty-state-title">Not enough data yet</p>

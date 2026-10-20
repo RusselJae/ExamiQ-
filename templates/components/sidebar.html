@@ -89,6 +89,12 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
                     <span class="sidebar-label">Sections</span>
                 </a>
+                <a href="{% url 'campus:academic_calendar' %}" title="Academic Calendar"
+                   class="sidebar-link {% if request.resolver_match.url_name == 'academic_calendar' %}sidebar-link-active{% endif %}"
+                   aria-label="Academic Calendar">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    <span class="sidebar-label">Academic Calendar</span>
+                </a>
                 <a href="{% url 'coordinator:subject_list' %}" title="Subject catalog"
                    class="sidebar-link {% if request.resolver_match.namespace == 'coordinator' %}sidebar-link-active{% endif %}"
                    aria-label="Subject catalog">

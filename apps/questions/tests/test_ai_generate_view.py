@@ -95,6 +95,17 @@ class TestQuestionAIGenerateView:
         assert response.status_code == 400
         assert "Upload" in response.json()["error"]
 
+    def test_requires_difficulty(self, client, professor, course_with_subject, topic):
+        client.force_login(professor)
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
+        response = client.post(url, {"topic": topic.pk})
+
+        assert response.status_code == 400
+        assert "at least one difficulty" in response.json()["error"]
+
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     def test_status_returns_modal_on_success(
@@ -219,17 +230,25 @@ class TestQuestionAIGenerateView:
         assert data["relevance_blocked"] is True
         mock_get_generator.assert_not_called()
 
+    @patch("apps.ai.factory.get_difficulty_tagger")
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")
     def test_multi_difficulty_getlist_splits_generation(
         self,
         mock_get_generator,
         _mock_thread,
+        mock_get_tagger,
         client,
         professor,
         course_with_subject,
         topic,
     ):
+        # Keep difficulty stamping hermetic: both the live tagger and the
+        # keyword-stub tagger reclassify placeholder stems over the network or
+        # by text heuristics, so inject a requested-band passthrough tagger.
+        from apps.ai.interfaces import DifficultyTagger
+
+        mock_get_tagger.return_value = DifficultyTagger()
         generator = mock_get_generator.return_value
 
         def _batch(topic, difficulty, count=3, **_kwargs):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 from apps.ai.factory import get_tutor_engine
 from apps.reviews.models import Answer, Question, ReviewSession, TutorConversation, TutorMessage
@@ -50,8 +51,11 @@ def _tutor_message_image_url(msg: TutorMessage) -> str:
         return ""
 
 
-def conversation_messages_payload(conversation: TutorConversation) -> list[dict]:
+def conversation_messages_payload(
+    conversation: TutorConversation, *, subject_code: str = "", history_note: str = ""
+) -> list[dict]:
     payload = []
+    last_concept_entry: dict | None = None
     for msg in conversation.messages.order_by("created"):
         entry = {
             "id": msg.pk,
@@ -64,8 +68,16 @@ def conversation_messages_payload(conversation: TutorConversation) -> list[dict]
             "created_at": msg.created.isoformat(),
         }
         if msg.role == TutorMessage.Role.ASSISTANT:
-            entry["structured"] = parse_tutor_structured_reply(msg.content)
+            structured = parse_tutor_structured_reply(msg.content)
+            if structured and subject_code:
+                structured["subject_code"] = subject_code
+            entry["structured"] = structured
+            if structured and structured.get("type") == "concept_check":
+                last_concept_entry = entry
         payload.append(entry)
+    if history_note and last_concept_entry and last_concept_entry.get("structured"):
+        # Show the current repeat-miss status once, on the latest concept check.
+        last_concept_entry["structured"]["history_note"] = history_note
     return payload
 
 
@@ -121,14 +133,33 @@ def _question_context(answer: Answer | None) -> dict:
     adaptive = clean_adaptive_explanation(
         getattr(question, "adaptive_explanation", None)
     )
+    subject = (
+        question.topic.subject if question.topic and question.topic.subject_id else None
+    )
     ctx = {
         "stem": question.stem,
+        "subject_code": getattr(subject, "code", "") or "",
+        "subject_name": getattr(subject, "name", "") or "",
         "user_answer": _answer_user_response(answer),
         "correct_answer": _answer_correct_response(answer),
         "is_correct": answer.is_correct,
         "timed_out": answer.timed_out,
         "difficulty": question.difficulty,
     }
+    if question.question_type == question.QuestionType.MCQ:
+        choices = [
+            {"id": choice.label, "text": choice.text}
+            for choice in question.choices.all().order_by("label")
+        ]
+        if choices:
+            ctx["choices"] = choices
+            correct = next(
+                (c for c in question.choices.all() if c.is_correct), None
+            )
+            if correct:
+                ctx["correct_pick"] = correct.label
+            if answer.selected_choice_id and answer.selected_choice:
+                ctx["student_pick"] = answer.selected_choice.label
     if steps:
         ctx["explanation_steps"] = steps
     if adaptive_explanation_has_content(adaptive):
@@ -136,10 +167,36 @@ def _question_context(answer: Answer | None) -> dict:
     return ctx
 
 
+def _concept_history_note(student: User, question: Question) -> str:
+    """Return a server-owned note after repeated misses on a concept."""
+    from apps.analytics.concept_review_services import concept_key_for_question
+    from apps.analytics.models import ConceptReview
+
+    key, fallback_name = concept_key_for_question(question)
+    review = (
+        ConceptReview.objects.filter(student=student, concept_key=key)
+        .only("concept_name", "miss_count", "status")
+        .first()
+    )
+    if not review or review.miss_count < 2:
+        return ""
+    if review.status == ConceptReview.Status.RESOLVED:
+        return ""
+    concept_name = (review.concept_name or fallback_name).strip()
+    if review.miss_count == 2:
+        return f"Second miss on {concept_name}. Saved to Concepts to Review."
+    return (
+        f"Missed {review.miss_count} times on {concept_name}. "
+        "Saved to Concepts to Review."
+    )
+
+
 def _exam_context(session: ReviewSession, answer: Answer | None = None) -> dict:
+    subject = session.topic.subject if session.topic.subject_id else None
     ctx = {
+        "subject": subject.name if subject else "",
+        "subject_code": (getattr(subject, "code", "") or "") if subject else "",
         "topic": session.topic.name,
-        "subject": session.topic.subject.name if session.topic.subject_id else "",
         "exam_name": f"{session.topic.name} ({session.get_difficulty_display()})",
     }
     if answer:
@@ -237,14 +294,35 @@ def tutor_history_payload(session: ReviewSession, *, answer_id: int | None = Non
 
     messages = []
     if active_answer_id:
-        answer = Answer.objects.filter(pk=active_answer_id, session=session).select_related("question").first()
+        answer = (
+            Answer.objects.filter(pk=active_answer_id, session=session)
+            .select_related(
+                "question",
+                "selected_choice",
+                "question__topic",
+                "question__topic__subject",
+            )
+            .first()
+        )
         if answer:
             conversation = TutorConversation.objects.filter(
                 student=session.student,
                 question=answer.question,
             ).first()
             if conversation:
-                messages = conversation_messages_payload(conversation)
+                subject = (
+                    answer.question.topic.subject
+                    if answer.question.topic_id
+                    and answer.question.topic.subject_id
+                    else None
+                )
+                messages = conversation_messages_payload(
+                    conversation,
+                    subject_code=(getattr(subject, "code", "") or ""),
+                    history_note=_concept_history_note(
+                        session.student, answer.question
+                    ),
+                )
 
     return {
         "messages": messages,
@@ -359,6 +437,161 @@ def _looks_like_math_line(text: str) -> bool:
     return False
 
 
+MAX_TABLE_COLUMNS = 6
+MAX_TABLE_ROWS = 20
+
+
+def _normalize_table_block(block: dict) -> dict | None:
+    """Validate a text table block; None when malformed."""
+    headers_raw = block.get("headers")
+    rows_raw = block.get("rows")
+    if not isinstance(headers_raw, list) or not isinstance(rows_raw, list):
+        return None
+    headers = [
+        str(value).strip() if value is not None else "" for value in headers_raw
+    ]
+    if not 2 <= len(headers) <= MAX_TABLE_COLUMNS:
+        return None
+    if any(not header for header in headers):
+        return None
+    rows: list[list[str]] = []
+    for row in rows_raw[:MAX_TABLE_ROWS]:
+        if not isinstance(row, list) or len(row) != len(headers):
+            continue
+        cells = [
+            str(cell).strip() if cell is not None else "" for cell in row
+        ]
+        if not any(cells):
+            continue
+        rows.append(cells)
+    if not rows:
+        return None
+    return {"kind": "table", "headers": headers, "rows": rows}
+
+
+def _normalize_text_blocks(blocks: Any) -> list[dict]:
+    """Return cleaned text blocks; empty list when the shape is invalid."""
+    if not isinstance(blocks, list):
+        return []
+    cleaned: list[dict] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("kind")
+        if kind == "paragraph":
+            text = str(block.get("text") or "").strip()
+            if text:
+                cleaned.append({"kind": "paragraph", "text": text})
+        elif kind == "list":
+            items = block.get("items")
+            items = [
+                str(item).strip()
+                for item in items
+                if str(item or "").strip()
+            ] if isinstance(items, list) else []
+            if items:
+                cleaned.append({"kind": "list", "items": items})
+        elif kind == "table":
+            table = _normalize_table_block(block)
+            if table:
+                cleaned.append(table)
+        elif kind == "math":
+            latex = str(block.get("latex") or "").strip()
+            if latex:
+                cleaned.append({"kind": "math", "latex": latex})
+    return cleaned
+
+
+def _blocks_plain_text(blocks: list[dict]) -> str:
+    """Plain-text fallback for a normalized blocks list (math is skipped)."""
+    parts: list[str] = []
+    for block in blocks:
+        kind = block.get("kind")
+        if kind == "math":
+            continue
+        if kind == "list":
+            parts.extend(str(item) for item in (block.get("items") or []) if item)
+        elif kind == "table":
+            headers = block.get("headers") or []
+            if headers:
+                parts.append(" | ".join(str(item) for item in headers))
+            for row in block.get("rows") or []:
+                parts.append(" | ".join(str(cell) for cell in row))
+        else:
+            parts.append(str(block.get("text") or "").strip())
+    parts = [p for p in parts if p]
+    return "\n".join(parts)
+
+
+def _parse_concept_check(data: dict) -> dict | None:
+    """Validate and normalize a concept_check reply; None when malformed."""
+    options_raw = data.get("options")
+    if not isinstance(options_raw, list) or not options_raw:
+        return None
+    options: list[dict] = []
+    for option in options_raw:
+        if not isinstance(option, dict):
+            return None
+        option_id = str(option.get("id") or "").strip()
+        if not option_id:
+            return None
+        normalized = {
+            "id": option_id,
+            "fits": bool(option.get("fits")),
+            "reason": str(option.get("reason") or "").strip(),
+        }
+        option_text = str(option.get("text") or "").strip()
+        if option_text:
+            normalized["text"] = option_text
+        option_tag = str(option.get("tag") or "").strip()
+        if option_tag:
+            normalized["tag"] = option_tag
+        options.append(normalized)
+    correct = str(data.get("correct") or "").strip()
+    if not correct:
+        return None
+    symbolic_raw = data.get("symbolic")
+    if isinstance(symbolic_raw, dict) and str(symbolic_raw.get("latex") or "").strip():
+        symbolic = {
+            "latex": str(symbolic_raw.get("latex")).strip(),
+            "explain": str(symbolic_raw.get("explain") or "").strip(),
+        }
+    else:
+        symbolic = None
+    follow_ups_raw = data.get("follow_ups")
+    follow_ups = (
+        [str(value).strip() for value in follow_ups_raw if str(value or "").strip()]
+        if isinstance(follow_ups_raw, list)
+        else []
+    )
+    return {
+        "type": "concept_check",
+        "student_pick": str(data.get("student_pick") or "").strip() or None,
+        "correct": correct,
+        "mistake": str(data.get("mistake") or "").strip() or None,
+        "rule": str(data.get("rule") or "").strip(),
+        "options": options,
+        "symbolic": symbolic,
+        "quick_check": str(data.get("quick_check") or "").strip() or None,
+        "remember": str(data.get("remember") or "").strip() or None,
+        "follow_ups": follow_ups,
+    }
+
+
+def _validate_solution_steps(steps: list) -> bool:
+    """Solution steps must be dicts; any latex field must be a list of strings."""
+    for step in steps:
+        if not isinstance(step, dict):
+            return False
+        latex = step.get("latex")
+        if latex is not None:
+            if not isinstance(latex, list):
+                return False
+            if not all(isinstance(line, str) for line in latex):
+                return False
+    return True
+
+
 def parse_tutor_structured_reply(reply: str) -> dict | None:
     """Extract structured tutor JSON from a model reply, if present."""
     import re
@@ -384,23 +617,96 @@ def parse_tutor_structured_reply(reply: str) -> dict | None:
         return coerce_plain_solution(text)
 
     response_type = data.get("type")
-    if response_type == "text":
-        content = (data.get("content") or "").strip()
-        if not content:
-            return None
-        return {"type": "text", "content": content}
+
+    if response_type == "concept_check":
+        return _parse_concept_check(data) or coerce_plain_solution(text)
 
     steps = data.get("steps")
     if steps is not None and not isinstance(steps, list):
         return None
 
     if response_type == "solution" or (steps and len(steps) > 0):
-        return {
+        if not _validate_solution_steps(steps or []):
+            return coerce_plain_solution(text)
+        steps = steps or []
+        answer = data.get("answer") or ""
+        # Legacy redirect replies used a single prose step with no math and
+        # no answer; treat those as plain text so history keeps rendering.
+        if (
+            len(steps) == 1
+            and not steps[0].get("equations")
+            and not steps[0].get("latex")
+            and not str(answer or "").strip()
+        ):
+            content = _blocks_plain_text(
+                [
+                    {
+                        "kind": "paragraph",
+                        "text": "\n".join(
+                            part
+                            for part in (
+                                str(steps[0].get("title") or ""),
+                                str(steps[0].get("operation") or ""),
+                                str(steps[0].get("note") or ""),
+                                str(steps[0].get("why") or ""),
+                            )
+                            if part.strip()
+                        ),
+                    }
+                ]
+            )
+            if content:
+                return {"type": "text", "content": content}
+        result: dict = {
             "type": "solution",
-            "steps": steps or [],
-            "answer": data.get("answer") or "",
+            "steps": steps,
+            "answer": answer,
             "chart": data.get("chart"),
         }
+        check = data.get("check")
+        if isinstance(check, str) and check.strip():
+            result["check"] = check.strip()
+        follow_ups_raw = data.get("follow_ups")
+        if isinstance(follow_ups_raw, list):
+            follow_ups = [
+                str(value).strip()
+                for value in follow_ups_raw
+                if str(value or "").strip()
+            ]
+            if follow_ups:
+                result["follow_ups"] = follow_ups
+        return result
+
+    blocks = _normalize_text_blocks(data.get("blocks"))
+    content = (data.get("content") or "").strip()
+    follow_ups_raw = data.get("follow_ups")
+    follow_ups = (
+        [str(value).strip() for value in follow_ups_raw if str(value or "").strip()]
+        if isinstance(follow_ups_raw, list)
+        else []
+    )
+    remember = str(data.get("remember") or "").strip()
+    if response_type == "text" or blocks:
+        if blocks:
+            result = {
+                "type": "text",
+                "content": content or _blocks_plain_text(blocks),
+                "blocks": blocks,
+            }
+            if follow_ups:
+                result["follow_ups"] = follow_ups
+            if remember:
+                result["remember"] = remember
+            return result
+        if content:
+            result = {"type": "text", "content": content}
+            if follow_ups:
+                result["follow_ups"] = follow_ups
+            if remember:
+                result["remember"] = remember
+            return result
+        if response_type == "text":
+            return None
 
     content = (data.get("content") or data.get("answer") or "").strip()
     if content:
@@ -421,7 +727,16 @@ def process_tutor_chat(
 
     answer = None
     if answer_id:
-        answer = Answer.objects.filter(pk=answer_id, session=session).select_related("question").first()
+        answer = (
+            Answer.objects.filter(pk=answer_id, session=session)
+            .select_related(
+                "question",
+                "selected_choice",
+                "question__topic",
+                "question__topic__subject",
+            )
+            .first()
+        )
     if not answer:
         return {"error": "Select a question to discuss."}
 
@@ -454,6 +769,13 @@ def process_tutor_chat(
     )
 
     structured = parse_tutor_structured_reply(reply)
+    subject_code = (question_context.get("subject_code") or "").strip()
+    if structured and subject_code:
+        structured["subject_code"] = subject_code
+    if structured and structured.get("type") == "concept_check":
+        history_note = _concept_history_note(session.student, answer.question)
+        if history_note:
+            structured["history_note"] = history_note
     assistant_msg = TutorMessage.objects.create(
         conversation=conversation,
         role=TutorMessage.Role.ASSISTANT,

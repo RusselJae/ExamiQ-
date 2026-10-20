@@ -5,6 +5,36 @@
 (function () {
     "use strict";
 
+    /**
+     * Options are read from the DOM on every access so callers can add or
+     * remove entries (pending uploads, freshly saved material) after the
+     * widget has been bound.
+     */
+    function optionNodes(root) {
+        const list = root && root.querySelector(".searchable-select__list");
+        if (!list) return [];
+        return Array.prototype.slice.call(
+            list.querySelectorAll(".searchable-select__option[data-value]")
+        );
+    }
+
+    /**
+     * Group headings ("Saved material", "New uploads") hide themselves when
+     * every option they belong to has been filtered out.
+     */
+    function updateGroupLabels(root) {
+        const list = root && root.querySelector(".searchable-select__list");
+        if (!list) return;
+        list.querySelectorAll(".searchable-select__group-label").forEach(function (label) {
+            const group = label.getAttribute("data-group");
+            if (!group) return;
+            const visible = list.querySelectorAll(
+                '.searchable-select__option[data-group="' + group + '"]:not(.hidden)'
+            ).length;
+            label.classList.toggle("hidden", visible === 0);
+        });
+    }
+
     function initOne(root) {
         if (!root || root.dataset.bound === "1") return;
         root.dataset.bound = "1";
@@ -17,9 +47,6 @@
         const hidden = root.querySelector('input[type="hidden"]');
         if (!trigger || !panel || !list || !hidden) return;
 
-        const options = Array.prototype.slice.call(
-            list.querySelectorAll(".searchable-select__option[data-value]")
-        );
         let activeIndex = -1;
 
         function setOpen(open) {
@@ -34,7 +61,7 @@
         }
 
         function visibleOptions() {
-            return options.filter(function (opt) {
+            return optionNodes(root).filter(function (opt) {
                 return !opt.classList.contains("hidden") && !opt.classList.contains("is-empty");
             });
         }
@@ -42,7 +69,7 @@
         function setActive(index) {
             const vis = visibleOptions();
             activeIndex = index;
-            options.forEach(function (opt) {
+            optionNodes(root).forEach(function (opt) {
                 opt.classList.remove("is-active");
             });
             if (activeIndex >= 0 && activeIndex < vis.length) {
@@ -54,7 +81,7 @@
         function filterOptions(query) {
             const q = String(query || "").trim().toLowerCase();
             let shown = 0;
-            options.forEach(function (opt) {
+            optionNodes(root).forEach(function (opt) {
                 if (opt.classList.contains("is-empty")) return;
                 const hay = (opt.dataset.search || opt.textContent || "").toLowerCase();
                 const match = !q || hay.indexOf(q) !== -1;
@@ -69,6 +96,7 @@
                 list.appendChild(empty);
             }
             empty.classList.toggle("hidden", shown > 0);
+            updateGroupLabels(root);
             setActive(shown ? 0 : -1);
         }
 
@@ -81,7 +109,7 @@
                 valueEl.textContent = label;
                 valueEl.classList.toggle("is-placeholder", !value);
             }
-            options.forEach(function (o) {
+            optionNodes(root).forEach(function (o) {
                 o.classList.toggle("is-selected", o === opt);
             });
             setOpen(false);
@@ -135,13 +163,44 @@
         });
     }
 
+    /**
+     * Set the widget's value from code (e.g. after an upload was promoted to
+     * a saved module). The label falls back to the matching option's label and
+     * then to the root's `data-placeholder` for an empty value.
+     */
+    function setValue(root, value, label) {
+        if (!root) return;
+        const hidden = root.querySelector('input[type="hidden"]');
+        const valueEl = root.querySelector(".searchable-select__value");
+        const next = value == null ? "" : String(value);
+
+        let text = label;
+        if (text == null) {
+            const match = optionNodes(root).filter(function (opt) {
+                return String(opt.dataset.value || "") === next;
+            })[0];
+            text = match ? match.dataset.label || match.textContent.trim() : "";
+        }
+
+        if (hidden) hidden.value = next;
+        if (valueEl) {
+            const placeholder = root.dataset.placeholder || "";
+            valueEl.textContent = next ? text : placeholder;
+            valueEl.classList.toggle("is-placeholder", !next);
+        }
+        optionNodes(root).forEach(function (opt) {
+            opt.classList.toggle("is-selected", String(opt.dataset.value || "") === next);
+        });
+        updateGroupLabels(root);
+    }
+
     function initAll(scope) {
         (scope || document)
             .querySelectorAll("[data-searchable-select]")
             .forEach(initOne);
     }
 
-    window.ExamiQSearchableSelect = { init: initAll };
+    window.ExamiQSearchableSelect = { init: initAll, setValue: setValue };
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () {

@@ -138,6 +138,7 @@ class OllamaQuestionGenerator(QuestionGenerator):
         reference_stem: str = "",
         source_material: str = "",
         question_type: str = "mcq",
+        exclude_stems: list[str] | None = None,
     ):
         if topic is None:
             return []
@@ -149,6 +150,7 @@ class OllamaQuestionGenerator(QuestionGenerator):
             reference_stem,
             source_material=source_material,
             question_type=question_type,
+            exclude_stems=exclude_stems,
         )
         token_budgets = [max_tokens, min(max_tokens * 2, 4096)]
         last_raw = ""

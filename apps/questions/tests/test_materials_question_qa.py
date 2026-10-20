@@ -99,7 +99,11 @@ class TestMaterialsHubAndUpload:
         assert doc.subject_id == subject.pk
         assert doc.original_name == "hub-notes.txt"
 
-    def test_upload_accepts_subject_and_original_name(self, client, professor, subject):
+    def test_upload_accepts_subject_and_original_name(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program"])
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         upload = SimpleUploadedFile(
@@ -124,7 +128,11 @@ class TestMaterialsHubAndUpload:
         assert doc.original_name == "algebra-notes.txt"
         assert doc.title == "Algebra notes"
 
-    def test_detail_updates_filename_and_subject(self, client, professor, subject):
+    def test_detail_updates_filename_and_subject(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program"])
         course = get_or_create_catalog_course(professor, subject)
         doc = LearningDocument.objects.create(
             course_id=course.pk,

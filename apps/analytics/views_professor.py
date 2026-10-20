@@ -8,6 +8,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.ai.factory import get_ai_provider_label, get_curriculum_advisor, is_ai_configured
 from apps.analytics.services import (
+    DONUT_PERIOD_CHOICES,
     _course_answers,
     _peer_accuracy_for_answers,
     _section_answers,
@@ -23,6 +24,7 @@ from apps.analytics.services import (
     professor_overview_summary,
     professor_overview_course_cards,
     professor_confidence_donut,
+    professor_donut_sections,
     professor_overview_trends,
     section_heatmap_subjects,
     section_performance_summary,
@@ -91,9 +93,14 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         context["overview"] = professor_overview_summary(self.request.user)
         context["overview_trends"] = professor_overview_trends(self.request.user)
         context["overview_donut"] = professor_confidence_donut(
-            self.request.user, period=self.request.GET.get("donut_period")
+            self.request.user,
+            period=self.request.GET.get("donut_period"),
+            section=self.request.GET.get("donut_section"),
         )
         context["donut_period"] = context["overview_donut"]["period"]
+        context["donut_period_choices"] = DONUT_PERIOD_CHOICES
+        context["donut_section"] = context["overview_donut"].get("section", "")
+        context["donut_sections"] = professor_donut_sections(self.request.user)
         return context
 
 
@@ -314,12 +321,17 @@ class ProfessorStudentDetailView(ProfessorRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         professor = self.request.user
-        summary = student_professor_summary(self.object, professor)
+        summary = student_professor_summary(
+            self.object, professor, period=self.request.GET.get("donut_period")
+        )
         peer_answers = Answer.objects.filter(session__course__professor=professor)
         peer_accuracy = _peer_accuracy_for_answers(peer_answers)
 
         context["summary"] = summary
         context["detail_scope"] = "professor"
+        donut = summary.get("dashboard_trends", {}).get("donut") or {}
+        context["donut_period"] = donut.get("period", "all")
+        context["donut_period_choices"] = DONUT_PERIOD_CHOICES
 
         if summary["accuracy"] < peer_accuracy and summary["total_answers"]:
             context["accuracy_subtext"] = "Below class average"

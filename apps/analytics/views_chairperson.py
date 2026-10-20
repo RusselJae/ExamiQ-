@@ -1,17 +1,15 @@
-from django.contrib import messages
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Q
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse
 from django.views import View
-from django.views.generic import DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import ListView, TemplateView
 
 from apps.analytics.confidence import confidence_accuracy_matrix
 from apps.analytics.models import MistakeRecord
-from apps.analytics.services import department_math_analytics, program_performance_summary
+from apps.analytics.services import (
+    department_math_analytics,
+    program_performance_summary,
+)
 from apps.core.filtering import (
-    STANDARD_DATE_SORT_FILTER_SPECS,
-    apply_date_range,
     apply_sort,
     build_filter_fields,
     get_filter_param,
@@ -21,7 +19,11 @@ from apps.core.mixins import ChairpersonRequiredMixin
 from apps.questions.models import Subject
 from apps.research.models import SurveyResponse
 from apps.reviews.models import Answer, ReviewSession
-from apps.users.constants import PROGRAM_DEFINITIONS, home_programs_for_department, students_in_department
+from apps.users.constants import (
+    PROGRAM_DEFINITIONS,
+    home_programs_for_department,
+    students_in_department,
+)
 from apps.users.models import Course, Program, ProgramSection, User
 
 
@@ -31,24 +33,23 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         department = self.request.user.department
-        dept_slugs = set(home_programs_for_department(department)) if department else set()
+        dept_slugs = (
+            set(home_programs_for_department(department)) if department else set()
+        )
         programs = Program.objects.all().order_by("name")
         if department:
-            programs = programs.filter(slug__in=dept_slugs) if dept_slugs else programs.filter(
-                managing_department=department
+            programs = (
+                programs.filter(slug__in=dept_slugs)
+                if dept_slugs
+                else programs.filter(managing_department=department)
             )
         summaries = [
-            program_performance_summary(program, department=department) for program in programs
+            program_performance_summary(program, department=department)
+            for program in programs
         ]
         for summary in summaries:
             summary["has_activity"] = summary["total_answers"] > 0
         context["program_summaries"] = summaries
-        context["dashboard_stats"] = {
-            "program_count": len(summaries),
-            "with_activity": sum(1 for row in summaries if row["has_activity"]),
-            "total_sessions": sum(row["sessions_completed"] for row in summaries),
-            "total_answers": sum(row["total_answers"] for row in summaries),
-        }
         context["management_stats"] = {
             "pending_count": User.objects.filter(
                 role=User.Role.PROFESSOR,
@@ -65,8 +66,7 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
             ).count(),
         }
         context["all_programs"] = [
-            {"slug": slug, "name": name}
-            for slug, name, _dept in PROGRAM_DEFINITIONS
+            {"slug": slug, "name": name} for slug, name, _dept in PROGRAM_DEFINITIONS
         ]
         context["department"] = department
         return context
@@ -90,7 +90,9 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
     def get_queryset(self):
         department = self.request.user.department
         if department:
-            student_ids = students_in_department(department).values_list("pk", flat=True)
+            student_ids = students_in_department(department).values_list(
+                "pk", flat=True
+            )
         else:
             student_ids = User.objects.filter(role=User.Role.STUDENT).values_list(
                 "pk", flat=True
@@ -162,7 +164,9 @@ class CourseAuditView(ChairpersonRequiredMixin, ListView):
                     "type": "select",
                     "name": "program",
                     "label": "Program",
-                    "choices": [(str(program.pk), program.name) for program in programs],
+                    "choices": [
+                        (str(program.pk), program.name) for program in programs
+                    ],
                 },
                 {
                     "type": "select",
@@ -199,7 +203,9 @@ class ResearchDataExportView(ChairpersonRequiredMixin, View):
         else:
             students = User.objects.filter(role=User.Role.STUDENT)
         response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="examiq_research_export.csv"'
+        response["Content-Disposition"] = (
+            'attachment; filename="examiq_research_export.csv"'
+        )
         writer = csv.writer(response)
         writer.writerow(
             [
@@ -244,7 +250,9 @@ class ResearchDataExportView(ChairpersonRequiredMixin, View):
                 student=student, survey_type=SurveyResponse.SurveyType.POST
             ).first()
 
-            student_hash = hashlib.sha256(f"examiq-research-{student.pk}".encode()).hexdigest()[:16]
+            student_hash = hashlib.sha256(
+                f"examiq-research-{student.pk}".encode()
+            ).hexdigest()[:16]
             writer.writerow(
                 [
                     student_hash,

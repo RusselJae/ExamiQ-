@@ -11,13 +11,13 @@
     }
 
     function katexRender(el) {
-        if (typeof window.renderMathInElement !== "undefined" && el) {
-            window.renderMathInElement(el, {
-                delimiters: [
-                    { left: "$$", right: "$$", display: true },
-                    { left: "$", right: "$", display: false },
-                ],
-            });
+        if (
+            typeof window.renderMathInElement !== "undefined" &&
+            el &&
+            window.ExamiQKatex &&
+            window.ExamiQKatex.options
+        ) {
+            window.renderMathInElement(el, window.ExamiQKatex.options);
         }
     }
 
@@ -170,17 +170,25 @@
                         why: "",
                     };
                 }
+                // New schema: raw "latex" list (\\hl-marked), no $ delimiters.
+                var latexList =
+                    Array.isArray(step.latex) && step.latex.length
+                        ? step.latex.map(String)
+                        : null;
                 return {
                     title: actionTitle(step.title, "Continue"),
                     operation: step.operation || "",
-                    equations: Array.isArray(step.equations)
-                        ? step.equations
-                        : step.equation
-                          ? [step.equation]
-                          : [],
+                    equations: latexList
+                        ? latexList
+                        : Array.isArray(step.equations)
+                          ? step.equations
+                          : step.equation
+                            ? [step.equation]
+                            : [],
                     highlight: step.highlight || "",
-                    note: step.note || "",
+                    note: step.note || step.explain || "",
                     why: step.why || "",
+                    fromLatex: !!latexList,
                 };
             });
         }
@@ -196,6 +204,14 @@
         return t;
     }
 
+    function prepareLatexField(text) {
+        // New-schema raw LaTeX: wrap in $...$ unless already delimited.
+        var t = String(text || "").trim();
+        if (!t) return "";
+        if (!/^\$/.test(t)) t = "$" + t + "$";
+        return escapeHtml(t);
+    }
+
     function looksLikeMathLine(text) {
         var t = String(text || "").trim();
         if (!t) return false;
@@ -206,6 +222,22 @@
         if (/[=+\-×÷^√≤≥≠≈]/.test(t) && /[0-9a-zA-Z]/.test(t)) return true;
         if (/[0-9]/.test(t) && /[=+\-]/.test(t) && !/[.!?]{2,}/.test(t)) return true;
         return false;
+    }
+
+    function looksLikeMathAnswer(text) {
+        // Decide whether an answer should be typeset as math. Prose answers
+        // (for example MCQ option text) must stay plain: KaTeX would drop
+        // every space between words.
+        var t = String(text || "").trim();
+        if (!t) return false;
+        // Delimited math is fine; inline math inside prose is left to the
+        // auto-renderer so the surrounding words keep their spacing.
+        if (/\$/.test(t)) return /^\s*\$\$?/.test(t);
+        if (/\\[a-zA-Z]/.test(t)) return true;
+        var longWords = (t.match(/[A-Za-z]{2,}/g) || []).length;
+        if (longWords > 1) return false;
+        if (/[=<>≤≥≠≈^_+\-×÷√∧∨¬→↔]/.test(t)) return true;
+        return /^\d+(\.\d+)?$/.test(t) || t.length === 1;
     }
 
     function shortTitle(text, fallback) {
@@ -459,14 +491,62 @@
                 highlight: step.highlight || "",
                 note: step.note || "",
                 why: step.why || "",
+                fromLatex: step.fromLatex || false,
             });
         });
         return cleaned;
     }
 
     function plainTutorText(structured, raw) {
-        if (structured && structured.type === "text" && structured.content) {
-            return stripLatexDecorations(structured.content);
+        if (structured && structured.type === "text") {
+            var blocks = Array.isArray(structured.blocks) ? structured.blocks : [];
+            if (blocks.length) {
+                var blockParts = [];
+                blocks.forEach(function (block) {
+                    if (!block || typeof block !== "object") return;
+                    if (block.kind === "list" && Array.isArray(block.items)) {
+                        block.items.forEach(function (item) {
+                            var itemText = String(item || "").trim();
+                            if (itemText) blockParts.push("• " + itemText);
+                        });
+                        return;
+                    }
+                    if (block.kind === "table") {
+                        var headers = Array.isArray(block.headers)
+                            ? block.headers
+                            : [];
+                        if (headers.length) {
+                            blockParts.push(
+                                headers
+                                    .map(function (header) {
+                                        return String(header || "").trim();
+                                    })
+                                    .join(" | ")
+                            );
+                        }
+                        (Array.isArray(block.rows) ? block.rows : []).forEach(
+                            function (row) {
+                                if (!Array.isArray(row)) return;
+                                var cells = row.map(function (cell) {
+                                    return String(cell == null ? "" : cell).trim();
+                                });
+                                if (cells.some(Boolean)) {
+                                    blockParts.push(cells.join(" | "));
+                                }
+                            }
+                        );
+                        return;
+                    }
+                    var text = String(block.text || "").trim();
+                    if (text) blockParts.push(text);
+                });
+                if (blockParts.length) {
+                    return stripLatexDecorations(blockParts.join("\n\n"));
+                }
+            }
+            if (structured.content) {
+                return stripLatexDecorations(structured.content);
+            }
         }
         var parts = [];
         if (structured) {
@@ -511,7 +591,7 @@
         if (data.type === "text") {
             return false;
         }
-        if (data.type === "solution") {
+        if (data.type === "solution" || data.type === "concept_check") {
             return true;
         }
         return !!(data.steps && data.steps.length);
@@ -548,11 +628,267 @@
         return index === total - 1 && total > 1 && /substitut|verify|makes sense/.test(title);
     }
 
+    function quickCheckChoices(text) {
+        // Derive two answer chips from a quick-check question like
+        // "Is it simple or compound?" — last "X or Y?" wins.
+        var t = String(text || "").trim();
+        var idx = t.toLowerCase().lastIndexOf(" or ");
+        if (idx === -1) return [];
+        var head = t.slice(0, idx).trim();
+        var tail = t.slice(idx + 4).replace(/[?.!,;:]+$/, "").trim();
+        var leftMatch = head.match(/([A-Za-z][\w-]*)\s*$/);
+        var rightMatch = tail.match(/^([A-Za-z][\w-]*)/);
+        if (!leftMatch || !rightMatch) return [];
+        var left = leftMatch[1].toLowerCase();
+        var right = rightMatch[1].toLowerCase();
+        if (left === right) return [];
+        return [left, right];
+    }
+
+    function capitalizeChoice(text) {
+        var t = String(text || "");
+        return t.charAt(0).toUpperCase() + t.slice(1);
+    }
+
+    function findOption(options, id) {
+        var target = String(id || "").trim();
+        for (var i = 0; i < options.length; i += 1) {
+            if (String(options[i].id || "").trim() === target) return options[i];
+        }
+        return null;
+    }
+
+    function isSymbolicExplainMath(text) {
+        var t = String(text || "").trim();
+        if (!t) return false;
+        if (/\\[a-zA-Z]/.test(t)) return true;
+        return /^[A-Za-z]\s*=/.test(t) && t.length <= 80;
+    }
+
+    function renderConceptCheck(host, structured) {
+        if (!host) return null;
+        host.innerHTML = "";
+        host.classList.add("tutor-visual-root", "tutor-check-root");
+
+        var wrap = document.createElement("div");
+        wrap.className = "tutor-check";
+
+        var options = Array.isArray(structured && structured.options)
+            ? structured.options.filter(function (option) {
+                  return (
+                      option &&
+                      typeof option === "object" &&
+                      String(option.id || "").trim()
+                  );
+              })
+            : [];
+        var correctId = String((structured && structured.correct) || "").trim();
+        var pickId = String((structured && structured.student_pick) || "").trim();
+        var correctOption = findOption(options, correctId);
+        var html = "";
+
+        if (correctId) {
+            var answerText = correctOption
+                ? String(correctOption.text || "").trim()
+                : "";
+            html +=
+                '<div class="tutor-check__answer">' +
+                '<span class="tutor-check__answer-label">Correct answer:</span> ' +
+                '<span class="tutor-check__answer-value">' +
+                "<strong>" +
+                escapeHtml(correctId + ".") +
+                "</strong>" +
+                (answerText ? " " + escapeHtml(answerText) : "") +
+                "</span></div>";
+        }
+
+        var mistake = String((structured && structured.mistake) || "").trim();
+        if (mistake) {
+            var mistakeTitle = pickId
+                ? "Why " + pickId + " doesn\u2019t fit."
+                : "Why it doesn\u2019t fit.";
+            html +=
+                '<div class="tutor-check__mistake">' +
+                '<p class="tutor-check__mistake-title">' +
+                escapeHtml(mistakeTitle) +
+                "</p>" +
+                '<p class="tutor-check__mistake-text">' +
+                escapeHtml(mistake) +
+                "</p></div>";
+        }
+
+        var rule = String((structured && structured.rule) || "").trim();
+        if (rule) {
+            html +=
+                '<section class="tutor-check__section">' +
+                '<h4 class="tutor-check__heading">The test</h4>' +
+                '<p class="tutor-check__rule">' +
+                escapeHtml(rule) +
+                "</p></section>";
+        }
+
+        if (options.length) {
+            html +=
+                '<section class="tutor-check__section">' +
+                '<h4 class="tutor-check__heading">Check each option</h4>' +
+                '<ul class="tutor-check__options">';
+            options.forEach(function (option) {
+                var id = String(option.id || "").trim();
+                var isCorrect = id === correctId;
+                var isPick = id === pickId && !isCorrect;
+                var optionText = String(option.text || "").trim();
+                var reason = String(option.reason || "").trim();
+                var tag = String(option.tag || "").trim();
+                if (!tag) tag = option.fits === false ? "Doesn't fit" : "Fits";
+                var rowClass =
+                    "tutor-check-option" +
+                    (isCorrect ? " tutor-check-option--correct" : "") +
+                    (isPick ? " tutor-check-option--picked" : "");
+                html +=
+                    '<li class="' +
+                    rowClass +
+                    '">' +
+                    '<span class="tutor-check-option__id" aria-hidden="true">' +
+                    escapeHtml(id) +
+                    "</span>" +
+                    '<span class="tutor-check-option__main">' +
+                    '<span class="tutor-check-option__text">' +
+                    escapeHtml(optionText) +
+                    (isPick
+                        ? '<span class="tutor-check-tag tutor-check-tag--picked">Your pick</span>'
+                        : "") +
+                    "</span>" +
+                    (reason
+                        ? '<span class="tutor-check-option__reason">' +
+                          escapeHtml(reason) +
+                          "</span>"
+                        : "") +
+                    "</span>" +
+                    '<span class="tutor-check-tag tutor-check-tag--type' +
+                    (isCorrect ? " tutor-check-tag--correct-type" : "") +
+                    '">' +
+                    escapeHtml(tag) +
+                    "</span>" +
+                    "</li>";
+            });
+            html += "</ul></section>";
+        }
+
+        var symbolic = structured && structured.symbolic;
+        var symbolicLatex = String((symbolic && symbolic.latex) || "").trim();
+        if (symbolicLatex) {
+            var symbolicExplain = String(
+                (symbolic && symbolic.explain) || ""
+            ).trim();
+            var symbolicLabel =
+                correctId && correctId.length <= 2
+                    ? "Write " + correctId + " symbolically"
+                    : "Symbolic form";
+            var symbolicLines = symbolicLatex
+                .split(/\n+/)
+                .map(function (line) {
+                    return line.trim();
+                })
+                .filter(Boolean)
+                .map(function (line) {
+                    return (
+                        '<div class="tutor-check__symbolic-math examiq-math-block">' +
+                        prepareLatexField(line) +
+                        "</div>"
+                    );
+                })
+                .join("");
+            html +=
+                '<section class="tutor-check__section tutor-check__symbolic">' +
+                '<p class="tutor-check__symbolic-label">' +
+                escapeHtml(symbolicLabel) +
+                "</p>" +
+                symbolicLines +
+                (symbolicExplain
+                    ? '<p class="tutor-check__symbolic-explain' +
+                      (isSymbolicExplainMath(symbolicExplain)
+                          ? " examiq-math-block"
+                          : "") +
+                      '">' +
+                      (isSymbolicExplainMath(symbolicExplain)
+                          ? prepareMathField(symbolicExplain, "equation")
+                          : escapeHtml(symbolicExplain)) +
+                      "</p>"
+                    : "") +
+                "</section>";
+        }
+
+        var quickCheck = String((structured && structured.quick_check) || "").trim();
+        if (quickCheck) {
+            var choices = quickCheckChoices(quickCheck);
+            html +=
+                '<div class="tutor-check__quick">' +
+                '<p class="tutor-check__quick-label">Quick check</p>' +
+                '<p class="tutor-check__quick-text">' +
+                escapeHtml(quickCheck) +
+                "</p>";
+            if (choices.length === 2) {
+                html +=
+                    '<div class="tutor-check__choices">' +
+                    choices
+                        .map(function (choice) {
+                            return (
+                                '<button type="button" class="tutor-check__choice" data-tutor-choice="' +
+                                escapeHtml(choice) +
+                                '">' +
+                                escapeHtml(capitalizeChoice(choice)) +
+                                "</button>"
+                            );
+                        })
+                        .join("") +
+                    "</div>";
+            }
+            html += "</div>";
+        }
+
+        var remember = String((structured && structured.remember) || "").trim();
+        if (remember) {
+            html +=
+                '<p class="tutor-check__remember">' +
+                '<span class="tutor-check__remember-label">Remember</span> ' +
+                escapeHtml(remember) +
+                "</p>";
+        }
+
+        var historyNote = String(
+            (structured && structured.history_note) || ""
+        ).trim();
+        if (historyNote) {
+            html +=
+                '<p class="tutor-check__history">' +
+                escapeHtml(historyNote) +
+                "</p>";
+        }
+
+        var subjectCode = String(
+            (structured && structured.subject_code) || ""
+        ).trim();
+        if (subjectCode) {
+            html +=
+                '<p class="tutor-check__reference">Definitions follow the ' +
+                escapeHtml(subjectCode) +
+                " course reference.</p>";
+        }
+
+        wrap.innerHTML = html;
+        host.appendChild(wrap);
+        katexRender(host);
+        return null;
+    }
+
     function renderVisualResponse(host, options) {
         options = options || {};
         if (!host) return null;
 
         var structured = options.structured || parseStructured(options.raw);
+        if (structured && structured.type === "concept_check") {
+            return renderConceptCheck(host, structured);
+        }
         var useStructured =
             structured &&
             structured.type !== "text" &&
@@ -581,6 +917,21 @@
             (useStructured && structured && structured.answer) ||
             options.finalAnswer ||
             "";
+        var checkLine =
+            useStructured && structured && String(structured.check || "").trim()
+                ? String(structured.check).trim()
+                : "";
+        // New-schema solution: raw latex steps and/or a "check" line — the
+        // answer needs $-wrapping since the model outputs no $ delimiters.
+        var newFormat = !!(
+            useStructured &&
+            structured &&
+            (checkLine ||
+                (Array.isArray(structured.steps) &&
+                    structured.steps.some(function (step) {
+                        return step && Array.isArray(step.latex) && step.latex.length;
+                    })))
+        );
         var problem =
             options.problem ||
             (useStructured && structured && structured.problem) ||
@@ -630,13 +981,7 @@
                     '<p class="tutor-visual-problem__label">Problem</p>' +
                     '<p class="tutor-visual-problem__text examiq-math-block">' +
                     prepareMathField(String(problem).trim(), "equation") +
-                    "</p>" +
-                    '<p class="tutor-visual-problem__hint">Highlighted terms show what changed in each step.</p>';
-                problemHost.hidden = false;
-            } else if (steps.length) {
-                problemHost.innerHTML =
-                    '<p class="tutor-visual-problem__hint tutor-visual-problem__hint--solo">' +
-                    "Highlighted terms show what changed in each step.</p>";
+                    "</p>";
                 problemHost.hidden = false;
             } else {
                 problemHost.hidden = true;
@@ -648,7 +993,7 @@
             steps.slice(0, visible).forEach(function (step, index) {
                 var isLastVisible = index === visible - 1;
                 var checkLike = isCheckStep(step, index, steps.length);
-                var active = showAll ? checkLike && index === steps.length - 1 : isLastVisible;
+                var active = !showAll && isLastVisible;
                 var card = document.createElement("div");
                 card.className =
                     "tutor-visual-step" +
@@ -657,9 +1002,12 @@
 
                 var eqs = (step.equations || [])
                     .map(function (eq, eqIndex) {
-                        var mathHtml = prepareMathField(eq, "equation");
-                        // Highlight changed terms on the result line (last eq), or any matching line
-                        if (step.highlight) {
+                        var mathHtml = step.fromLatex
+                            ? prepareLatexField(eq)
+                            : prepareMathField(eq, "equation");
+                        // New-schema steps embed \\hl inside the latex already;
+                        // skip the legacy string-highlight pass for them.
+                        if (step.highlight && !step.fromLatex) {
                             mathHtml = highlightChangedTerms(mathHtml, step.highlight);
                         }
                         var row =
@@ -746,14 +1094,33 @@
 
             answerHost.innerHTML = "";
             if (answer && (!progressive || revealed >= steps.length || !steps.length)) {
+                var answerIsPlain = !looksLikeMathAnswer(answer);
+                var answerMath = answerIsPlain
+                    ? escapeHtml(answer)
+                    : newFormat
+                      ? prepareLatexField(answer)
+                      : prepareMathField(answer, "equation");
                 answerHost.innerHTML =
                     '<div class="tutor-visual-answer">' +
-                    '<span class="tutor-visual-answer__icon" aria-hidden="true">✓</span>' +
                     '<div class="tutor-visual-answer__content">' +
                     '<span class="tutor-visual-answer__label">Answer</span> ' +
-                    '<span class="tutor-visual-answer__value examiq-math-block">' +
-                    prepareMathField(answer, "equation") +
+                    '<span class="tutor-visual-answer__value examiq-math-block' +
+                    (answerIsPlain
+                        ? " tutor-visual-answer__value--text"
+                        : "") +
+                    '">' +
+                    answerMath +
                     "</span></div></div>";
+            }
+
+            if (
+                checkLine &&
+                (!progressive || revealed >= steps.length || !steps.length)
+            ) {
+                answerHost.innerHTML +=
+                    '<p class="tutor-visual-check examiq-math-block">' +
+                    prepareMathField(checkLine, "equation") +
+                    "</p>";
             }
 
             katexRender(host);
@@ -777,6 +1144,7 @@
 
     window.ExamiQUI = window.ExamiQUI || {};
     window.ExamiQUI.renderTutorVisualResponse = renderVisualResponse;
+    window.ExamiQUI.renderConceptCheck = renderConceptCheck;
     window.ExamiQUI.parseTutorStructured = parseStructured;
     window.ExamiQUI.extractFeedbackText = extractFeedbackText;
     window.ExamiQUI.parseAdaptiveFeedback = parseAdaptiveFeedback;

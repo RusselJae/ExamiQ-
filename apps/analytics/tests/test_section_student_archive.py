@@ -182,3 +182,4 @@ class TestSectionStudentArchive:
         content = response.content.decode()
         assert "Section" in content
         assert program_section.display_label in content
+        assert "data-table-wrap--scroll" in content

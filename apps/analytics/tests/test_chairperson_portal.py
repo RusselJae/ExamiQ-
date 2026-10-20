@@ -135,6 +135,9 @@ class TestChairpersonSubjects:
 
         response = client.get(reverse("analytics_chairperson:subjects"))
         assert response.status_code == 200
+        content = response.content.decode()
+        assert "lg:grid-cols-[minmax(0,1fr)_22rem]" in content
+        assert "min-w-[40rem]" in content
 
         response = client.post(
             reverse("analytics_chairperson:subjects"),
@@ -218,6 +221,19 @@ class TestChairpersonDashboard:
         assert reverse("analytics_chairperson:subjects") in content
         assert reverse("analytics_chairperson:assignments") in content
 
+    def test_dashboard_hides_program_analytics_and_course_audit(
+        self, client, chairperson
+    ):
+        """Both were dropped from the coordinator sidebar."""
+        client.force_login(chairperson)
+        content = client.get(
+            reverse("analytics_chairperson:dashboard")
+        ).content.decode()
+        program_analytics = reverse("analytics_chairperson:analytics_by_program")
+        course_audit = reverse("analytics_chairperson:course_audit")
+        assert f'href="{program_analytics}"' not in content
+        assert f'href="{course_audit}"' not in content
+
     def test_dashboard_hides_retired_panels(self, client, chairperson):
         client.force_login(chairperson)
         content = client.get(
@@ -226,3 +242,7 @@ class TestChairpersonDashboard:
         assert "Degree programs" not in content
         assert "With activity" not in content
         assert "All degree programs" not in content
+        assert "Total sessions" not in content
+        assert "Total answers" not in content
+        assert "Most sessions" not in content
+        assert "data-sessions" not in content

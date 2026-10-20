@@ -1,5 +1,6 @@
 """Stub AI service implementations (no live API calls)."""
 
+import json
 import logging
 from datetime import timedelta
 
@@ -24,6 +25,13 @@ from apps.reviews.recommendations import get_review_recommendations
 logger = logging.getLogger(__name__)
 
 _STUB_LABELS = ("B", "C", "D")
+
+
+def _stub_normalized_stem(stem: str) -> str:
+    """Case-insensitive, whitespace-collapsed stem for exclusion matching."""
+    import re
+
+    return re.sub(r"\s+", " ", (stem or "").strip().lower())
 
 
 def _stub_explanation_fields(topic_name: str, answer_hint: str) -> dict:
@@ -54,6 +62,7 @@ class StubQuestionGenerator(QuestionGenerator):
         reference_stem: str = "",
         source_material: str = "",
         question_type: str = "mcq",
+        exclude_stems: list[str] | None = None,
     ):
         from apps.ai.prompts import coerce_generate_question_type
 
@@ -109,6 +118,14 @@ class StubQuestionGenerator(QuestionGenerator):
                     ],
                     **_stub_explanation_fields(topic_name, f"choice {label}"),
                 })
+        items = [
+            item
+            for item in items
+            if _stub_normalized_stem(item.get("stem", ""))
+            not in {
+                _stub_normalized_stem(stem) for stem in (exclude_stems or [])
+            }
+        ]
         return normalize_generated_questions(items, question_type=qtype)
 
 
@@ -273,6 +290,124 @@ class StubSpacedRepetitionScheduler(SpacedRepetitionScheduler):
     pass
 
 
+def _stub_follow_ups() -> list[str]:
+    return ["Why is this the answer?", "Show another example", "What should I avoid?"]
+
+
+def _stub_text_reply(topic: str) -> str:
+    return json.dumps(
+        {
+            "type": "text",
+            "blocks": [
+                {
+                    "kind": "paragraph",
+                    "text": f"Quick tutoring notes for {topic or 'this lesson'}.",
+                },
+                {
+                    "kind": "list",
+                    "items": [
+                        "Pick an exam question to discuss.",
+                        "Ask for the rule behind any step.",
+                    ],
+                },
+                {
+                    "kind": "table",
+                    "headers": ["Action", "Why it helps"],
+                    "rows": [
+                        ["Name the rule", "Justifies each step"],
+                        ["Check the last line", "Catches sign and copy errors"],
+                    ],
+                },
+            ],
+            "remember": "Name the rule before applying it.",
+            "follow_ups": [
+                "Which question confused me?",
+                "Explain the main rule",
+                "Show an example",
+            ],
+        }
+    )
+
+
+def _stub_solution_reply(topic: str, ctx: dict) -> str:
+    return json.dumps(
+        {
+            "type": "solution",
+            "steps": [
+                {
+                    "title": f"Recall the {topic or 'topic'} rule",
+                    "latex": ["\\text{rule} : \\text{name it first}"],
+                    "explain": "Naming the rule first justifies every later line.",
+                },
+                {
+                    "title": "Apply the rule",
+                    "latex": ["\\text{apply} : \\text{term} = 2\\hl{x - 1}"],
+                    "explain": "The highlighted term is what changed after applying the rule.",
+                },
+            ],
+            "answer": (ctx.get("correct_answer") or "").strip()
+            or "\\text{value from the rule}",
+            "check": "Compare the final line back to the active question.",
+            "follow_ups": _stub_follow_ups(),
+        }
+    )
+
+
+def _stub_concept_check_reply(ctx: dict) -> str:
+    choices = [
+        choice
+        for choice in (ctx.get("choices") or [])
+        if str((choice or {}).get("id") or "").strip()
+    ]
+    correct = (ctx.get("correct_pick") or "").strip() or next(
+        (str(choice["id"]) for choice in choices), "A"
+    )
+    if choices:
+        options = [
+            {
+                "id": choice["id"],
+                "text": str(choice.get("text") or "").strip(),
+                "fits": choice["id"] == correct,
+                "reason": (
+                    "matches the defining condition in the stem"
+                    if choice["id"] == correct
+                    else "skips a condition required by the stem"
+                ),
+            }
+            for choice in choices
+        ]
+    else:
+        options = [
+            {"id": "A", "fits": False, "reason": "skips a condition required by the stem"},
+            {"id": "B", "fits": False, "reason": "confuses a different rule"},
+            {"id": "C", "fits": True, "reason": "matches the defining condition"},
+        ]
+    student_pick = (ctx.get("student_pick") or "").strip() or None
+    mistake = None
+    if student_pick and student_pick != correct:
+        mistake = (
+            f"Option {student_pick} reads one clause but skips the defining condition."
+        )
+    return json.dumps(
+        {
+            "type": "concept_check",
+            "student_pick": student_pick,
+            "correct": correct,
+            "mistake": mistake,
+            "rule": "Test each option against the defining condition in the stem.",
+            "options": options,
+            "symbolic": None,
+            "quick_check": "Does 'and' make a statement simple or compound?",
+            "remember": "Test the defining condition first.",
+            "follow_ups": [
+                f"Why is option {correct} correct?",
+                f"Why not option {student_pick}?" if student_pick else "Test one option now",
+                "State the rule again",
+            ],
+        }
+    )
+
+
 class StubTutorEngine(TutorEngine):
     def chat(
         self,
@@ -283,44 +418,22 @@ class StubTutorEngine(TutorEngine):
         exam_context: dict | None = None,
         question_context: dict | None = None,
     ) -> str:
-        import json
-
-        stem = (question_context or {}).get("stem", "")
-        if stem:
-            return json.dumps(
-                {
-                    "steps": [
-                        {
-                            "title": f"Focus on {topic}",
-                            "operation": "start from the active question",
-                            "equations": [],
-                            "highlight": "",
-                        },
-                        {
-                            "title": "Check the Solution tab",
-                            "operation": "compare your work to the worked steps",
-                            "equations": [],
-                            "highlight": "",
-                        },
-                    ],
-                    "answer": (question_context or {}).get("correct_answer") or "",
-                    "chart": None,
-                }
-            )
-        return json.dumps(
-            {
-                "steps": [
-                    {
-                        "title": f"Stay on {topic}",
-                        "operation": "pick an exam question to discuss",
-                        "equations": [],
-                        "highlight": "",
-                    }
-                ],
-                "answer": "",
-                "chart": None,
-            }
+        ctx = question_context or {}
+        if not (ctx or {}).get("stem", ""):
+            return _stub_text_reply(topic)
+        lowered = (message or "").strip().lower()
+        concept_triggers = (
+            "which",
+            "option",
+            "true or false",
+            "correct",
+            "classify",
         )
+        if any(trigger in lowered for trigger in concept_triggers) or (
+            "student_pick" in ctx
+        ):
+            return _stub_concept_check_reply(ctx)
+        return _stub_solution_reply(topic, ctx)
 
 
 class LiveTutorEngine(TutorEngine):
@@ -348,14 +461,29 @@ class LiveTutorEngine(TutorEngine):
             if settings.LLM_PROVIDER == "gemini":
                 from apps.ai.providers.gemini_client import chat_with_fallback
 
-                return chat_with_fallback(user_prompt, system=system, max_output_tokens=800).text
+                return chat_with_fallback(
+                    user_prompt,
+                    system=system,
+                    max_output_tokens=1200,
+                    json_mode=True,
+                ).text
             if settings.LLM_PROVIDER == "ollama":
                 from apps.ai.providers.ollama_client import chat_with_fallback
 
-                return chat_with_fallback(user_prompt, system=system, max_output_tokens=800).text
+                return chat_with_fallback(
+                    user_prompt,
+                    system=system,
+                    max_output_tokens=1200,
+                    json_mode=True,
+                ).text
             from apps.ai.providers.openai_provider import _chat
 
-            result = _chat(user_prompt, system=system)
+            result = _chat(
+                user_prompt,
+                system=system,
+                max_output_tokens=1200,
+                json_mode=True,
+            )
             if result:
                 return result
             raise RuntimeError("OpenAI returned empty response")

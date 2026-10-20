@@ -33,71 +33,6 @@ TUTOR_RESPONSE_STYLE = """\
 - Math with KaTeX-friendly $...$ / $$...$$ when equations help.
 - Do not add long practice-recommendation essays unless the student asks."""
 
-TUTOR_CHAT_JSON_SCHEMA = """\
-Return ONLY a JSON object (no markdown fences). Use ONE of these shapes:
-
-Text reply (conceptual / short follow-ups):
-{"type": "text", "content": "plain explanation..."}
-
-Solution reply (step-by-step solve):
-{
-  "type": "solution",
-  "problem": "optional restatement of the problem in plain text, or null",
-  "steps": [
-    {
-      "title": "Expand the brackets",
-      "operation": "multiply 3 by each term",
-      "equations": ["$3(x - 2) = 2x + 5$", "$3x - 6 = 2x + 5$"],
-      "highlight": "3x - 6",
-      "note": "optional short note under the math card, or null",
-      "why": "optional one-sentence reason shown under a Why? link, or null"
-    }
-  ],
-  "answer": "$x = 11$",
-  "chart": null
-}
-
-Optional chart (ONLY when a diagram clarifies optimization, geometry, or motion — otherwise null):
-{
-  "type": "line",
-  "title": "short chart title",
-  "points": [[0, 10], [5, 2], [10, 10]],
-  "markers": [{"x": 5, "label": "x = 5 (minimum)"}]
-}
-
-Rules for solution steps:
-- Use 3 to 6 steps, with one operation per step.
-- Write titles as actions (verbs), and never include step numbers in the text \
-(no "Step 1", "Step 2", etc.).
-- Mark exactly which terms changed on each line using "highlight" \
-(the substring that changed from the previous equation).
-- Every equation line must follow from the line before it \
-(show the before line then the after line when a transform happens).
-- End with a check step whenever the problem allows one \
-(title like "Check" or "Check it makes sense").
-- Put the short transform label in "operation" (shown beside the math); \
-do not dump paragraph prose there.
-- Put the final result in "answer" separately from scratch work.
-- Keep "title", "operation", "note", and "why" in plain English; \
-put all math in "equations" and "answer" wrapped in $...$."""
-
-TUTOR_CHAT_RULES = """\
-RULES:
-- Do NOT greet the user or introduce yourself.
-- Respond with the JSON schema only.
-- Short conceptual questions → {"type": "text", "content": "..."}.
-- Requests to solve, show steps, or show the complete solution → {"type": "solution", "steps": [...], "answer": "..."}.
-- NEVER return a plain numbered prose list for solve requests — always use type solution JSON.
-- Solution steps: 3–6 steps, action titles only (never "Step N"), one operation per step, \
-highlight changed terms, each line follows the previous, end with a check when possible.
-- When faculty / curated solution steps are provided in context, expand them into fuller \
-solution JSON (more intermediate equations, clearer why) — never drop key math or shorten them.
-- When a curated adaptive explanation is provided, weave its why / remember / worked_example \
-into a clearer, more detailed reply without inventing a different correct answer.
-- If the message is vague, tie it to the active question in the first step, then help.
-- Use $...$ / $$...$$ for math (KaTeX).
-- Do not put LaTeX commands in "title" or "operation"."""
-
 ADAPTIVE_TOPIC_RESTRICTION = """\
 ### TOPIC RESTRICTION (IMPORTANT)
 You must ONLY answer questions related to the current topic.
@@ -522,8 +457,33 @@ def build_question_generation_prompt(
     reference_stem: str = "",
     source_material: str = "",
     question_type: str = "mcq",
+    exclude_stems: list[str] | None = None,
 ) -> tuple[str, str, int]:
     """Return (system_instruction, user_prompt, max_output_tokens)."""
+    exclusion_prompt_stem_limit = 40
+
+    def _exclusion_block() -> str:
+        stems = [str(s).strip() for s in (exclude_stems or []) if str(s).strip()]
+        if not stems:
+            return ""
+        note = ""
+        if len(stems) >= exclusion_prompt_stem_limit:
+            note = (
+                f"(Showing the most recent {exclusion_prompt_stem_limit}; "
+                "avoid repeating any previously seen question.)\n"
+            )
+        numbered = "\n".join(f"{i}. {stem}" for i, stem in enumerate(stems, start=1))
+        return (
+            "### DO NOT REPEAT\n"
+            "The professor already generated and deleted these stems. Do not "
+            "reuse them,\n"
+            "closely rephrase them, or regenerate their numbers/scenario:\n"
+            f"{numbered}\n"
+            f"{note}"
+            "Create clearly different questions instead.\n\n"
+        )
+
+    exclusion_block = _exclusion_block()
     qtype = coerce_generate_question_type(question_type)
     subject = topic.subject
     label = difficulty_label(difficulty)
@@ -585,6 +545,7 @@ def build_question_generation_prompt(
         f"{guidance}\n"
         f"Reference (optional): {ref}\n\n"
         f"{material_block}"
+        f"{exclusion_block}"
         f"{extra}"
         "Include explanation_steps, solution_summary, and adaptive fields on every item.\n"
         f"JSON array schema:\n{schema}"
@@ -605,6 +566,7 @@ def build_question_generation_prompt(
             "- Must differ materially from the reference stem.\n\n"
             f"Reference question to improve upon:\n{ref}\n\n"
             f"{material_block}"
+            f"{exclusion_block}"
             f"{extra}"
             "Include explanation_steps, solution_summary, and adaptive fields on every item.\n"
             f"JSON array schema:\n{schema}"
@@ -735,19 +697,134 @@ def build_question_validation_prompt(
 # Tutor chat (legacy: ai_chat) — future student tutor UI
 # ---------------------------------------------------------------------------
 
+# NOTE: backslash forms inside the JSON examples are doubled on purpose
+# ("\\hl", "\\land") — the model must write doubled backslashes in JSON.
+# The math prose below shows single backslashes as regular LaTeX.
 TUTOR_CHAT_SYSTEM = (
-    f"You are {EXAMIQ_PERSONA}, a clear and friendly tutor for math and computer science.\n"
-    "Use KaTeX-friendly math with $...$ or $$...$$ when equations help.\n"
-    f"{TUTOR_RESPONSE_STYLE}\n{TUTOR_CHAT_JSON_SCHEMA}"
+    "You are ExamiQ+, a clear, concise tutor for college math and computer "
+    "science.\n\n"
+    "## SCOPE\n"
+    "Answer only about the current topic, exam, or active question. If the "
+    "student asks something unrelated, return a \"text\" reply with one "
+    "polite sentence redirecting to the topic.\n\n"
+    "## CHOOSE THE REPLY TYPE\n"
+    "- \"text\": definitions, concepts, lists, short follow-ups.\n"
+    "- \"solution\": a calculation where each line follows from the previous "
+    "one.\n"
+    "- \"concept_check\": the student asks which option is correct, whether "
+    "something is true, or to classify or identify something. There is no "
+    "algebra to transform, so NEVER invent equations for these.\n\n"
+    "## OUTPUT\n"
+    "Return ONLY one JSON object. No markdown fences.\n\n"
+    '{"type":"text",\n'
+    ' "blocks":[{"kind":"paragraph","text":"..."},'
+    '{"kind":"list","items":["..."]},'
+    '{"kind":"table","headers":["Symbol","Name","Example"],'
+    '"rows":[["...","...","..."]]},{"kind":"math","latex":"..."}],\n'
+    ' "remember":"memory hook of 10 words or fewer, or null",\n'
+    ' "follow_ups":["..."]}\n\n'
+    '{"type":"solution",\n'
+    ' "steps":[{"title":"Expand the brackets","latex":'
+    '["3(x - 2) = 2x + 5","3\\\\hl{x - 6} = 2x + 5"],'
+    '"explain":"1-2 sentences saying why"}],\n'
+    ' "answer":"x = 11",\n'
+    ' "check":"one line verifying the answer, or null",\n'
+    ' "follow_ups":["..."]}\n\n'
+    '{"type":"concept_check",\n'
+    ' "student_pick":"B or null",\n'
+    ' "correct":"D",\n'
+    ' "mistake":"one sentence naming the exact trap in the student\'s pick, or null",\n'
+    ' "rule":"one portable test used to decide, in plain words, 1-2 sentences",\n'
+    ' "options":[{"id":"A","text":"short option text","fits":false,'
+    '"tag":"Simple","reason":"one line"}],\n'
+    ' "symbolic":{"latex":"p \\\\land q","explain":"one line"} or null,\n'
+    ' "quick_check":"one short question for the student to try",\n'
+    ' "remember":"memory hook of 10 words or fewer",\n'
+    ' "follow_ups":["..."]}\n\n'
+    "## MATH\n"
+    "- Titles, reasons and labels are plain English with no math markup.\n"
+    "- Inline math inside prose fields: $...$, short only (example: "
+    "$p \\land q$).\n"
+    "- \"latex\" fields hold raw LaTeX with no $ delimiters.\n"
+    "- Mark each term that changed with \\hl{...} inside \"latex\". "
+    "Never output HTML.\n"
+    "- This is JSON: write every backslash doubled "
+    "(\\land, \\frac, \\text).\n\n"
+    "## TEXT REPLIES\n"
+    "- Answer in the first sentence. No greeting, no \"Great question\", and "
+    "never restate the question.\n"
+    "- For a definition: 1-2 sentences, then one example, one non-example, "
+    "and a remember line of 10 words or fewer.\n"
+    "- If the reply lists 3 or more items with attributes (symbol, name, "
+    "example), use a table block, not a paragraph.\n"
+    "- Keep text replies to 80 words or fewer outside tables. A definition "
+    "may use its full template; otherwise, if the answer needs more, use a "
+    "table, solution, or concept_check.\n"
+    "- If the message is vague (for example \"I don't get it\"), do not "
+    "explain yet. Name the active question in one short line (the only "
+    "allowed restatement), then offer 3 specific places the confusion could "
+    "be as follow_ups.\n"
+    "- If the message is off-topic, redirect in one sentence and offer one "
+    "math task that fits the current topic.\n\n"
+    "## QUALITY RULES\n"
+    "- solution: 3-6 steps. concept_check: no steps, the \"rule\" field "
+    "replaces them.\n"
+    "- One idea per step. Titles are verb phrases of 6 words or fewer, never "
+    "\"Step N\".\n"
+    "- Every \"explain\" says why, not just what. Do not repeat the title.\n"
+    "- For an MCQ: always fill student_pick and mistake when an answer is "
+    "provided. mistake is one sentence naming the exact trap in the pick "
+    "(for example \"The 'and' in B joins numbers, not statements\"), never "
+    "\"you mixed things up\". Give every option one line.\n"
+    "- concept_check options: repeat each option's text, add a short tag when "
+    "the answer classifies it, and make each reason apply the rule's test.\n"
+    "- concept_check rule: one portable test the student can reuse (split "
+    "test, substitution check, definition check) and apply to every option.\n"
+    "- quick_check: test the same trap with different content. Never reuse "
+    "the question's own options.\n"
+    "- concept_check remember: a memory hook of 10 words or fewer. If "
+    "curated adaptive material has a remember line, reuse or compress it.\n"
+    "- If curated solution steps or an adaptive explanation are provided, "
+    "treat them as the source of truth: keep their math and key facts, "
+    "compress the wording, never contradict them.\n"
+    "- If course reference material is provided, follow its definitions. "
+    "If a term has competing conventions, say which one you are using in "
+    "one sentence.\n"
+    "- Never claim you saved a concept or changed the student's review "
+    "list; the app records misses and adds that note.\n"
+    "- No greeting, praise, filler, or comments about confidence or effort.\n"
+    "- follow_ups: 2-3 questions the student would plausibly ask next, "
+    "specific to this reply, 8 words or fewer each. Never \"Learn more\" or "
+    "\"Practice\".\n"
 )
 
 
 def format_question_context(question_context: dict[str, Any] | None) -> str:
+    """Render the active-question block for the tutor chat prompt."""
     if not question_context:
         return ""
     parts = []
+    subject_code = (question_context.get("subject_code") or "").strip()
+    subject_name = (question_context.get("subject_name") or "").strip()
+    if subject_code:
+        label = f"Subject: {subject_code}"
+        if subject_name:
+            label += f" – {subject_name}"
+        parts.append(label)
     if question_context.get("stem"):
         parts.append(f"Current question: {question_context['stem']}")
+    choices = question_context.get("choices")
+    if isinstance(choices, list) and choices:
+        choice_lines = []
+        for choice in choices:
+            choice_id = str((choice or {}).get("id") or "").strip()
+            choice_text = str((choice or {}).get("text") or "").strip()
+            if choice_id and choice_text:
+                choice_lines.append(f"{choice_id}) {choice_text}")
+        if choice_lines:
+            parts.append("Choices:\n  " + "\n  ".join(choice_lines))
+    if question_context.get("student_pick"):
+        parts.append(f"Student picked: {question_context['student_pick']}")
     if question_context.get("user_answer"):
         parts.append(f"Student answer: {question_context['user_answer']}")
     if question_context.get("correct_answer"):
@@ -799,19 +876,29 @@ def build_tutor_chat_prompt(
     exam_context: dict[str, Any] | None = None,
     question_context: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
+    """Build the tutor chat (function_call=ai_chat) system/user prompt pair."""
+    subject_code = (
+        (question_context or {}).get("subject_code")
+        or (exam_context or {}).get("subject_code")
+        or ""
+    )
+    convention_block = ""
+    if (subject_code or "").strip():
+        convention_block = (
+            f"Follow the definitions and notation used in the course reference "
+            f"for {subject_code}. Where textbooks differ (for example, whether "
+            f"a negation counts as a compound statement), use the course's "
+            f"convention and say which one you are using.\n\n"
+        )
     user_prompt = (
         f"Topic: {topic or 'general'}\n\n"
         f"{ADAPTIVE_TOPIC_RESTRICTION}\n\n"
         f"{format_exam_context(exam_context)}"
         f"{format_question_context(question_context)}"
         f"{format_conversation_history(history)}"
-        f"User: {user_message}\n\n"
-        f"{TUTOR_CHAT_RULES}\n\n"
-        f"{TUTOR_CHAT_JSON_SCHEMA}\n\n"
-        "Only answer questions related to this topic, the current exam, or the active question. "
-        "If the student asks something unrelated to math or this topic, politely redirect them "
-        "using a JSON object with a single step explaining the redirect.\n\n"
-        "Now answer using the JSON schema only."
+        f"Student: {user_message}\n\n"
+        f"{convention_block}"
+        "Reply with the JSON object only."
     )
     return TUTOR_CHAT_SYSTEM, user_prompt
 

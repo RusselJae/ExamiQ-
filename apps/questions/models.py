@@ -346,3 +346,53 @@ class QuestionValidationItem(models.Model):
 
     def __str__(self) -> str:
         return f"Item {self.order} Q#{self.question_id} ({self.outcome})"
+
+
+class ExcludedQuestion(TimeStampedModel):
+    """A stem the professor removed; AI generation must never repeat it."""
+
+    class Reason(models.TextChoices):
+        DELETED = "deleted", "Deleted by professor"
+        DRAFT_REMOVED = "draft-removed", "Removed from batch draft"
+
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name="excluded_questions",
+    )
+    stem = models.TextField(
+        blank=True,
+        default="",
+        help_text="Original stem text that must not be generated again.",
+    )
+    stem_key = models.CharField(
+        max_length=64,
+        help_text="SHA-256 hex fingerprint of the normalized stem.",
+    )
+    excluded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="excluded_questions",
+    )
+    reason = models.CharField(
+        max_length=50,
+        blank=True,
+        default=Reason.DELETED,
+        help_text="Why this stem was excluded (deleted question or draft row).",
+    )
+
+    class Meta:
+        verbose_name = "Excluded Question"
+        verbose_name_plural = "Excluded Questions"
+        ordering = ["-created", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["topic", "stem_key"],
+                name="uniq_excluded_stem_per_topic",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.topic.name}: {self.stem[:60]}"

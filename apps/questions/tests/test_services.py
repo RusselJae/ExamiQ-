@@ -3,9 +3,13 @@ import pytest
 from apps.questions.models import Question
 from apps.questions.services import (
     create_question,
+    exclude_stem_from_generation,
+    exclusion_set_for_topic,
+    exclusion_stems_for_topic,
     find_duplicate_question,
     generation_fit_meta,
     normalize_stem,
+    stem_fingerprint,
 )
 
 
@@ -100,3 +104,53 @@ class TestDuplicateQuestionDetection:
             [],
         )
         assert find_duplicate_question(topic.pk, "What is 3+3?") is None
+
+
+@pytest.mark.django_db
+class TestStemExclusionRegistry:
+    def test_exclude_stem_is_idempotent(self, topic):
+        created_first = exclude_stem_from_generation(
+            topic_id=topic.pk, stem="What is 2+2?"
+        )
+        created_second = exclude_stem_from_generation(
+            topic_id=topic.pk, stem="  what is 2+2? "
+        )
+        assert created_first is True
+        assert created_second is False
+        from apps.questions.models import ExcludedQuestion
+
+        assert ExcludedQuestion.objects.filter(topic=topic).count() == 1
+
+    def test_whitespace_stem_is_ignored(self, topic):
+        assert exclude_stem_from_generation(topic_id=topic.pk, stem="   ") is False
+        assert exclusion_set_for_topic(topic.pk) == set()
+
+    def test_exclusion_set_and_stems_round_trip(self, topic):
+        exclude_stem_from_generation(topic_id=topic.pk, stem="First stem.")
+        exclude_stem_from_generation(topic_id=topic.pk, stem="Second stem.")
+        keys = exclusion_set_for_topic(topic.pk)
+        assert len(keys) == 2
+        assert all(len(key) == 64 for key in keys)
+
+        stems = exclusion_stems_for_topic(topic_id=topic.pk)
+        assert set(stems) == {"First stem.", "Second stem."}
+
+    def test_stem_fingerprint_matches_registry(self, topic):
+        exclude_stem_from_generation(topic_id=topic.pk, stem="What is 2+2?")
+        fingerprint = stem_fingerprint(topic.pk, "  What   is 2+2? ")
+        assert fingerprint in exclusion_set_for_topic(topic.pk)
+
+    def test_truncation_applies_limit_and_length(self, topic):
+        from apps.questions.models import ExcludedQuestion
+
+        for i in range(45):
+            ExcludedQuestion.objects.create(
+                topic=topic,
+                stem=f"Stem number {i} " + ("x" * 300),
+                stem_key=f"{i:064x}",
+            )
+        stems = exclusion_stems_for_topic(topic_id=topic.pk)
+        assert len(stems) == 40
+        assert all(len(stem) <= 240 for stem in stems)
+        # Newest first per Meta ordering.
+        assert stems[0].startswith("Stem number 44")

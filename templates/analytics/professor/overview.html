@@ -70,22 +70,37 @@
         <p class="overview-trends-card__subtitle student-confidence-card__scope" id="overview-donut-scope">
             {{ overview_donut.scope_line }}
         </p>
-        <div class="student-confidence-card__periods" role="group" aria-label="Time period">
-            <a href="?donut_period=7"
-               class="student-confidence-card__period{% if donut_period == '7' %} is-active{% endif %}">7 days</a>
-            <a href="?donut_period=30"
-               class="student-confidence-card__period{% if donut_period == '30' %} is-active{% endif %}">30 days</a>
-            <a href="?donut_period=all"
-               class="student-confidence-card__period{% if donut_period == 'all' %} is-active{% endif %}">All time</a>
+        <div class="overview-trends-filters student-confidence-card__filters">
+            <div class="overview-trends-filter">
+                <span class="overview-trends-filter__label" id="overview-donut-range-label">Range</span>
+                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-range-label">
+                    {% for value, label in donut_period_choices %}
+                    <a href="?donut_period={{ value }}{% if donut_section %}&amp;donut_section={{ donut_section }}{% endif %}"
+                       class="overview-pill{% if donut_period == value %} is-selected{% endif %}">{{ label }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% if donut_sections %}
+            <div class="overview-trends-filter">
+                <span class="overview-trends-filter__label" id="overview-donut-section-label">Sections</span>
+                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-section-label">
+                    <a href="?donut_period={{ donut_period }}"
+                       class="overview-pill{% if not donut_section %} is-selected{% endif %}">All sections</a>
+                    {% for section in donut_sections %}
+                    <a href="?donut_period={{ donut_period }}&amp;donut_section={{ section.pk }}"
+                       class="overview-pill{% if donut_section == section.pk %} is-selected{% endif %}">{{ section.label }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
-    <div class="overview-trends-chart-wrap student-donut-wrap" id="overviewDonutWrap">
-        <canvas id="overviewDonutChart" aria-label="Confidence performance donut chart"></canvas>
-        <div class="student-donut-center" id="overview-donut-center" aria-hidden="true"></div>
-    </div>
-    <div class="overview-trends-chart-footer">
+    <div class="student-donut-layout">
+        <div class="overview-trends-chart-wrap student-donut-wrap" id="overviewDonutWrap">
+            <canvas id="overviewDonutChart" aria-label="Confidence performance donut chart"></canvas>
+            <div class="student-donut-center" id="overview-donut-center" aria-hidden="true"></div>
+        </div>
         <div class="student-donut-legend overview-confidence-legend" id="overview-donut-legend" hidden></div>
-        <p class="student-confidence-card__insight" id="overview-donut-insight" hidden></p>
     </div>
     <div id="overview-donut-empty" class="chart-empty-state hidden">
         <p class="empty-state-title">Not enough data yet</p>
@@ -102,11 +117,13 @@
         <div class="overview-trends-filter" id="over-time-range-filter">
             <span class="overview-trends-filter__label" id="over-time-range-label">Range</span>
             <select id="over-time-range" class="sr-only" tabindex="-1" aria-labelledby="over-time-range-label">
+                <option value="daily">Daily</option>
                 <option value="weekly" selected>Weekly</option>
                 <option value="monthly">Monthly</option>
                 <option value="yearly">Yearly</option>
             </select>
             <div class="overview-pill-group" role="group" aria-labelledby="over-time-range-label" data-pill-target="over-time-range">
+                <button type="button" class="overview-pill" data-pill-value="daily" aria-pressed="false">Daily</button>
                 <button type="button" class="overview-pill is-selected" data-pill-value="weekly" aria-pressed="true">Weekly</button>
                 <button type="button" class="overview-pill" data-pill-value="monthly" aria-pressed="false">Monthly</button>
                 <button type="button" class="overview-pill" data-pill-value="yearly" aria-pressed="false">Yearly</button>

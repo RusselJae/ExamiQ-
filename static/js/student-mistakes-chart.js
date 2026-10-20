@@ -10,6 +10,19 @@
 
     var BAR_COLOR = "#1a5634";
     var MAX_BARS = 20;
+    var MOBILE_MAX_BARS = 10;
+    var MOBILE_QUERY = "(max-width: 640px)";
+    var chart = null;
+
+    /**
+     * Narrow screens only get half as many bars so the labels stay readable.
+     */
+    function maxBars() {
+        if (window.matchMedia && window.matchMedia(MOBILE_QUERY).matches) {
+            return MOBILE_MAX_BARS;
+        }
+        return MAX_BARS;
+    }
 
     function truncate(text, max) {
         var value = (text || "").trim();
@@ -46,7 +59,7 @@
         points = points.filter(function (point) {
             return point && (point.value || 0) > 0;
         });
-        points = points.slice(0, MAX_BARS);
+        points = points.slice(0, maxBars());
 
         if (countEl) {
             countEl.textContent = points.length
@@ -62,7 +75,11 @@
         if (wrapEl) wrapEl.hidden = false;
         if (emptyEl) emptyEl.classList.add("hidden");
 
-        return new Chart(canvas.getContext("2d"), {
+        if (chart) {
+            chart.destroy();
+            chart = null;
+        }
+        chart = new Chart(canvas.getContext("2d"), {
             type: "bar",
             data: {
                 labels: points.map(function (point) {
@@ -133,6 +150,7 @@
                 },
             },
         });
+        return chart;
     }
 
     window.ExamiQUI = window.ExamiQUI || {};
@@ -140,5 +158,18 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         renderStudentMistakesChart({ dataEl: "student-trends-data" });
+        // Re-draw when the viewport crosses the mobile breakpoint so the bar
+        // count follows the layout.
+        if (window.matchMedia) {
+            var query = window.matchMedia(MOBILE_QUERY);
+            var onChange = function () {
+                renderStudentMistakesChart({ dataEl: "student-trends-data" });
+            };
+            if (query.addEventListener) {
+                query.addEventListener("change", onChange);
+            } else if (query.addListener) {
+                query.addListener(onChange);
+            }
+        }
     });
 })();

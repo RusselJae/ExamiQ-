@@ -4,6 +4,22 @@
 (function () {
     "use strict";
 
+    // Shared KaTeX auto-render options (\\hl highlight macro, trust for \\htmlClass).
+    window.ExamiQKatex = window.ExamiQKatex || {};
+    window.ExamiQKatex.options = {
+        delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+        ],
+        throwOnError: false,
+        trust: function (context) {
+            return context.command === "\\htmlClass";
+        },
+        macros: {
+            "\\hl": "\\htmlClass{tutor-visual-mark}{#1}",
+        },
+    };
+
     const TOAST_DURATION = 4000;
 
     const TOAST_BORDER = {

@@ -12,6 +12,7 @@ from django.urls import reverse
 from apps.ai.ingest import ingest_learning_upload
 from apps.ai.models import LearningDocument
 from apps.ai.source_extract import SourceMaterialError
+from apps.questions.models import Subject
 from apps.reviews.exam_setup_services import sync_program_subject_timers
 from apps.users.assignment_services import get_or_create_catalog_course
 from conftest import make_bsed_student
@@ -36,15 +37,15 @@ def _make_ready_doc(*, course, subject, user, title="Module overview", archived=
 
 @pytest.mark.django_db
 class TestFacultyMaterialsUI:
-    def test_course_list_keeps_course_chrome(
-        self, client, professor, subject
-    ):
+    def test_course_list_keeps_course_chrome(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         _make_ready_doc(course=course, subject=subject, user=professor)
 
         client.force_login(professor)
         response = client.get(
-            reverse("analytics_professor:material_list", kwargs={"course_pk": course.pk})
+            reverse(
+                "analytics_professor:material_list", kwargs={"course_pk": course.pk}
+            )
         )
         assert response.status_code == 200
         content = response.content.decode()
@@ -187,6 +188,15 @@ class _AlwaysRelated:
 class TestMaterialUploadRelevanceGate:
     """Uploads that do not match the course subject are rejected."""
 
+    @pytest.fixture(autouse=True)
+    def _math_curriculum(self, subject, course, bsed_program):
+        """Content management only accepts BSEd Mathematics subjects."""
+        subject.program = bsed_program
+        subject.code = course.code
+        subject.save(update_fields=["program", "code"])
+        course.program = bsed_program
+        course.save(update_fields=["program"])
+
     def _upload_url(self, course):
         return reverse(
             "analytics_professor:material_upload", kwargs={"course_pk": course.pk}
@@ -264,9 +274,7 @@ class TestMaterialUploadRelevanceGate:
                 "topic_score": 0,
             }
 
-        with patch(
-            "apps.questions.views_materials.assess_subject_relevance", _capture
-        ):
+        with patch("apps.questions.views_materials.assess_subject_relevance", _capture):
             self._post(
                 client,
                 course,
@@ -294,33 +302,27 @@ class TestMaterialUploadRelevanceGate:
         with patch(
             "apps.questions.views_materials.assess_subject_relevance"
         ) as mock_relevance:
-            response = self._post(
-                client, course, subject, {"source_file": blob}
-            )
+            response = self._post(client, course, subject, {"source_file": blob})
 
         mock_relevance.assert_not_called()
         assert response.status_code == 200
         assert LearningDocument.objects.filter(course_id=course.pk).count() == 1
 
-    def test_unsupported_extension_is_rejected(
-        self, client, professor, subject
-    ):
+    def test_unsupported_extension_is_rejected(self, client, professor, subject):
         """Only TXT, MD, CSV, PDF and DOCX may be uploaded."""
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         blob = SimpleUploadedFile(
-            "slides.pptx", b"PK\x03\x04not-really", content_type=(
-                "application/vnd.openxmlformats-officedocument"
-            )
+            "slides.pptx",
+            b"PK\x03\x04not-really",
+            content_type=("application/vnd.openxmlformats-officedocument"),
         )
 
         with patch(
             "apps.questions.views_materials.assess_subject_relevance",
             _AlwaysRelated(),
         ):
-            response = self._post(
-                client, course, subject, {"source_file": blob}
-            )
+            response = self._post(client, course, subject, {"source_file": blob})
 
         assert response.status_code == 200
         assert LearningDocument.objects.filter(course_id=course.pk).count() == 0
@@ -343,6 +345,38 @@ class TestMaterialUploadRelevanceGate:
         assert is_allowed_upload("photo.png") is False
         assert is_allowed_upload("") is False
 
+    def test_non_math_subject_is_rejected(
+        self, client, professor, course, program, year_level
+    ):
+        """A posted subject outside BSEd Mathematics cannot receive uploads."""
+        client.force_login(professor)
+        other_subject = Subject.objects.create(
+            program=program,
+            code="CS-ONLY",
+            name="Non-Math Subject",
+            year_level=year_level,
+            semester=1,
+        )
+
+        with patch(
+            "apps.questions.views_materials.assess_subject_relevance",
+            _AlwaysRelated(),
+        ):
+            response = self._post(
+                client,
+                course,
+                other_subject,
+                {
+                    "source_file": SimpleUploadedFile(
+                        "trig.txt", RELATED_UPLOAD, content_type="text/plain"
+                    )
+                },
+            )
+
+        assert response.status_code == 200
+        assert "BSEd Mathematics subjects only" in response.content.decode()
+        assert LearningDocument.objects.filter(course_id=course.pk).count() == 0
+
     def test_blank_subject_falls_back_to_the_course_subject(
         self, client, professor, subject
     ):
@@ -361,9 +395,7 @@ class TestMaterialUploadRelevanceGate:
                 "topic_score": 5,
             }
 
-        with patch(
-            "apps.questions.views_materials.assess_subject_relevance", _capture
-        ):
+        with patch("apps.questions.views_materials.assess_subject_relevance", _capture):
             response = client.post(
                 self._upload_url(course),
                 {
@@ -432,9 +464,7 @@ class TestMaterialContentEditing:
             kwargs={"course_pk": course.pk, "pk": doc.pk},
         )
 
-    def test_detail_page_renders_document_header(
-        self, client, professor, subject
-    ):
+    def test_detail_page_renders_document_header(self, client, professor, subject):
         """Document title, actions, meta pills and the overflow menu."""
         course = get_or_create_catalog_course(professor, subject)
         doc = _make_ready_doc(course=course, subject=subject, user=professor)
@@ -455,7 +485,7 @@ class TestMaterialContentEditing:
         assert "Archive material" in content
         # Course picker is a pill select in the meta row.
         assert 'name="subject_id"' in content
-        assert 'data-doc-rename-row' in content
+        assert "data-doc-rename-row" in content
         assert "materials-detail.js" in content
 
     def test_detail_page_renders_editor_with_current_text(
@@ -470,7 +500,7 @@ class TestMaterialContentEditing:
         content = client.get(self._detail_url(course, doc)).content.decode()
 
         assert "materials-doc__editor" in content
-        assert 'data-editor-surface' in content
+        assert "data-editor-surface" in content
         assert "Editable body text for the module." in content
         assert "Text preview" not in content
 
@@ -576,9 +606,7 @@ class TestMaterialContentEditing:
         assert any("sine" in t for t in texts)
         assert any(r.bold for p in exported.paragraphs for r in p.runs)
 
-    def test_saved_html_is_sanitized_server_side(
-        self, client, professor, subject
-    ):
+    def test_saved_html_is_sanitized_server_side(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         doc = _make_ready_doc(course=course, subject=subject, user=professor)
 
@@ -617,10 +645,12 @@ class TestMaterialContentEditing:
         buffer.seek(0)
 
         upload = SimpleUploadedFile(
-            "trig.docx", buffer.read(), content_type=(
+            "trig.docx",
+            buffer.read(),
+            content_type=(
                 "application/vnd.openxmlformats-officedocument."
                 "wordprocessingml.document"
-            )
+            ),
         )
         doc = ingest_learning_upload(
             uploaded_file=upload, course_id=course.pk, user=professor
@@ -633,9 +663,7 @@ class TestMaterialContentEditing:
         assert "# Unit Circle" in doc.source_text
         assert "sine" in doc.source_text
 
-    def test_rewritten_file_path_is_not_double_nested(
-        self, client, professor, subject
-    ):
+    def test_rewritten_file_path_is_not_double_nested(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         doc = LearningDocument.objects.create(
             course_id=course.pk,

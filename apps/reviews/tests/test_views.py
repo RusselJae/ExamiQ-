@@ -494,6 +494,112 @@ class TestTutorChat:
         conversation = TutorConversation.objects.get(student=student, question=question)
         assert TutorMessage.objects.filter(conversation=conversation).count() == 2
 
+    def test_tutor_chat_concept_check_roundtrip(
+        self, client, student, topic, mcq_question
+    ):
+        question, _correct = mcq_question
+        wrong_choice = question.choices.filter(is_correct=False).first()
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        answer = submit_answer(
+            session=session,
+            question=question,
+            confidence=2,
+            selected_choice=wrong_choice,
+            time_spent_seconds=6,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        client.force_login(student)
+        chat_url = reverse("reviews:tutor_chat", kwargs={"pk": session.pk})
+        response = client.post(
+            chat_url,
+            data='{"message": "Which option is the correct answer?", '
+            f'"answer_id": {answer.pk}}}',
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["structured"]["type"] == "concept_check"
+        assert data["structured"]["correct"]
+        assert data["structured"]["subject_code"] == topic.subject.code
+        # First miss: no repeat-miss note yet.
+        assert "history_note" not in data["structured"]
+        assert any(option.get("text") for option in data["structured"]["options"])
+
+        history_url = reverse("reviews:tutor_history", kwargs={"pk": session.pk})
+        history_response = client.get(history_url + f"?answer_id={answer.pk}")
+        assert history_response.status_code == 200
+        history_data = history_response.json()
+        assistant = [
+            msg
+            for msg in history_data["messages"]
+            if msg["role"] != "user"
+        ]
+        assert assistant
+        assert assistant[-1]["structured"]["type"] == "concept_check"
+        assert assistant[-1]["structured"]["subject_code"] == topic.subject.code
+        assert "history_note" not in assistant[-1]["structured"]
+
+    def test_tutor_chat_adds_history_note_on_repeated_miss(
+        self, client, student, topic, mcq_question
+    ):
+        from apps.analytics.models import ConceptReview
+
+        question, _correct = mcq_question
+        wrong_choice = question.choices.filter(is_correct=False).first()
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            mode=ReviewSession.Mode.TIMED_EXAM,
+        )
+        answer = submit_answer(
+            session=session,
+            question=question,
+            confidence=2,
+            selected_choice=wrong_choice,
+            time_spent_seconds=6,
+        )
+        session.status = ReviewSession.Status.COMPLETED
+        session.save(update_fields=["status"])
+
+        review = ConceptReview.objects.get(student=student)
+        review.miss_count = 2
+        review.save(update_fields=["miss_count", "updated_at"])
+        expected_note = (
+            f"Second miss on {review.concept_name}. Saved to Concepts to Review."
+        )
+
+        client.force_login(student)
+        chat_url = reverse("reviews:tutor_chat", kwargs={"pk": session.pk})
+        response = client.post(
+            chat_url,
+            data='{"message": "Which option is the correct answer?", '
+            f'"answer_id": {answer.pk}}}',
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["structured"]["type"] == "concept_check"
+        assert data["structured"]["history_note"] == expected_note
+
+        history_url = reverse("reviews:tutor_history", kwargs={"pk": session.pk})
+        history_response = client.get(history_url + f"?answer_id={answer.pk}")
+        assert history_response.status_code == 200
+        history_data = history_response.json()
+        assistant = [
+            msg
+            for msg in history_data["messages"]
+            if msg["role"] != "user"
+        ]
+        assert assistant[-1]["structured"]["history_note"] == expected_note
+
     def test_tutor_chat_accepts_image(self, client, student, topic, mcq_question):
         from django.core.files.uploadedfile import SimpleUploadedFile
 

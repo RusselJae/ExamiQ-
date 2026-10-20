@@ -1,9 +1,12 @@
 """Student dashboard donut aggregates."""
 
 import pytest
+from django.urls import reverse
 
 from apps.analytics.services import (
     professor_confidence_donut,
+    professor_donut_sections,
+    professor_overview_trends,
     student_incorrect_question_series,
     student_performance_donut,
     student_professor_summary,
@@ -338,3 +341,180 @@ def test_professor_confidence_donut_excludes_other_professors(
     assert donut["total"] == 0
     assert donut["slices"]
     assert donut["insight"] == ""
+
+
+@pytest.mark.django_db
+def test_donut_daily_period_covers_last_24_hours(
+    professor, course, student, topic, mcq_question
+):
+    """The Daily range keeps only the trailing 24 hours."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    question, _correct = mcq_question
+
+    old_session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    recent_session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    ReviewSession.objects.filter(pk=old_session.pk).update(
+        started_at=timezone.now() - timedelta(hours=30)
+    )
+    Answer.objects.create(
+        session=old_session, question=question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=recent_session, question=question, confidence=1, is_correct=False
+    )
+
+    daily = professor_confidence_donut(professor, period="1")
+    assert daily["period"] == "1"
+    assert daily["total"] == 1
+    assert "Last 24 hours" in daily["scope_line"]
+
+    # A 7-day window still covers both sessions.
+    weekly = professor_confidence_donut(professor, period="7")
+    assert weekly["total"] == 2
+
+
+@pytest.mark.django_db
+def test_professor_confidence_donut_section_filter(
+    professor, course, student, program_section, topic, mcq_question
+):
+    """Picking a section narrows the donut to that cohort."""
+    from apps.users.models import ProgramSection, User
+
+    question, _correct = mcq_question
+    other_section = ProgramSection.objects.create(
+        program=program_section.program,
+        year_level=program_section.year_level,
+        label="2M",
+        academic_year=program_section.academic_year,
+    )
+    other_student = User.objects.create_user(
+        email="other-section@test.edu",
+        password="testpass123",
+        role=User.Role.STUDENT,
+        department=student.department,
+        home_degree_program=student.home_degree_program,
+        year_level=student.year_level,
+        section=other_section,
+    )
+
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    other_session = ReviewSession.objects.create(
+        student=other_student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=other_session, question=question, confidence=5, is_correct=True
+    )
+
+    # All sections is the default.
+    everything = professor_confidence_donut(professor)
+    assert everything["total"] == 2
+    assert everything["section"] == ""
+
+    scoped = professor_confidence_donut(professor, section=str(other_section.pk))
+    assert scoped["total"] == 1
+    assert scoped["section"] == other_section.pk
+
+    # Unknown or explicit "all" values fall back to every section.
+    assert professor_confidence_donut(professor, section="all")["total"] == 2
+    assert professor_confidence_donut(professor, section="999999")["total"] == 2
+
+    sections = professor_donut_sections(professor)
+    labels = [entry["label"] for entry in sections]
+    assert len(sections) == 2
+    assert program_section.display_label in labels
+    assert other_section.display_label in labels
+
+
+@pytest.mark.django_db
+def test_donut_reports_calibration_status(
+    professor, course, student, topic, mcq_question, numeric_question
+):
+    """Sure-but-wrong answers mark the group as overconfident."""
+    question, _correct = mcq_question
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=session, question=numeric_question, confidence=5, is_correct=False
+    )
+
+    donut = professor_confidence_donut(professor)
+    assert donut["calibration_status"] == "overconfident"
+    assert "100% of wrong answers were rated Sure" in donut["calibration_detail"]
+
+    # Right answers rated Guessing read as underconfidence instead.
+    Answer.objects.filter(session=session).update(confidence=1)
+    donut = professor_confidence_donut(professor)
+    assert donut["calibration_status"] == "underconfident"
+    assert "right answers were rated Guessing" in donut["calibration_detail"]
+
+
+@pytest.mark.django_db
+def test_overview_trends_expose_daily_range(professor):
+    """The line chart ships an hourly (last 24 hours) bucket set."""
+    trends = professor_overview_trends(professor)
+    assert "daily" in trends
+    assert len(trends["daily"]["mistake_trend"]) == 24
+    assert trends["daily"]["mistake_trend"][0]["label"]
+
+
+@pytest.mark.django_db
+def test_professor_overview_renders_donut_filters(
+    client, professor, course, student, topic, mcq_question
+):
+    """The donut ships the range pills and the section filter."""
+    question, _correct = mcq_question
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+
+    client.force_login(professor)
+    content = client.get(reverse("analytics_professor:overview")).content.decode()
+    assert "donut_period=1" in content
+    assert "donut_period=7" in content
+    assert "donut_period=30" in content
+    assert "donut_period=all" in content
+    assert "All sections" in content
+    assert student.section.display_label in content

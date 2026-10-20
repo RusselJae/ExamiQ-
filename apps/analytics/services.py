@@ -1,8 +1,16 @@
 """Analytics and performance aggregation services."""
 
+from datetime import timedelta
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Avg, Count, Max, Prefetch, Q, Sum
-from django.db.models.functions import TruncDate, TruncMonth, TruncWeek, TruncYear
+from django.db.models.functions import (
+    TruncDate,
+    TruncHour,
+    TruncMonth,
+    TruncWeek,
+    TruncYear,
+)
 from django.urls import reverse
 from django.utils import timezone
 
@@ -553,14 +561,85 @@ def _ordinal_label(n: int) -> str:
     return f"{n}{suffix}"
 
 
-def _parse_donut_period(period: str | None) -> tuple[str, int | None]:
-    """Normalize period query values to (key, days_or_None for all-time)."""
+def _parse_donut_period(period: str | None) -> tuple[str, timedelta | None]:
+    """Normalize period query values to (key, window_or_None for all-time).
+
+    ``1`` means the trailing 24 hours; ``7`` and ``30`` are calendar windows.
+    """
     key = (period or "all").strip().lower()
+    if key in {"1", "1d", "day", "daily", "24h", "24hours"}:
+        return "1", timedelta(hours=24)
     if key in {"7", "7d", "7days", "week"}:
-        return "7", 7
+        return "7", timedelta(days=7)
     if key in {"30", "30d", "30days", "month"}:
-        return "30", 30
+        return "30", timedelta(days=30)
     return "all", None
+
+
+#: Donut range controls, in display order. ``key`` is the query-string value.
+DONUT_PERIOD_CHOICES = (
+    ("1", "Daily"),
+    ("7", "Weekly"),
+    ("30", "Monthly"),
+    ("all", "All time"),
+)
+
+
+def _donut_range_label(period_key: str) -> str:
+    """Human label for the window a donut period covers."""
+    if period_key == "1":
+        return "Last 24 hours"
+    if period_key == "7":
+        return "Last 7 days"
+    if period_key == "30":
+        return "Last 30 days"
+    return "All time"
+
+
+def _calibration_status(
+    buckets: dict, correct_total: int, incorrect_total: int
+) -> tuple[str, str]:
+    """Classify how well confidence matches correctness.
+
+    Returns ``(status_key, computation_detail)`` where ``status_key`` is one of
+    ``overconfident`` / ``underconfident`` / ``confident`` and the detail spells
+    out the numbers behind the call (shown on hover). Overconfidence wins ties
+    because asserting wrong knowledge is the costlier mis-calibration.
+    """
+    sure_wrong = buckets.get("sure_incorrect", 0)
+    sure_right = buckets.get("sure_correct", 0)
+    guess_right = buckets.get("guessing_correct", 0)
+
+    wrong_sure_pct = (100.0 * sure_wrong / incorrect_total) if incorrect_total else 0.0
+    right_guess_pct = (100.0 * guess_right / correct_total) if correct_total else 0.0
+
+    if incorrect_total and wrong_sure_pct >= 50:
+        return (
+            "overconfident",
+            (
+                f"{wrong_sure_pct:g}% of wrong answers were rated Sure "
+                f"({sure_wrong} of {incorrect_total}). "
+                f"{sure_right} of {correct_total} right answers were rated Sure."
+            ),
+        )
+    if correct_total and right_guess_pct >= 50:
+        return (
+            "underconfident",
+            (
+                f"{right_guess_pct:g}% of right answers were rated Guessing "
+                f"({guess_right} of {correct_total}). "
+                f"{sure_wrong} of {incorrect_total} wrong answers were rated Sure."
+            ),
+        )
+    return (
+        "confident",
+        (
+            f"{wrong_sure_pct:g}% of wrong answers were rated Sure "
+            f"({sure_wrong} of {incorrect_total}); "
+            f"{right_guess_pct:g}% of right answers were rated Guessing "
+            f"({guess_right} of {correct_total})."
+        ),
+    )
 
 
 def student_performance_donut(
@@ -574,21 +653,19 @@ def student_performance_donut(
     ``for_professor`` keeps the insight text but drops the student-area
     "review those questions" link, which faculty cannot open.
     """
-    from datetime import timedelta
-
     from django.utils import timezone
 
     from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
 
-    period_key, days = _parse_donut_period(period)
+    period_key, window = _parse_donut_period(period)
     answers_qs = Answer.objects.filter(
         session__student=student,
         session__status=ReviewSession.Status.COMPLETED,
         confidence__isnull=False,
     ).select_related("session")
 
-    if days is not None:
-        since = timezone.now() - timedelta(days=days)
+    if window is not None:
+        since = timezone.now() - window
         answers_qs = answers_qs.filter(session__started_at__gte=since)
 
     answers = list(answers_qs.only("confidence", "is_correct", "session_id", "session__started_at"))
@@ -659,10 +736,8 @@ def student_performance_donut(
             round(100.0 * item["value"] / total, 1) if total else 0.0
         )
 
-    if period_key == "7":
-        range_label = "Last 7 days"
-    elif period_key == "30":
-        range_label = "Last 30 days"
+    if period_key in {"1", "7", "30"}:
+        range_label = _donut_range_label(period_key)
     elif earliest and latest:
         if earliest.date() == latest.date():
             range_label = earliest.strftime("%b %d, %Y")
@@ -698,6 +773,10 @@ def student_performance_donut(
             "were rated Guessing"
         )
 
+    calibration_key, calibration_detail = _calibration_status(
+        buckets, correct_total, incorrect_total
+    )
+
     return {
         "total": total,
         "slices": slices,
@@ -714,6 +793,8 @@ def student_performance_donut(
         "insight": insight,
         "insight_url": review_url,
         "insight_link_label": "Review those questions" if review_url else "",
+        "calibration_status": calibration_key,
+        "calibration_detail": calibration_detail,
     }
 
 
@@ -1209,8 +1290,6 @@ def professor_overview_trends(professor: User) -> dict:
 
     Returns all metrics × ranges so the client can switch without refetching.
     """
-    from datetime import timedelta
-
     from django.utils import timezone
 
     now = timezone.now()
@@ -1221,6 +1300,13 @@ def professor_overview_trends(professor: User) -> dict:
     )
 
     ranges = {
+        "daily": {
+            "trunc": TruncHour,
+            "count": 24,
+            "delta": timedelta(hours=1),
+            "label": lambda d: d.strftime("%I %p").lstrip("0"),
+            "key": lambda d: d.strftime("%Y-%m-%d %H"),
+        },
         "weekly": {
             "trunc": TruncWeek,
             "count": 12,
@@ -1246,7 +1332,11 @@ def professor_overview_trends(professor: User) -> dict:
 
     def _bucket_starts(cfg):
         starts = []
-        if cfg["trunc"] is TruncWeek:
+        if cfg["trunc"] is TruncHour:
+            d = now.replace(minute=0, second=0, microsecond=0)
+            for i in range(cfg["count"] - 1, -1, -1):
+                starts.append(d - timedelta(hours=i))
+        elif cfg["trunc"] is TruncWeek:
             d = (now - timedelta(days=now.weekday())).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
@@ -1461,22 +1551,22 @@ def professor_overview_trends(professor: User) -> dict:
 
 
 def professor_confidence_donut(
-    professor: User, *, period: str | None = None
+    professor: User, *, period: str | None = None, section: str | None = None
 ) -> dict:
     """Confidence × correctness donut across every student in a professor's scope.
 
     Same payload shape as :func:`student_performance_donut` so the shared donut
     renderer drives both. Scope matches ``professor_overview_trends``:
     sessions on the professor's non-archived course offerings. ``period``
-    accepts the same ``7`` / ``30`` / ``all`` keys as the student dashboard.
+    accepts the same ``1`` / ``7`` / ``30`` / ``all`` keys as the student
+    dashboard. ``section`` narrows the scope to one program section (the
+    students' cohort section); unknown or missing values mean "all sections".
     """
-    from datetime import timedelta
-
     from django.utils import timezone
 
     from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
 
-    period_key, days = _parse_donut_period(period)
+    period_key, window = _parse_donut_period(period)
 
     answers = Answer.objects.filter(
         session__course__professor=professor,
@@ -1485,10 +1575,12 @@ def professor_confidence_donut(
         confidence__isnull=False,
     ).only("confidence", "is_correct", "session_id", "session__started_at")
 
-    if days is not None:
-        answers = answers.filter(
-            session__started_at__gte=timezone.now() - timedelta(days=days)
-        )
+    if window is not None:
+        answers = answers.filter(session__started_at__gte=timezone.now() - window)
+
+    section_id = _resolve_program_section(section)
+    if section_id:
+        answers = answers.filter(session__student__section_id=section_id)
 
     rows = list(
         answers.values_list(
@@ -1557,10 +1649,8 @@ def professor_confidence_donut(
     for item in slices:
         item["percent"] = round(100.0 * item["value"] / total, 1) if total else 0.0
 
-    if period_key == "7":
-        range_label = "Last 7 days"
-    elif period_key == "30":
-        range_label = "Last 30 days"
+    if period_key in {"1", "7", "30"}:
+        range_label = _donut_range_label(period_key)
     elif earliest and latest:
         if earliest.date() == latest.date():
             range_label = earliest.strftime("%b %d, %Y")
@@ -1584,6 +1674,10 @@ def professor_confidence_donut(
     else:
         insight = ""
 
+    calibration_key, calibration_detail = _calibration_status(
+        buckets, correct_total, incorrect_total
+    )
+
     return {
         "total": total,
         "slices": slices,
@@ -1600,7 +1694,53 @@ def professor_confidence_donut(
         "insight": insight,
         "insight_url": "",
         "insight_link_label": "",
+        "calibration_status": calibration_key,
+        "calibration_detail": calibration_detail,
+        "section": section_id or "",
     }
+
+
+def _resolve_program_section(section: str | None) -> int | None:
+    """Resolve a section query value to a program section PK.
+
+    Anything missing, blank or unknown falls back to "all sections".
+    """
+    if section in (None, "", "all"):
+        return None
+    try:
+        section_id = int(str(section).strip())
+    except (TypeError, ValueError):
+        return None
+    from apps.users.models import ProgramSection
+
+    if not ProgramSection.objects.filter(pk=section_id).exists():
+        return None
+    return section_id
+
+
+def professor_donut_sections(professor: User) -> list[dict]:
+    """Program sections represented among the professor's completed sessions.
+
+    Powers the donut's section filter. Each entry carries ``pk`` and ``label``.
+    """
+    from apps.users.models import ProgramSection
+
+    section_ids = (
+        ReviewSession.objects.filter(
+            course__professor=professor,
+            course__is_archived=False,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .exclude(student__section__isnull=True)
+        .values_list("student__section_id", flat=True)
+        .distinct()
+    )
+    sections = (
+        ProgramSection.objects.filter(pk__in=list(section_ids))
+        .select_related("program", "year_level")
+        .order_by("program__name", "year_level__order", "label")
+    )
+    return [{"pk": section.pk, "label": section.display_label} for section in sections]
 
 
 def professor_mistake_trend(professor: User, *, ranges: dict, bucket_starts) -> dict:
@@ -2293,11 +2433,14 @@ def get_professor_students_with_exams(
     return rows
 
 
-def student_professor_summary(student: User, professor: User) -> dict:
+def student_professor_summary(
+    student: User, professor: User, *, period: str | None = None
+) -> dict:
     """Performance summary for a student across a professor's visible scope.
 
     Includes sessions on courses they own plus completed exams in their
     assigned section/subject profile scope (same gate as the Students list).
+    ``period`` narrows the confidence donut to a time window.
     """
     from apps.users.assignment_services import (
         faculty_has_chat_scope,
@@ -2337,6 +2480,7 @@ def student_professor_summary(student: User, professor: User) -> dict:
         weak_topics_filter=Q(answer__session_id__in=session_ids),
         confidence_group_by="subject",
         include_donut=True,
+        donut_period=period,
     )
 
 
@@ -2768,6 +2912,7 @@ def _build_student_activity_summary(
     weak_topics_filter: Q | None = None,
     confidence_group_by: str = "topic",
     include_donut: bool = False,
+    donut_period: str | None = None,
 ) -> dict:
     """Shared KPI/chart payload for course, subject, or section student detail.
 
@@ -2865,7 +3010,7 @@ def _build_student_activity_summary(
     )
     if include_donut:
         dashboard_trends["donut"] = student_performance_donut(
-            student, for_professor=True
+            student, for_professor=True, period=donut_period
         )
 
     return {

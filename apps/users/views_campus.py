@@ -5,10 +5,16 @@ from datetime import timedelta
 from django.contrib import messages
 from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
-from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
+from django.views.generic import (
+    CreateView,
+    FormView,
+    ListView,
+    TemplateView,
+    UpdateView,
+)
 
 from apps.core.filtering import (
     apply_date_range,
@@ -17,7 +23,11 @@ from apps.core.filtering import (
     redirect_preserving_filters,
 )
 from apps.core.mixins import CampusAdminRequiredMixin
-from apps.users.email_services import send_account_approved_email, send_account_rejected_email
+from apps.questions.models import YearLevel
+from apps.users.email_services import (
+    send_account_approved_email,
+    send_account_rejected_email,
+)
 from apps.users.forms import (
     AcademicTermForm,
     AcademicYearForm,
@@ -63,7 +73,8 @@ def _campus_recent_activity(manager: User, limit: int = 8) -> list[dict]:
     activities: list[dict] = []
 
     for account in (
-        _managed_users(manager).filter(role=User.Role.PROFESSOR)
+        _managed_users(manager)
+        .filter(role=User.Role.PROFESSOR)
         .order_by("-date_joined")[:6]
     ):
         name = account.get_full_name() or account.email
@@ -76,9 +87,11 @@ def _campus_recent_activity(manager: User, limit: int = 8) -> list[dict]:
             }
         )
 
-    for account in _managed_users(manager).filter(approval_status=User.ApprovalStatus.PENDING).order_by(
-        "-date_joined"
-    )[:4]:
+    for account in (
+        _managed_users(manager)
+        .filter(approval_status=User.ApprovalStatus.PENDING)
+        .order_by("-date_joined")[:4]
+    ):
         name = account.get_full_name() or account.email
         activities.append(
             {
@@ -89,7 +102,8 @@ def _campus_recent_activity(manager: User, limit: int = 8) -> list[dict]:
         )
 
     for account in (
-        _managed_users(manager).filter(role=User.Role.STUDENT, is_active=False)
+        _managed_users(manager)
+        .filter(role=User.Role.STUDENT, is_active=False)
         .exclude(approval_status=User.ApprovalStatus.PENDING)
         .order_by("-date_joined")[:3]
     ):
@@ -117,14 +131,18 @@ class CampusDashboardView(CampusAdminRequiredMixin, TemplateView):
         professors = managed_users.filter(role=User.Role.PROFESSOR)
         context["student_count"] = students.count()
         context["professor_count"] = professors.count()
-        context["new_students_count"] = students.filter(date_joined__gte=month_ago).count()
+        context["new_students_count"] = students.filter(
+            date_joined__gte=month_ago
+        ).count()
         context["student_subtext"] = (
             f"+{context['new_students_count']} this month"
             if context["new_students_count"]
             else "No new students this month"
         )
         context["active_professor_count"] = professors.filter(is_active=True).count()
-        context["professor_subtext"] = f"{context['active_professor_count']} active accounts"
+        context["professor_subtext"] = (
+            f"{context['active_professor_count']} active accounts"
+        )
         context["pending_count"] = managed_users.filter(
             approval_status=User.ApprovalStatus.PENDING
         ).count()
@@ -329,6 +347,7 @@ class CampusSectionListView(CampusAdminRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["programs"] = _managed_programs(self.request.user).order_by("name")
+        context["year_levels"] = YearLevel.objects.order_by("order")
         context["academic_years"] = AcademicYear.objects.all().order_by("-label")
         context["program_filter"] = self.request.GET.get("program", "")
         context["year_level_filter"] = self.request.GET.get("year_level", "")

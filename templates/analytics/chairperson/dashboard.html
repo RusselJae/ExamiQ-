@@ -17,12 +17,6 @@
     <div class="overview-kpi-grid__item">
         {% include "components/overview_stat_card.html" with value=management_stats.faculty_count label="Faculty" icon="users" variant="blue" %}
     </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=dashboard_stats.total_sessions label="Total sessions" icon="clock" variant="teal" %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=dashboard_stats.total_answers label="Total answers" icon="target" variant="blue" %}
-    </div>
 </div>
 
 {% if management_stats.pending_count %}
@@ -84,7 +78,6 @@
                     <option value="accuracy-desc">Sort by accuracy</option>
                     <option value="accuracy-asc">Accuracy (low to high)</option>
                     <option value="name-asc">Name (A–Z)</option>
-                    <option value="sessions-desc">Most sessions</option>
                 </select>
             </div>
         </div>
@@ -93,8 +86,7 @@
             {% for summary in program_summaries %}
             <article class="overview-course-card program-card {% if summary.has_activity %}overview-course-card--active{% endif %}"
                      data-program-name="{{ summary.program.name|lower }}"
-                     data-accuracy="{{ summary.accuracy }}"
-                     data-sessions="{{ summary.sessions_completed }}">
+                     data-accuracy="{{ summary.accuracy }}">
                 <div class="overview-course-card__header">
                     <div class="program-card__identity">
                         <span class="program-card__icon" aria-hidden="true">{{ summary.program.name|slice:":1" }}</span>
@@ -117,17 +109,6 @@
                     </div>
                     <div class="program-card__progress" role="presentation">
                         <div class="program-card__progress-fill" style="width: {{ summary.accuracy }}%"></div>
-                    </div>
-                </div>
-
-                <div class="program-card__footer">
-                    <div>
-                        <span class="overview-course-stat-label">Sessions</span>
-                        <span class="overview-course-stat-value">{{ summary.sessions_completed }}</span>
-                    </div>
-                    <div>
-                        <span class="overview-course-stat-label">Answers</span>
-                        <span class="overview-course-stat-value">{{ summary.total_answers }}</span>
                     </div>
                 </div>
             </article>
@@ -166,9 +147,6 @@
         cards.sort(function (a, b) {
             if (mode === "name-asc") {
                 return (a.dataset.programName || "").localeCompare(b.dataset.programName || "");
-            }
-            if (mode === "sessions-desc") {
-                return Number(b.dataset.sessions) - Number(a.dataset.sessions);
             }
             if (mode === "accuracy-asc") {
                 return Number(a.dataset.accuracy) - Number(b.dataset.accuracy);

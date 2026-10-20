@@ -27,14 +27,123 @@
     }
 
     function katexRender(el) {
-        if (typeof window.renderMathInElement !== "undefined" && el) {
-            window.renderMathInElement(el, {
-                delimiters: [
-                    { left: "$$", right: "$$", display: true },
-                    { left: "$", right: "$", display: false },
-                ],
-            });
+        if (
+            typeof window.renderMathInElement !== "undefined" &&
+            el &&
+            window.ExamiQKatex &&
+            window.ExamiQKatex.options
+        ) {
+            window.renderMathInElement(el, window.ExamiQKatex.options);
         }
+    }
+
+    function renderTextBlocks(content, blocks) {
+        // New-schema text replies (blocks); falls back to plain content.
+        var html = "";
+        (Array.isArray(blocks) ? blocks : []).forEach(function (block) {
+            if (!block || typeof block !== "object") return;
+            if (block.kind === "paragraph") {
+                var text = String(block.text || "").trim();
+                if (text) {
+                    html +=
+                        '<p class="chat-bubble__text">' +
+                        escapeHtml(text).replace(/\n/g, "<br>") +
+                        "</p>";
+                }
+            } else if (block.kind === "list") {
+                var items = Array.isArray(block.items)
+                    ? block.items
+                          .map(function (item) {
+                              return String(item || "").trim();
+                          })
+                          .filter(Boolean)
+                    : [];
+                if (items.length) {
+                    html +=
+                        '<ul class="chat-bubble__list">' +
+                        items
+                            .map(function (item) {
+                                return "<li>" + escapeHtml(item) + "</li>";
+                            })
+                            .join("") +
+                        "</ul>";
+                }
+            } else if (block.kind === "table") {
+                var headers = Array.isArray(block.headers) ? block.headers : [];
+                var rows = Array.isArray(block.rows) ? block.rows : [];
+                var headerCells = headers
+                    .map(function (header) {
+                        return String(header || "").trim();
+                    })
+                    .filter(Boolean);
+                if (headerCells.length) {
+                    html +=
+                        '<div class="chat-table-wrap">' +
+                        '<table class="chat-table"><thead><tr>';
+                    headerCells.forEach(function (header) {
+                        html +=
+                            '<th scope="col">' + escapeHtml(header) + "</th>";
+                    });
+                    html += "</tr></thead><tbody>";
+                    rows.forEach(function (row) {
+                        if (!Array.isArray(row)) return;
+                        html += "<tr>";
+                        headerCells.forEach(function (_header, index) {
+                            var cell = String(
+                                row[index] == null ? "" : row[index]
+                            ).trim();
+                            html += "<td>" + escapeHtml(cell) + "</td>";
+                        });
+                        html += "</tr>";
+                    });
+                    html += "</tbody></table></div>";
+                }
+            } else if (block.kind === "math") {
+                var latex = String(block.latex || "").trim();
+                if (latex) {
+                    if (latex.charAt(0) !== "$") latex = "$" + latex + "$";
+                    html +=
+                        '<p class="chat-bubble__math examiq-math-block">' +
+                        escapeHtml(latex) +
+                        "</p>";
+                }
+            }
+        });
+        if (html) return html;
+        return content
+            ? '<p class="chat-bubble__text">' +
+                  escapeHtml(content).replace(/\n/g, "<br>") +
+                  "</p>"
+            : "";
+    }
+
+    function rememberBlockHtml(text) {
+        text = String(text || "").trim();
+        if (!text) return "";
+        return (
+            '<p class="chat-remember">' +
+            '<span class="chat-remember__label">Remember</span> ' +
+            escapeHtml(text) +
+            "</p>"
+        );
+    }
+
+    function followUpChipsHtml(followUps) {
+        return (Array.isArray(followUps) ? followUps : [])
+            .map(function (text) {
+                text = String(text || "").trim();
+                if (!text) return "";
+                return (
+                    '<button type="button" class="chat-followup" data-follow-up="' +
+                    escapeHtml(text) +
+                    '">' +
+                    escapeHtml(text) +
+                    "</button>"
+                );
+            })
+            .filter(Boolean)
+            .slice(0, 3)
+            .join("");
     }
 
     function getConfig() {
@@ -729,6 +838,24 @@
         katexRender(document.getElementById("ai-tutor-feedback-panel"));
     }
 
+    function scrollChatToBottom() {
+        // The modal's real scroll container is the unified scroll pane; the
+        // message list itself expands to its content. Scroll both, then once
+        // more after layout so KaTeX-sized content is measured correctly.
+        var container = document.getElementById("ai-tutor-messages");
+        var scroller = document.getElementById("ai-tutor-unified-scroll");
+
+        function apply() {
+            if (container) container.scrollTop = container.scrollHeight;
+            if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        }
+
+        apply();
+        if (window.requestAnimationFrame) {
+            window.requestAnimationFrame(apply);
+        }
+    }
+
     function renderMessages() {
         var container = document.getElementById("ai-tutor-messages");
         if (!container) return;
@@ -772,15 +899,29 @@
                     window.ExamiQUI.isSolutionResponse &&
                     window.ExamiQUI.isSolutionResponse(structured, msg.content);
                 if (!isSolution) {
-                    var plain =
-                        window.ExamiQUI && window.ExamiQUI.plainTutorText
-                            ? window.ExamiQUI.plainTutorText(structured, msg.content)
-                            : msg.content || "";
                     bubble.className += " chat-bubble--simple";
-                    bubble.innerHTML =
-                        '<p class="chat-bubble__text">' +
-                        escapeHtml(plain).replace(/\n/g, "<br>") +
-                        "</p>";
+                    if (
+                        structured &&
+                        Array.isArray(structured.blocks) &&
+                        structured.blocks.length
+                    ) {
+                        bubble.innerHTML = renderTextBlocks(
+                            structured.content || msg.content || "",
+                            structured.blocks
+                        );
+                    } else {
+                        var plain =
+                            window.ExamiQUI && window.ExamiQUI.plainTutorText
+                                ? window.ExamiQUI.plainTutorText(structured, msg.content)
+                                : msg.content || "";
+                        bubble.innerHTML =
+                            '<p class="chat-bubble__text">' +
+                            escapeHtml(plain).replace(/\n/g, "<br>") +
+                            "</p>";
+                    }
+                    if (structured && structured.remember) {
+                        bubble.innerHTML += rememberBlockHtml(structured.remember);
+                    }
                 } else if (
                     window.ExamiQUI &&
                     window.ExamiQUI.renderTutorVisualResponse
@@ -802,6 +943,15 @@
             }
 
             body.appendChild(bubble);
+            if (!isUser && structured && Array.isArray(structured.follow_ups)) {
+                var chipsHtml = followUpChipsHtml(structured.follow_ups);
+                if (chipsHtml) {
+                    var chips = document.createElement("div");
+                    chips.className = "chat-followups";
+                    chips.innerHTML = chipsHtml;
+                    body.appendChild(chips);
+                }
+            }
             if (isUser) {
                 row.appendChild(body);
                 row.insertAdjacentHTML("beforeend", avatarHtml("out", identity));
@@ -812,7 +962,7 @@
             container.appendChild(row);
         });
         katexRender(container);
-        container.scrollTop = container.scrollHeight;
+        scrollChatToBottom();
     }
 
     function showTypingIndicator() {
@@ -836,7 +986,7 @@
             '<span class="chat-typing__dot"></span>' +
             "</div></div></div>";
         container.appendChild(row);
-        container.scrollTop = container.scrollHeight;
+        scrollChatToBottom();
     }
 
     function hideTypingIndicator() {
@@ -1100,13 +1250,29 @@
                 var chip = event.target.closest("[data-follow-up]");
                 if (!chip) return;
                 var text = chip.getAttribute("data-follow-up") || "";
-                var inputEl = document.getElementById("ai-tutor-chat-input");
                 if (!text) return;
-                if (inputEl) {
-                    inputEl.value = text;
-                    inputEl.focus();
-                }
                 sendMessage(text, null);
+                scrollChatToBottom();
+            });
+        }
+
+        var messagesContainer = document.getElementById("ai-tutor-messages");
+        if (messagesContainer) {
+            messagesContainer.addEventListener("click", function (event) {
+                var choiceBtn = event.target.closest("[data-tutor-choice]");
+                if (choiceBtn) {
+                    var choice = choiceBtn.getAttribute("data-tutor-choice") || "";
+                    if (!choice) return;
+                    sendMessage(choice, null);
+                    scrollChatToBottom();
+                    return;
+                }
+                var chip = event.target.closest("[data-follow-up]");
+                if (!chip) return;
+                var text = chip.getAttribute("data-follow-up") || "";
+                if (!text) return;
+                sendMessage(text, null);
+                scrollChatToBottom();
             });
         }
 

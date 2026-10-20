@@ -66,13 +66,17 @@
     if (!el || typeof renderMathInElement === "undefined") {
       return;
     }
-    renderMathInElement(el, {
-      delimiters: [
-        { left: "$$", right: "$$", display: true },
-        { left: "$", right: "$", display: false },
-      ],
-      throwOnError: false,
-    });
+    var options = window.ExamiQKatex && window.ExamiQKatex.options;
+    if (!options) {
+      options = {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false },
+        ],
+        throwOnError: false,
+      };
+    }
+    renderMathInElement(el, options);
   }
 
   function initTryIt(root) {

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import re
 import threading
 import time
 
@@ -21,6 +23,51 @@ from apps.ai.prompts import coerce_generate_question_type
 from apps.questions.models import ExplanationStep, Question, Topic
 
 logger = logging.getLogger(__name__)
+
+
+def _normalized_stem(stem: str) -> str:
+    """Normalize a stem for duplicate comparison (mirrors normalize_stem)."""
+    return re.sub(r"\s+", " ", (stem or "").strip().lower())
+
+
+def _stem_fingerprint(stem: str) -> str:
+    """SHA-256 fingerprint of a normalized stem (mirrors stem_fingerprint)."""
+    return hashlib.sha256(_normalized_stem(stem).encode("utf-8")).hexdigest()
+
+
+def _load_generation_exclusions(
+    job_id: int, topic_id: int
+) -> tuple[set[str], list[str], set[str]]:
+    """Load the exclusion registry plus current bank stems for a topic.
+
+    Returns (excluded stem_keys for hard filtering, prompt stems from the
+    registry for the LLM, normalized bank stems for hard filtering). Fails
+    soft: a registry problem must never crash a generation job.
+    """
+    from apps.questions.services import (
+        exclusion_set_for_topic,
+        exclusion_stems_for_topic,
+        normalize_stem,
+    )
+
+    try:
+        excluded_keys = exclusion_set_for_topic(topic_id)
+        prompt_stems = exclusion_stems_for_topic(topic_id=topic_id)
+    except Exception:
+        logger.warning(
+            "Could not load exclusion registry for job %s", job_id, exc_info=True
+        )
+        excluded_keys = set()
+        prompt_stems = []
+    # The bank (saved questions, active or not) is hard-filtered in-loop but
+    # never listed in the prompt — only the professor's deleted stems go there.
+    bank_stems = {
+        normalize_stem(stem)
+        for stem in Question.objects.filter(topic_id=topic_id).values_list(
+            "stem", flat=True
+        )
+    }
+    return excluded_keys, prompt_stems, bank_stems
 
 
 def _chunk_sizes(total: int, size: int) -> list[int]:
@@ -182,6 +229,9 @@ def run_question_generation_job(job_id: int) -> None:
         # provider failures (rate limits, 5xx) with exponential backoff.
         # When multiple difficulties are selected, split the total count evenly
         # and generate each band separately so applied rows keep distinct levels.
+        excluded_keys, prompt_stems, bank_stems = _load_generation_exclusions(
+            job_id, job.topic_id
+        )
         batch_size = getattr(settings, "AI_GENERATION_BATCH_SIZE", 5)
         max_attempts = getattr(settings, "AI_GENERATION_MAX_ATTEMPTS", 3)
         difficulties = parse_job_difficulties(job.difficulty)
@@ -204,6 +254,7 @@ def run_question_generation_job(job_id: int) -> None:
                                 source_material=source_material,
                                 question_type=job.question_type,
                                 reference_stem=job.reference_stem or "",
+                                exclude_stems=prompt_stems,
                             ),
                             question_type=job.question_type,
                         )
@@ -213,8 +264,17 @@ def run_question_generation_job(job_id: int) -> None:
                             if (v.get("stem") or "").strip()
                         }
                         for item in batch:
-                            stem_key = (item.get("stem") or "").strip().casefold()
+                            stem = (item.get("stem") or "").strip()
+                            stem_key = stem.casefold()
+                            # Skip registry-excluded stems (deleted by the
+                            # professor) and anything already in the question
+                            # bank, on top of this job's local dedup.
                             if not stem_key or stem_key in seen_stems:
+                                continue
+                            if (
+                                _stem_fingerprint(stem) in excluded_keys
+                                or _normalized_stem(stem) in bank_stems
+                            ):
                                 continue
                             seen_stems.add(stem_key)
                             item["difficulty"] = _resolve_item_difficulty(

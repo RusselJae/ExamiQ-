@@ -30,6 +30,7 @@ class QuestionGenerator:
         reference_stem: str = "",
         source_material: str = "",
         question_type: str = "mcq",
+        exclude_stems: list[str] | None = None,
     ) -> list[dict]:
         return []
 

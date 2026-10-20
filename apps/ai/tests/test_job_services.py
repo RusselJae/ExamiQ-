@@ -15,6 +15,7 @@ from apps.ai.job_services import (
 from apps.ai.models import AIGenerationJob
 from apps.ai.normalize import normalize_generated_questions
 from apps.questions.models import ExplanationStep
+from apps.questions.services import exclude_stem_from_generation
 
 
 def _make_question_batch(count: int, stem_prefix: str = "Q") -> list[dict]:
@@ -176,6 +177,11 @@ class TestQuestionGenerationJob:
             normalize_generated_questions(_make_question_batch(3, "M")),
             normalize_generated_questions(_make_question_batch(3, "H")),
         ]
+        # Keep difficulty stamping hermetic: both the live tagger and the
+        # keyword-stub tagger reclassify placeholder stems over the network or
+        # by text heuristics, so inject a requested-band passthrough tagger.
+        from apps.ai.interfaces import DifficultyTagger
+
         job = _create_job(
             professor=professor,
             course=course,
@@ -183,7 +189,11 @@ class TestQuestionGenerationJob:
             count=9,
             difficulty="easy,medium,hard",
         )
-        job = _run(generator, job.pk)
+        with patch(
+            "apps.ai.factory.get_difficulty_tagger",
+            return_value=DifficultyTagger(),
+        ):
+            job = _run(generator, job.pk)
 
         assert job.status == AIGenerationJob.Status.SUCCEEDED
         assert generator.generate.call_count == 3
@@ -196,6 +206,69 @@ class TestQuestionGenerationJob:
         assert [v["difficulty"] for v in variations] == (
             ["easy"] * 3 + ["medium"] * 3 + ["hard"] * 3
         )
+
+    @override_settings(AI_GENERATION_BATCH_SIZE=5, AI_GENERATION_MAX_ATTEMPTS=3)
+    def test_generator_receives_registry_exclude_stems(self, professor, course, topic):
+        """Only the ExcludedQuestion registry seeds the LLM exclusion list."""
+        exclude_stem_from_generation(
+            topic_id=topic.pk, stem="Deleted stem from an earlier batch."
+        )
+        generator = MagicMock()
+        generator.generate.return_value = normalize_generated_questions(
+            _make_question_batch(1, "A")
+        )
+        job = _create_job(professor=professor, course=course, topic=topic, count=1)
+        job = _run(generator, job.pk)
+
+        assert generator.generate.call_count == 1
+        exclude_stems = generator.generate.call_args.kwargs["exclude_stems"]
+        assert exclude_stems == ["Deleted stem from an earlier batch."]
+
+    @override_settings(AI_GENERATION_BATCH_SIZE=1, AI_GENERATION_MAX_ATTEMPTS=3)
+    def test_registry_stems_are_dropped_and_generation_continues(
+        self, professor, course, topic
+    ):
+        """A returned stem in the registry is skipped; later calls still run."""
+        exclude_stem_from_generation(topic_id=topic.pk, stem="Gone-0")
+        generator = MagicMock()
+        generator.generate.side_effect = [
+            normalize_generated_questions(_make_question_batch(1, "Gone")),
+            normalize_generated_questions(_make_question_batch(1, "Fresh1")),
+            normalize_generated_questions(_make_question_batch(1, "Fresh2")),
+        ]
+        job = _create_job(professor=professor, course=course, topic=topic, count=3)
+        job = _run(generator, job.pk)
+
+        assert job.status == AIGenerationJob.Status.SUCCEEDED
+        assert generator.generate.call_count == 3
+        stems = [v["stem"] for v in job.result["variations"]]
+        assert "Gone-0" not in stems
+        assert len(stems) == 2
+        assert job.result["variations"][0]["stem"] == "Fresh1-0"
+        assert job.result["variations"][1]["stem"] == "Fresh2-0"
+
+    @override_settings(AI_GENERATION_BATCH_SIZE=5, AI_GENERATION_MAX_ATTEMPTS=3)
+    def test_bank_duplicate_stems_are_dropped_across_job(
+        self, professor, course, topic
+    ):
+        """Saved bank questions (active or deleted) are never regenerated."""
+        from apps.questions.models import Question
+
+        Question.objects.create(
+            topic=topic,
+            stem="Bank-0",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+        )
+        generator = MagicMock()
+        generator.generate.return_value = normalize_generated_questions(
+            _make_question_batch(1, "Bank")
+        )
+        job = _create_job(professor=professor, course=course, topic=topic, count=1)
+        job = _run(generator, job.pk)
+
+        assert generator.generate.call_count == 1
+        assert job.result["variations"] == []
 
 
 def _create_explanation_job(

@@ -495,6 +495,89 @@ def normalize_stem(stem: str) -> str:
     return text
 
 
+def stem_fingerprint(topic_id: int, stem: str) -> str:
+    """Return the SHA-256 hex fingerprint of a normalized stem for a topic."""
+    import hashlib
+
+    return hashlib.sha256(normalize_stem(stem).encode("utf-8")).hexdigest()
+
+
+def exclude_stem_from_generation(
+    *,
+    topic_id: int,
+    stem: str,
+    excluded_by=None,
+    reason: str = "deleted",
+) -> bool:
+    """Record a stem so AI generation never repeats it for the topic.
+
+    Empty or whitespace-only stems are ignored. Returns True when a new
+    exclusion row was created, False when it already existed (idempotent).
+    """
+    import hashlib
+
+    from django.db import IntegrityError
+
+    from apps.questions.models import ExcludedQuestion
+
+    normalized = normalize_stem(stem)
+    if not normalized:
+        return False
+    stem_key = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    try:
+        _record, created = ExcludedQuestion.objects.get_or_create(
+            topic_id=topic_id,
+            stem_key=stem_key,
+            defaults={
+                "stem": stem,
+                "excluded_by": excluded_by,
+                "reason": reason,
+            },
+        )
+    except IntegrityError:
+        # A concurrent request created the same exclusion; nothing to do.
+        return False
+    return created
+
+
+def exclusion_set_for_topic(topic_id: int) -> set[str]:
+    """Return the stem_key fingerprints excluded from generation for a topic."""
+    from apps.questions.models import ExcludedQuestion
+
+    return set(
+        ExcludedQuestion.objects.filter(topic_id=topic_id).values_list(
+            "stem_key", flat=True
+        )
+    )
+
+
+def exclusion_stems_for_topic(
+    *,
+    topic_id: int,
+    limit: int = 40,
+    max_len: int = 240,
+) -> list[str]:
+    """Return the latest excluded stems for the LLM prompt (newest first).
+
+    Truncation is explicit: at most ``limit`` non-empty stems, each trimmed to
+    ``max_len`` characters (with a trailing ellipsis).
+    """
+    from apps.questions.models import ExcludedQuestion
+
+    stems: list[str] = []
+    for stem in (
+        ExcludedQuestion.objects.filter(topic_id=topic_id)
+        .values_list("stem", flat=True)[:limit]
+    ):
+        text = (stem or "").strip()
+        if not text:
+            continue
+        if len(text) > max_len:
+            text = text[: max_len - 1].rstrip() + "…"
+        stems.append(text)
+    return stems
+
+
 def find_duplicate_question(topic_id: int, stem: str, *, exclude_pk: int | None = None):
     """Return an existing question in the topic with the same normalized stem."""
     from apps.questions.models import Question

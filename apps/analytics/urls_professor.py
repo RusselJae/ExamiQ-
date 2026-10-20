@@ -284,6 +284,11 @@ urlpatterns = [
         name="question_ai_generate",
     ),
     path(
+        "courses/<int:course_pk>/questions/draft-remove/",
+        question_views.QuestionDraftRemoveView.as_view(),
+        name="question_draft_delete",
+    ),
+    path(
         "courses/<int:course_pk>/questions/ai-generate/<int:job_id>/",
         question_views.QuestionAIGenerateStatusView.as_view(),
         name="question_ai_generate_status",

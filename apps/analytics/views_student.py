@@ -26,6 +26,7 @@ from apps.analytics.concept_review_services import (
 from apps.analytics.forms import MistakeConcernForm
 from apps.analytics.models import ConceptReview, MistakeRecord
 from apps.analytics.services import (
+    DONUT_PERIOD_CHOICES,
     annotate_session_metrics,
     build_session_history_rows,
     generate_mistake_feedback,
@@ -57,6 +58,7 @@ class StudentDashboardView(StudentRequiredMixin, TemplateView):
             self.request.user, period=period
         )
         context["donut_period"] = context["dashboard_trends"].get("period", "all")
+        context["donut_period_choices"] = DONUT_PERIOD_CHOICES
         context["summary"] = student_performance_summary(self.request.user)
         context["recommendations"] = get_review_recommendations(
             self.request.user, limit=5

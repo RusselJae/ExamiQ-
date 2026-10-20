@@ -40,7 +40,7 @@ class TestBatchAddQuestionsScreen:
         assert 'id="ai-library-document"' in content
         assert "GNED 03_Overview" in content
         assert "data-source-upload-option" in content
-        assert 'data-source-upload-group' in content
+        assert "data-source-upload-group" in content
         assert 'data-dropzone-input="ai-source-file"' in content
 
     def test_difficulty_offers_ai_decides_without_mix_wording(
@@ -58,6 +58,15 @@ class TestBatchAddQuestionsScreen:
         assert 'id="settings-difficulty"' in content
         assert 'data-pill-max="3"' in content
 
+    def test_no_difficulty_is_selected_by_default(self, client, professor, course):
+        """Switching courses must not pre-fill a difficulty band."""
+        client.force_login(professor)
+        content = client.get(self.url(course)).content.decode()
+
+        assert 'value="medium" selected' not in content
+        assert 'class="batch-pill is-selected"' not in content
+        assert "Select at least one difficulty before generating." in content
+
     def test_ai_decides_maps_to_all_three_bands(self):
         """Selecting every band is what "AI decides" submits."""
         from apps.ai.job_services import parse_job_difficulties, split_counts_across
@@ -71,7 +80,7 @@ class TestBatchAddQuestionsScreen:
         content = client.get(self.url(course)).content.decode()
         # JS guards still raise the same wording as a toast; only assert on
         # what is actually rendered above the fold.
-        markup = re.sub(r"<script\b.*?</script>", "", content, flags=re.S)
+        markup = re.sub(r"<script\b.*?</script>", "", content, flags=re.DOTALL)
 
         for removed in (
             "Set up this batch",
@@ -94,7 +103,7 @@ class TestBatchAddQuestionsScreen:
         assert "Delete selected" in content
         assert 'id="publish-validated-count"' in content
         assert "Publish validated (0)" in content
-        assert 'data-select-all' in content
+        assert "data-select-all" in content
 
     def test_batch_table_is_scrollable_without_per_row_controls(
         self, client, professor, course
@@ -221,6 +230,4 @@ class TestBatchAddQuestionsScreen:
         data = response.json()
         assert data["learning_document_id"]
         assert data["learning_document_title"]
-        assert LearningDocument.objects.filter(
-            pk=data["learning_document_id"]
-        ).exists()
+        assert LearningDocument.objects.filter(pk=data["learning_document_id"]).exists()

@@ -210,3 +210,35 @@ ExplanationStepFormSet = inlineformset_factory(
         "professor_note": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 2}),
     },
 )
+
+MAX_DRAFT_REMOVE_STEMS = 50
+
+
+class QuestionDraftRemoveForm(forms.Form):
+    """Validate stems removed from the client-side batch question draft.
+
+    The draft lives only in sessionStorage, so removed stems are POSTed here
+    to be recorded as exclusions for future AI generation.
+    """
+
+    topic_id = forms.IntegerField(min_value=1)
+    stems_json = forms.CharField()
+
+    def clean_stems_json(self) -> list[str]:
+        import json
+
+        raw = self.cleaned_data["stems_json"]
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            raise forms.ValidationError("stems_json must be a JSON array.")
+        if not isinstance(parsed, list):
+            raise forms.ValidationError("stems_json must be a JSON array of stems.")
+        stems: list[str] = []
+        for item in parsed[:MAX_DRAFT_REMOVE_STEMS]:
+            if not isinstance(item, str):
+                continue
+            text = item.strip()
+            if text and text not in stems:
+                stems.append(text)
+        return stems

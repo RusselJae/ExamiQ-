@@ -56,7 +56,7 @@ class TestQuestionGenerationPrompt:
         assert tokens > question_generation_max_tokens(3, "medium")
 
     def test_non_mcq_generate_type_coerces_to_mcq(self, topic):
-        system, user, _ = build_question_generation_prompt(
+        _, user, _ = build_question_generation_prompt(
             topic, "medium", 2, question_type=Question.QuestionType.IDENTIFICATION
         )
         assert "multiple-choice" in user.lower() or "mcq" in user.lower()
@@ -69,10 +69,79 @@ class TestQuestionGenerationPrompt:
         assert "true_false" not in user or "multiple-choice" in user.lower()
         assert "choices" in user.lower() or "correct_label" in user.lower()
 
+    def test_exclude_stems_adds_do_not_repeat_block(self, topic):
+        _, user, _ = build_question_generation_prompt(
+            topic,
+            "easy",
+            2,
+            exclude_stems=["What is 2+2?", "Solve x^2 = 9."],
+        )
+        assert "### DO NOT REPEAT" in user
+        assert "1. What is 2+2?" in user
+        assert "2. Solve x^2 = 9." in user
+        assert "Create clearly different questions instead." in user
+        # No truncation note when the list is under the limit.
+        assert "Showing the most recent" not in user
+
+    def test_exclude_stems_truncation_note_shows_at_limit(self, topic):
+        stems = [f"Excluded stem {i}" for i in range(40)]
+        _, user, _ = build_question_generation_prompt(
+            topic, "easy", 2, exclude_stems=stems
+        )
+        assert "### DO NOT REPEAT" in user
+        assert "Showing the most recent 40" in user
+        assert "40. Excluded stem 39" in user
+        assert "41." not in user
+
+    def test_exclude_stems_block_appears_in_regenerate_branch(self, topic):
+        _, user, _ = build_question_generation_prompt(
+            topic,
+            "easy",
+            2,
+            reference_stem="Reference stem for improvement.",
+            exclude_stems=["Regenerated but deleted again."],
+        )
+        assert "Regenerate" in user
+        assert "### DO NOT REPEAT" in user
+        assert "1. Regenerated but deleted again." in user
+
+    def test_no_exclude_stems_omits_do_not_repeat_block(self, topic):
+        _, user, _ = build_question_generation_prompt(topic, "easy", 2)
+        assert "DO NOT REPEAT" not in user
+
 
 class TestLegacyTutorPrompts:
-    def test_tutor_chat_includes_rules_and_context(self):
-        system, user = build_tutor_chat_prompt(
+    def test_tutor_chat_system_has_new_schema_and_rules(self):
+        system, _user = build_tutor_chat_prompt("algebra", "Help me factor x^2 + 5x + 6")
+        assert "ExamiQ+" in system
+        assert "clear, concise tutor for college math and computer science" in system
+        assert "## SCOPE" in system
+        assert "## CHOOSE THE REPLY TYPE" in system
+        assert "concept_check" in system
+        assert '"concept_check"' in system
+        assert "## QUALITY RULES" in system
+        assert "## TEXT REPLIES" in system
+        assert "\\hl" in system
+        assert "3-6 steps" in system
+        assert "source of truth" in system
+        assert "solution: 3-6 steps. concept_check: no steps" in system
+        assert "80 words or fewer outside tables" in system
+        assert "table block" in system
+        assert "exact trap" in system
+        assert "portable test" in system
+        assert "different content" in system
+        assert "Never claim you saved" in system
+        assert "Learn more" in system
+        assert "8 words or fewer" in system
+        assert '"blocks"' in system
+        assert '"check"' in system
+        assert '"follow_ups"' in system
+        assert '"quick_check"' in system
+        assert '"remember"' in system
+        assert '"table"' in system
+
+    def test_tutor_chat_user_prompt_shape(self):
+        _system, user = build_tutor_chat_prompt(
             "algebra",
             "How do I factor x^2 + 5x + 6?",
             history=[{"role": "user", "text": "I'm stuck"}],
@@ -84,19 +153,51 @@ class TestLegacyTutorPrompts:
                 "is_correct": False,
             },
         )
-        assert "ExamiQ+" in system
-        assert "Do NOT greet" in user
+        assert "TOPIC RESTRICTION" in user
         assert "Midterm" in user
         assert "I'm stuck" in user
-        assert "TOPIC RESTRICTION" in user
+        assert "Student: How do I factor x^2 + 5x + 6?" in user
         assert "Factor x^2 + 5x + 6" in user
-        assert "unrelated to math" in user.lower() or "outside this topic" in user.lower()
-        assert '"steps"' in system or '"steps"' in user
-        assert "$...$" in system or "KaTeX" in system
-        assert "3 to 6 steps" in system or "3–6 steps" in system or "3 to 6 steps" in user
-        assert "never include step numbers" in system.lower() or "never" in user.lower()
-        assert "highlight" in system.lower()
-        assert "check step" in system.lower() or "check when possible" in user.lower()
+        assert "Reply with the JSON object only." in user
+        # No subject code in context → the convention rule must be omitted.
+        assert "course reference" not in user
+        assert "Subject:" not in user
+
+    def test_tutor_chat_convention_rule_follows_subject_code(self):
+        _, user = build_tutor_chat_prompt(
+            "linear equations",
+            "Is a negation a compound statement?",
+            question_context={
+                "stem": "Which statement is compound?",
+                "subject_code": "BSEM 22",
+                "subject_name": "College Algebra",
+            },
+        )
+        assert "Subject: BSEM 22 – College Algebra" in user
+        assert (
+            "Follow the definitions and notation used in the course reference "
+            "for BSEM 22" in user
+        )
+        assert "negation counts as a compound statement" in user
+        assert "Reply with the JSON object only." in user
+
+    def test_tutor_chat_choices_rendered_for_mcq(self):
+        _, user = build_tutor_chat_prompt(
+            "logic",
+            "Which option is the correct answer?",
+            question_context={
+                "stem": "Which statement is compound?",
+                "choices": [
+                    {"id": "A", "text": "p AND q"},
+                    {"id": "B", "text": "not p"},
+                ],
+                "student_pick": "B",
+            },
+        )
+        assert "Choices:" in user
+        assert "A) p AND q" in user
+        assert "B) not p" in user
+        assert "Student picked: B" in user
 
     def test_tutor_chat_includes_faculty_steps_for_expansion(self):
         _, user = build_tutor_chat_prompt(
@@ -122,7 +223,10 @@ class TestLegacyTutorPrompts:
         assert "expand these into richer teaching" in user.lower()
         assert "Arithmetic slip" in user
         assert "build on this" in user.lower()
-        assert "expand them into fuller" in user.lower()
+        # The system QUALITY RULES anchor curated content as the source of truth.
+        system_text, _user2 = build_tutor_chat_prompt("algebra", "Show the full solution")
+        assert "treat them as the source of truth" in system_text
+
 
     def test_tutor_intro_format(self):
         _, user = build_tutor_intro_prompt("Calculus")

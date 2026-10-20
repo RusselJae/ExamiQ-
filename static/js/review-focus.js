@@ -382,13 +382,13 @@
     }
 
     function katexRender(el) {
-        if (typeof window.renderMathInElement !== "undefined" && el) {
-            window.renderMathInElement(el, {
-                delimiters: [
-                    { left: "$$", right: "$$", display: true },
-                    { left: "$", right: "$", display: false },
-                ],
-            });
+        if (
+            typeof window.renderMathInElement !== "undefined" &&
+            el &&
+            window.ExamiQKatex &&
+            window.ExamiQKatex.options
+        ) {
+            window.renderMathInElement(el, window.ExamiQKatex.options);
         }
     }
 

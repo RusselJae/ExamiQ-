@@ -41,7 +41,7 @@ from apps.questions.forms import (
     TopicForm,
 )
 
-from apps.questions.models import Question, Subject, Topic
+from apps.questions.models import ExcludedQuestion, Question, Subject, Topic
 from apps.questions.views_curriculum import (
     CurriculumTopicsView,
     ProfessorCurriculumSubjectsView as ProfessorCurriculumSubjectsAPI,
@@ -51,6 +51,7 @@ from apps.questions.services import (
     build_steps_from_post,
     create_question,
     deactivate_question,
+    exclude_stem_from_generation,
     find_duplicate_question,
     generation_fit_meta,
     mistake_student_threshold,
@@ -470,6 +471,12 @@ class QuestionDeleteView(ProfessorCourseMixin, DeleteView):
 
         deactivate_question(self.object)
 
+        exclude_stem_from_generation(
+            topic_id=self.object.topic_id,
+            stem=self.object.stem,
+            excluded_by=self.request.user,
+        )
+
         messages.success(self.request, "Question deactivated.")
 
         return redirect(self.get_success_url())
@@ -503,6 +510,44 @@ class QuestionToggleActiveView(ProfessorCourseMixin, View):
             activate_question(question)
             messages.success(request, "Question activated.")
         return redirect("analytics_professor:question_list", course_pk=course_pk)
+
+
+class QuestionDraftRemoveView(ProfessorCourseMixin, View):
+    """Remember stems removed from the client-side batch draft.
+
+    Draft questions live only in sessionStorage, so deletion there is not
+    persisted anywhere. This endpoint records the removed stems as generation
+    exclusions so AI never regenerates them for the topic.
+    """
+
+    def post(self, request, course_pk):
+        from apps.questions.forms import QuestionDraftRemoveForm
+
+        form = QuestionDraftRemoveForm(request.POST)
+        if not form.is_valid():
+            return JsonResponse(
+                {"error": "Invalid draft removal request."}, status=400
+            )
+        subject = _subject_for_course(self.course)
+        if not subject:
+            return JsonResponse(
+                {"error": "Link a subject to this course first."}, status=400
+            )
+        topic = get_object_or_404(
+            Topic,
+            pk=form.cleaned_data["topic_id"],
+            subject=subject,
+        )
+        excluded = 0
+        for stem in form.cleaned_data["stems_json"]:
+            if exclude_stem_from_generation(
+                topic_id=topic.pk,
+                stem=stem,
+                excluded_by=request.user,
+                reason=ExcludedQuestion.Reason.DRAFT_REMOVED,
+            ):
+                excluded += 1
+        return JsonResponse({"topic_id": topic.pk, "excluded": excluded})
 
 
 class QuestionPublishView(ProfessorCourseMixin, View):
@@ -990,7 +1035,10 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                 if code in valid_difficulties and code not in difficulties:
                     difficulties.append(code)
         if not difficulties:
-            difficulties = [Question.Difficulty.EASY]
+            return JsonResponse(
+                {"error": "Select at least one difficulty before generating."},
+                status=400,
+            )
         # Cap at three bands (UI allows 1–3); store comma-joined for the job.
         difficulties = difficulties[:3]
         difficulty = ",".join(difficulties)

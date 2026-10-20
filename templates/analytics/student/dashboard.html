@@ -36,22 +36,24 @@
                 <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-trends-scope">
                     {{ dashboard_trends.donut.scope_line }}
                 </p>
-                <div class="student-confidence-card__periods" role="group" aria-label="Time period">
-                    <a href="?period=7"
-                       class="student-confidence-card__period{% if donut_period == '7' %} is-active{% endif %}">7 days</a>
-                    <a href="?period=30"
-                       class="student-confidence-card__period{% if donut_period == '30' %} is-active{% endif %}">30 days</a>
-                    <a href="?period=all"
-                       class="student-confidence-card__period{% if donut_period == 'all' %} is-active{% endif %}">All time</a>
+                <div class="overview-trends-filters student-confidence-card__filters">
+                    <div class="overview-trends-filter">
+                        <span class="overview-trends-filter__label" id="student-donut-range-label">Range</span>
+                        <div class="overview-pill-group" role="group" aria-labelledby="student-donut-range-label">
+                            {% for value, label in donut_period_choices %}
+                            <a href="?period={{ value }}"
+                               class="overview-pill{% if donut_period == value %} is-selected{% endif %}">{{ label }}</a>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="overview-trends-chart-wrap student-donut-wrap" id="studentTrendsChartWrap">
-                <canvas id="studentTrendsChart" aria-label="Confidence performance donut chart"></canvas>
-                <div class="student-donut-center" id="student-donut-center" aria-hidden="true"></div>
-            </div>
-            <div class="overview-trends-chart-footer">
+            <div class="student-donut-layout">
+                <div class="overview-trends-chart-wrap student-donut-wrap" id="studentTrendsChartWrap">
+                    <canvas id="studentTrendsChart" aria-label="Confidence performance donut chart"></canvas>
+                    <div class="student-donut-center" id="student-donut-center" aria-hidden="true"></div>
+                </div>
                 <div class="student-donut-legend overview-confidence-legend" id="student-confidence-legend" hidden></div>
-                <p class="student-confidence-card__insight" id="student-confidence-insight" hidden></p>
             </div>
             <div id="student-trends-empty" class="chart-empty-state hidden">
                 <p class="empty-state-title">Not enough data yet</p>

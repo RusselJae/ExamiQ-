@@ -6,7 +6,64 @@
 
     var COLORS = ["#0F766E", "#F59E0B", "#1D4ED8", "#DC2626"];
 
-    function renderLegend(el, slices, total) {
+    var STATUS_LABELS = {
+        overconfident: "Overconfident",
+        underconfident: "Underconfident",
+        confident: "Confident",
+    };
+
+    function escapeHtml(value) {
+        return String(value == null ? "" : value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    /**
+     * Legend footer: the plain-language insight plus the calibration status
+     * (bolded, with the computation on hover).
+     */
+    function renderLegendFooter(donut) {
+        if (!donut) return "";
+        var insight = donut.insight || "";
+        var status = donut.calibration_status || "";
+        var detail = donut.calibration_detail || "";
+        if (!insight && !status) return "";
+
+        var html = "";
+        if (insight) {
+            var link = "";
+            if (donut.insight_url) {
+                link =
+                    ' <a class="student-confidence-card__insight-link" href="' +
+                    donut.insight_url +
+                    '">' +
+                    (donut.insight_link_label || "Review those questions") +
+                    "</a>";
+            }
+            html +=
+                '<p class="student-donut-legend__insight">' +
+                escapeHtml(insight) +
+                link +
+                "</p>";
+        }
+        if (status) {
+            html +=
+                '<p class="student-donut-legend__status">' +
+                '<span class="student-donut-legend__status-label" data-status="' +
+                escapeHtml(status) +
+                '" title="' +
+                escapeHtml(detail) +
+                '">' +
+                escapeHtml(STATUS_LABELS[status] || status) +
+                "</span></p>";
+        }
+        return html;
+    }
+
+    function renderLegend(el, slices, total, donut) {
         if (!el) return;
         if (!slices || !slices.length || !total) {
             el.hidden = true;
@@ -14,7 +71,7 @@
             return;
         }
         el.hidden = false;
-        el.innerHTML = slices
+        var items = slices
             .map(function (slice, index) {
                 var color = COLORS[index % COLORS.length];
                 return (
@@ -34,6 +91,7 @@
                 );
             })
             .join("");
+        el.innerHTML = items + renderLegendFooter(donut);
     }
 
     function renderCenter(el, donut) {
@@ -111,7 +169,7 @@
         if (!total || !slices.length) {
             if (wrapEl) wrapEl.hidden = true;
             if (emptyEl) emptyEl.classList.remove("hidden");
-            renderLegend(legendEl, [], 0);
+            renderLegend(legendEl, [], 0, donut);
             renderCenter(centerEl, { total: 0 });
             renderInsight(insightEl, {});
             return null;
@@ -163,7 +221,7 @@
                 },
             },
         });
-        renderLegend(legendEl, slices, total);
+        renderLegend(legendEl, slices, total, donut);
         renderCenter(centerEl, donut);
         renderInsight(insightEl, donut);
         return chart;

@@ -94,14 +94,41 @@ def _bsed_subject_options(professor):
     return options
 
 
-def _resolve_upload_subject(course, professor, subject_id: str):
-    """Pick a subject from the request, constrained to the course section."""
-    subjects = subjects_for_course_section(course, professor)
+MATH_ONLY_UPLOAD_MESSAGE = "Content management accepts BSEd Mathematics subjects only."
+
+
+def _is_math_subject(subject) -> bool:
+    """Return True when ``subject`` belongs to the BSEd Mathematics curriculum."""
+    program = getattr(subject, "program", None)
+    return bool(program and program.slug == User.HomeDegreeProgram.BSED_MATH)
+
+
+def _requested_subject(subject_id: str):
+    """Fetch the explicitly posted subject, if any."""
     if subject_id and str(subject_id).isdigit():
-        match = subjects.filter(pk=int(subject_id)).first()
+        return (
+            Subject.objects.select_related("program").filter(pk=int(subject_id)).first()
+        )
+    return None
+
+
+def _resolve_upload_subject(course, professor, subject_id: str):
+    """Pick a BSEd Mathematics subject from the request for this course section."""
+    subjects = subjects_for_course_section(course, professor).filter(
+        program__slug=User.HomeDegreeProgram.BSED_MATH
+    )
+    requested = _requested_subject(subject_id)
+    if requested is not None:
+        if not _is_math_subject(requested):
+            return None
+        match = subjects.filter(pk=requested.pk).first()
         if match is not None:
             return match
-    return _subject_for_course(course) or subjects.first()
+        return None
+    course_subject = _subject_for_course(course)
+    if _is_math_subject(course_subject):
+        return course_subject
+    return subjects.first()
 
 
 def _file_response(document: LearningDocument) -> FileResponse:
@@ -151,7 +178,9 @@ def _extract_upload_pages(uploaded) -> tuple[list[dict], str]:
 
 def _unsupported_upload_message(name: str) -> str:
     """User-facing rejection for a file outside the supported upload set."""
-    allowed = ", ".join(suffix.upper().lstrip(".") for suffix in allowed_upload_suffixes())
+    allowed = ", ".join(
+        suffix.upper().lstrip(".") for suffix in allowed_upload_suffixes()
+    )
     return f"{name or 'That file'} is not a supported format. Upload one of: {allowed}."
 
 
@@ -315,8 +344,6 @@ class MaterialUploadView(ProfessorCourseMixin, View):
             "material_type", LearningDocument.MaterialType.MODULE
         )
         subject = _resolve_upload_subject(self.course, request.user, subject_id)
-        if subject is None and subject_id.isdigit():
-            subject = Subject.objects.filter(pk=int(subject_id)).first()
 
         def _reject(message):
             messages.error(request, message)
@@ -325,9 +352,15 @@ class MaterialUploadView(ProfessorCourseMixin, View):
             return redirect("analytics_professor:material_list", course_pk=course_pk)
 
         if subject is None:
+            requested = _requested_subject(subject_id)
+            if requested is not None and not _is_math_subject(requested):
+                return _reject(MATH_ONLY_UPLOAD_MESSAGE)
             return _reject(
-                "Select a course subject before uploading a learning material."
+                "Select a BSEd Mathematics course subject before uploading a "
+                "learning material."
             )
+        if not _is_math_subject(subject):
+            return _reject(MATH_ONLY_UPLOAD_MESSAGE)
 
         # Reject unsupported formats before spending time on extraction.
         if not is_allowed_upload(uploaded.name):
@@ -472,6 +505,16 @@ class MaterialDetailView(ProfessorCourseMixin, View):
         subject = _resolve_upload_subject(
             self.course, request.user, request.POST.get("subject_id", "")
         )
+        if subject is None:
+            messages.error(request, MATH_ONLY_UPLOAD_MESSAGE)
+            return redirect(
+                "analytics_professor:material_detail", course_pk=course_pk, pk=pk
+            )
+        if not _is_math_subject(subject):
+            messages.error(request, MATH_ONLY_UPLOAD_MESSAGE)
+            return redirect(
+                "analytics_professor:material_detail", course_pk=course_pk, pk=pk
+            )
         update_document_metadata(
             document,
             title=request.POST.get("title", document.title),

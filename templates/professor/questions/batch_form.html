@@ -80,19 +80,57 @@
                 {% endif %}
 
                 <div class="batch-settings-field batch-source-field" data-source-select>
-                    <label for="ai-library-document" class="batch-setup-label">Source material</label>
-                    <select id="ai-library-document" class="batch-setup-select" data-source-select-control>
-                        <option value="">Select source material…</option>
-                        <option value="__upload__" data-source-upload-option>＋ Upload a file…</option>
-                        {% if learning_documents %}
-                        <optgroup label="Saved material" data-source-saved-group>
-                            {% for doc in learning_documents %}
-                            <option value="{{ doc.pk }}">{{ doc.display_title }}</option>
-                            {% endfor %}
-                        </optgroup>
-                        {% endif %}
-                        <optgroup label="New uploads" data-source-upload-group></optgroup>
-                    </select>
+                    <span class="batch-setup-label" id="source-material-label">Source material</span>
+                    <div
+                        class="searchable-select searchable-select--batch"
+                        data-searchable-select
+                        data-source-select-control
+                        data-placeholder="Select source material…"
+                    >
+                        <input type="hidden" id="ai-library-document" value="">
+                        <button
+                            type="button"
+                            class="searchable-select__trigger"
+                            aria-haspopup="listbox"
+                            aria-expanded="false"
+                            aria-labelledby="source-material-label"
+                        >
+                            <span class="searchable-select__icon" aria-hidden="true">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+                            </span>
+                            <span class="searchable-select__value is-placeholder">Select source material…</span>
+                            <span class="searchable-select__chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="searchable-select__panel hidden" role="presentation">
+                            <input type="search" class="searchable-select__search" placeholder="Search saved material…" autocomplete="off">
+                            <ul class="searchable-select__list" role="listbox" aria-label="Source material">
+                                <li
+                                    class="searchable-select__option"
+                                    role="option"
+                                    data-value="__upload__"
+                                    data-label="＋ Upload a file…"
+                                    data-search="upload a file"
+                                    data-source-upload-option
+                                >
+                                    ＋ Upload a file…
+                                </li>
+                                <li class="searchable-select__group-label{% if not learning_documents %} hidden{% endif %}" role="presentation" data-group="saved" data-source-saved-group>Saved material</li>
+                                {% for doc in learning_documents %}
+                                <li
+                                    class="searchable-select__option"
+                                    role="option"
+                                    data-group="saved"
+                                    data-value="{{ doc.pk }}"
+                                    data-label="{{ doc.display_title }}"
+                                    data-search="{{ doc.display_title|lower }}"
+                                >
+                                    {{ doc.display_title }}
+                                </li>
+                                {% endfor %}
+                                <li class="searchable-select__group-label hidden" role="presentation" data-group="uploads" data-source-upload-group>New uploads</li>
+                            </ul>
+                        </div>
+                    </div>
                     <input
                         type="file"
                         id="ai-source-file"
@@ -120,7 +158,7 @@
                             tabindex="-1"
                             size="{{ difficulty_choices|length }}">
                         {% for value, label in difficulty_choices %}
-                        <option value="{{ value }}"{% if value == "medium" %} selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
                     <div class="batch-pill-group"
@@ -133,9 +171,9 @@
                          data-pill-target="settings-difficulty">
                         {% for value, label in difficulty_choices %}
                         <button type="button"
-                                class="batch-pill{% if value == "medium" %} is-selected{% endif %}"
+                                class="batch-pill"
                                 data-pill-value="{{ value }}"
-                                aria-pressed="{% if value == "medium" %}true{% else %}false{% endif %}">
+                                aria-pressed="false">
                             {{ label }}
                         </button>
                         {% endfor %}
@@ -146,6 +184,7 @@
                             AI decides
                         </button>
                     </div>
+                    <p class="text-xs text-examiq-slate mt-2">Select at least one difficulty before generating.</p>
                 </div>
 
                 <div class="batch-settings-field">
@@ -289,6 +328,9 @@
     const generateUrl = coursePk
         ? "{% if course %}{% url 'analytics_professor:question_ai_generate' course.pk %}{% endif %}"
         : "";
+    const draftDeleteUrl = coursePk
+        ? "{% if course %}{% url 'analytics_professor:question_draft_delete' course.pk %}{% endif %}"
+        : "";
     const validateUrl = coursePk
         ? "{% if course %}{% url 'analytics_professor:question_ai_validate' course.pk %}{% endif %}"
         : "";
@@ -318,7 +360,10 @@
     const batchForm = document.getElementById("batch-question-form");
     const sourceInput = document.getElementById("ai-source-file");
     const librarySelect = document.getElementById("ai-library-document");
-    const uploadOption = document.querySelector("[data-source-upload-option]");
+    const sourceSelectRoot = document.querySelector("[data-source-select-control]");
+    const sourceList = sourceSelectRoot
+        ? sourceSelectRoot.querySelector(".searchable-select__list")
+        : null;
     const uploadGroup = document.querySelector("[data-source-upload-group]");
     const sourceDropzone = document.querySelector("[data-source-dropzone]");
     const sourceClearBtn = document.querySelector("[data-source-clear-upload]");
@@ -383,15 +428,50 @@
         return "library";
     }
 
+    /* Mirror a value into the searchable-select trigger so the picker always
+     * shows what is actually going to be sent to the server. */
+    function setSourceValue(value, label) {
+        const next = value == null ? "" : String(value);
+        if (librarySelect) librarySelect.value = next;
+        if (window.ExamiQSearchableSelect && window.ExamiQSearchableSelect.setValue) {
+            window.ExamiQSearchableSelect.setValue(sourceSelectRoot, next, label);
+            return;
+        }
+        const valueEl = sourceSelectRoot
+            ? sourceSelectRoot.querySelector(".searchable-select__value")
+            : null;
+        if (!valueEl) return;
+        const placeholder = (sourceSelectRoot && sourceSelectRoot.dataset.placeholder) || "";
+        valueEl.textContent = next ? label || next : placeholder;
+        valueEl.classList.toggle("is-placeholder", !next);
+    }
+
+    function removePendingUploadOptions() {
+        if (!sourceList) return;
+        sourceList
+            .querySelectorAll('[data-pending-upload="1"]')
+            .forEach(function (el) { el.remove(); });
+    }
+
     function registerPendingUpload(name) {
-        if (!librarySelect || !uploadGroup) return;
-        uploadGroup.innerHTML = "";
-        const option = document.createElement("option");
-        option.value = UPLOAD_PREFIX + name;
-        option.textContent = name;
+        if (!librarySelect || !sourceList) return;
+        removePendingUploadOptions();
+        const option = document.createElement("li");
+        option.className = "searchable-select__option";
+        option.setAttribute("role", "option");
         option.setAttribute("data-pending-upload", "1");
-        uploadGroup.appendChild(option);
-        librarySelect.value = option.value;
+        option.setAttribute("data-group", "uploads");
+        option.setAttribute("data-value", UPLOAD_PREFIX + name);
+        option.setAttribute("data-label", name);
+        option.setAttribute("data-search", String(name).toLowerCase());
+        option.textContent = name;
+        if (uploadGroup && uploadGroup.parentNode) {
+            uploadGroup.parentNode.insertBefore(option, uploadGroup.nextSibling);
+            uploadGroup.classList.remove("hidden");
+        } else {
+            sourceList.appendChild(option);
+        }
+        setSourceValue(UPLOAD_PREFIX + name, name);
         if (sourceDropzone) {
             sourceDropzone.classList.remove("hidden");
             const filenameEl = sourceDropzone.querySelector("[data-dropzone-filename]");
@@ -405,8 +485,9 @@
 
     function clearPendingUpload() {
         if (sourceInput) sourceInput.value = "";
-        if (uploadGroup) uploadGroup.innerHTML = "";
-        if (librarySelect) librarySelect.value = "";
+        removePendingUploadOptions();
+        if (uploadGroup) uploadGroup.classList.add("hidden");
+        setSourceValue("", "");
         if (sourceDropzone) {
             sourceDropzone.classList.add("hidden");
             const filenameEl = sourceDropzone.querySelector("[data-dropzone-filename]");
@@ -419,28 +500,29 @@
     }
 
     function promoteUploadToSaved(docId, title) {
-        if (!librarySelect || !docId) return;
-        if (uploadGroup) uploadGroup.innerHTML = "";
-        let savedGroup = librarySelect.querySelector('optgroup[data-source-saved-group]');
-        if (!savedGroup) {
-            savedGroup = document.createElement("optgroup");
-            savedGroup.label = "Saved material";
-            savedGroup.setAttribute("data-source-saved-group", "1");
-            const anchor = uploadGroup || uploadOption || null;
-            if (anchor && anchor.parentNode) {
-                librarySelect.insertBefore(savedGroup, anchor);
-            } else {
-                librarySelect.appendChild(savedGroup);
-            }
+        if (!librarySelect || !docId || !sourceList) return;
+        removePendingUploadOptions();
+        if (uploadGroup) uploadGroup.classList.add("hidden");
+        sourceList
+            .querySelectorAll('.searchable-select__option[data-value="' + String(docId) + '"]')
+            .forEach(function (el) { el.remove(); });
+        const label = title || "Material #" + docId;
+        const saved = document.createElement("li");
+        saved.className = "searchable-select__option";
+        saved.setAttribute("role", "option");
+        saved.setAttribute("data-group", "saved");
+        saved.setAttribute("data-value", String(docId));
+        saved.setAttribute("data-label", label);
+        saved.setAttribute("data-search", String(label).toLowerCase());
+        saved.textContent = label;
+        const savedGroup = sourceList.querySelector("[data-source-saved-group]");
+        if (savedGroup) {
+            savedGroup.classList.remove("hidden");
+            savedGroup.parentNode.insertBefore(saved, savedGroup.nextSibling);
+        } else {
+            sourceList.appendChild(saved);
         }
-        Array.prototype.forEach.call(librarySelect.options, function (option) {
-            if (option.value === String(docId)) option.remove();
-        });
-        const saved = document.createElement("option");
-        saved.value = String(docId);
-        saved.textContent = title || "Material #" + docId;
-        savedGroup.appendChild(saved);
-        librarySelect.value = String(docId);
+        setSourceValue(String(docId), label);
         if (sourceDropzone) sourceDropzone.classList.add("hidden");
         if (sourceClearBtn) sourceClearBtn.classList.add("hidden");
     }
@@ -457,15 +539,9 @@
     if (librarySelect) {
         librarySelect.addEventListener("change", function () {
             if (librarySelect.value === UPLOAD_TRIGGER) {
-                librarySelect.value = "";
+                setSourceValue("", "");
                 if (sourceInput) sourceInput.click();
             }
-        });
-    }
-
-    if (uploadOption) {
-        uploadOption.addEventListener("dblclick", function () {
-            if (sourceInput) sourceInput.click();
         });
     }
 
@@ -731,7 +807,7 @@
     };
 
     function selectedDifficulties() {
-        if (!difficultySelect) return ["medium"];
+        if (!difficultySelect) return [];
         const values = [];
         if (difficultySelect.multiple) {
             Array.prototype.forEach.call(difficultySelect.selectedOptions || [], function (opt) {
@@ -741,14 +817,13 @@
             values.push(difficultySelect.value);
         }
         const allowed = ["easy", "medium", "hard"];
-        const cleaned = values.filter(function (v) {
+        return values.filter(function (v) {
             return allowed.indexOf(v) !== -1;
         });
-        return cleaned.length ? cleaned : ["medium"];
     }
 
     function primaryDifficulty() {
-        return selectedDifficulties()[0] || "medium";
+        return selectedDifficulties()[0] || "";
     }
 
     function normalizeDifficulty(value) {
@@ -763,6 +838,9 @@
 
     function difficultyPillHtml(difficulty) {
         const key = normalizeDifficulty(difficulty);
+        if (!key) {
+            return '<span class="text-examiq-slate">—</span>';
+        }
         const label = DIFFICULTY_LABELS[key] || key;
         return '<span class="difficulty-pill difficulty-pill--' + key + '">' + label + "</span>";
     }
@@ -1237,6 +1315,27 @@
         });
     }
 
+    function postDraftStemsForExclusion(stems) {
+        // Fire-and-forget: record deleted draft stems so AI generation avoids
+        // repeating them later. Draft removal itself must not depend on this
+        // succeeding, so failures are only logged.
+        if (!draftDeleteUrl) return;
+        const topicId = topicSelect ? topicSelect.value : "";
+        if (!topicId || !stems.length) return;
+        const fd = new FormData();
+        fd.append("csrfmiddlewaretoken", csrfToken);
+        fd.append("topic_id", String(topicId));
+        fd.append("stems_json", JSON.stringify(stems));
+        fetch(draftDeleteUrl, {
+            method: "POST",
+            body: fd,
+            headers: { Accept: "application/json", "X-CSRFToken": csrfToken },
+            credentials: "same-origin",
+        }).catch(function (err) {
+            console.warn("Could not record deleted draft stems for exclusion:", err);
+        });
+    }
+
     if (deleteSelectedBtn) {
         deleteSelectedBtn.addEventListener("click", function () {
             const picked = selectedRowIndexes();
@@ -1255,6 +1354,14 @@
             }).then(function (ok) {
                 if (!ok) return;
                 markDirty();
+                // Read stems before indexes shift so the backend can remember
+                // them as exclusions for future AI generation.
+                const stems = picked
+                    .map(function (index) {
+                        return (getQuestionData(index).stem || "").trim();
+                    })
+                    .filter(function (stem) { return stem; });
+                postDraftStemsForExclusion(stems);
                 picked
                     .slice()
                     .reverse()
@@ -1523,6 +1630,12 @@
     generateBtn.addEventListener("click", async function() {
         if (!subjectSelected || !coursePk || !generateUrl) {
             if (window.showToast) window.showToast("Select a course subject to save questions.", "warning");
+            return;
+        }
+        if (!selectedDifficulties().length) {
+            if (window.showToast) {
+                window.showToast("Select at least one difficulty before generating.", "warning");
+            }
             return;
         }
         const hasLibrary = currentSourceKind() !== "none";
