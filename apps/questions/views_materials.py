@@ -28,6 +28,7 @@ from apps.ai.material_services import (
     document_text_is_rewritable,
     documents_for_course,
     documents_for_subject,
+    delete_document,
     ensure_download_file,
     ingest_course_material,
     replace_document_content,
@@ -526,6 +527,11 @@ class MaterialDetailView(ProfessorCourseMixin, View):
             return redirect(
                 "analytics_professor:material_detail", course_pk=course_pk, pk=pk
             )
+        if action == "delete":
+            title = document.display_title
+            delete_document(document)
+            messages.success(request, f"“{title}” was deleted permanently.")
+            return _after_mutate()
         if action == "save_content":
             try:
                 result = replace_document_content(
@@ -569,7 +575,22 @@ class MaterialDetailView(ProfessorCourseMixin, View):
             original_name=request.POST.get("original_name", document.original_name),
             subject=subject,
         )
-        messages.success(request, "Material updated.")
+        # The editor lives inside this form: when the content changed, the
+        # submitted HTML is saved too and the AI chunks are rebuilt.
+        content_html = request.POST.get("content_html", "")
+        if content_html.strip():
+            try:
+                result = replace_document_content(document, html=content_html)
+            except SourceMaterialError as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"Material updated — {result['chunk_count']} chunk(s) rebuilt "
+                    "for AI generate.",
+                )
+        else:
+            messages.success(request, "Material updated.")
         return redirect(
             "analytics_professor:material_detail", course_pk=course_pk, pk=pk
         )

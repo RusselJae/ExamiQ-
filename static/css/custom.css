@@ -3223,6 +3223,60 @@
     margin: 0;
 }
 
+/* Account-state notices on the sign-in / sign-up pages (e.g. "your account
+   exists but the email is not verified yet"). */
+.auth-form__notice {
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.auth-form__notice p {
+    margin: 0;
+}
+
+.auth-form__notice p + p {
+    margin-top: 0.4rem;
+}
+
+.auth-form__notice--success {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+.auth-form__notice--warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+.auth-form__notice a {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* Small helper line under the submit button (e.g. "Already registered?"). */
+.auth-form__hint {
+    margin: 0;
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--color-slate);
+}
+
+.auth-form__hint a {
+    color: var(--color-primary);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .auth-field {
     display: flex;
     flex-direction: column;
@@ -17109,6 +17163,52 @@ button, .btn-primary, .btn-secondary, .btn-outline, label {
     background: #f59e0b;
 }
 
+/* ---- Narrow screens: the document header stacks cleanly ---- */
+@media (max-width: 767px) {
+    .materials-doc__head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.6rem;
+    }
+
+    /* Long file names wrap instead of being cut off. */
+    .materials-doc__title {
+        font-size: 1.15rem;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .materials-doc__actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        align-items: center;
+        gap: 0.4rem;
+        width: 100%;
+    }
+
+    .materials-doc__saved {
+        grid-column: 1 / -1;
+        font-size: 0.75rem;
+        margin-bottom: 0.1rem;
+    }
+
+    .materials-doc__actions .btn-primary,
+    .materials-doc__actions .btn-secondary {
+        width: 100%;
+        font-size: 0.8125rem;
+        padding: 0 0.5rem;
+    }
+
+    .materials-doc__meta {
+        flex-wrap: wrap;
+    }
+
+    .materials-doc__course {
+        width: 100%;
+    }
+}
+
 .materials-doc__saved[data-state="saving"] {
     color: var(--color-slate);
 }
@@ -17450,6 +17550,78 @@ button, .btn-primary, .btn-secondary, .btn-outline, label {
 
 .document-editor-content:focus {
     outline: none;
+}
+
+/* ---- Narrow screens: a comfortable, page-like editing surface ---- */
+@media (max-width: 767px) {
+    .document-editor-container {
+        max-width: 100%;
+        margin: 0.75rem 0 1.5rem;
+        padding: 1rem 1rem 1.5rem;
+        min-height: 0;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+
+    /* The toolbar sticks to the top of the screen on mobile, and every
+       button stays a comfortable tap target. */
+    .document-editor-toolbar {
+        position: sticky;
+        top: 3rem;
+        z-index: 3;
+        margin: 0 0 0.75rem;
+        padding: 0.4rem;
+        gap: 0.15rem;
+        border-radius: 0.6rem;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .document-editor-toolbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .document-editor-toolbar button {
+        min-width: 2.25rem;
+        min-height: 2.25rem;
+        padding: 0.45rem 0.55rem;
+        font-size: 0.875rem;
+        flex: 0 0 auto;
+    }
+
+    .document-editor-toolbar__sep {
+        height: 1.5rem;
+        margin: 0 0.1rem;
+        flex: 0 0 auto;
+    }
+
+    .materials-editor__actions {
+        margin-bottom: 0.5rem;
+        gap: 0.5rem;
+    }
+
+    .materials-editor__count {
+        font-size: 0.6875rem;
+    }
+
+    /* Readable document typography on a phone. */
+    .document-editor-content {
+        font-size: 16px;
+        line-height: 1.6;
+    }
+
+    .document-editor-content h1 {
+        font-size: 1.5rem;
+    }
+
+    .document-editor-content h2 {
+        font-size: 1.25rem;
+    }
+
+    .document-editor-content h3 {
+        font-size: 1.1rem;
+    }
 }
 
 .document-editor-content > *:first-child {
@@ -18266,6 +18438,15 @@ a.materials-library__name:hover {
 
 .materials-archive-btn--restore {
     color: var(--color-cyan, #0e7490);
+}
+
+/* Delete removes the material for good, so it reads as a destructive action. */
+.materials-archive-btn--delete {
+    color: #b91c1c;
+}
+
+.materials-archive-btn--delete:hover {
+    color: #991b1b;
 }
 
 .materials-library__item--archived {

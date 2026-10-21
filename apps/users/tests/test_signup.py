@@ -458,6 +458,86 @@ class TestSignupRoles:
 
 
 @pytest.mark.django_db
+class TestAlreadyRegisteredEmail:
+    """A student who signed up but never verified must not hit a dead end."""
+
+    @pytest.fixture(autouse=True)
+    def _locmem_email(self, settings):
+        settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+        settings.FACULTY_PORTAL_TOKEN = FACULTY_TOKEN
+
+    def test_unverified_account_points_to_signin_and_resend(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        User.objects.create_user(
+            email="newstudent@test.edu",
+            password="strongpass123!",
+            role=User.Role.STUDENT,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=False,
+        )
+        response = client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "already registered" in content
+        assert "waiting for email verification" in content
+        assert "Resend code" in content
+        assert reverse("account_login") in content
+
+    def test_active_account_points_to_signin(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        User.objects.create_user(
+            email="newstudent@test.edu",
+            password="strongpass123!",
+            role=User.Role.STUDENT,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=True,
+        )
+        response = client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, signup_section),
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "already registered" in content
+        assert "Sign in with it instead" in content
+
+    def test_login_of_unverified_account_opens_verify_screen(
+        self, client, bsed_program, signup_year_level, signup_section
+    ):
+        User.objects.create_user(
+            email="newstudent@test.edu",
+            password="strongpass123!",
+            role=User.Role.STUDENT,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=False,
+        )
+        response = client.post(
+            reverse("account_login"),
+            {"login": "newstudent@test.edu", "password": "strongpass123!"},
+        )
+        assert response.status_code == 302
+        assert reverse("users:signup_verify") in response.url
+
+    def test_login_page_explains_pending_and_archived_states(self, client):
+        pending = client.get(reverse("account_login") + "?registered=pending")
+        assert pending.status_code == 200
+        assert "waiting for email verification" in pending.content.decode()
+
+        archived = client.get(reverse("account_login") + "?archived=1")
+        assert archived.status_code == 200
+        assert "archived" in archived.content.decode()
+
+        verified = client.get(reverse("account_login") + "?verified=1")
+        assert verified.status_code == 200
+        assert "Email verified" in verified.content.decode()
+
+
+@pytest.mark.django_db
 class TestAuthTemplates:
     def test_login_page_has_forgot_password(self, client):
         response = client.get(reverse("account_login"))

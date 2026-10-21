@@ -8,8 +8,11 @@
      data-office-config-url="{{ office_config_url }}"
      {% if not office_enabled %}data-office-enabled="0"{% endif %}>
 
-    {# Archive/restore posts from the overflow menu, kept outside the header form. #}
-    <form id="materials-doc-archive" method="post" class="hidden">
+    {# Delete posts from the overflow menu, kept outside the header form. #}
+    <form id="materials-doc-archive" method="post" class="hidden"
+          data-confirm-message="Delete this material permanently? This cannot be undone."
+          data-confirm-type="danger"
+          data-confirm-label="Delete">
         {% csrf_token %}
         {% if from_hub %}
         <input type="hidden" name="hub_return" value="1">
@@ -17,15 +20,16 @@
         <input type="hidden" name="subject_id" value="{{ document.subject_id }}">
         {% endif %}
         {% endif %}
-        <input type="hidden" name="action" value="{% if document.is_archived %}restore{% else %}archive{% endif %}">
+        <input type="hidden" name="action" value="delete">
     </form>
 
     {# Back link, course name, and document title removed per request. #}
 
-    <form method="post" class="materials-doc__form" data-doc-form>
+    <form method="post" class="materials-doc__form" data-doc-form data-editor-form>
         {% csrf_token %}
         <input type="hidden" name="action" value="save">
         <input type="hidden" name="title" value="{{ document.title }}">
+        <input type="hidden" name="content_html" data-editor-payload>
 
         <div class="materials-doc__head">
             <h1 class="materials-doc__title">{{ document.display_title }}</h1>
@@ -56,11 +60,7 @@
                         {% endif %}
                         <button type="button" role="menuitem" data-doc-rename>Rename file</button>
                         <button type="button" role="menuitem" data-doc-move-course>Move to course</button>
-                        {% if document.is_archived %}
-                        <button type="submit" role="menuitem" form="materials-doc-archive">Restore material</button>
-                        {% else %}
-                        <button type="submit" role="menuitem" class="is-danger" form="materials-doc-archive">Archive material</button>
-                        {% endif %}
+                        <button type="submit" role="menuitem" class="is-danger" form="materials-doc-archive">Delete material</button>
                     </div>
                 </div>
             </div>
@@ -90,48 +90,41 @@
             <input id="materials-doc-filename" name="original_name" value="{{ document.original_name }}"
                    class="materials-doc__rename-input" autocomplete="off">
         </div>
-    </form>
 
-    {% if document.error_message %}
-    <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{{ document.error_message }}</div>
-    {% endif %}
+        {% if document.error_message %}
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{{ document.error_message }}</div>
+        {% endif %}
 
-    <section class="materials-doc__editor" aria-labelledby="materials-editor-title">
-        <h2 id="materials-editor-title" class="sr-only">Document editor</h2>
+        <section class="materials-doc__editor" aria-labelledby="materials-editor-title">
+            <h2 id="materials-editor-title" class="sr-only">Document editor</h2>
 
-        {% if is_pdf %}
-        {# PDFs are view/download only for now: no paragraph model to reflow-edit. #}
-        <div class="materials-doc__readonly">
-            <p class="materials-doc__readonly-title">PDF files can't be edited here yet</p>
-            <p class="materials-doc__readonly-body">
-                {% if document.file %}
-                <a href="{% url 'analytics_professor:material_download' course.pk document.pk %}">Download {{ document.original_name }}</a>
-                to view or print it.
-                {% endif %}
-                Its text is still indexed for AI Generate.
+            {% if is_pdf %}
+            {# PDFs are view/download only for now: no paragraph model to reflow-edit. #}
+            <div class="materials-doc__readonly">
+                <p class="materials-doc__readonly-title">PDF files can't be edited here yet</p>
+                <p class="materials-doc__readonly-body">
+                    {% if document.file %}
+                    <a href="{% url 'analytics_professor:material_download' course.pk document.pk %}">Download {{ document.original_name }}</a>
+                    to view or print it.
+                    {% endif %}
+                    Its text is still indexed for AI Generate.
+                </p>
+            </div>
+            {% else %}
+
+            {% if not text_is_rewritable %}
+            <p class="materials-doc__notice">
+                The downloadable copy is still the original {{ document.file_type_label }} upload — only the
+                content below is updated. Students download the original file; AI generate uses your edits.
             </p>
-        </div>
-        {% else %}
+            {% endif %}
 
-        {% if not text_is_rewritable %}
-        <p class="materials-doc__notice">
-            The downloadable copy is still the original {{ document.file_type_label }} upload — only the
-            content below is updated. Students download the original file; AI generate uses your edits.
-        </p>
-        {% endif %}
-
-        {% if office_enabled %}
-        <div class="materials-office" id="materials-office" data-office-root
-             data-office-config-url="{{ office_config_url }}">
-            <p class="materials-editor__empty">Loading the document editor…</p>
-        </div>
-        {% endif %}
-
-        <form method="post" data-editor-form class="materials-editor__form"
-              {% if office_enabled %}hidden{% endif %}>
-            {% csrf_token %}
-            <input type="hidden" name="action" value="save_content">
-            <input type="hidden" name="content_html" data-editor-payload>
+            {% if office_enabled %}
+            <div class="materials-office" id="materials-office" data-office-root
+                 data-office-config-url="{{ office_config_url }}">
+                <p class="materials-editor__empty">Loading the document editor…</p>
+            </div>
+            {% else %}
 
             <div class="document-editor-container" data-editor-page>
                 <div class="document-editor-toolbar" role="toolbar" aria-label="Formatting" data-editor-toolbar>
@@ -151,7 +144,6 @@
                 <div class="materials-editor__actions">
                     <span class="materials-editor__count" data-editor-count aria-live="polite"></span>
                     <button type="button" class="btn-secondary btn-primary-sm hidden" data-editor-revert>Revert</button>
-                    <button type="button" class="btn-primary btn-primary-sm" data-editor-save disabled>Save content</button>
                 </div>
 
                 <label class="sr-only" for="material-editor-surface">Material content</label>
@@ -164,16 +156,17 @@
                      spellcheck="true"
                      data-editor-surface>{{ document_html|safe }}</div>
             </div>
-        </form>
 
-        {% if not document_html and not office_enabled %}
-        <p class="materials-editor__empty">
-            No content was extracted from this file. Write it here and save to make it
-            available to AI generate.
-        </p>
-        {% endif %}
-        {% endif %}
-    </section>
+            {% if not document_html %}
+            <p class="materials-editor__empty">
+                No content was extracted from this file. Write it here and save to make it
+                available to AI generate.
+            </p>
+            {% endif %}
+            {% endif %}
+            {% endif %}
+        </section>
+    </form>
 </div>
 {% endblock %}
 

@@ -20,6 +20,10 @@ from apps.ai.office_editor import (
     download_edited_document,
     file_token,
     is_editable,
+    is_local_host,
+    is_tunnel_host,
+    public_base_url,
+    railway_public_base_url,
     server_url,
     sign_payload,
     verify_payload,
@@ -74,11 +78,55 @@ def pdf_doc(course, subject, professor):
     return document
 
 
+class TestPublicBaseUrl:
+    """The Document Server must be able to reach the app.
+
+    On Railway the app's own ``*.up.railway.app`` domain is the only origin
+    that reliably works: a dev tunnel copied from a local ``.env`` expires and
+    leaves the editor unable to download the file.
+    """
+
+    def test_blank_config_falls_back_to_request_host(self, settings, monkeypatch):
+        settings.ONLYOFFICE_PUBLIC_BASE_URL = ""
+        monkeypatch.delenv("RAILWAY_PUBLIC_DOMAIN", raising=False)
+        monkeypatch.delenv("RAILWAY_STATIC_URL", raising=False)
+        assert public_base_url() == ""
+
+    def test_railway_domain_is_auto_detected(self, settings, monkeypatch):
+        settings.ONLYOFFICE_PUBLIC_BASE_URL = ""
+        monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "myapp.up.railway.app")
+        assert railway_public_base_url() == "https://myapp.up.railway.app"
+        assert public_base_url() == "https://myapp.up.railway.app"
+
+    def test_stale_tunnel_is_replaced_on_railway(self, settings, monkeypatch):
+        settings.ONLYOFFICE_PUBLIC_BASE_URL = "https://abc.ngrok-free.dev"
+        monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "myapp.up.railway.app")
+        assert public_base_url() == "https://myapp.up.railway.app"
+
+    def test_localhost_is_replaced_on_railway(self, settings, monkeypatch):
+        settings.ONLYOFFICE_PUBLIC_BASE_URL = "http://127.0.0.1:8000"
+        monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "myapp.up.railway.app")
+        assert public_base_url() == "https://myapp.up.railway.app"
+
+    def test_explicit_custom_domain_is_kept(self, settings, monkeypatch):
+        settings.ONLYOFFICE_PUBLIC_BASE_URL = "https://docs.example.edu"
+        monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "myapp.up.railway.app")
+        assert public_base_url() == "https://docs.example.edu"
+
+    def test_host_classification(self):
+        assert is_local_host("127.0.0.1") is True
+        assert is_local_host("localhost") is True
+        assert is_local_host("192.168.1.10") is True
+        assert is_local_host("example.edu") is False
+        assert is_tunnel_host("abc.ngrok-free.dev") is True
+        assert is_tunnel_host("abc.trycloudflare.com") is True
+        assert is_tunnel_host("myapp.up.railway.app") is False
+
+
 class TestConfigurationGating:
     def test_disabled_when_url_unset(self, settings, docx_doc):
         settings.ONLYOFFICE_DOCUMENT_SERVER_URL = ""
         assert is_editable(docx_doc) is False
-
     @pytest.mark.django_db
     def test_enabled_for_docx_when_configured(self, office, docx_doc):
         assert is_editable(docx_doc) is True
@@ -484,7 +532,10 @@ class TestDetailPageIntegration:
             )
         ).content.decode()
         assert "data-office-root" not in content
-        assert "data-editor-form" not in content
+        # The form is shared with the document header, but no editing surface
+        # or formatting toolbar may be mounted for a PDF.
+        assert "data-editor-surface" not in content
+        assert "data-editor-toolbar" not in content
         assert "materials-office.js" not in content
         assert "materials-editor.js" not in content
         # Read-only notice plus a way to get the file.

@@ -33,13 +33,15 @@
 
     function initEditor(root) {
         if (!root || root.dataset.editorBound === "1") return;
-        var form = root.querySelector("[data-editor-form]");
-        var surface = root.querySelector("[data-editor-surface]");
-        var payload = root.querySelector("[data-editor-payload]");
-        var toolbar = root.querySelector("[data-editor-toolbar]");
-        var saveBtn = root.querySelector("[data-editor-save]");
-        var revertBtn = root.querySelector("[data-editor-revert]");
-        var countEl = root.querySelector("[data-editor-count]");
+        var form = root.matches("[data-editor-form]")
+            ? root
+            : root.querySelector("[data-editor-form]");
+        var scope = form || root;
+        var surface = scope.querySelector("[data-editor-surface]");
+        var payload = scope.querySelector("[data-editor-payload]");
+        var toolbar = scope.querySelector("[data-editor-toolbar]");
+        var revertBtn = scope.querySelector("[data-editor-revert]");
+        var countEl = scope.querySelector("[data-editor-count]");
         if (!form || !surface || !payload) return;
         root.dataset.editorBound = "1";
 
@@ -70,10 +72,22 @@
 
         function syncToolbarState() {
             if (!toolbar) return;
-            var block = closestBlock(window.getSelection() ? window.getSelection().anchorNode : null);
+            var selection = window.getSelection();
+            var anchor = selection ? selection.anchorNode : null;
+            var block = closestBlock(anchor);
             toolbar.querySelectorAll("[data-cmd]").forEach(function (btn) {
                 var tag = btn.getAttribute("data-cmd").toUpperCase();
-                btn.classList.toggle("is-active", hasTag(block, tag));
+                var on;
+                if (tag === "BOLD") {
+                    // Bold is inline, so look for the tag around the caret
+                    // rather than for a block-level ancestor.
+                    on = hasTag(anchor, "B") || hasTag(anchor, "STRONG");
+                } else if (tag === "ITALIC") {
+                    on = hasTag(anchor, "I") || hasTag(anchor, "EM");
+                } else {
+                    on = hasTag(block, tag);
+                }
+                btn.classList.toggle("is-active", !!on);
             });
             toolbar.querySelectorAll("[data-block]").forEach(function (btn) {
                 var tag = btn.getAttribute("data-block").toUpperCase();
@@ -87,8 +101,10 @@
 
         function setDirty(dirty) {
             root.classList.toggle("is-dirty", dirty);
-            if (saveBtn) saveBtn.disabled = !dirty;
             if (revertBtn) revertBtn.classList.toggle("hidden", !dirty);
+            if (window.ExamiQMaterials && window.ExamiQMaterials.setSaveStatus) {
+                window.ExamiQMaterials.setSaveStatus(dirty ? "dirty" : "saved");
+            }
         }
 
         function sync() {
@@ -97,8 +113,35 @@
             syncToolbarState();
         }
 
+        /* Remember the current selection so a toolbar click can restore it:
+           focusing the surface collapses the selection, which would make the
+           command apply to the caret instead of the selected text. */
+        var savedRange = null;
+
+        function rememberSelection() {
+            var selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) return;
+            var range = selection.getRangeAt(0);
+            if (!surface.contains(range.commonAncestorContainer)) return;
+            savedRange = range.cloneRange();
+        }
+
+        function restoreSelection() {
+            if (!savedRange) return;
+            var selection = window.getSelection();
+            if (!selection) return;
+            try {
+                selection.removeAllRanges();
+                selection.addRange(savedRange);
+            } catch (err) {
+                /* ignore */
+            }
+        }
+
         function exec(command, value) {
+            rememberSelection();
             surface.focus();
+            restoreSelection();
             try {
                 document.execCommand(command, false, value || null);
             } catch (err) {
@@ -172,21 +215,21 @@
             }
         }
 
-        function submitForm() {
-            if (serialize() === original) return;
+        /* The editor lives inside the document form: the single "Save" button
+           posts both the metadata and the edited content. */
+        function collectContent() {
+            if (serialize() === original) {
+                payload.value = "";
+                return true;
+            }
             if (!(surface.innerText || "").trim()) {
                 if (window.showToast) {
                     window.showToast("Add some content before saving.", "warning");
                 }
-                return;
+                return false;
             }
             payload.value = serialize();
-            if (saveBtn && window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
-                window.ExamiQUI.setButtonLoading(saveBtn, true, "Saving…");
-            }
-            original = serialize();
-            setDirty(false);
-            form.submit();
+            return true;
         }
 
         if (toolbar) {
@@ -209,6 +252,7 @@
         surface.addEventListener("keyup", sync);
         surface.addEventListener("mouseup", sync);
         surface.addEventListener("focus", sync);
+        surface.addEventListener("blur", rememberSelection);
         surface.addEventListener("paste", function (event) {
             var clipboard = event.clipboardData;
             if (!clipboard) return;
@@ -225,11 +269,11 @@
         surface.addEventListener("keydown", function (event) {
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
                 event.preventDefault();
-                submitForm();
+                if (!collectContent()) return;
+                form.requestSubmit ? form.requestSubmit() : form.submit();
             }
         });
 
-        if (saveBtn) saveBtn.addEventListener("click", submitForm);
         if (revertBtn) {
             revertBtn.addEventListener("click", function () {
                 surface.innerHTML = original;
@@ -239,8 +283,12 @@
         }
 
         form.addEventListener("submit", function (event) {
-            event.preventDefault();
-            submitForm();
+            if (!collectContent()) {
+                event.preventDefault();
+                return;
+            }
+            original = serialize();
+            setDirty(false);
         });
 
         window.addEventListener("beforeunload", function (event) {
@@ -253,7 +301,7 @@
     }
 
     function boot() {
-        document.querySelectorAll(".materials-editor-card").forEach(initEditor);
+        document.querySelectorAll("[data-editor-form]").forEach(initEditor);
     }
 
     if (document.readyState === "loading") {

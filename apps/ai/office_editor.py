@@ -156,6 +156,65 @@ def document_from_token(token: str) -> LearningDocument | None:
 # --------------------------------------------------------------------------- #
 # Editor configuration
 # --------------------------------------------------------------------------- #
+def railway_public_base_url() -> str:
+    """The app's own public origin when it runs on Railway.
+
+    Railway exposes every service on ``*.up.railway.app``; that origin is the
+    only one the Document Server can reliably reach.
+    """
+    import os
+
+    domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if domain:
+        if "://" not in domain:
+            domain = f"https://{domain}"
+        return domain.rstrip("/")
+
+    static_url = os.environ.get("RAILWAY_STATIC_URL", "").strip()
+    if static_url:
+        return static_url.rstrip("/")
+    return ""
+
+
+def is_local_host(host: str) -> bool:
+    """True for hosts the Document Server can never reach."""
+    host = (host or "").split(":")[0].strip().lower()
+    if not host:
+        return True
+    if host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+        return True
+    if host.endswith(".local") or host.endswith(".internal"):
+        return True
+    if host.startswith("10.") or host.startswith("192.168."):
+        return True
+    if host.startswith("172."):
+        try:
+            second = int(host.split(".")[1])
+        except (IndexError, ValueError):
+            return False
+        return 16 <= second <= 31
+    return False
+
+
+# Dev tunnels expire, so a URL pointing at one is never a valid public origin
+# for a deployed app.
+_TUNNEL_HOSTS = (
+    ".ngrok.io",
+    ".ngrok-free.dev",
+    ".ngrok.app",
+    ".trycloudflare.com",
+    ".loca.lt",
+    ".localtunnel.me",
+    ".serveo.net",
+)
+
+
+def is_tunnel_host(host: str) -> bool:
+    """True for short-lived development tunnel hosts."""
+    host = (host or "").split(":")[0].strip().lower()
+    return any(host.endswith(suffix) for suffix in _TUNNEL_HOSTS)
+
+
 def public_base_url() -> str:
     """Public origin the Document Server should use to reach this app.
 
@@ -164,20 +223,37 @@ def public_base_url() -> str:
     ``127.0.0.1``. Set ``ONLYOFFICE_PUBLIC_BASE_URL`` (e.g. an ngrok tunnel) to
     override; otherwise the request host is used.
 
-    On Railway, if ``ONLYOFFICE_PUBLIC_BASE_URL`` is not set, try to auto-detect
-    the public domain from Railway environment variables.
+    On Railway the app's public domain wins: a tunnel URL copied from a local
+    ``.env`` (ngrok tunnels expire) would otherwise leave the Document Server
+    unable to download the file, and the editor silently never renders.
     """
     configured = (getattr(settings, "ONLYOFFICE_PUBLIC_BASE_URL", "") or "").strip()
-    if configured:
+
+    railway = railway_public_base_url()
+    if railway:
+        if not configured:
+            return railway
+        from urllib.parse import urlparse
+
+        configured_host = urlparse(configured).hostname or ""
+        if is_local_host(configured_host) or is_tunnel_host(configured_host):
+            logger.warning(
+                "ONLYOFFICE_PUBLIC_BASE_URL points at %s, which the Document "
+                "Server cannot use for a deployed app. Using %s instead.",
+                configured,
+                railway,
+            )
+            return railway
+        if configured_host != urlparse(railway).hostname:
+            logger.warning(
+                "ONLYOFFICE_PUBLIC_BASE_URL is %s but the app is served from %s. "
+                "The Document Server may not be able to reach this app.",
+                configured,
+                railway,
+            )
         return configured.rstrip("/")
 
-    # Auto-detect Railway public URL
-    import os
-    railway_public = os.environ.get("RAILWAY_PUBLIC_DOMAIN") or os.environ.get("RAILWAY_STATIC_URL")
-    if railway_public:
-        return railway_public.rstrip("/")
-
-    return ""
+    return configured.rstrip("/")
 
 
 def absolute_url(request, path: str) -> str:

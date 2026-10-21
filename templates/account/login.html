@@ -8,6 +8,30 @@
 <h2 class="auth-page__heading">Welcome back</h2>
 <p class="auth-page__subheading">Log in to continue your review session.</p>
 
+{% if request.GET.verified %}
+<div class="auth-form__notice auth-form__notice--success" role="status">
+    <p><strong>Email verified.</strong> You can sign in now.</p>
+</div>
+{% elif request.GET.registered == "pending" %}
+<div class="auth-form__notice auth-form__notice--warning" role="status">
+    <p><strong>Your account was created and is waiting for email verification.</strong></p>
+    <p>Enter the code we emailed you on the verification screen, or use <strong>Resend code</strong> there if it never arrived.</p>
+</div>
+{% elif request.GET.registered == "rejected" %}
+<div class="auth-form__notice auth-form__notice--warning" role="status">
+    <p><strong>Your faculty request was declined.</strong> Contact your program coordinator if you think this is a mistake.</p>
+</div>
+{% elif request.GET.archived %}
+<div class="auth-form__notice auth-form__notice--warning" role="status">
+    <p><strong>This account is archived.</strong> Contact your program coordinator to restore access.</p>
+</div>
+{% elif request.GET.unverified %}
+<div class="auth-form__notice auth-form__notice--warning" role="status">
+    <p><strong>Your account exists but the email address is not verified yet.</strong></p>
+    <p>We need the 6-digit code we emailed you before the account can be used. Use <strong>Resend code</strong> on the verification screen if you did not get it.</p>
+</div>
+{% endif %}
+
 <form method="post" action="{% url 'account_login' %}" class="auth-form" novalidate>
     {% csrf_token %}
     {% for field in form.hidden_fields %}{{ field }}{% endfor %}

@@ -59,6 +59,12 @@
     {% include "components/auth_password_strength.html" with compact=True %}
     {% include "components/auth_password_field.html" with field=form.password2 %}
     <button type="submit" class="auth-btn-submit">Create account</button>
+
+    {% if form.email.errors %}
+    <p class="auth-form__hint">
+        Already registered? <a href="{% url 'account_login' %}">Sign in instead</a>
+    </p>
+    {% endif %}
 </form>
 {% endblock %}
 

@@ -352,6 +352,22 @@ def restore_document(document: LearningDocument) -> LearningDocument:
     return document
 
 
+def delete_document(document: LearningDocument) -> LearningDocument:
+    """Delete a learning material and its stored file for good.
+
+    The stored file is removed first: ``FileField.delete`` only clears the
+    database row, leaving the bytes behind in storage.
+    """
+    if document.file:
+        try:
+            document.file.delete(save=False)
+        except OSError:
+            # Storage hiccup: still drop the row so the library is consistent.
+            pass
+    document.delete()
+    return document
+
+
 def documents_for_subject(subject, *, include_archived: bool = False):
     """Materials linked to a subject (by subject FK or catalog course)."""
     from apps.reviews.exam_setup_services import course_for_subject
@@ -399,6 +415,7 @@ __all__ = [
     "MAX_EDITABLE_CHARS",
     "SourceMaterialError",
     "archive_document",
+    "delete_document",
     "document_download_name",
     "document_editor_html",
     "document_plain_text",

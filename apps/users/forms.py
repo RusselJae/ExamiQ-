@@ -357,6 +357,45 @@ class ExamiQSignupForm(SignupForm):
             raise forms.ValidationError("Employee ID is required.")
         return value
 
+    def clean_email(self) -> str:
+        """Turn allauth's dead-end "email already registered" into a next step.
+
+        The app sets ``ACCOUNT_EMAIL_VERIFICATION = "none"`` (it runs its own
+        signup OTP), so allauth prefers uniqueness over enumeration prevention
+        and refuses the address outright. A student who signed up but never
+        received their verification code was then told the address was taken
+        and given no way forward - they could not log in either, because the
+        account is still inactive. Point them at sign-in instead.
+        """
+        try:
+            return super().clean_email()
+        except forms.ValidationError as exc:
+            email = (self.cleaned_data.get("email") or "").strip().lower()
+            user = (
+                User.objects.filter(email__iexact=email).first() if email else None
+            )
+            if user is None:
+                raise
+            if user.approval_status == User.ApprovalStatus.REJECTED:
+                raise forms.ValidationError(
+                    "This email is already registered, but the request was "
+                    "declined. Contact your program coordinator.",
+                ) from exc
+            if user.approval_status == User.ApprovalStatus.PENDING:
+                raise forms.ValidationError(
+                    "This email is already registered and is awaiting email "
+                    "verification and coordinator approval.",
+                ) from exc
+            if not user.is_active:
+                raise forms.ValidationError(
+                    "This email is already registered, but the account is still "
+                    "waiting for email verification. Sign in and use 'Resend "
+                    "code' on the verification screen if you never got the code.",
+                ) from exc
+            raise forms.ValidationError(
+                "This email is already registered. Sign in with it instead.",
+            ) from exc
+
     def clean(self):
         cleaned = super().clean()
         role = cleaned.get("role", User.Role.STUDENT)

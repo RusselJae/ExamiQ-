@@ -130,7 +130,9 @@ class TestFacultyMaterialsUI:
         assert "materials-download-btn" in content
         # TXT is editable via the in-app content editor.
         assert "materials-edit-btn" in content
-        assert "Archive" in content
+        # Archive was replaced by a permanent delete.
+        assert "Delete" in content
+        assert "Archive" not in content
         assert "Content Management" in content
 
     def test_download_returns_attachment(self, client, professor, subject):
@@ -189,6 +191,37 @@ class TestFacultyMaterialsUI:
             )
         )
         assert download.status_code == 404
+
+    def test_delete_removes_material_and_file_permanently(
+        self, client, professor, subject
+    ):
+        import os
+
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        stored_path = doc.file.path
+        assert os.path.exists(stored_path)
+
+        client.force_login(professor)
+        response = client.post(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            ),
+            {"action": "delete"},
+        )
+        assert response.status_code == 302
+        assert not LearningDocument.objects.filter(pk=doc.pk).exists()
+        assert not os.path.exists(stored_path)
+
+        # The detail screen is gone with it.
+        detail = client.get(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            )
+        )
+        assert detail.status_code == 404
 
 
 @pytest.fixture(autouse=True)
@@ -569,7 +602,9 @@ class TestMaterialContentEditing:
         assert "Download txt" in content
         assert "Rename file" in content
         assert "Move to course" in content
-        assert "Archive material" in content
+        # Archive was replaced by a permanent delete.
+        assert "Delete material" in content
+        assert "Archive material" not in content
         # Course picker is a pill select in the meta row.
         assert 'name="subject_id"' in content
         assert "data-doc-rename-row" in content
