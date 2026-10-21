@@ -130,6 +130,8 @@ _MIN_OVERLAP_CHARS = 20
 def document_text_is_rewritable(document: LearningDocument) -> bool:
     """True when the download can be regenerated from the editor content."""
     name = (document.original_name or "").lower()
+    if not name and getattr(document, "file", None):
+        name = (getattr(document.file, "name", None) or "").lower()
     return name.endswith(TEXT_FILE_SUFFIXES) or name.endswith(DOCX_SUFFIX)
 
 
@@ -293,9 +295,15 @@ def _rewrite_download(document: LearningDocument, text: str, html: str) -> bool:
 
     # Pass only the basename: FileField.save re-applies upload_to, so a
     # full storage path would nest the directory twice.
-    basename = posixpath.basename(document.file.name) or "material.txt"
+    stored_name = document.file.name if document.file else ""
+    basename = (
+        posixpath.basename(stored_name)
+        or posixpath.basename(document.original_name or "")
+        or "material.txt"
+    )
     try:
-        document.file.delete(save=False)
+        if document.file:
+            document.file.delete(save=False)
         document.file.save(basename, ContentFile(payload), save=False)
         document.save(update_fields=["file", "updated"])
         return True
@@ -308,6 +316,28 @@ def _rewrite_download(document: LearningDocument, text: str, html: str) -> bool:
         except Exception:  # pragma: no cover - best effort cleanup
             logger.exception("Could not clear stored file for document %s", document.pk)
         return False
+
+
+def ensure_download_file(document: LearningDocument) -> bool:
+    """Ensure a downloadable file exists, rebuilding from text when possible.
+
+    Returns True when ``document.file`` is available after this call.
+    """
+    if document.file:
+        try:
+            # Touch storage so a stale path surfaces before the response.
+            document.file.open("rb").close()
+            return True
+        except (FileNotFoundError, OSError, ValueError):
+            document.file = None
+            document.save(update_fields=["file", "updated"])
+
+    if not document_text_is_rewritable(document):
+        return False
+    text = document_plain_text(document)
+    if not text.strip():
+        return False
+    return _rewrite_download(document, text, document.content_html or "")
 
 
 def archive_document(document: LearningDocument) -> LearningDocument:
@@ -375,6 +405,7 @@ __all__ = [
     "document_text_is_rewritable",
     "documents_for_course",
     "documents_for_subject",
+    "ensure_download_file",
     "ingest_course_material",
     "ready_documents_for_course",
     "ready_documents_for_subject",

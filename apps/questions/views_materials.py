@@ -28,6 +28,7 @@ from apps.ai.material_services import (
     document_text_is_rewritable,
     documents_for_course,
     documents_for_subject,
+    ensure_download_file,
     ingest_course_material,
     replace_document_content,
     restore_document,
@@ -176,7 +177,7 @@ def _resolve_upload_subject(course, professor, subject_id: str):
 
 
 def _file_response(document: LearningDocument) -> FileResponse:
-    if not document.file:
+    if not ensure_download_file(document):
         raise Http404("File not available.")
     try:
         handle = document.file.open("rb")

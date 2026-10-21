@@ -3488,16 +3488,19 @@ body {
     }
 
     /* Difficulty / mode pills wrap instead of being clipped. */
-    .qe-pill-group,
-    .batch-pill-group {
+    .qe-pill-group {
         flex-wrap: wrap;
         row-gap: 0.5rem;
     }
 
-    .qe-pill,
-    .batch-pill {
+    .qe-pill {
         flex: 0 1 auto;
         max-width: 100%;
+    }
+
+    /* Keep the floating action button clear of the page's own action row. */
+    #batch-question-form {
+        padding-bottom: 4.5rem;
     }
 }
 
@@ -13084,6 +13087,131 @@ a.overview-pill.is-selected:hover {
     vertical-align: top;
 }
 
+/* Mobile: turn each draft row into a stacked card so columns stop colliding. */
+@media (max-width: 640px) {
+    .batch-table-scroll {
+        overflow-x: hidden;
+        max-height: none;
+    }
+
+    .data-table--batch,
+    .bento-card .data-table--batch {
+        min-width: 0;
+        table-layout: auto;
+        border-collapse: separate;
+        border-spacing: 0 0.75rem;
+    }
+
+    .data-table--batch thead {
+        display: none;
+    }
+
+    .data-table--batch tbody,
+    .data-table--batch tr,
+    .data-table--batch td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .data-table--batch tbody tr {
+        padding: 0.85rem 0.9rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.85rem;
+        background: #f8fafc;
+    }
+
+    .data-table--batch tbody tr.is-selected {
+        border-color: rgba(26, 86, 50, 0.35);
+        background: #f0f7f2;
+    }
+
+    .data-table--batch tbody td {
+        padding: 0.25rem 0;
+        border: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .data-table--batch tbody td.batch-col-select {
+        display: inline-flex;
+        width: auto;
+        align-items: center;
+        margin-right: 0.5rem;
+        padding: 0;
+    }
+
+    .data-table--batch tbody td.batch-col-select + td {
+        display: inline-flex;
+        width: auto;
+        align-items: center;
+        font-weight: 700;
+        color: var(--color-navy);
+        padding: 0;
+    }
+
+    .data-table--batch tbody td.batch-question-cell {
+        margin-top: 0.55rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .data-table--batch .batch-question-stem {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+        overflow: hidden;
+    }
+
+    /* Column headers, since the table head is hidden on narrow screens. */
+    .data-table--batch tbody td:nth-child(4)::before {
+        content: "Difficulty";
+    }
+
+    .data-table--batch tbody td:nth-child(5)::before {
+        content: "Correct answer";
+    }
+
+    .data-table--batch tbody td:nth-child(6)::before {
+        content: "Concept";
+    }
+
+    .data-table--batch tbody td:nth-child(4)::before,
+    .data-table--batch tbody td:nth-child(5)::before,
+    .data-table--batch tbody td:nth-child(6)::before {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #94a3b8;
+    }
+
+    .data-table--batch tbody td:nth-child(4),
+    .data-table--batch tbody td:nth-child(5),
+    .data-table--batch tbody td:nth-child(6),
+    .data-table--batch tbody td.batch-col-validate {
+        margin-top: 0.55rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid #eef2f7;
+    }
+
+    /* Draft card: stack the answer choices and give the Edit link its own
+       line so neither is clipped by the viewport. */
+    .batch-question-choices {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.35rem;
+    }
+
+    .batch-question-edit {
+        align-self: flex-start;
+        margin-top: 0.2rem;
+    }
+}
+
 .batch-choice {
     font-size: 0.75rem;
     color: var(--color-slate);
@@ -13913,6 +14041,53 @@ a.overview-pill.is-selected:hover {
     font-weight: 600;
     line-height: 1;
     border-radius: var(--radius-control);
+}
+
+/* Narrow screens: the four difficulty pills and the four draft-panel actions
+   each fit a 2x2 grid. Declared after the base rules so it wins over them. */
+@media (max-width: 640px) {
+    .batch-pill-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .batch-pill {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        box-sizing: border-box;
+    }
+
+    .batch-questions-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .batch-questions-toolbar__actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: stretch;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .batch-toolbar-btn {
+        min-width: 0;
+        width: 100%;
+        height: auto;
+        min-height: 2.5rem;
+        box-sizing: border-box;
+        white-space: normal;
+        text-align: center;
+        padding: 0.55rem 0.5rem;
+    }
 }
 
 .batch-status-badge {
@@ -17427,27 +17602,23 @@ button, .btn-primary, .btn-secondary, .btn-outline, label {
     box-sizing: border-box;
 }
 
+/* Grid items default to min-width:auto, so they refuse to shrink below their
+   content and push the whole row past the viewport. */
+.materials-hub-upload-row > * {
+    min-width: 0;
+}
+
+.materials-field {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 /* Narrow screens: stack the course picker above the dropzone so the row's
    15rem minimum can no longer push the page wider than the viewport. */
 @media (max-width: 640px) {
     .materials-hub-upload-row {
         grid-template-columns: minmax(0, 1fr);
-    }
-
-    .materials-hub-upload-row .materials-field--file .materials-dropzone {
-        height: auto;
-        min-height: 3.25rem;
-        flex-wrap: wrap;
-        row-gap: 0.5rem;
-    }
-
-    .materials-hub-upload-row .materials-field--file .materials-dropzone__text {
-        flex: 1 1 100%;
-    }
-
-    .materials-hub-upload-row .materials-field--file .materials-dropzone__actions {
-        flex-wrap: wrap;
-        flex: 1 1 100%;
     }
 }
 
@@ -17478,6 +17649,44 @@ button, .btn-primary, .btn-secondary, .btn-outline, label {
     align-items: center;
     flex-wrap: nowrap;
     gap: 0.5rem;
+}
+
+/* Narrow screens: the dropzone grows to fit its content and the two action
+   buttons drop onto their own row inside the dashed border. Declared after
+   the base rules above so it wins over them. */
+@media (max-width: 640px) {
+    .materials-hub-upload-row .materials-field--file .materials-dropzone {
+        height: auto;
+        min-height: 3.25rem;
+        flex-wrap: wrap;
+        align-items: center;
+        row-gap: 0.6rem;
+        padding: 0.7rem 0.85rem;
+    }
+
+    .materials-hub-upload-row .materials-field--file .materials-dropzone__text {
+        flex: 1 1 100%;
+        text-align: center;
+    }
+
+    .materials-hub-upload-row .materials-field--file .materials-dropzone__icon {
+        display: none;
+    }
+
+    .materials-hub-upload-row .materials-field--file .materials-dropzone__actions {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.6rem;
+    }
+
+    .materials-hub-upload-row .materials-field--file .materials-dropzone__choose,
+    .materials-hub-upload-row .materials-field--file .materials-dropzone__upload {
+        flex: 1 1 auto;
+        min-width: 0;
+        justify-content: center;
+        text-align: center;
+    }
 }
 
 /* Supported-types hint sits above the dropzone, tight to the field label. */
@@ -18093,10 +18302,14 @@ a.materials-library__name:hover {
         align-items: stretch;
     }
 
+    /* The controls stack vertically here, so the shared `flex: 1 1 12rem`
+       would become a 12rem *height*. Pin the fields to a normal row height. */
     .materials-library__search,
     .materials-library__sort {
+        flex: 0 0 auto;
         width: 100%;
-        min-height: 44px;
+        height: 2.75rem;
+        min-height: 2.75rem;
         font-size: 1rem;
         box-sizing: border-box;
     }
@@ -18118,9 +18331,43 @@ a.materials-library__name:hover {
     }
 
     .materials-library__item {
-        align-items: flex-start;
-        gap: 0.75rem;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+            "icon body"
+            "side side";
+        align-items: start;
+        gap: 0.65rem 0.75rem;
         padding: 0.9rem 0.85rem;
+    }
+
+    .materials-library__icon {
+        grid-area: icon;
+    }
+
+    .materials-library__body {
+        grid-area: body;
+    }
+
+    /* The action row used to force the title column down to zero, which hid
+       the file name entirely. Let the actions scroll sideways instead. */
+    .materials-library__side {
+        grid-area: side;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        flex-wrap: nowrap;
+        width: 100%;
+        gap: 0.55rem;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .materials-library__actions {
+        min-width: 0;
+        align-self: stretch;
     }
 
     .materials-library__name {
@@ -18305,6 +18552,13 @@ a.materials-library__name:hover {
     max-width: 22rem;
     height: min(22rem, 58vw);
     margin: 0.75rem auto 0.25rem;
+}
+
+/* Chart.js sets an explicit pixel width on the canvas — keep it inside the
+   card so it cannot push the page sideways on narrow screens. */
+.student-donut-wrap canvas,
+.overview-trends-chart-wrap canvas {
+    max-width: 100% !important;
 }
 /* Donut on the left, legend on the right of it. */
 .student-donut-layout {

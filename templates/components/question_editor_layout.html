@@ -12,7 +12,7 @@
 {% block content %}
 <div class="qe-head" data-question-editor-shell>
     {% if cancel_url %}
-    <a href="{{ cancel_url }}" class="overview-back-link">&larr; Back to saved questions</a>
+    <a href="{{ cancel_url }}" class="overview-back-link">&larr; {{ back_label|default:"Back to saved questions" }}</a>
     {% endif %}
     <nav class="qe-breadcrumb" aria-label="Breadcrumb">
         {% for crumb in breadcrumbs %}

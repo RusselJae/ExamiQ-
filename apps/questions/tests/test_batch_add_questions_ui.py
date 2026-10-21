@@ -65,7 +65,9 @@ class TestBatchAddQuestionsScreen:
 
         assert 'value="medium" selected' not in content
         assert 'class="batch-pill is-selected"' not in content
-        assert "Select at least one difficulty before generating." in content
+        # Helper copy under the difficulty pills was removed; toast still exists.
+        markup = re.sub(r"<script\b.*?</script>", "", content, flags=re.DOTALL)
+        assert "Select at least one difficulty before generating." not in markup
 
     def test_ai_decides_maps_to_all_three_bands(self):
         """Selecting every band is what "AI decides" submits."""

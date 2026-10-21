@@ -617,6 +617,9 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
     template_name = "professor/questions/batch_question_edit.html"
 
     def get(self, request, course_pk, question_index):
+        batch_url = reverse(
+            "analytics_professor:question_create", kwargs={"course_pk": course_pk}
+        )
         context = {
             "course": self.course,
             "active_tab": "questions",
@@ -627,7 +630,19 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
             # real total in on load.
             "total_questions": None,
         }
-        context.update(_editor_shell_context(self.course, "Edit question"))
+        context.update(
+            _editor_shell_context(
+                self.course,
+                "Edit question",
+                back_label="Back to batch editor",
+                cancel_url=batch_url,
+                breadcrumbs=[
+                    {"label": self.course.code, "url": batch_url},
+                    {"label": "Add Questions", "url": batch_url},
+                    {"label": "Edit", "url": None},
+                ],
+            )
+        )
         return render(request, self.template_name, context)
 
 
@@ -1451,7 +1466,14 @@ def _get_program_subject(course, subject_id, professor=None):
     return subject
 
 
-def _editor_shell_context(course, title: str) -> dict:
+def _editor_shell_context(
+    course,
+    title: str,
+    *,
+    back_label: str = "Back to saved questions",
+    cancel_url: str | None = None,
+    breadcrumbs: list[dict] | None = None,
+) -> dict:
     """Breadcrumb/cancel context shared by both question editors.
 
     The Cancel action prefers browser history (the user may have arrived from
@@ -1461,14 +1483,17 @@ def _editor_shell_context(course, title: str) -> dict:
     list_url = reverse(
         "analytics_professor:question_list", kwargs={"course_pk": course.pk}
     )
-    return {
-        "editor_title": title,
-        "breadcrumbs": [
+    if breadcrumbs is None:
+        breadcrumbs = [
             {"label": course.code, "url": list_url},
             {"label": "Saved questions", "url": list_url},
             {"label": "Edit" if "edit" in title.lower() else "New", "url": None},
-        ],
-        "cancel_url": list_url,
+        ]
+    return {
+        "editor_title": title,
+        "breadcrumbs": breadcrumbs,
+        "cancel_url": cancel_url or list_url,
+        "back_label": back_label,
     }
 
 

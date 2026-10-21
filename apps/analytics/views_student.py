@@ -562,6 +562,7 @@ class StudentMaterialDownloadView(StudentRequiredMixin, View):
 
         from apps.ai.material_services import (
             document_download_name,
+            ensure_download_file,
             ready_documents_for_subject,
         )
         from apps.ai.models import LearningDocument
@@ -575,7 +576,7 @@ class StudentMaterialDownloadView(StudentRequiredMixin, View):
         if pk not in allowed_ids:
             raise Http404
         document = get_object_or_404(LearningDocument, pk=pk)
-        if not document.file:
+        if not ensure_download_file(document):
             raise Http404("File not available.")
         try:
             handle = document.file.open("rb")

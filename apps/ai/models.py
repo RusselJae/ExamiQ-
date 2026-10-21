@@ -188,6 +188,13 @@ class LearningDocument(models.Model):
         from apps.ai.office_editor import is_editable
         return is_editable(self)
 
+    @property
+    def is_content_editable(self) -> bool:
+        """True when faculty can open an editor for this file (office or text)."""
+        from apps.ai.material_services import document_text_is_rewritable
+
+        return self.is_editable_by_office or document_text_is_rewritable(self)
+
 
 class LearningChunk(models.Model):
     """Text chunk from a learning document for topic-scoped retrieval."""

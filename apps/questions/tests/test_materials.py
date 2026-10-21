@@ -78,9 +78,9 @@ class TestFacultyMaterialsUI:
         assert "materials-library" in content
         # Course sub-navigation was dropped; the sidebar owns those links now.
         assert "course-nav-link" not in content
-        assert ">Download</a>" in content
-        # Edit is only offered for formats ONLYOFFICE can open.
-        assert ">Edit</a>" not in content
+        assert "materials-download-btn" in content
+        # TXT uploads use the in-app editor, so Edit is offered.
+        assert "materials-edit-btn" in content
         # Course-scoped page: no course picker, supported-types hint present.
         assert "materials-hub-upload-row" in content
         assert "Supported: TXT, MD, CSV, PDF, DOCX." in content
@@ -109,8 +109,8 @@ class TestFacultyMaterialsUI:
         )
         assert response.status_code == 200
         content = response.content.decode()
-        assert ">Download</a>" in content
-        assert ">Edit</a>" in content
+        assert "materials-download-btn" in content
+        assert "materials-edit-btn" in content
 
     def test_hub_with_subject_shows_download_and_edit(
         self, client, professor, subject, bsed_program
@@ -127,9 +127,9 @@ class TestFacultyMaterialsUI:
         content = response.content.decode()
         assert response.status_code == 200
         assert "materials-library" in content
-        assert ">Download</a>" in content
-        # A .txt upload cannot be opened by ONLYOFFICE, so no Edit link.
-        assert ">Edit</a>" not in content
+        assert "materials-download-btn" in content
+        # TXT is editable via the in-app content editor.
+        assert "materials-edit-btn" in content
         assert "Archive" in content
         assert "Content Management" in content
 
