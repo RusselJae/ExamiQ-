@@ -668,8 +668,11 @@ class TeachingAssignment(models.Model):
             "term__name",
             "program_section__label",
         ]
-        unique_together = [
-            ["professor", "program_section", "subject", "term"],
+        constraints = [
+            models.UniqueConstraint(
+                fields=["professor", "subject", "term"],
+                name="unique_teaching_load_per_course",
+            ),
         ]
 
     def __str__(self) -> str:

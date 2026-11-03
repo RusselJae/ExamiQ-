@@ -194,28 +194,6 @@
                                 <span class="sidebar-draft-badge" title="{{ group.draft_count }} draft{{ group.draft_count|pluralize }}">{{ group.draft_count }}</span>
                                 {% endif %}
                             </a>
-                            {% if group.has_multiple_sections and sidebar_course and sidebar_course.code == group.code and sidebar_course.program_id == group.program_id %}
-                            <ul class="sidebar-section-rows" aria-label="{{ group.code }} sections">
-                                <li>
-                                    <a href="{% url 'analytics_professor:course_detail' group.representative_pk %}"
-                                       class="sidebar-section-row{% if not selected_section %} sidebar-section-row--active{% endif %}">
-                                        <span class="sidebar-section-row__dot" aria-hidden="true"></span>
-                                        <span class="sidebar-section-row__label">All sections</span>
-                                        <span class="sidebar-section-row__count">{{ group.total_students }}</span>
-                                    </a>
-                                </li>
-                                {% for offering in group.sections %}
-                                <li>
-                                    <a href="{% url 'analytics_professor:course_detail' group.representative_pk %}?section={{ offering.section|urlencode }}"
-                                       class="sidebar-section-row{% if selected_section == offering.section %} sidebar-section-row--active{% endif %}">
-                                        <span class="sidebar-section-row__dot" aria-hidden="true"></span>
-                                        <span class="sidebar-section-row__label">Section {{ offering.section }}</span>
-                                        <span class="sidebar-section-row__count">{{ offering.students }}</span>
-                                    </a>
-                                </li>
-                                {% endfor %}
-                            </ul>
-                            {% endif %}
                         </li>
                         {% endfor %}
                         {% endfor %}

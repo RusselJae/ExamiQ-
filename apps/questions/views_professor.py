@@ -704,6 +704,13 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
         )
         if request.GET.get("embed") == "1":
             batch_url = f"{batch_url}?embed=1"
+        overlay_url = (
+            reverse(
+                "analytics_professor:question_list",
+                kwargs={"course_pk": course_pk},
+            )
+            + "?batch=open"
+        )
         context = {
             "course": self.course,
             "active_tab": "questions",
@@ -714,13 +721,16 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
             # real total in on load.
             "total_questions": None,
             "embed_mode": request.GET.get("embed") == "1",
+            # Closing (Cancel or Save) returns to the questions list with the
+            # batch overlay reopened — never the standalone add page.
+            "batch_overlay_url": overlay_url,
         }
         context.update(
             _editor_shell_context(
                 self.course,
                 "Edit question",
                 back_label="Back to batch editor",
-                cancel_url=batch_url,
+                cancel_url=overlay_url,
                 breadcrumbs=[
                     {"label": self.course.code, "url": batch_url},
                     {"label": "Add Questions", "url": batch_url},

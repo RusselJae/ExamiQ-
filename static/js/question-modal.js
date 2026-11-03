@@ -158,6 +158,24 @@
             });
         });
 
+        // Deep link back from the batch editors: ?batch=open reopens the
+        // overlay on load, then the param is dropped so refresh stays clean.
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("batch") === "open") {
+                const first = document.querySelector("[data-batch-modal]");
+                const src = first
+                    ? first.dataset.batchModalSrc || first.getAttribute("href") || ""
+                    : "";
+                if (src) openBatch(src);
+                params.delete("batch");
+                const clean =
+                    window.location.pathname +
+                    (params.toString() ? "?" + params.toString() : "");
+                window.history.replaceState(null, "", clean);
+            }
+        } catch (e) { /* ignore */ }
+
         window.addEventListener("message", (event) => {
             if (event.origin !== window.location.origin) return;
             if (event.data && event.data.type === "examiq-batch-close") {

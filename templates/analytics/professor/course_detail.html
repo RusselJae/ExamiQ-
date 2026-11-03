@@ -6,13 +6,10 @@
 {% block content %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-{# One panel holds the banner, aggregate grids, cards, and labels.
-   Aggregate-only: no section tabs are rendered; ?section= handling in views is untouched. #}
 <div class="course-home-panel course-home-panel--tabbed">
     {% include "components/chalk_banner.html" with course=course %}
 
     <div class="course-home-grid--two">
-        {# Left: content + questions stats, then the enrolled-students KPI. #}
         <div class="course-home-stack">
             <section class="course-home-card" aria-labelledby="course-home-content-heading">
                 <h2 class="course-home-card__title" id="course-home-content-heading">Content</h2>
@@ -37,7 +34,6 @@
             {% endif %}
         </div>
 
-        {# Right: question breakdown (questions data). #}
         <section class="course-breakdown-card" aria-labelledby="course-breakdown-heading">
             <div class="course-breakdown-card__header">
                 <h2 class="course-breakdown-card__title" id="course-breakdown-heading">Question Breakdown</h2>

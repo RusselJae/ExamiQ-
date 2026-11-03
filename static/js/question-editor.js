@@ -254,7 +254,10 @@
                 var ok = window.confirm(
                     "Discard your unsaved changes and leave this screen?"
                 );
-                if (ok) goBack(btn);
+                if (ok) {
+                    self.root.dataset.editorAllowUnload = "1";
+                    goBack(btn);
+                }
             });
         });
     };
@@ -270,6 +273,17 @@
 
     function goBack(btn) {
         var fallback = btn && btn.getAttribute("data-cancel-url");
+        // Hard-cancel targets (batch draft editor) always land on their
+        // explicit URL — e.g. the questions list with the batch overlay
+        // reopened — instead of trusting history.
+        if (btn && btn.hasAttribute("data-cancel-hard") && fallback) {
+            if (window.top && window.top !== window) {
+                window.top.location.href = fallback;
+            } else {
+                window.location.href = fallback;
+            }
+            return;
+        }
         // Prefer real history so we land on whatever screen the user came
         // from (question list, batch draft, analytics, ...).
         if (window.history.length > 1) {
@@ -303,6 +317,7 @@
         editor.refresh();
 
         window.addEventListener("beforeunload", function (event) {
+            if (form.dataset.editorAllowUnload === "1") return;
             if (editor.serialize() === editor.baseline) return;
             event.preventDefault();
             event.returnValue = "";

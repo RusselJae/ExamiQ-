@@ -277,7 +277,7 @@
                     Validate selected
                 </button>
                 {% if course %}
-                <a href="{% url 'analytics_professor:question_batch_edit' course.pk 0 %}"
+                <a href="{% url 'analytics_professor:question_batch_edit' course.pk 0 %}{% if embed_mode %}?embed=1{% endif %}"
                    class="btn-secondary batch-toolbar-btn"
                    title="Edit drafts one by one, starting with the first">
                     Edit all

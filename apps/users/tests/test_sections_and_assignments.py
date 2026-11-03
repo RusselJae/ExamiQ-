@@ -650,6 +650,81 @@ class TestTeachingAssignmentReassign:
 
 
 @pytest.mark.django_db
+class TestTeachingAssignmentUniqueness:
+    """One row per faculty + course + term, enforced at the database level."""
+
+    def _other_section(self, program_section):
+        from apps.users.models import ProgramSection
+
+        return ProgramSection.objects.create(
+            program=program_section.program,
+            year_level=program_section.year_level,
+            label="9Z",
+            academic_year=program_section.academic_year,
+            is_active=True,
+        )
+
+    def test_second_row_for_same_course_is_rejected(
+        self, professor, program_section, subject, academic_term
+    ):
+        from django.db import IntegrityError, transaction
+
+        from apps.users.models import TeachingAssignment
+
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
+        with transaction.atomic(), pytest.raises(IntegrityError):
+            TeachingAssignment.objects.create(
+                professor=professor,
+                program_section=self._other_section(program_section),
+                subject=subject,
+                term=academic_term,
+                assigned_by=professor,
+            )
+        assert (
+            TeachingAssignment.objects.filter(
+                professor=professor, subject=subject, term=academic_term
+            ).count()
+            == 1
+        )
+
+    def test_create_service_returns_existing_row_instead_of_duplicate(
+        self, professor, program_section, subject, academic_term, chairperson
+    ):
+        from apps.users.assignment_services import create_teaching_assignment
+        from apps.users.models import TeachingAssignment
+
+        first, created_first = create_teaching_assignment(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=chairperson,
+        )
+        second, created_second = create_teaching_assignment(
+            professor=professor,
+            program_section=self._other_section(program_section),
+            subject=subject,
+            term=academic_term,
+            assigned_by=chairperson,
+        )
+        assert created_first is True
+        assert created_second is False
+        assert first.pk == second.pk
+        assert (
+            TeachingAssignment.objects.filter(
+                professor=professor, subject=subject, term=academic_term
+            ).count()
+            == 1
+        )
+
+
+@pytest.mark.django_db
 class TestBackfillTeachingAssignments:
     def test_backfill_creates_assignments_from_profile(
         self, professor, program_section, subject, academic_year, academic_term

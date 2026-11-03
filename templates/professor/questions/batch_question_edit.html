@@ -115,7 +115,7 @@ data-steps-selector="[data-step-input]"
 {% endblock %}
 
 {% block editor_actions %}
-<button type="button" class="btn-secondary" data-editor-cancel
+<button type="button" class="btn-secondary" data-editor-cancel data-cancel-hard
         {% if cancel_url %}data-cancel-url="{{ cancel_url }}"{% endif %}>Cancel</button>
 <button type="submit" class="btn-primary">Save changes</button>
 {% endblock %}
@@ -320,8 +320,7 @@ data-steps-selector="[data-step-input]"
     })();
 
     form.addEventListener("submit", function(e) {
-        e.preventDefault();
-        const updated = {
+        e.preventDefault();        const updated = {
             stem: stemInput.value,
             correct: (form.querySelector('[name="edit-correct"]:checked') || {}).value || "A",
             concept: document.getElementById("edit-concept").value,
@@ -350,11 +349,16 @@ data-steps-selector="[data-step-input]"
             draft.questionIndex = questionIndex + 1;
         }
         window.ExamiQBatch.saveDraft(coursePk, draft);
-        var backUrl = "{% url 'analytics_professor:question_create' course.pk %}";
-        {% if embed_mode %}
-        backUrl += "?embed=1";
-        {% endif %}
-        window.location.href = backUrl;
+        // Back to the questions list with the batch overlay reopened —
+        // break out of the embed iframe when opened inside the modal.
+        // Tell the shared editor guard this navigation is intentional.
+        form.dataset.editorAllowUnload = "1";
+        var overlayUrl = "{{ batch_overlay_url }}";
+        if (window.top && window.top !== window) {
+            window.top.location.href = overlayUrl;
+        } else {
+            window.location.href = overlayUrl;
+        }
     });
 })();
 </script>
