@@ -17,6 +17,17 @@ DIFFICULTY_LABELS = {
 
 
 @register.filter
+def get_item(mapping, key):
+    """Dictionary lookup by variable key (missing keys render empty)."""
+    if not mapping:
+        return ""
+    try:
+        return mapping.get(key, "")
+    except AttributeError:
+        return ""
+
+
+@register.filter
 def difficulty_label(value):
     """Map stored difficulty code(s) to display label(s).
 

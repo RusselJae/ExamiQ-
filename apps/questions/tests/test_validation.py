@@ -147,5 +147,8 @@ class TestDuplicateValidation:
             question_type="mcq",
         )
         assert result["is_valid"] is False
-        assert "GNED 03" in result["feedback"] or "not look related" in result["feedback"].lower()
+        assert (
+            "GNED 03" in result["feedback"]
+            or "not look related" in result["feedback"].lower()
+        )
         assert "four choices" not in result["feedback"].lower()

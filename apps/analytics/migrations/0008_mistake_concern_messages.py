@@ -55,7 +55,6 @@ def backfill_concern_messages(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("analytics", "0007_mistake_record_faculty_note"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

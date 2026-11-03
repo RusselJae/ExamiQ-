@@ -16,7 +16,9 @@ class PilotConsentForm(forms.ModelForm):
         fields = ["consented"]
         widgets = {
             "consented": forms.CheckboxInput(
-                attrs={"class": "rounded border-slate-300 text-examiq-green focus:ring-green-100"}
+                attrs={
+                    "class": "rounded border-slate-300 text-examiq-green focus:ring-green-100"
+                }
             ),
         }
 
@@ -32,16 +34,26 @@ class PreSurveyForm(forms.ModelForm):
         ]
         widgets = {
             "calibration_awareness": forms.Select(attrs={"class": FORM_INPUT_CLASS}),
-            "confidence_rating_usefulness": forms.Select(attrs={"class": FORM_INPUT_CLASS}),
+            "confidence_rating_usefulness": forms.Select(
+                attrs={"class": FORM_INPUT_CLASS}
+            ),
             "would_recommend": forms.Select(attrs={"class": FORM_INPUT_CLASS}),
             "open_feedback": forms.Textarea(
-                attrs={"class": FORM_INPUT_CLASS, "rows": 3, "placeholder": "Optional comments"}
+                attrs={
+                    "class": FORM_INPUT_CLASS,
+                    "rows": 3,
+                    "placeholder": "Optional comments",
+                }
             ),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in ("calibration_awareness", "confidence_rating_usefulness", "would_recommend"):
+        for field in (
+            "calibration_awareness",
+            "confidence_rating_usefulness",
+            "would_recommend",
+        ):
             self.fields[field].choices = LIKERT_CHOICES
             self.fields[field].label = {
                 "calibration_awareness": "I am aware of how confidence affects learning",
@@ -53,12 +65,10 @@ class PreSurveyForm(forms.ModelForm):
 class PostSurveyForm(PreSurveyForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["calibration_awareness"].label = (
-            "EXAMIQ helped me understand my calibration gaps"
-        )
-        self.fields["confidence_rating_usefulness"].label = (
-            "Confidence ratings improved my self-regulated learning"
-        )
-        self.fields["would_recommend"].label = (
-            "I would recommend EXAMIQ after using it"
-        )
+        self.fields[
+            "calibration_awareness"
+        ].label = "EXAMIQ helped me understand my calibration gaps"
+        self.fields[
+            "confidence_rating_usefulness"
+        ].label = "Confidence ratings improved my self-regulated learning"
+        self.fields["would_recommend"].label = "I would recommend EXAMIQ after using it"

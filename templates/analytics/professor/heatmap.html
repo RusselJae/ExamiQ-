@@ -4,8 +4,8 @@
 {% block title %}Overview - {{ course.section|default:course.code }}{% endblock %}
 
 {% block content %}
-{% include "components/professor_section_header.html" with course=course page_label="Overview" %}
-{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+{% include "components/course_banner.html" with course=course subject=course_subject %}
+{% include "components/professor_course_nav.html" with course=course active_tab="level" draft_count=draft_count %}
 
 {% if heatmap.callouts.low_confidence %}
 <div class="bento-card p-4 mb-4 border-l-4 border-amber-400">

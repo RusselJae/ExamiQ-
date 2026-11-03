@@ -4,15 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('users', '0015_alter_teachingassignment_assigned_by'),
+        ("users", "0015_alter_teachingassignment_assigned_by"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='academicterm',
-            name='semester',
-            field=models.PositiveSmallIntegerField(choices=[(1, '1st Semester'), (2, '2nd Semester'), (3, 'Midyear')], default=1),
+            model_name="academicterm",
+            name="semester",
+            field=models.PositiveSmallIntegerField(
+                choices=[(1, "1st Semester"), (2, "2nd Semester"), (3, "Midyear")],
+                default=1,
+            ),
         ),
     ]

@@ -4,21 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0009_add_midyear_semester'),
-        ('reviews', '0011_tutor_conversation_per_question'),
+        ("questions", "0009_add_midyear_semester"),
+        ("reviews", "0011_tutor_conversation_per_question"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='reviewsession',
-            name='question_queue',
-            field=models.JSONField(blank=True, default=list, help_text='Ordered question PKs for multi-subject timed exams.'),
+            model_name="reviewsession",
+            name="question_queue",
+            field=models.JSONField(
+                blank=True,
+                default=list,
+                help_text="Ordered question PKs for multi-subject timed exams.",
+            ),
         ),
         migrations.AddField(
-            model_name='reviewsession',
-            name='subjects',
-            field=models.ManyToManyField(blank=True, related_name='review_sessions', to='questions.subject'),
+            model_name="reviewsession",
+            name="subjects",
+            field=models.ManyToManyField(
+                blank=True, related_name="review_sessions", to="questions.subject"
+            ),
         ),
     ]

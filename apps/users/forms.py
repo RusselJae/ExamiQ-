@@ -12,7 +12,7 @@ from allauth.account.forms import (
 )
 from allauth.account.utils import filter_users_by_email
 from django import forms
-from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import UploadedFile as UploadFile
 from django.utils import timezone
 
 from apps.questions.models import Subject, YearLevel
@@ -27,12 +27,13 @@ from apps.users.models import (
 )
 from apps.users.section_services import (
     get_current_academic_year,
-    get_or_create_student_section,
-    parse_section_label,
-    section_matches_student,
-    sections_for_student,
-    validate_section_capacity,
 )
+
+
+class SubjectCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
+    def label_from_instance(self, obj):
+        return f"{obj.code}: {obj.name}"
+
 
 INPUT_CLASS = (
     "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
@@ -68,6 +69,15 @@ def _clean_digits(value: str, label: str, length: int) -> str:
     if not re.fullmatch(rf"\d{{{length}}}", value):
         raise forms.ValidationError(f"{label} must be exactly {length} digits.")
     return value
+
+
+def _has_pending_registration(student_number: str) -> bool:
+    """Coordinator must have registered the number before a student signs up."""
+    from apps.users.models import PendingStudentRegistration
+
+    return PendingStudentRegistration.objects.filter(
+        student_number=student_number, claimed_by__isnull=True
+    ).exists()
 
 
 class ExamiQLoginForm(LoginForm):
@@ -254,19 +264,53 @@ class ExamiQSignupForm(SignupForm):
         label="Year level",
         widget=forms.Select(attrs={"class": AUTH_SELECT_CLASS, "id": "id_year_level"}),
     )
-    section = forms.ModelChoiceField(
-        queryset=ProgramSection.objects.none(),
+    courses = forms.ModelMultipleChoiceField(
+        queryset=Subject.objects.none(),
         required=False,
-        empty_label="— Select section —",
-        label="Section",
-        widget=forms.Select(
+        label="Courses",
+        widget=SubjectCheckboxSelectMultiple(
+            attrs={"class": "course-checkbox__input", "id": "id_courses"}
+        ),
+    )
+    course_selections = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        help_text="JSON map of course id to selected section letters.",
+    )
+    faculty_selections = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        help_text="JSON map of subject id to selected faculty pk.",
+    )
+    cor_detected = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        help_text="JSON of the subject rows detected from the uploaded COR.",
+    )
+    cor_upload = forms.FileField(
+        required=False,
+        label="Certificate of Registration",
+        help_text="Required for irregular students: upload your COR as a PDF or photo.",
+        widget=forms.ClearableFileInput(
             attrs={
-                "class": AUTH_SELECT_CLASS,
-                "id": "id_section",
-                "data-program": User.HomeDegreeProgram.BSED_MATH,
+                "class": "auth-field__input",
+                "id": "id_cor_upload",
+                "accept": ".pdf,.png,.jpg,.jpeg,.webp",
             }
         ),
     )
+
+    is_irregular = forms.BooleanField(
+        required=False,
+        label="I am an irregular student",
+        widget=forms.CheckboxInput(
+            attrs={
+                "class": "form-checkbox",
+                "data-toggle": "#irregular-fields",
+            }
+        ),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _style_auth_fields(self)
@@ -286,23 +330,14 @@ class ExamiQSignupForm(SignupForm):
             )
 
         self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
-        year_level_id = None
-        if self.data.get("year_level"):
-            try:
-                year_level_id = int(self.data.get("year_level"))
-            except (TypeError, ValueError):
-                year_level_id = None
-        self.fields["section"].queryset = sections_for_student(
-            User.HomeDegreeProgram.BSED_MATH,
-            year_level_id,
+        self.fields["courses"].queryset = (
+            Subject.objects.filter(
+                program=Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH),
+            )
+            .select_related("year_level")
+            .order_by("year_level__order", "semester", "code")
         )
-        self.fields["section"].label_from_instance = lambda obj: obj.display_label
-        self.fields["section"].widget.attrs["data-program"] = (
-            User.HomeDegreeProgram.BSED_MATH
-        )
-        self.fields["section"].widget.attrs["data-sections-url"] = (
-            "/profile/api/sections/"
-        )
+
     def clean_first_name(self):
         from apps.users.name_validation import clean_person_name
 
@@ -371,9 +406,7 @@ class ExamiQSignupForm(SignupForm):
             return super().clean_email()
         except forms.ValidationError as exc:
             email = (self.cleaned_data.get("email") or "").strip().lower()
-            user = (
-                User.objects.filter(email__iexact=email).first() if email else None
-            )
+            user = User.objects.filter(email__iexact=email).first() if email else None
             if user is None:
                 raise
             if user.approval_status == User.ApprovalStatus.REJECTED:
@@ -399,6 +432,7 @@ class ExamiQSignupForm(SignupForm):
     def clean(self):
         cleaned = super().clean()
         role = cleaned.get("role", User.Role.STUDENT)
+        is_irregular = cleaned.get("is_irregular", False)
         if role == User.Role.STUDENT:
             student_number = cleaned.get("student_number")
             if (
@@ -408,31 +442,216 @@ class ExamiQSignupForm(SignupForm):
                 self.add_error(
                     "student_number", "This student number is already registered."
                 )
+            elif student_number and not _has_pending_registration(student_number):
+                self.add_error(
+                    "student_number",
+                    "Your student number is not registered yet. Ask your program "
+                    "coordinator to add it first, then sign up.",
+                )
+        cor_file = cleaned.get("cor_upload")
+        if isinstance(cor_file, UploadFile) and cor_file:
+            content_type = (cor_file.content_type or "").lower()
+            allowed = {
+                "application/pdf",
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+            }
+            if cor_file.size > 8 * 1024 * 1024:
+                self.add_error(
+                    "cor_upload", "That file is larger than 8 MB. Compress it first."
+                )
+            elif content_type and content_type not in allowed:
+                self.add_error(
+                    "cor_upload", "Upload the COR as a PDF, PNG, JPG, or WebP."
+                )
         year_level = cleaned.get("year_level")
-        section = cleaned.get("section")
-        if role == User.Role.STUDENT:
+        courses = cleaned.get("courses")
+        if role == User.Role.STUDENT and is_irregular:
+            if not courses:
+                self.add_error("courses", "Select at least one course.")
+            if not cor_file:
+                self.add_error(
+                    "cor_upload",
+                    "Your COR is required for irregular registration.",
+                )
+        elif role == User.Role.STUDENT and not is_irregular:
             if not year_level:
-                self.add_error("year_level", "Year level is required.")
-            if not section:
-                self.add_error("section", "Section is required.")
-            elif year_level and "section" not in self.errors:
-                if not section_matches_student(
-                    section,
-                    User.HomeDegreeProgram.BSED_MATH,
-                    year_level.pk,
-                ):
-                    self.add_error(
-                        "section", "Choose a section for the selected year level."
-                    )
-                else:
-                    try:
-                        validate_section_capacity(section)
-                    except ValidationError as exc:
-                        self.add_error(
-                            "section",
-                            exc.messages[0] if exc.messages else str(exc),
-                        )
+                self.add_error(
+                    "year_level",
+                    "Analyze your COR first — your year level is detected from it.",
+                )
+            if not cor_file:
+                self.add_error(
+                    "cor_upload",
+                    "Your COR is required for registration.",
+                )
+        if role == User.Role.STUDENT:
+            self._validate_faculty_selections(cleaned)
         return cleaned
+
+    def _scope_subject_ids(self, cleaned) -> list[int]:
+        """Subject pks the student must pick faculty for."""
+        is_irregular = cleaned.get("is_irregular", False)
+        if is_irregular:
+            courses = cleaned.get("courses") or []
+            return [c.pk for c in courses]
+        year_level = cleaned.get("year_level")
+        if year_level is None:
+            return []
+        return list(
+            Subject.objects.filter(
+                program=Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH),
+                year_level=year_level,
+            ).values_list("pk", flat=True)
+        )
+
+    def _validate_faculty_selections(self, cleaned) -> None:
+        """Every in-scope subject with available faculty needs a valid pick."""
+        import json as _json
+
+        from apps.users.services import subject_faculty_options
+
+        raw = cleaned.get("faculty_selections") or "{}"
+        try:
+            picks = _json.loads(raw)
+            if not isinstance(picks, dict):
+                raise TypeError("not a mapping")
+        except (ValueError, TypeError):
+            self.add_error("faculty_selections", "Invalid faculty selections.")
+            return
+        subject_ids = self._scope_subject_ids(cleaned)
+        if not subject_ids:
+            return
+        options = subject_faculty_options(subject_ids)
+        for subject_id in subject_ids:
+            available = {str(o["faculty_pk"]) for o in options.get(subject_id, [])}
+            if not available:
+                continue
+            picked = picks.get(str(subject_id))
+            if picked is None or str(picked) not in available:
+                self.add_error(
+                    "faculty_selections",
+                    "Choose a faculty member for each of your subjects.",
+                )
+                return
+
+    def _assign_subjects_and_faculty(self, user) -> None:
+        """Persist subject enrollments and per-subject faculty assignments.
+
+        Faculty picks come from the validated ``faculty_selections`` map.
+        Irregular enrollments derive their section from the chosen faculty's
+        teaching assignment, so students no longer pick section letters.
+        """
+        import json as _json
+
+        from apps.users.models import (
+            IrregularSubjectEnrollment,
+            StudentFacultyAssignment,
+            TeachingAssignment,
+        )
+
+        raw = self.cleaned_data.get("faculty_selections") or "{}"
+        try:
+            picks = _json.loads(raw)
+        except (ValueError, TypeError):
+            picks = {}
+        if not isinstance(picks, dict):
+            picks = {}
+
+        if user.is_irregular:
+            courses = self.cleaned_data.get("courses") or []
+            subject_ids = [c.pk for c in courses]
+        else:
+            subject_ids = self._scope_subject_ids(self.cleaned_data)
+        current_term = AcademicTerm.get_current()
+        current_year = current_term.academic_year if current_term is not None else None
+        if current_year is None:
+            return
+        for subject_id in subject_ids:
+            faculty_pk = picks.get(str(subject_id))
+            if not faculty_pk:
+                continue
+            try:
+                faculty_pk = int(faculty_pk)
+            except (TypeError, ValueError):
+                continue
+            assignment = (
+                TeachingAssignment.objects.filter(
+                    subject_id=subject_id,
+                    professor_id=faculty_pk,
+                    term__academic_year=current_year,
+                )
+                .select_related("program_section")
+                .first()
+            )
+            if assignment is None or assignment.professor_id != faculty_pk:
+                continue
+            if user.is_irregular:
+                IrregularSubjectEnrollment.objects.get_or_create(
+                    student=user,
+                    subject_id=subject_id,
+                    term=current_term,
+                    defaults={
+                        "section": assignment.program_section,
+                        "status": IrregularSubjectEnrollment.Status.ENROLLED,
+                    },
+                )
+            StudentFacultyAssignment.objects.get_or_create(
+                student=user,
+                faculty_id=faculty_pk,
+                subject_id=subject_id,
+                academic_year=current_year,
+            )
+
+    def _claim_pending_registration(self, user) -> None:
+        """Mark the coordinator-registered number as claimed by this signup."""
+        from django.db import transaction
+
+        from apps.users.models import PendingStudentRegistration
+
+        student_number = (self.cleaned_data.get("student_number") or "").strip()
+        if not student_number:
+            return
+        with transaction.atomic():
+            entry = (
+                PendingStudentRegistration.objects.select_for_update()
+                .filter(student_number=student_number, claimed_by__isnull=True)
+                .first()
+            )
+            if entry is None:
+                return
+            entry.claimed_by = user
+            entry.claimed_at = timezone.now()
+            entry.save(update_fields=["claimed_by", "claimed_at"])
+
+    def _attach_cor_upload(self, user, request=None) -> None:
+        """Persist the required COR file for students.
+
+        Detection rows come from the analyze-time session bundle (server-side),
+        never from posted hidden fields.
+        """
+        from apps.users.cor_services import COR_SESSION_KEY
+        from apps.users.models import CorUpload
+
+        cor_file = self.cleaned_data.get("cor_upload")
+        if not cor_file:
+            return
+        detected = []
+        if request is not None:
+            bundle = request.session.get(COR_SESSION_KEY)
+            if isinstance(bundle, dict):
+                detected = bundle.get("rows", []) or []
+            request.session.pop(COR_SESSION_KEY, None)
+        if not detected:
+            detected = self.cleaned_data.get("cor_detected") or []
+        current_term = AcademicTerm.get_current()
+        CorUpload.objects.create(
+            student=user,
+            file=cor_file,
+            term=current_term,
+            detected_json=detected,
+        )
 
     def save(self, request):
         user = super().save(request)
@@ -446,14 +665,21 @@ class ExamiQSignupForm(SignupForm):
         user.student_number = self.cleaned_data["student_number"]
         user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
         user.employee_id = ""
-        user.year_level = self.cleaned_data["year_level"]
-        user.section = self.cleaned_data["section"]
+        user.is_irregular = self.cleaned_data.get("is_irregular", False)
+        if not user.is_irregular:
+            user.year_level = self.cleaned_data["year_level"]
+        else:
+            user.year_level = None
         # Students sign up freely: the account is approved and only needs the
         # email OTP before it can be used. No faculty activation step.
         user.approval_status = User.ApprovalStatus.APPROVED
         user.is_active = False
 
         user.save()
+
+        self._claim_pending_registration(user)
+        self._assign_subjects_and_faculty(user)
+        self._attach_cor_upload(user, request)
 
         from django.contrib import messages
 
@@ -482,7 +708,7 @@ class FacultySignupForm(ExamiQSignupForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field_name in ("student_number", "year_level", "section"):
+        for field_name in ("student_number", "year_level"):
             self.fields.pop(field_name, None)
         self.fields["employee_id"].required = True
         self.fields["employee_id"].help_text = ""
@@ -545,7 +771,7 @@ class CoordinatorSignupForm(ExamiQSignupForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field_name in ("student_number", "year_level", "section"):
+        for field_name in ("student_number", "year_level"):
             self.fields.pop(field_name, None)
         self.fields["employee_id"].required = True
         self.fields["employee_id"].help_text = ""
@@ -604,13 +830,7 @@ class ProfileUpdateForm(forms.Form):
         empty_label="— Select year level —",
         label="Year level",
     )
-    section = forms.CharField(
-        required=False,
-        max_length=20,
-        label="Section",
-        widget=forms.TextInput(attrs={"placeholder": "1M or BSE 2-1M"}),
-        help_text="Your cohort section for Chat and exam access (e.g. 1M, 2-1M).",
-    )
+
     def __init__(self, user, *args, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
@@ -623,14 +843,11 @@ class ProfileUpdateForm(forms.Form):
             "image/jpeg,image/png,image/webp"
         )
 
-        if user.role == User.Role.STUDENT:
+        if user.role == User.Role.STUDENT and not user.is_irregular:
             self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
             self.fields["year_level"].initial = user.year_level
-            if user.section_id:
-                self.fields["section"].initial = user.section.display_label
         else:
             del self.fields["year_level"]
-            del self.fields["section"]
 
     def clean_first_name(self):
         from apps.users.name_validation import clean_person_name
@@ -659,39 +876,13 @@ class ProfileUpdateForm(forms.Form):
             required=False,
         )
 
-    def clean_section(self):
-        if self.user.role != User.Role.STUDENT:
-            return ""
-        value = (self.cleaned_data.get("section") or "").strip()
-        if not value:
-            raise forms.ValidationError("Section is required.")
-        try:
-            return parse_section_label(value)
-        except ValidationError as exc:
-            raise forms.ValidationError(
-                exc.messages[0] if exc.messages else str(exc)
-            ) from exc
-
     def clean(self):
         cleaned = super().clean()
-        if self.user.role != User.Role.STUDENT:
+        if self.user.role != User.Role.STUDENT or self.user.is_irregular:
             return cleaned
         year_level = cleaned.get("year_level")
-        section_label = cleaned.get("section")
         if not year_level:
             self.add_error("year_level", "Year level is required.")
-        elif section_label and "section" not in self.errors:
-            try:
-                cleaned["section_obj"] = get_or_create_student_section(
-                    year_level,
-                    section_label,
-                    exclude_user=self.user,
-                )
-            except ValidationError as exc:
-                self.add_error(
-                    "section",
-                    exc.messages[0] if exc.messages else str(exc),
-                )
         return cleaned
 
     def clean_profile_photo(self):
@@ -717,11 +908,10 @@ class ProfileUpdateForm(forms.Form):
                 self.user.profile_photo.delete(save=False)
             self.user.profile_photo = photo
             update_fields.append("profile_photo")
-        if self.user.role == User.Role.STUDENT:
+        if self.user.role == User.Role.STUDENT and not self.user.is_irregular:
             self.user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
             self.user.year_level = self.cleaned_data.get("year_level")
-            self.user.section = self.cleaned_data.get("section_obj")
-            update_fields.extend(["home_degree_program", "year_level", "section"])
+            update_fields.extend(["home_degree_program", "year_level"])
         self.user.save(update_fields=update_fields)
 
 
@@ -981,9 +1171,12 @@ class ProgramSectionBulkForm(forms.Form):
 
 
 class ProgramCoordinatorSubjectForm(forms.Form):
-    """Create a curriculum subject within the coordinator's department."""
+    """Create a curriculum subject within the coordinator's department.
 
-    program = forms.ModelChoiceField(queryset=Program.objects.none(), label="Program")
+    The program is resolved automatically from the coordinator's managed
+    programs — there is no program picker on the Add course dialog.
+    """
+
     code = forms.CharField(max_length=20, label="Course code")
     name = forms.CharField(max_length=200, label="Course title")
     year_level = forms.ModelChoiceField(
@@ -1000,41 +1193,62 @@ class ProgramCoordinatorSubjectForm(forms.Form):
         self.coordinator = coordinator
         super().__init__(*args, **kwargs)
         _style_fields(self)
-        programs = Program.objects.all()
-        if coordinator.department_id:
-            programs = programs.filter(managing_department=coordinator.department)
-        self.fields["program"].queryset = programs.order_by("name")
+        self.program = self._resolve_program()
         self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
         self.fields["code"].widget.attrs["placeholder"] = "e.g. MATH101"
         self.fields["name"].widget.attrs["placeholder"] = "e.g. College Algebra"
+
+    def _resolve_program(self) -> Program | None:
+        """The coordinator's own program(s): managed programs for the dept."""
+        programs = Program.objects.all()
+        if self.coordinator.department_id:
+            programs = programs.filter(
+                managing_department_id=self.coordinator.department_id
+            ).order_by("name")
+        else:
+            programs = programs.order_by("name")
+        return programs.first()
 
     def clean_code(self) -> str:
         return (self.cleaned_data.get("code") or "").strip().upper()
 
     def clean(self):
         cleaned = super().clean()
-        program = cleaned.get("program")
+        program = getattr(self, "program", None)
+        if program is None:
+            self.add_error(
+                None,
+                "No managed program found for your department. "
+                "Ask an administrator to link your account to a department.",
+            )
+            return cleaned
         code = cleaned.get("code")
-        if program and code and Subject.objects.filter(program=program, code=code).exists():
-            self.add_error("code", f"Course code {code} already exists for this program.")
+        if (
+            program
+            and code
+            and Subject.objects.filter(program=program, code=code).exists()
+        ):
+            self.add_error(
+                "code", f"Course code {code} already exists for this program."
+            )
         return cleaned
 
 
 class ChairpersonSubjectForm(forms.ModelForm):
-    """Add or edit a curriculum subject in the chairperson's department."""
+    """Edit a curriculum subject in the chairperson's department.
+
+    The program is owned by the coordinator's department and cannot be
+    changed here — only code, title, year level and semester are editable.
+    """
 
     class Meta:
         model = Subject
-        fields = ["program", "code", "name", "year_level", "semester"]
+        fields = ["code", "name", "year_level", "semester"]
 
     def __init__(self, *args, manager: User | None = None, **kwargs):
         self.manager = manager
         super().__init__(*args, **kwargs)
         _style_fields(self)
-        programs = Program.objects.all()
-        if manager is not None and manager.department_id:
-            programs = programs.filter(managing_department=manager.department)
-        self.fields["program"].queryset = programs.order_by("name")
         self.fields["year_level"].queryset = YearLevel.objects.order_by("order")
         self.fields["code"].widget.attrs["placeholder"] = "e.g. MATH101"
         self.fields["name"].widget.attrs["placeholder"] = "e.g. College Algebra"
@@ -1044,7 +1258,7 @@ class ChairpersonSubjectForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        program = cleaned.get("program")
+        program = self.instance.program if self.instance and self.instance.pk else None
         code = cleaned.get("code")
         if program and code:
             clash = Subject.objects.filter(program=program, code=code)
@@ -1102,13 +1316,6 @@ class TeachingAssignmentForm(forms.Form):
         ),
         label="Faculty",
     )
-    program_sections = forms.ModelMultipleChoiceField(
-        queryset=ProgramSection.queryset_with_counts().select_related(
-            "program", "year_level", "academic_year"
-        ),
-        label="Sections",
-        widget=forms.CheckboxSelectMultiple,
-    )
     subject = forms.ModelChoiceField(
         queryset=Subject.objects.none(),
         label="Course",
@@ -1124,7 +1331,6 @@ class TeachingAssignmentForm(forms.Form):
         self.chairperson = chairperson
         super().__init__(**kwargs)
         _style_fields(self)
-        self.fields["program_sections"].widget.attrs["class"] = "exam-setup-topic-grid"
         dept_id = chairperson.department_id
         if dept_id:
             self.fields["professor"].queryset = User.objects.filter(
@@ -1134,13 +1340,6 @@ class TeachingAssignmentForm(forms.Form):
             ).order_by("email")
         elif chairperson.role == User.Role.PROGRAM_COORDINATOR:
             self.fields["professor"].queryset = User.objects.none()
-        if dept_id:
-            self.fields["program_sections"].queryset = (
-                ProgramSection.queryset_with_counts()
-                .filter(program__managing_department_id=dept_id, is_active=True)
-                .select_related("program", "year_level", "academic_year")
-                .order_by("program__name", "year_level__order", "label")
-            )
         current_term = AcademicTerm.get_current()
         if current_term:
             self.fields["term"].initial = current_term.pk
@@ -1162,55 +1361,35 @@ class TeachingAssignmentForm(forms.Form):
                 .select_related("program", "year_level")
                 .order_by("program__name", "year_level__order", "code")
             )
-        section_ids = self.data.getlist("program_sections") if self.data else []
-        term_id = self.data.get("term") if self.data else None
-        first_section_id = next(
-            (sid for sid in section_ids if str(sid).isdigit()),
-            None,
-        )
-        if first_section_id:
-            section = (
-                ProgramSection.objects.filter(pk=int(first_section_id))
-                .select_related("program")
-                .first()
-            )
-            term = None
-            if term_id and str(term_id).isdigit():
-                term = AcademicTerm.objects.filter(pk=int(term_id)).first()
-            if not term:
-                term = current_term
-            if section and term:
-                from apps.questions.curriculum import subjects_for_teaching_assignment
-
-                self.fields["subject"].queryset = subjects_for_teaching_assignment(
-                    section, term
-                )
-
-    def clean_program_sections(self):
-        sections = self.cleaned_data.get("program_sections")
-        if not sections:
-            raise forms.ValidationError("Select at least one section.")
-        return sections
 
     def clean(self):
         cleaned = super().clean()
-        sections = cleaned.get("program_sections")
         subject = cleaned.get("subject")
         term = cleaned.get("term")
-        if not sections or not subject:
+        if not subject:
             return cleaned
-        from apps.users.assignment_services import validate_assignment_subject
+        # No sections on the form: the assignment covers the course as a
+        # whole. Pick the representative section (first active section of the
+        # course's year level) for the underlying row.
+        sections = list(
+            ProgramSection.objects.filter(
+                program_id=subject.program_id,
+                year_level_id=subject.year_level_id,
+                is_active=True,
+            ).order_by("label")
+        )
+        if not sections:
+            raise forms.ValidationError(
+                "No active sections exist for this course's year level."
+            )
+        cleaned["program_sections"] = sections
+        if term:
+            from apps.users.assignment_services import validate_assignment_subject
 
-        for section in sections:
-            if subject.program_id != section.program_id:
-                raise forms.ValidationError(
-                    f"Subject must belong to the program for section {section.label}."
-                )
-            if term:
-                try:
-                    validate_assignment_subject(section, subject, term)
-                except ValueError as exc:
-                    raise forms.ValidationError(str(exc)) from exc
+            try:
+                validate_assignment_subject(sections[0], subject, term)
+            except ValueError as exc:
+                raise forms.ValidationError(str(exc)) from exc
         return cleaned
 
 

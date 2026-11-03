@@ -1,6 +1,9 @@
 import pytest
 
-from apps.analytics.services import course_performance_summary, student_performance_summary
+from apps.analytics.services import (
+    course_performance_summary,
+    student_performance_summary,
+)
 from apps.users.models import Course
 
 

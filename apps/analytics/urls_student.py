@@ -11,7 +11,9 @@ urlpatterns = [
         views_student.StudentDonutDataView.as_view(),
         name="donut_data",
     ),
-    path("sessions/", views_student.SessionHistoryView.as_view(), name="session_history"),
+    path(
+        "sessions/", views_student.SessionHistoryView.as_view(), name="session_history"
+    ),
     path("chat/", views_student.StudentChatInboxView.as_view(), name="chat_inbox"),
     path(
         "chat/conversations/",
@@ -70,7 +72,11 @@ urlpatterns = [
         views_student.GenerateAnswerFeedbackView.as_view(),
         name="generate_answer_feedback",
     ),
-    path("mistakes/patterns/", views_student.MistakePatternView.as_view(), name="mistake_patterns"),
+    path(
+        "mistakes/patterns/",
+        views_student.MistakePatternView.as_view(),
+        name="mistake_patterns",
+    ),
     path(
         "mistakes/patterns/<int:topic_id>/",
         views_student.TopicAnswerReviewView.as_view(),

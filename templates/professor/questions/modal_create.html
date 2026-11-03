@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Add questions — EXAMIQ+{% endblock %}
+
+{% block content %}
+{% url 'analytics_professor:question_create_single' course.pk as create_action %}
+{% url 'analytics_professor:question_list' course.pk as list_url %}
+{% include "components/question_modal.html" with modal_id="question-modal-add" modal_mode="add" modal_title="Add questions — Manually" modal_action_label="Save all" form_action=create_action form=form choice_formset=choice_formset step_formset=step_formset difficulty_choices=difficulty_choices topic_choices=topic_choices course_pk=course.pk|default:"" subject_id=subject_id|default:"" subject_options=subject_options adaptive_explanation=adaptive_explanation course=course auto_open=True cancel_url=cancel_url|default:list_url %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/question-editor.js' %}"></script>
+<script src="{% static 'js/question-modal.js' %}"></script>
+{% endblock %}

@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from apps.questions.models import ExplanationStep, Question, QuestionChoice, Subject, Topic, YearLevel
+from apps.questions.models import (
+    ExplanationStep,
+    Question,
+    QuestionChoice,
+    Subject,
+    Topic,
+    YearLevel,
+)
 
 
 class QuestionChoiceInline(admin.TabularInline):
@@ -40,13 +47,35 @@ class TopicAdmin(admin.ModelAdmin):
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
     list_display = ["id", "topic", "difficulty", "question_type", "status", "is_active"]
-    list_filter = ["difficulty", "question_type", "topic__subject__program", "status", "is_active"]
+    list_filter = [
+        "difficulty",
+        "question_type",
+        "topic__subject__program",
+        "status",
+        "is_active",
+    ]
     search_fields = ["stem", "topic__name", "concept_tag"]
     ordering = ["topic__name", "difficulty"]
     inlines = [QuestionChoiceInline, ExplanationStepInline]
     fieldsets = (
-        (None, {"fields": ("topic", "difficulty", "question_type", "stem", "concept_tag", "status", "is_active")}),
-        ("Review", {"fields": ("proposed_by", "reviewed_by", "reviewed_at", "rejection_note")}),
+        (
+            None,
+            {
+                "fields": (
+                    "topic",
+                    "difficulty",
+                    "question_type",
+                    "stem",
+                    "concept_tag",
+                    "status",
+                    "is_active",
+                )
+            },
+        ),
+        (
+            "Review",
+            {"fields": ("proposed_by", "reviewed_by", "reviewed_at", "rejection_note")},
+        ),
         (
             "Numeric Answer Settings",
             {

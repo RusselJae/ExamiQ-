@@ -5,7 +5,13 @@ from django.conf import settings
 from apps.analytics.services import log_mistake
 from apps.questions.models import Question, Topic
 from apps.questions.services import count_available_questions, grade_answer
-from apps.reviews.models import Answer, FeedbackView, ReviewSession, ReviewWindow, StepFeedbackView
+from apps.reviews.models import (
+    Answer,
+    FeedbackView,
+    ReviewSession,
+    ReviewWindow,
+    StepFeedbackView,
+)
 from apps.users.models import User
 
 
@@ -83,7 +89,9 @@ def start_session_from_window(
 ) -> ReviewSession:
     """Start a session directly from a scheduled review window."""
     if student.role == User.Role.STUDENT and not student.home_degree_program:
-        raise WindowStartError("Set your home degree program in Profile before starting a review.")
+        raise WindowStartError(
+            "Set your home degree program in Profile before starting a review."
+        )
 
     if not window.is_open:
         raise WindowStartError("This review window is no longer open.")
@@ -101,7 +109,9 @@ def start_session_from_window(
     )
     if topic:
         if not allowed_topics.filter(pk=topic.pk).exists():
-            raise WindowStartError("Selected topic is not allowed for this review window.")
+            raise WindowStartError(
+                "Selected topic is not allowed for this review window."
+            )
     else:
         topic = allowed_topics.order_by("name").first()
         if not topic:
@@ -190,7 +200,9 @@ def record_feedback_view(answer: Answer) -> FeedbackView:
 
 def record_step_feedback_view(answer: Answer, explanation_step) -> StepFeedbackView:
     """Track when a student views a specific explanation step."""
-    return StepFeedbackView.objects.create(answer=answer, explanation_step=explanation_step)
+    return StepFeedbackView.objects.create(
+        answer=answer, explanation_step=explanation_step
+    )
 
 
 def complete_session(session: ReviewSession) -> ReviewSession:

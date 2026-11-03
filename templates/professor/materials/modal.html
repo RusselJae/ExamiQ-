@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load static %}
+
+{# Material detail — full-screen "Edit content" dialog for a library file. #}
+{# The shared content modal renders pre-filled and opens on load, so opening a #}
+{# material by URL (e.g. a PDF title in the library) lands in the same editor #}
+{# as the library Edit button. #}
+
+{% block title %}Edit content — {{ document.display_title }}{% endblock %}
+
+{% block content %}
+{% url 'analytics_professor:material_detail' course.pk document.pk as edit_action %}
+
+{% if from_hub %}
+{% url 'analytics_professor:materials_hub' as materials_back_url %}
+{% else %}
+{% url 'analytics_professor:material_list' course.pk as materials_back_url %}
+{% endif %}
+
+{% include "components/content_modal.html" with modal_id="content-modal-edit" modal_mode="edit" modal_title="Edit content" modal_action_label="Save changes" form_action=edit_action subject_id=document.subject_id|default:"" doc_title=document.title|default:document.original_name doc_description=document.description doc_ext=document.file_type_label|upper|default:'PDF' doc_name=document.original_name|default:'Document' doc_meta=attached_meta download_url=download_url doc_subject=document.subject_id|default:"" doc_status=document.status auto_open=True cancel_url=materials_back_url return_to="list" hub_return=from_hub subject_options=subject_options %}
+
+{# Placeholder so the underlying page is not blank if scripting is disabled. #}
+<noscript>
+    <div class="course-home-panel">
+        <p class="text-examiq-slate text-sm">
+            Editing “{{ document.display_title }}” requires JavaScript.
+        </p>
+    </div>
+</noscript>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/content-modal.js' %}"></script>
+{% endblock %}

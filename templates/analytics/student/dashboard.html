@@ -6,6 +6,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Your Performance" subtitle="Track confidence and mistakes across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
 
+<div class="student-panel">
 <div class="bento-grid mb-6">
     <div class="span-9">
         <div class="bento-card p-6 overview-trends-card h-full student-confidence-card" data-confidence-card>
@@ -109,6 +110,7 @@
             {% endif %}
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
 

@@ -116,8 +116,8 @@ def test_student_dashboard_has_chat_and_tutor_icons(client, student):
     client.force_login(student)
     response = client.get(reverse("analytics_student:dashboard"))
     content = response.content.decode()
-    assert 'data-open-chat-modal' in content
-    assert 'data-open-ai-tutor' in content
+    assert "data-open-chat-modal" in content
+    assert "data-open-ai-tutor" in content
     assert "examiq-chat-modal" in content
     assert "ai-tutor-modal" in content
 

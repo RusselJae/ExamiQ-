@@ -45,9 +45,7 @@ def parse_section_label(raw: str) -> str:
     if re.fullmatch(r"[0-9A-Z]{1,10}", text):
         return text
 
-    raise ValidationError(
-        "Enter a section like 1M, 2-1M, or BSE 2-1M."
-    )
+    raise ValidationError("Enter a section like 1M, 2-1M, or BSE 2-1M.")
 
 
 def get_or_create_student_section(

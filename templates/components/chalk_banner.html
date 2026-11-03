@@ -1,0 +1,18 @@
+{# Chalkboard banner for the faculty course overview panel. #}
+{# Optional: course. Year/semester line shows only when fields exist. #}
+<div class="chalk-banner" role="img" aria-label="{{ course.code }} — {{ course.name }}">
+    <div class="chalk-banner__main">
+        <p class="chalk-banner__code">{{ course.code }}</p>
+        <h1 class="chalk-banner__title">{{ course.name }}</h1>
+        {% if course.term and course.term != "Catalog" %}
+        <p class="chalk-banner__meta">{{ course.term }}{% if course.academic_year %} · {{ course.academic_year }}{% endif %}</p>
+        {% elif course.academic_year and course.academic_year != "Catalog" %}
+        <p class="chalk-banner__meta">{{ course.academic_year }}</p>
+        {% endif %}
+    </div>
+    <div class="chalk-banner__doodles" aria-hidden="true">
+        <span>a&#178; + b&#178; = c&#178;</span>
+        <span>&pi; &#8776; 3.14</span>
+        <span>1 + 2 + &#8230; + n = n(n+1)/2</span>
+    </div>
+</div>

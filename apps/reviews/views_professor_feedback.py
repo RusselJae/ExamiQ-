@@ -239,9 +239,7 @@ class FeedbackFacultyNoteView(ProfessorCourseMixin, View):
         form = MistakeConcernForm(
             {
                 "body": (
-                    request.POST.get("faculty_note")
-                    or request.POST.get("body")
-                    or ""
+                    request.POST.get("faculty_note") or request.POST.get("body") or ""
                 ),
             },
             request.FILES,
@@ -269,7 +267,9 @@ class FeedbackFacultyNoteView(ProfessorCourseMixin, View):
         )
 
 
-class SectionFeedbackConcernsApiView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View):
+class SectionFeedbackConcernsApiView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View
+):
     """JSON list of section student concerns for the faculty feedback modal."""
 
     def dispatch(self, request, *args, **kwargs):
@@ -305,7 +305,9 @@ class SectionFeedbackConcernsApiView(FacultyLegacyRosterBlockedMixin, ProfessorR
         )
 
 
-class SectionFeedbackFacultyNoteView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View):
+class SectionFeedbackFacultyNoteView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View
+):
     """Post a faculty reply on a section student concern."""
 
     def dispatch(self, request, *args, **kwargs):
@@ -327,9 +329,7 @@ class SectionFeedbackFacultyNoteView(FacultyLegacyRosterBlockedMixin, ProfessorR
         form = MistakeConcernForm(
             {
                 "body": (
-                    request.POST.get("faculty_note")
-                    or request.POST.get("body")
-                    or ""
+                    request.POST.get("faculty_note") or request.POST.get("body") or ""
                 ),
             },
             request.FILES,
@@ -383,7 +383,9 @@ class GlobalChatConversationsApiView(ProfessorRequiredMixin, View):
         )
 
         records = list(professor_chat_queryset(request.user)[:100])
-        items = [serialize_conversation(record, viewer=request.user) for record in records]
+        items = [
+            serialize_conversation(record, viewer=request.user) for record in records
+        ]
         active_id = request.GET.get("conversation_id")
         student_id = request.GET.get("student_id")
         active_conversation_id = None
@@ -438,9 +440,7 @@ class GlobalChatFacultyMessageView(ProfessorRequiredMixin, View):
         form = MistakeConcernForm(
             {
                 "body": (
-                    request.POST.get("faculty_note")
-                    or request.POST.get("body")
-                    or ""
+                    request.POST.get("faculty_note") or request.POST.get("body") or ""
                 ),
             },
             request.FILES,
@@ -510,9 +510,7 @@ class FacultyPeerMessageView(ProfessorRequiredMixin, View):
             if not professor_can_access_faculty_conversation(
                 request.user, conversation
             ):
-                return JsonResponse(
-                    {"ok": False, "error": "Not allowed."}, status=403
-                )
+                return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
         else:
             peer_id = request.POST.get("peer_id") or ""
             if not str(peer_id).isdigit():
@@ -531,9 +529,7 @@ class FacultyPeerMessageView(ProfessorRequiredMixin, View):
         form = MistakeConcernForm(
             {
                 "body": (
-                    request.POST.get("faculty_note")
-                    or request.POST.get("body")
-                    or ""
+                    request.POST.get("faculty_note") or request.POST.get("body") or ""
                 ),
             },
             request.FILES,

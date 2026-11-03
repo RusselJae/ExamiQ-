@@ -5,12 +5,17 @@ import logging
 import re
 
 from apps.ai.exceptions import AIServiceUnavailableError
-from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
+from apps.ai.helpers import (
+    calibration_narrative_from_matrix,
+    course_review_narrative,
+    parse_cor_rows,
+)
 from apps.ai.interfaces import (
     AdaptiveFeedbackGenerator,
     CalibrationAnalyzer,
     ConceptPracticeGenerator,
     ConceptRemediationGenerator,
+    CorSubjectAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -20,6 +25,7 @@ from apps.ai.interfaces import (
 )
 from apps.ai.prompts import (
     build_calibration_prompt,
+    build_cor_extraction_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
     build_explanation_generation_prompt,
@@ -30,6 +36,7 @@ from apps.ai.prompts import (
 from apps.ai.providers import gemini_client
 from apps.ai.stubs import (
     StubCalibrationAnalyzer,
+    StubCorSubjectAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
@@ -90,8 +97,14 @@ def _parse_explanation_json(raw: str) -> dict:
     }
 
 
-def _chat(prompt: str, system: str = "You are a concise educational analytics assistant.", max_output_tokens: int = 500) -> str | None:
-    return gemini_client.chat(prompt, system=system, max_output_tokens=max_output_tokens)
+def _chat(
+    prompt: str,
+    system: str = "You are a concise educational analytics assistant.",
+    max_output_tokens: int = 500,
+) -> str | None:
+    return gemini_client.chat(
+        prompt, system=system, max_output_tokens=max_output_tokens
+    )
 
 
 class GeminiCalibrationAnalyzer(CalibrationAnalyzer):
@@ -109,6 +122,17 @@ class GeminiCurriculumAdvisor(CurriculumAdvisor):
         fallback = course_review_narrative(summary)
         prompt = build_course_report_prompt(course, summary)
         return _chat(prompt) or fallback
+
+
+class GeminiCorSubjectAnalyzer(CorSubjectAnalyzer):
+    def structure_rows(self, text: str) -> list[dict[str, str]]:
+        if not (text or "").strip():
+            return []
+        system, prompt = build_cor_extraction_prompt(text)
+        raw = _chat(prompt, system=system, max_output_tokens=900)
+        if not raw:
+            return StubCorSubjectAnalyzer().structure_rows(text)
+        return parse_cor_rows(raw)
 
 
 class GeminiDifficultyTagger(DifficultyTagger):

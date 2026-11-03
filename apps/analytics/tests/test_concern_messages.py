@@ -51,7 +51,9 @@ def test_post_concern_message_creates_thread(student, professor, mistake_record)
         body="Why is this wrong?",
     )
     assert msg.pk
-    assert MistakeConcernMessage.objects.filter(mistake_record=mistake_record).count() == 1
+    assert (
+        MistakeConcernMessage.objects.filter(mistake_record=mistake_record).count() == 1
+    )
     assert concern_needs_faculty_reply(mistake_record)
 
     reply = post_concern_message(
@@ -68,7 +70,9 @@ def test_post_concern_message_creates_thread(student, professor, mistake_record)
 
 
 @pytest.mark.django_db
-def test_student_message_notifies_professor(student, professor, mistake_record, subject):
+def test_student_message_notifies_professor(
+    student, professor, mistake_record, subject
+):
     professor.assigned_sections.add(student.section)
     professor.assigned_subjects.add(subject)
     post_concern_message(mistake_record, student, body="Help please")

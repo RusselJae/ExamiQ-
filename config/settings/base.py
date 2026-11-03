@@ -1,4 +1,5 @@
 """Base settings shared across all environments."""
+
 from pathlib import Path
 import os
 import environ
@@ -89,16 +90,16 @@ DATABASES = {
     #     "HOST": "tokaido.proxy.rlwy.net",
     #     "PORT": "11132",
     # },
-
     "default": env.db(
         "DATABASE_URL",
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
     )
-
 }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -209,9 +210,9 @@ AI_ENABLED = env.bool("AI_ENABLED", default=False)
 # detail page embeds ONLYOFFICE for Office formats and a signed callback
 # writes the edited file back over the stored one.
 # ---------------------------------------------------------------------------
-ONLYOFFICE_DOCUMENT_SERVER_URL = env(
-    "ONLYOFFICE_DOCUMENT_SERVER_URL", default=""
-).strip().rstrip("/")
+ONLYOFFICE_DOCUMENT_SERVER_URL = (
+    env("ONLYOFFICE_DOCUMENT_SERVER_URL", default="").strip().rstrip("/")
+)
 ONLYOFFICE_JWT_SECRET = env("ONLYOFFICE_JWT_SECRET", default="")
 ONLYOFFICE_JWT_ENABLED = env.bool("ONLYOFFICE_JWT_ENABLED", default=True)
 # Public origin the Document Server uses to fetch files and post callbacks.
@@ -236,7 +237,9 @@ GEMINI_FALLBACK_MODELS = env.list(
         "gemini-2.0-flash-lite",
     ],
 )
-GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int("GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=8192)
+GEMINI_QUESTION_MAX_OUTPUT_TOKENS = env.int(
+    "GEMINI_QUESTION_MAX_OUTPUT_TOKENS", default=8192
+)
 AI_GENERATION_BATCH_SIZE = env.int("AI_GENERATION_BATCH_SIZE", default=5)
 AI_GENERATION_MAX_ATTEMPTS = env.int("AI_GENERATION_MAX_ATTEMPTS", default=3)
 # Legacy env keys retained so existing .env files keep loading; no longer enforced.

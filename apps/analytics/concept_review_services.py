@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Max, QuerySet
 from django.utils import timezone
 
 from apps.analytics.models import ConceptPracticeAttempt, ConceptReview, MistakeRecord
@@ -140,7 +140,7 @@ def list_concept_reviews(
     """Return concept reviews for the student, optionally filtered by status."""
     qs = (
         ConceptReview.objects.filter(student=student)
-        .select_related("topic", "topic__subject")
+        .select_related("topic", "topic__subject", "topic__subject__year_level")
         .annotate(open_attempts=Count("practice_attempts"))
     )
     if status and status in {s.value for s in ConceptReview.Status}:
@@ -164,7 +164,9 @@ def concept_status_counts(student: User) -> dict[str, int]:
 
 def build_concept_card_context(review: ConceptReview) -> dict[str, Any]:
     """Template-friendly card fields for the Concepts to Review list."""
-    parts: list[str] = [f"Missed {review.miss_count} time" + ("s" if review.miss_count != 1 else "")]
+    parts: list[str] = [
+        f"Missed {review.miss_count} time" + ("s" if review.miss_count != 1 else "")
+    ]
     if review.same_wrong_answer_count >= 2:
         parts.append(
             f"Same wrong answer picked {review.same_wrong_answer_count} times"
@@ -203,7 +205,9 @@ def build_concept_card_context(review: ConceptReview) -> dict[str, Any]:
     subject = review.topic.subject if review.topic_id else None
     subject_label = ""
     if subject:
-        subject_label = f"{subject.name} · {subject.code}" if subject.code else subject.name
+        subject_label = (
+            f"{subject.name} · {subject.code}" if subject.code else subject.name
+        )
 
     cta = "Start review"
     if review.status == STATUS_PRACTICING:
@@ -265,7 +269,9 @@ def _missed_questions_payload(review: ConceptReview) -> list[dict[str, Any]]:
         else:
             correct = record.question.expected_answer or ""
         conf = _confidence_bucket(record.answer.confidence)
-        conf_label = "Sure" if conf == "sure" else "Guessing" if conf == "guessing" else ""
+        conf_label = (
+            "Sure" if conf == "sure" else "Guessing" if conf == "guessing" else ""
+        )
         items.append(
             {
                 "stem": record.question.stem,
@@ -277,7 +283,9 @@ def _missed_questions_payload(review: ConceptReview) -> list[dict[str, Any]]:
     return items
 
 
-def ensure_learn_content(review: ConceptReview, *, force: bool = False) -> ConceptReview:
+def ensure_learn_content(
+    review: ConceptReview, *, force: bool = False
+) -> ConceptReview:
     """Generate and cache Learn / Try it content when missing."""
     if review.learn_payload and not force:
         return review
@@ -384,7 +392,16 @@ def _previous_practice_questions(review: ConceptReview) -> list[dict[str, Any]]:
     return out
 
 
-def start_or_next_practice(review: ConceptReview) -> ConceptPracticeAttempt:
+def next_practice_attempt_number(review: ConceptReview) -> int:
+    """Monotonic per-review attempt number that survives regenerate deletes."""
+    return (
+        review.practice_attempts.aggregate(top=Max("attempt_number"))["top"] or 0
+    ) + 1
+
+
+def start_or_next_practice(
+    review: ConceptReview, *, attempt_number: int | None = None
+) -> ConceptPracticeAttempt:
     """Return an unanswered practice attempt, creating one via AI if needed."""
     open_attempt = (
         review.practice_attempts.filter(is_correct__isnull=True)
@@ -396,7 +413,8 @@ def start_or_next_practice(review: ConceptReview) -> ConceptPracticeAttempt:
 
     from apps.ai.factory import get_concept_practice_generator
 
-    attempt_number = review.practice_attempts.count() + 1
+    if attempt_number is None:
+        attempt_number = next_practice_attempt_number(review)
     concept_name = review.concept_name
     if review.prerequisite_mode and review.prerequisite_flag:
         concept_name = review.prerequisite_flag
@@ -552,7 +570,9 @@ def miss_history_for_sidebar(review: ConceptReview) -> list[dict[str, str]]:
             continue
         chosen = _wrong_answer_text(record.answer)
         conf = _confidence_bucket(record.answer.confidence)
-        conf_label = "Sure" if conf == "sure" else "Guessing" if conf == "guessing" else ""
+        conf_label = (
+            "Sure" if conf == "sure" else "Guessing" if conf == "guessing" else ""
+        )
         date_str = record.occurred_at.strftime("%b %d")
         detail = f"picked {chosen}" if chosen else "missed"
         if conf_label:
@@ -561,7 +581,8 @@ def miss_history_for_sidebar(review: ConceptReview) -> list[dict[str, str]]:
         if len(lines) >= 5:
             break
     return lines or [
-        {"date": "", "detail": item.get("chosen_answer") or "Missed"} for item in items[:3]
+        {"date": "", "detail": item.get("chosen_answer") or "Missed"}
+        for item in items[:3]
     ]
 
 
@@ -569,6 +590,9 @@ def diagnose_from_stats(review: ConceptReview) -> str:
     """Heuristic diagnosis before AI teach runs (for card badges)."""
     if review.same_wrong_answer_count >= 2 or review.marked_sure_count >= 2:
         return ConceptReview.DiagnosisType.MISCONCEPTION
-    if review.marked_guessing_count >= review.miss_count // 2 and review.miss_count >= 2:
+    if (
+        review.marked_guessing_count >= review.miss_count // 2
+        and review.miss_count >= 2
+    ):
         return ConceptReview.DiagnosisType.KNOWLEDGE_GAP
     return ConceptReview.DiagnosisType.KNOWLEDGE_GAP

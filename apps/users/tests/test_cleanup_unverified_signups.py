@@ -76,9 +76,7 @@ class TestCleanupAbandonedSignups:
         User.objects.filter(pk=stale.pk).update(
             date_joined=timezone.now() - timedelta(hours=30)
         )
-        result = cleanup_abandoned_signups(
-            older_than=timedelta(hours=24), dry_run=True
-        )
+        result = cleanup_abandoned_signups(older_than=timedelta(hours=24), dry_run=True)
         assert result["users"] == 1
         assert User.objects.filter(email="dry-run@test.edu").exists()
 

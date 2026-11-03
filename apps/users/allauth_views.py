@@ -104,6 +104,47 @@ class ExamiQSignupView(ClearPendingLoginCodeMixin, allauth_views.SignupView):
 
     form_class = ExamiQSignupForm
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from apps.questions.models import Subject, YearLevel
+        from apps.users.models import User as _User
+        from apps.users.services import subject_faculty_options
+
+        context["year_levels"] = YearLevel.objects.order_by("order")
+        context["semester_choices"] = Subject.Semester.choices
+        subjects = list(
+            Subject.objects.filter(
+                program__slug=_User.HomeDegreeProgram.BSED_MATH,
+            )
+            .select_related("year_level")
+            .order_by("year_level__order", "semester", "code")
+        )
+        context["subject_year_map"] = {str(s.pk): s.year_level_id for s in subjects}
+        context["subject_meta"] = {
+            str(s.pk): {"code": s.code, "name": s.name} for s in subjects
+        }
+        context["faculty_options"] = subject_faculty_options([s.pk for s in subjects])
+        return context
+
+    def form_valid(self, form):
+        """Enforce the COR gate against the analyze-time session bundle."""
+        from apps.users.cor_services import verify_cor_submission
+
+        cleaned = form.cleaned_data
+        error = verify_cor_submission(
+            self.request,
+            cleaned.get("cor_upload"),
+            is_irregular=bool(cleaned.get("is_irregular")),
+            year_level_id=cleaned.get("year_level").pk
+            if cleaned.get("year_level") is not None
+            else None,
+            course_ids=[c.pk for c in (cleaned.get("courses") or [])],
+        )
+        if error:
+            form.add_error("cor_upload", error)
+            return self.form_invalid(form)
+        return super().form_valid(form)
+
 
 def _portal_token_valid(token: str, expected: str) -> bool:
     """True when the URL token matches the configured portal token."""

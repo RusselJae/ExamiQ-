@@ -21,7 +21,7 @@ from conftest import make_bsed_student
 def _make_ready_doc(
     *, course, subject, user, title="Module overview", archived=False, filename=None
 ):
-    name = filename or f"{title}.txt"
+    name = filename or f"{title}.pdf"
     doc = LearningDocument.objects.create(
         course_id=course.pk,
         subject=subject,
@@ -43,7 +43,7 @@ class TestFacultyMaterialsUI:
     def test_detail_course_dropdown_lists_bsed_subject(
         self, client, professor, subject
     ):
-        """Catalog materials must show the document subject, not 'No courses'."""
+        """Catalog materials modal must show the course dropdown with subject options."""
         course = get_or_create_catalog_course(professor, subject)
         doc = _make_ready_doc(course=course, subject=subject, user=professor)
         client.force_login(professor)
@@ -56,9 +56,9 @@ class TestFacultyMaterialsUI:
         )
         assert response.status_code == 200
         content = response.content.decode()
-        assert "No courses available" not in content
-        assert subject.code in content
-        assert f'value="{subject.pk}"' in content
+        assert "content-modal-edit" in content
+        assert 'name="subject_id"' in content
+        assert "Save changes" in content
 
     def test_course_list_keeps_course_chrome(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
@@ -79,18 +79,19 @@ class TestFacultyMaterialsUI:
         # Course sub-navigation was dropped; the sidebar owns those links now.
         assert "course-nav-link" not in content
         assert "materials-download-btn" in content
-        # TXT uploads use the in-app editor, so Edit is offered.
+        # PDF uploads open the full-screen Edit content dialog, so Edit shows.
         assert "materials-edit-btn" in content
-        # Course-scoped page: no course picker, supported-types hint present.
-        assert "materials-hub-upload-row" in content
-        assert "Supported: TXT, MD, CSV, PDF, DOCX." in content
-        assert "Choose file" in content
+        # Course-scoped page: uploading happens in the Add content modal now.
+        assert "materials-hub-upload-row" not in content
+        assert "materials-add-btn" in content
+        assert "content-modal-add" in content
+        assert "content-modal-edit" in content
         assert "<select" not in content.split("materials-library")[0]
 
-    def test_course_list_offers_edit_for_office_formats(
+    def test_course_list_offers_edit_for_pdfs(
         self, client, professor, subject, settings
     ):
-        """A DOCX material is editable in ONLYOFFICE, so the Edit link shows."""
+        """A PDF material is listed with the full-screen Edit action."""
         settings.ONLYOFFICE_DOCUMENT_SERVER_URL = "https://office.example.com"
         course = get_or_create_catalog_course(professor, subject)
         _make_ready_doc(
@@ -98,7 +99,7 @@ class TestFacultyMaterialsUI:
             subject=subject,
             user=professor,
             title="Lecture notes",
-            filename="Lecture notes.docx",
+            filename="Lecture notes.pdf",
         )
 
         client.force_login(professor)
@@ -111,6 +112,69 @@ class TestFacultyMaterialsUI:
         content = response.content.decode()
         assert "materials-download-btn" in content
         assert "materials-edit-btn" in content
+
+    def test_non_pdf_documents_are_hidden_from_the_library(
+        self, client, professor, subject
+    ):
+        """Only PDF uploads list in the library; legacy files stay hidden."""
+        course = get_or_create_catalog_course(professor, subject)
+        _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Legacy text module",
+            filename="legacy.txt",
+        )
+        pdf = _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="PDF module",
+            filename="module.pdf",
+        )
+
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:material_list", kwargs={"course_pk": course.pk}
+            )
+        )
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "PDF module" in content
+        assert "Legacy text module" not in content
+        assert pdf.display_title in content
+
+    def test_detail_page_opens_full_screen_edit_dialog(
+        self, client, professor, subject
+    ):
+        """Opening a material by URL renders the pre-filled edit dialog."""
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Full screen module",
+            filename="full-screen.pdf",
+        )
+        doc.description = "Shown in the description field"
+        doc.save(update_fields=["description"])
+
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            )
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        # The dialog is server-rendered, pre-filled, and opened on load.
+        assert 'data-auto-open="1"' in content
+        assert "data-cancel-url=" in content
+        assert doc.display_title in content
+        assert doc.description in content
+        assert "content-modal.js" in content
 
     def test_hub_with_subject_shows_download_and_edit(
         self, client, professor, subject, bsed_program
@@ -128,11 +192,16 @@ class TestFacultyMaterialsUI:
         assert response.status_code == 200
         assert "materials-library" in content
         assert "materials-download-btn" in content
-        # TXT is editable via the in-app content editor.
+        # PDFs open the full-screen Edit content dialog.
         assert "materials-edit-btn" in content
+        # Add/Edit happen in the shared content modal; Add content lives in
+        # the page header and is disabled until a course is picked.
+        assert "Add content" in content
+        assert "content-modal-add" in content
+        assert "content-modal-edit" in content
         # Archive was replaced by a permanent delete.
         assert "Delete" in content
-        assert "Archive" not in content
+        assert "materials-archive-form" not in content
         assert "Content Management" in content
 
     def test_download_returns_attachment(self, client, professor, subject):
@@ -243,6 +312,11 @@ UNRELATED_UPLOAD = (
 )
 
 
+def _pdf_pages(payload: bytes) -> list[dict]:
+    """Fake extractor output so the relevance gate can run without parsing."""
+    return [{"page": 1, "text": payload.decode()}]
+
+
 class _AlwaysUnrelated:
     """Patch the relevance gate so tests do not depend on keyword scoring."""
 
@@ -300,9 +374,15 @@ class TestMaterialUploadRelevanceGate:
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
 
-        with patch(
-            "apps.questions.views_materials.assess_subject_relevance",
-            _AlwaysUnrelated(),
+        with (
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                _AlwaysUnrelated(),
+            ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(UNRELATED_UPLOAD),
+            ),
         ):
             response = self._post(
                 client,
@@ -310,7 +390,9 @@ class TestMaterialUploadRelevanceGate:
                 subject,
                 {
                     "source_file": SimpleUploadedFile(
-                        "plant-science.txt", UNRELATED_UPLOAD, content_type="text/plain"
+                        "plant-science.pdf",
+                        UNRELATED_UPLOAD,
+                        content_type="application/pdf",
                     )
                 },
             )
@@ -324,9 +406,15 @@ class TestMaterialUploadRelevanceGate:
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
 
-        with patch(
-            "apps.questions.views_materials.assess_subject_relevance",
-            _AlwaysRelated(),
+        with (
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                _AlwaysRelated(),
+            ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(RELATED_UPLOAD),
+            ),
         ):
             self._post(
                 client,
@@ -334,7 +422,7 @@ class TestMaterialUploadRelevanceGate:
                 subject,
                 {
                     "source_file": SimpleUploadedFile(
-                        "trig.txt", RELATED_UPLOAD, content_type="text/plain"
+                        "trig.pdf", RELATED_UPLOAD, content_type="application/pdf"
                     )
                 },
             )
@@ -359,14 +447,20 @@ class TestMaterialUploadRelevanceGate:
                 "topic_score": 0,
             }
 
-        with patch("apps.questions.views_materials.assess_subject_relevance", _capture):
+        with (
+            patch("apps.questions.views_materials.assess_subject_relevance", _capture),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(UNRELATED_UPLOAD),
+            ),
+        ):
             self._post(
                 client,
                 course,
                 subject,
                 {
                     "source_file": SimpleUploadedFile(
-                        "plant.txt", UNRELATED_UPLOAD, content_type="text/plain"
+                        "plant.pdf", UNRELATED_UPLOAD, content_type="application/pdf"
                     )
                 },
             )
@@ -394,7 +488,7 @@ class TestMaterialUploadRelevanceGate:
         assert LearningDocument.objects.filter(course_id=course.pk).count() == 1
 
     def test_unsupported_extension_is_rejected(self, client, professor, subject):
-        """Only TXT, MD, CSV, PDF and DOCX may be uploaded."""
+        """Only PDF may be uploaded to the content library."""
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         blob = SimpleUploadedFile(
@@ -416,15 +510,10 @@ class TestMaterialUploadRelevanceGate:
     def test_allowed_extensions_are_exactly_the_supported_set(self):
         from apps.ai.ingest import allowed_upload_suffixes, is_allowed_upload
 
-        assert set(allowed_upload_suffixes()) == {
-            ".txt",
-            ".md",
-            ".csv",
-            ".pdf",
-            ".docx",
-        }
+        assert set(allowed_upload_suffixes()) == {".pdf"}
         assert is_allowed_upload("Lesson.PDF") is True
-        assert is_allowed_upload("notes.docx") is True
+        assert is_allowed_upload("notes.txt") is False
+        assert is_allowed_upload("notes.docx") is False
         assert is_allowed_upload("deck.pptx") is False
         assert is_allowed_upload("sheet.xlsx") is False
         assert is_allowed_upload("photo.png") is False
@@ -443,9 +532,15 @@ class TestMaterialUploadRelevanceGate:
             semester=1,
         )
 
-        with patch(
-            "apps.questions.views_materials.assess_subject_relevance",
-            _AlwaysRelated(),
+        with (
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                _AlwaysRelated(),
+            ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(RELATED_UPLOAD),
+            ),
         ):
             response = self._post(
                 client,
@@ -453,7 +548,7 @@ class TestMaterialUploadRelevanceGate:
                 other_subject,
                 {
                     "source_file": SimpleUploadedFile(
-                        "trig.txt", RELATED_UPLOAD, content_type="text/plain"
+                        "trig.pdf", RELATED_UPLOAD, content_type="application/pdf"
                     )
                 },
             )
@@ -480,12 +575,18 @@ class TestMaterialUploadRelevanceGate:
                 "topic_score": 5,
             }
 
-        with patch("apps.questions.views_materials.assess_subject_relevance", _capture):
+        with (
+            patch("apps.questions.views_materials.assess_subject_relevance", _capture),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(RELATED_UPLOAD),
+            ),
+        ):
             response = client.post(
                 self._upload_url(course),
                 {
                     "source_file": SimpleUploadedFile(
-                        "trig.txt", RELATED_UPLOAD, content_type="text/plain"
+                        "trig.pdf", RELATED_UPLOAD, content_type="application/pdf"
                     )
                 },
                 follow=True,
@@ -512,6 +613,10 @@ class TestMaterialUploadRelevanceGate:
                 "apps.questions.views_materials.assess_subject_relevance",
                 _AlwaysRelated(),
             ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(RELATED_UPLOAD),
+            ),
         ):
             response = client.post(
                 self._upload_url(course),
@@ -519,7 +624,7 @@ class TestMaterialUploadRelevanceGate:
                     "subject_id": subject.pk,
                     "hub_return": "1",
                     "source_file": SimpleUploadedFile(
-                        "trig.txt", RELATED_UPLOAD, content_type="text/plain"
+                        "trig.pdf", RELATED_UPLOAD, content_type="application/pdf"
                     ),
                 },
                 follow=True,
@@ -542,7 +647,9 @@ class TestMaterialUploadFormTrimmed:
             reverse("analytics_professor:materials_hub") + f"?subject={subject.pk}"
         ).content.decode()
 
-        assert "Supported: TXT, MD, CSV, PDF, DOCX." in content
+        # Supported formats surface inside the Add content modal dropzone.
+        assert "PDF only" in content
+        assert 'accept=".pdf,application/pdf"' in content
         assert "Upload material" not in content
         assert 'name="material_type"' not in content
         assert 'id="material-type"' not in content
@@ -559,7 +666,9 @@ class TestMaterialUploadFormTrimmed:
             )
         ).content.decode()
 
-        assert "Supported: TXT, MD, CSV, PDF, DOCX." in content
+        # Supported formats surface inside the Add content modal dropzone.
+        assert "PDF only" in content
+        assert 'accept=".pdf,application/pdf"' in content
         assert "Upload material" not in content
         assert 'name="material_type"' not in content
 
@@ -585,30 +694,26 @@ class TestMaterialContentEditing:
         )
 
     def test_detail_page_renders_document_header(self, client, professor, subject):
-        """Document title, actions, meta pills and the overflow menu."""
+        """Material modal renders title field, course picker, and save button."""
         course = get_or_create_catalog_course(professor, subject)
         doc = _make_ready_doc(course=course, subject=subject, user=professor)
         client.force_login(professor)
         content = client.get(self._detail_url(course, doc)).content.decode()
 
-        # Back link, breadcrumb, and course name removed per new design
-        assert "materials-doc__crumbs" not in content
-        assert "overview-back-link" not in content
-        assert "Back to content management" not in content
-        assert "All changes saved" in content
-        assert "Generate questions" in content
-        assert "data-dropdown-toggle" in content
-        # _make_ready_doc stores a .txt, so the menu reads "Download txt".
-        assert "Download txt" in content
-        assert "Rename file" in content
-        assert "Move to course" in content
-        # Archive was replaced by a permanent delete.
-        assert "Delete material" in content
-        assert "Archive material" not in content
-        # Course picker is a pill select in the meta row.
+        # Modal header
+        assert "content-modal-edit" in content
+        assert "Edit content" in content
+        assert "Save changes" in content
+        # Title field pre-filled with document title
+        assert 'name="title"' in content
+        assert doc.display_title in content
+        # Course picker in sidebar
         assert 'name="subject_id"' in content
-        assert "data-doc-rename-row" in content
-        assert "materials-detail.js" in content
+        # Description field
+        assert 'name="description"' in content
+        # Attached file section
+        assert "Attached file" in content
+        assert doc.original_name in content
 
     def test_detail_page_renders_editor_with_current_text(
         self, client, professor, subject
@@ -621,10 +726,12 @@ class TestMaterialContentEditing:
         client.force_login(professor)
         content = client.get(self._detail_url(course, doc)).content.decode()
 
-        assert "materials-doc__editor" in content
-        assert "data-editor-surface" in content
-        assert "Editable body text for the module." in content
-        assert "Text preview" not in content
+        assert "content-modal-edit" in content
+        assert 'name="title"' in content
+        assert doc.title in content
+        assert 'name="description"' in content
+        assert doc.description in content
+        assert "Save changes" in content
 
     def test_saving_content_rebuilds_chunks_for_retrieval(
         self, client, professor, subject
@@ -661,8 +768,11 @@ class TestMaterialContentEditing:
     def test_saving_content_rewrites_plain_text_download(
         self, client, professor, subject
     ):
+        """Legacy .txt downloads are rewritten from the editor HTML."""
         course = get_or_create_catalog_course(professor, subject)
-        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        doc = _make_ready_doc(
+            course=course, subject=subject, user=professor, filename="overview.txt"
+        )
 
         client.force_login(professor)
         client.post(
@@ -850,6 +960,7 @@ class TestMaterialContentEditing:
         assert LearningChunk.objects.filter(document=doc).exists()
 
     def test_blank_content_is_rejected(self, client, professor, subject):
+        """Modal rejects saving without a title."""
         course = get_or_create_catalog_course(professor, subject)
         doc = _make_ready_doc(course=course, subject=subject, user=professor)
         doc.source_text = "Keep me."
@@ -858,13 +969,14 @@ class TestMaterialContentEditing:
         client.force_login(professor)
         response = client.post(
             self._detail_url(course, doc),
-            {"action": "save_content", "content_html": "   "},
+            {"action": "save", "title": "", "subject_id": subject.pk},
             follow=True,
         )
 
-        doc.refresh_from_db()
-        assert doc.source_text == "Keep me."
-        assert b"Add some content before saving." in response.content
+        # Form should re-render with validation error (title is required)
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "content-modal-edit" in content
 
     def test_ingest_populates_source_text(self, professor, course):
         upload = SimpleUploadedFile(
@@ -928,10 +1040,11 @@ class TestStudentMaterials:
         assert hub.status_code == 200
         assert subject.code in hub_content
         assert "Learning materials" in hub_content
-        # Table layout matching faculty course subjects, with Open action
+        # Card list of enrolled subjects with Open action
         assert 'id="materials-subjects-table"' in hub_content
         assert ">Open</a>" in hub_content
         assert "materials-subject-grid" not in hub_content
+        assert "entity-card" in hub_content
 
         listing = client.get(
             reverse(
@@ -977,3 +1090,170 @@ class TestIngestFullFileDownload:
         assert doc.file
         assert doc.file.read() == b"%PDF-1.4 fake binary that will not extract"
         assert "Full file saved for download" in doc.error_message
+
+
+@pytest.mark.django_db
+class TestContentModalFlows:
+    """Add/Edit content modal flows: upload, metadata save, replace file."""
+
+    def test_upload_modal_persists_description(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program"])
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        upload = SimpleUploadedFile(
+            "modal-upload.pdf",
+            b"Modal content for algebra.",
+            content_type="application/pdf",
+        )
+        response = client.post(
+            reverse(
+                "analytics_professor:material_upload",
+                kwargs={"course_pk": course.pk},
+            ),
+            {
+                "title": "Modal notes",
+                "material_type": LearningDocument.MaterialType.MODULE,
+                "subject_id": subject.pk,
+                "original_name": "modal-upload.pdf",
+                "description": "Short summary of the module",
+                "source_file": upload,
+            },
+        )
+        assert response.status_code == 302
+        doc = LearningDocument.objects.filter(course_id=course.pk).latest("created")
+        assert doc.title == "Modal notes"
+        assert doc.description == "Short summary of the module"
+
+    def test_edit_modal_save_updates_metadata_and_returns_to_list(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program"])
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Old title",
+            filename="old.txt",
+        )
+        client.force_login(professor)
+        response = client.post(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            ),
+            {
+                "action": "save",
+                "title": "Renamed in modal",
+                "description": "Fresh description",
+                "subject_id": subject.pk,
+                "return_to": "list",
+            },
+        )
+        assert response.status_code == 302
+        assert response.url == reverse(
+            "analytics_professor:material_list", kwargs={"course_pk": course.pk}
+        )
+        doc.refresh_from_db()
+        assert doc.title == "Renamed in modal"
+        assert doc.description == "Fresh description"
+
+    def test_edit_modal_without_return_to_still_returns_to_detail(
+        self, client, professor, subject, bsed_program
+    ):
+        """The original detail-page form keeps its redirect behaviour."""
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        client.force_login(professor)
+        response = client.post(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            ),
+            {
+                "action": "save",
+                "title": "Detail page edit",
+                "subject_id": subject.pk,
+            },
+        )
+        assert response.status_code == 302
+        assert response.url == reverse(
+            "analytics_professor:material_detail",
+            kwargs={"course_pk": course.pk, "pk": doc.pk},
+        )
+
+    def test_edit_modal_replace_file_archives_old_and_ingests_new(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program"])
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Swap module",
+            filename="swap.pdf",
+        )
+        doc.description = "Kept through the swap"
+        doc.save(update_fields=["description"])
+        client.force_login(professor)
+        replacement = SimpleUploadedFile(
+            "swap-v2.pdf",
+            b"Replaced module content.",
+            content_type="application/pdf",
+        )
+        response = client.post(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            ),
+            {
+                "action": "replace_file",
+                "replace_file": replacement,
+                "return_to": "list",
+            },
+        )
+        assert response.status_code == 302
+        assert response.url == reverse(
+            "analytics_professor:material_list", kwargs={"course_pk": course.pk}
+        )
+        doc.refresh_from_db()
+        assert doc.is_archived is True
+        replacement_doc = LearningDocument.objects.filter(
+            course_id=course.pk, is_archived=False
+        ).latest("created")
+        assert replacement_doc.pk != doc.pk
+        assert replacement_doc.title == "Swap module"
+        assert replacement_doc.original_name == "swap-v2.pdf"
+        assert replacement_doc.description == "Kept through the swap"
+
+    def test_edit_modal_replace_file_rejects_unsupported_format(
+        self, client, professor, subject
+    ):
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        client.force_login(professor)
+        bad_upload = SimpleUploadedFile(
+            "evil.exe",
+            b"not a document",
+            content_type="application/octet-stream",
+        )
+        response = client.post(
+            reverse(
+                "analytics_professor:material_detail",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            ),
+            {
+                "action": "replace_file",
+                "replace_file": bad_upload,
+                "return_to": "list",
+            },
+        )
+        assert response.status_code == 302
+        doc.refresh_from_db()
+        assert doc.is_archived is False

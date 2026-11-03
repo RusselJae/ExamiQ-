@@ -14,7 +14,10 @@ from apps.questions.validation_session_services import (
     record_validation_outcome,
     start_validation_session,
 )
-from apps.questions.views_professor import _subject_for_course, topics_for_course_section
+from apps.questions.views_professor import (
+    _subject_for_course,
+    topics_for_course_section,
+)
 
 
 class ValidationSessionStartView(ProfessorCourseMixin, View):
@@ -43,7 +46,11 @@ class ValidationSessionStartView(ProfessorCourseMixin, View):
         topic_id = request.POST.get("topic") or None
         topic = None
         if topic_id:
-            topic = topics_for_course_section(self.course, request.user).filter(pk=topic_id).first()
+            topic = (
+                topics_for_course_section(self.course, request.user)
+                .filter(pk=topic_id)
+                .first()
+            )
         try:
             size = int(request.POST.get("size") or 0) or None
         except (TypeError, ValueError):
@@ -85,7 +92,12 @@ class ValidationSessionDetailView(ProfessorCourseMixin, View):
         return render(
             request,
             self.template_name,
-            {"course": self.course, "active_tab": "validation", "session": session, "items": session.items.all()},
+            {
+                "course": self.course,
+                "active_tab": "validation",
+                "session": session,
+                "items": session.items.all(),
+            },
         )
 
     def post(self, request, course_pk, session_pk):

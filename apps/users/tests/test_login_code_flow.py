@@ -156,9 +156,7 @@ class TestEmailDeliveryFailure:
         assert page.status_code == 200
         assert b"could not send the sign-in code" in page.content
 
-    def test_password_reset_shows_message_instead_of_erroring(
-        self, client, professor
-    ):
+    def test_password_reset_shows_message_instead_of_erroring(self, client, professor):
         response = client.post(
             reverse("account_reset_password"), {"email": professor.email}
         )

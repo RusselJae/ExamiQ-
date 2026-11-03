@@ -19,12 +19,47 @@ ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "docs" / "thesis" / "rrl.pdf"
 
 styles = getSampleStyleSheet()
-TITLE = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=15, spaceAfter=6, alignment=TA_CENTER)
-SUBTITLE = ParagraphStyle("Subtitle", parent=styles["Normal"], fontSize=11, spaceAfter=14, alignment=TA_CENTER)
-H1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=13, spaceBefore=10, spaceAfter=8, textColor=colors.HexColor("#1e3a5f"))
-H2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=11.5, spaceBefore=12, spaceAfter=6, textColor=colors.HexColor("#2a4d80"))
-BODY = ParagraphStyle("Body", parent=styles["Normal"], fontSize=10.5, leading=16, alignment=TA_JUSTIFY, firstLineIndent=0.5 * cm, spaceAfter=10)
-REF = ParagraphStyle("Ref", parent=styles["Normal"], fontSize=10, leading=14, alignment=TA_LEFT, leftIndent=0.75 * cm, firstLineIndent=-0.75 * cm, spaceAfter=8)
+TITLE = ParagraphStyle(
+    "Title", parent=styles["Heading1"], fontSize=15, spaceAfter=6, alignment=TA_CENTER
+)
+SUBTITLE = ParagraphStyle(
+    "Subtitle", parent=styles["Normal"], fontSize=11, spaceAfter=14, alignment=TA_CENTER
+)
+H1 = ParagraphStyle(
+    "H1",
+    parent=styles["Heading1"],
+    fontSize=13,
+    spaceBefore=10,
+    spaceAfter=8,
+    textColor=colors.HexColor("#1e3a5f"),
+)
+H2 = ParagraphStyle(
+    "H2",
+    parent=styles["Heading2"],
+    fontSize=11.5,
+    spaceBefore=12,
+    spaceAfter=6,
+    textColor=colors.HexColor("#2a4d80"),
+)
+BODY = ParagraphStyle(
+    "Body",
+    parent=styles["Normal"],
+    fontSize=10.5,
+    leading=16,
+    alignment=TA_JUSTIFY,
+    firstLineIndent=0.5 * cm,
+    spaceAfter=10,
+)
+REF = ParagraphStyle(
+    "Ref",
+    parent=styles["Normal"],
+    fontSize=10,
+    leading=14,
+    alignment=TA_LEFT,
+    leftIndent=0.75 * cm,
+    firstLineIndent=-0.75 * cm,
+    spaceAfter=8,
+)
 
 # Each section: (section title, [ (entry title, [paragraph, ...]), ... ])
 SECTIONS = [
@@ -237,7 +272,12 @@ REFERENCES = [
 def build_story():
     story = []
     story.append(Paragraph("EXAMIQ", TITLE))
-    story.append(Paragraph("A Self-Regulated Mathematics Exam Review System for College Students", SUBTITLE))
+    story.append(
+        Paragraph(
+            "A Self-Regulated Mathematics Exam Review System for College Students",
+            SUBTITLE,
+        )
+    )
     story.append(Paragraph("Review of Related Literature", TITLE))
     story.append(Spacer(1, 0.4 * cm))
 

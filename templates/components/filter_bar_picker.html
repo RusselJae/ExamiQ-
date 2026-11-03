@@ -1,0 +1,44 @@
+<details class="filter-bar__picker{% if filter_bar_inline_picker %} filter-bar__picker--inline{% endif %}" data-filter-picker{% if advanced_filter_count %} open{% endif %}>
+    <summary class="filter-bar__toggle" aria-label="Open filters">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M7 12h10M11 18h2"/></svg>
+        Filter
+        <span class="filter-bar__badge{% if advanced_filter_count %} is-visible{% endif %}">{{ advanced_filter_count }}</span>
+    </summary>
+    <div class="filter-bar__panel" data-filter-panel>
+        <div class="filter-bar__grid">
+            {% for field in filter_form_fields %}
+                {% if field.type == "select" or field.type == "sort" %}
+                <label class="filter-bar__field">
+                    <span class="filter-bar__label">{{ field.label }}</span>
+                    <select name="{{ field.name }}" class="filter-bar__select">
+                        {% if field.type == "select" %}
+                        <option value="">{{ field.all_label|default:"All" }}</option>
+                        {% endif %}
+                        {% for value, label in field.choices %}
+                        <option value="{{ value }}" {% if value == field.selected %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% elif field.type == "date" %}
+                {% if field.name == "date_from" %}
+                <div class="filter-bar__dates">
+                {% endif %}
+                <label class="filter-bar__field">
+                    <span class="filter-bar__label">{{ field.label }}</span>
+                    <input type="date"
+                           name="{{ field.name }}"
+                           value="{{ field.value }}"
+                           class="filter-bar__input">
+                </label>
+                {% if field.name == "date_to" %}
+                </div>
+                {% endif %}
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="filter-bar__actions">
+            <a href="{{ request.path }}" class="filter-bar__reset">Reset</a>
+            <button type="submit" class="btn-primary btn-primary-sm filter-bar__apply">Apply filters</button>
+        </div>
+    </div>
+</details>

@@ -17,18 +17,17 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
                     <span class="sidebar-label">Dashboard</span>
                 </a>
-                <a href="{% url 'reviews:setup' %}" title="Start Review"
-                   class="sidebar-link {% if request.resolver_match.url_name == 'setup' %}sidebar-link-active{% endif %}"
-                   aria-label="Start Review">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span class="sidebar-label">Start Review</span>
+                <a href="{% url 'analytics_student:materials_hub' %}" title="Courses"
+                   class="sidebar-link {% if 'materials' in request.resolver_match.url_name and not sidebar_subject %}sidebar-link-active{% endif %}"
+                   aria-label="Courses">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                    <span class="sidebar-label">Courses</span>
                 </a>
-                {# Primary student destination for modules — kept under Main, not Insights #}
-                <a href="{% url 'analytics_student:materials_hub' %}" title="Learning materials"
-                   class="sidebar-link {% if 'materials' in request.resolver_match.url_name %}sidebar-link-active{% endif %}"
-                   aria-label="Learning Materials">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-                    <span class="sidebar-label">Learning Materials</span>
+                <a href="{% url 'reviews:setup' %}" title="Start Review"
+                   class="sidebar-link {% if request.resolver_match.namespace == 'reviews' and request.resolver_match.url_name == 'setup' %}sidebar-link-active{% endif %}"
+                   aria-label="Start Review">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span class="sidebar-label">Start Review</span>
                 </a>
 
                 <p class="sidebar-section-label">Insights</p>
@@ -38,28 +37,30 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <span class="sidebar-label">Session History</span>
                 </a>
-                <div class="sidebar-link-group" data-dropdown data-dropdown-sticky>
-                    <a href="{% url 'analytics_student:mistakes' %}" title="Action Plan"
-                       class="sidebar-link"
-                       data-dropdown-toggle data-dropdown-prevent-nav
-                       aria-expanded="false" aria-haspopup="true"
-                       aria-label="Action Plan">
-                        <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                        <span class="sidebar-label">Action Plan</span>
-                        {% if sidebar_concept_count %}
-                        <span class="sidebar-count" title="{{ sidebar_concept_count }} concept{{ sidebar_concept_count|pluralize }} to practise" aria-label="{{ sidebar_concept_count }} concepts to practise">{{ sidebar_concept_count }}</span>
-                        {% endif %}
-                    </a>
-                    <ul class="sidebar-subnav sidebar-subnav--menu hidden" data-dropdown-menu role="menu">
-                        <li>
-                            <a role="menuitem"
-                               class="sidebar-subnav-link{% if request.resolver_match.url_name == 'mistakes' and request.GET.tab != 'concepts' %} sidebar-subnav-link-active{% endif %}"
-                               href="{% url 'analytics_student:mistakes' %}?tab=all">All mistakes</a>
+                <div class="sidebar-course-section-group" data-sidebar-group="action-plan">
+                    <button type="button" class="sidebar-course-sub-header" data-sidebar-toggle aria-expanded="true" aria-label="Toggle Action Plan">
+                        <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                        <span class="sidebar-sub-section-title">Action Plan{% if sidebar_concept_count %} · {{ sidebar_concept_count }}{% endif %}</span>
+                        <span class="sidebar-sub-section-dropdown" aria-hidden="true">▾</span>
+                    </button>
+                    <ul class="sidebar-entity-list" data-sidebar-list aria-label="Action plan">
+                        <li data-sidebar-course="mistakes">
+                            <a class="sidebar-entity{% if request.resolver_match.url_name == 'mistakes' and request.GET.tab != 'concepts' %} sidebar-entity--active{% endif %}"
+                               href="{% url 'analytics_student:mistakes' %}?tab=all"
+                               title="All mistakes">
+                                <span class="sidebar-entity__text">
+                                    <span class="sidebar-entity__title">Mistakes</span>
+                                </span>
+                            </a>
                         </li>
-                        <li>
-                            <a role="menuitem"
-                               class="sidebar-subnav-link{% if request.GET.tab == 'concepts' or request.resolver_match.url_name == 'concept_review' %} sidebar-subnav-link-active{% endif %}"
-                               href="{% url 'analytics_student:mistakes' %}?tab=concepts">Concepts to Review</a>
+                        <li data-sidebar-course="review">
+                            <a class="sidebar-entity{% if request.GET.tab == 'concepts' or request.resolver_match.url_name == 'concept_review' %} sidebar-entity--active{% endif %}"
+                               href="{% url 'analytics_student:mistakes' %}?tab=concepts"
+                               title="Concepts to Review">
+                                <span class="sidebar-entity__text">
+                                    <span class="sidebar-entity__title">Review</span>
+                                </span>
+                            </a>
                         </li>
                     </ul>
                 </div>
@@ -81,7 +82,7 @@
                    class="sidebar-link {% if request.resolver_match.namespace == 'analytics_chairperson' and 'assignment' in request.resolver_match.url_name %}sidebar-link-active{% endif %}"
                    aria-label="Faculty sections">
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                    <span class="sidebar-label">Faculty Sections</span>
+                    <span class="sidebar-label">Faculty Courses</span>
                 </a>
                 <a href="{% url 'campus:section_list' %}" title="Sections"
                    class="sidebar-link {% if request.resolver_match.namespace == 'campus' and 'section' in request.resolver_match.url_name %}sidebar-link-active{% endif %}"
@@ -101,6 +102,25 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
                     <span class="sidebar-label">Subjects</span>
                 </a>
+
+                {% if coordinator_sections %}
+                <p class="sidebar-section-label">My Sections</p>
+                <ul class="sidebar-entity-list" aria-label="My sections">
+                    {% for section in coordinator_sections %}
+                    <li>
+                        <a href="{% url 'campus:section_edit' section.pk %}"
+                           class="sidebar-entity{% if sidebar_section and sidebar_section.pk == section.pk %} sidebar-entity--active{% endif %}"
+                           title="{{ section.display_label }}">
+                            <span class="sidebar-entity__chip sidebar-entity__chip--{% cycle '0' '1' '2' '3' '4' %}" aria-hidden="true">{{ section.label|default:section.display_label|slice:":1" }}</span>
+                            <span class="sidebar-entity__text">
+                                <span class="sidebar-entity__title">{{ section.display_label }}</span>
+                                <span class="sidebar-entity__subtitle">{{ section.year_level.name }} · {{ section.program.name }}</span>
+                            </span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
             {% elif user.role == "chairperson" %}
                 <p class="sidebar-section-label">Department management</p>
                 <a href="{% url 'analytics_chairperson:dashboard' %}" title="Dashboard"
@@ -121,11 +141,11 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
                     <span class="sidebar-label">Courses</span>
                 </a>
-                <a href="{% url 'analytics_chairperson:assignments' %}" title="Faculty sections"
+                <a href="{% url 'analytics_chairperson:assignments' %}" title="Faculty courses"
                    class="sidebar-link {% if request.resolver_match.namespace == 'analytics_chairperson' and 'assignment' in request.resolver_match.url_name %}sidebar-link-active{% endif %}"
-                   aria-label="Faculty sections">
+                   aria-label="Faculty courses">
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                    <span class="sidebar-label">Faculty Sections</span>
+                    <span class="sidebar-label">Faculty Courses</span>
                 </a>
             {% elif user.role == "professor" %}
                 <p class="sidebar-section-label">Main</p>
@@ -147,31 +167,69 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                     <span class="sidebar-label">Students</span>
                 </a>
-                <a href="{% url 'analytics_professor:question_add' %}" title="Add Questions"
-                   class="sidebar-link{% if sidebar_course %}{% elif request.resolver_match.url_name == 'question_add' or request.resolver_match.url_name == 'question_create' or request.resolver_match.url_name == 'question_create_single' or request.resolver_match.url_name == 'question_batch_edit' %} sidebar-link-active{% endif %}"
-                   aria-label="Add Questions">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                    <span class="sidebar-label">Add Questions</span>
-                </a>
-                <a href="{% url 'analytics_professor:materials_hub' %}" title="Content Management"
-                   class="sidebar-link{% if sidebar_course %}{% elif request.resolver_match.url_name == 'materials_hub' or request.resolver_match.url_name == 'material_list' or request.resolver_match.url_name == 'material_detail' or request.resolver_match.url_name == 'material_upload' %} sidebar-link-active{% endif %}"
-                   aria-label="Content Management">
-                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-                    <span class="sidebar-label">Content</span>
-                </a>
 
-                {% if sidebar_course %}
-                <p class="sidebar-section-label sidebar-course-label">
-                    {% if sidebar_course.section == "Catalog" %}{{ sidebar_course.code }} Catalog{% else %}{{ sidebar_section_label|default:sidebar_course.code }}{% endif %}
-                </p>
-                <nav class="sidebar-subnav" aria-label="Course navigation">
-                    <a href="{% url 'analytics_professor:question_list' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if 'question' in request.resolver_match.url_name %}sidebar-subnav-link-active{% endif %}">Saved Questions</a>
-                    <a href="{% url 'analytics_professor:material_list' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'material_list' or request.resolver_match.url_name == 'material_detail' or request.resolver_match.url_name == 'material_upload' %}sidebar-subnav-link-active{% endif %}">Content</a>
-                    <a href="{% url 'analytics_professor:course_heatmap' sidebar_course.pk %}"
-                       class="sidebar-subnav-link {% if request.resolver_match.url_name == 'course_heatmap' or request.resolver_match.url_name == 'subject_detail' or request.resolver_match.url_name == 'subject_roster' %}sidebar-subnav-link-active{% endif %}">Overview</a>
-                </nav>
+                {% if professor_course_groups %}
+                <div class="sidebar-course-section">
+                    <div class="sidebar-course-header" role="button" aria-label="My courses">
+                        <span class="sidebar-course-title">Handled courses · {{ professor_courses|length }}</span>
+                    </div>
+                    <div class="sidebar-course-filter">
+                        <svg class="sidebar-course-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                        <input type="search" class="sidebar-course-search" placeholder="Filter courses" aria-label="Filter courses" data-sidebar-filter>
+                    </div>
+
+                    <ul class="sidebar-entity-list" data-sidebar-list aria-label="My handled courses">
+                        {% for bucket in professor_course_groups %}
+                        {% for group in bucket.groups %}
+                        <li data-sidebar-course="{{ group.code }}">
+                            <a href="{% url 'analytics_professor:course_detail' group.representative_pk %}"
+                               class="sidebar-entity{% if sidebar_course and sidebar_course.code == group.code and sidebar_course.program_id == group.program_id %} sidebar-entity--active{% endif %}"
+                               title="{{ group.code }} — {{ group.name }}">
+                                <span class="sidebar-entity__chip sidebar-entity__chip--{% cycle '0' '1' '2' '3' '4' %}" aria-hidden="true">{{ group.name|slice:":1"|upper }}</span>
+                                <span class="sidebar-entity__text">
+                                    <span class="sidebar-entity__title">{{ group.code }}</span>
+                                    <span class="sidebar-entity__subtitle">{{ group.name }}</span>
+                                </span>
+                                {% if group.draft_count %}
+                                <span class="sidebar-draft-badge" title="{{ group.draft_count }} draft{{ group.draft_count|pluralize }}">{{ group.draft_count }}</span>
+                                {% endif %}
+                            </a>
+                            {% if group.has_multiple_sections and sidebar_course and sidebar_course.code == group.code and sidebar_course.program_id == group.program_id %}
+                            <ul class="sidebar-section-rows" aria-label="{{ group.code }} sections">
+                                <li>
+                                    <a href="{% url 'analytics_professor:course_detail' group.representative_pk %}"
+                                       class="sidebar-section-row{% if not selected_section %} sidebar-section-row--active{% endif %}">
+                                        <span class="sidebar-section-row__dot" aria-hidden="true"></span>
+                                        <span class="sidebar-section-row__label">All sections</span>
+                                        <span class="sidebar-section-row__count">{{ group.total_students }}</span>
+                                    </a>
+                                </li>
+                                {% for offering in group.sections %}
+                                <li>
+                                    <a href="{% url 'analytics_professor:course_detail' group.representative_pk %}?section={{ offering.section|urlencode }}"
+                                       class="sidebar-section-row{% if selected_section == offering.section %} sidebar-section-row--active{% endif %}">
+                                        <span class="sidebar-section-row__dot" aria-hidden="true"></span>
+                                        <span class="sidebar-section-row__label">Section {{ offering.section }}</span>
+                                        <span class="sidebar-section-row__count">{{ offering.students }}</span>
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                        {% endfor %}
+                    </ul>
+
+                    <div class="sidebar-course-view-all">
+                        <a href="{% url 'analytics_professor:course_list' %}" class="sidebar-course-view-all__link" aria-label="View all courses">View all {{ professor_courses|length }} courses →</a>
+                    </div>
+                </div>
+                {% else %}
+                <div class="sidebar-course-section">
+                    <p class="sidebar-section-label">My courses</p>
+                    <p class="text-xs text-examiq-slate px-1">No subjects assigned yet — ask your chairperson for a teaching assignment.</p>
+                </div>
                 {% endif %}
             {% endif %}
         </nav>

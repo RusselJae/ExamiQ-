@@ -4,20 +4,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0009_add_midyear_semester'),
+        ("questions", "0009_add_midyear_semester"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='question',
-            name='expected_answer',
-            field=models.TextField(blank=True, default='', help_text='Expected answer for True/False, Identification, or Enumeration. For Enumeration, put one item per line.'),
+            model_name="question",
+            name="expected_answer",
+            field=models.TextField(
+                blank=True,
+                default="",
+                help_text="Expected answer for True/False, Identification, or Enumeration. For Enumeration, put one item per line.",
+            ),
         ),
         migrations.AlterField(
-            model_name='question',
-            name='question_type',
-            field=models.CharField(choices=[('mcq', 'Multiple Choice'), ('true_false', 'True or False'), ('identification', 'Identification'), ('enumeration', 'Enumeration'), ('numeric', 'Numeric Answer')], default='mcq', max_length=20),
+            model_name="question",
+            name="question_type",
+            field=models.CharField(
+                choices=[
+                    ("mcq", "Multiple Choice"),
+                    ("true_false", "True or False"),
+                    ("identification", "Identification"),
+                    ("enumeration", "Enumeration"),
+                    ("numeric", "Numeric Answer"),
+                ],
+                default="mcq",
+                max_length=20,
+            ),
         ),
     ]

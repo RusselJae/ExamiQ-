@@ -8,6 +8,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Profile" subtitle="Manage your account details, login email, and password." %}
 
+<div class="course-home-panel">
 <div class="profile-bento{% if user.role == 'professor' %} profile-bento--faculty{% endif %}">
     {# Summary card #}
     <div class="profile-bento-hero bento-card profile-card profile-hero bento-card--elevated">
@@ -190,6 +191,7 @@
         </form>
     </div>
 
+</div>
 </div>
 {% endblock %}
 

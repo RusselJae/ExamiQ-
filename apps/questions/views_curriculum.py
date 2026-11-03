@@ -19,14 +19,18 @@ class CurriculumSubjectsView(View):
         year_level_id = request.GET.get("year_level")
         if not program_id or not program_id.isdigit():
             return JsonResponse({"subjects": []})
-        year_id = int(year_level_id) if year_level_id and year_level_id.isdigit() else None
+        year_id = (
+            int(year_level_id) if year_level_id and year_level_id.isdigit() else None
+        )
         subjects = get_subjects_for_program(int(program_id), year_id)
-        return JsonResponse({
-            "subjects": [
-                {"id": s.pk, "code": s.code, "name": s.name, "label": str(s)}
-                for s in subjects
-            ]
-        })
+        return JsonResponse(
+            {
+                "subjects": [
+                    {"id": s.pk, "code": s.code, "name": s.name, "label": str(s)}
+                    for s in subjects
+                ]
+            }
+        )
 
 
 class ProfessorCurriculumSubjectsView(CurriculumSubjectsView):
@@ -37,11 +41,15 @@ class ProfessorCurriculumSubjectsView(CurriculumSubjectsView):
         year_level_id = request.GET.get("year_level")
         if not program_id or not program_id.isdigit():
             return JsonResponse({"subjects": [], "fallback_message": ""})
-        year_id = int(year_level_id) if year_level_id and year_level_id.isdigit() else None
+        year_id = (
+            int(year_level_id) if year_level_id and year_level_id.isdigit() else None
+        )
         program_id = int(program_id)
 
         if program_slug == "cs":
-            strict_subjects = get_subjects_for_program(program_id, year_id, strict_year=True)
+            strict_subjects = get_subjects_for_program(
+                program_id, year_id, strict_year=True
+            )
             if year_id and strict_subjects.exists():
                 subjects = strict_subjects
                 fallback_message = ""
@@ -56,13 +64,15 @@ class ProfessorCurriculumSubjectsView(CurriculumSubjectsView):
             subjects = get_subjects_for_program(program_id, year_id)
             fallback_message = ""
 
-        return JsonResponse({
-            "subjects": [
-                {"id": s.pk, "code": s.code, "name": s.name, "label": str(s)}
-                for s in subjects
-            ],
-            "fallback_message": fallback_message,
-        })
+        return JsonResponse(
+            {
+                "subjects": [
+                    {"id": s.pk, "code": s.code, "name": s.name, "label": str(s)}
+                    for s in subjects
+                ],
+                "fallback_message": fallback_message,
+            }
+        )
 
 
 class CurriculumTopicsView(View):
@@ -73,9 +83,7 @@ class CurriculumTopicsView(View):
         if not subject_id or not subject_id.isdigit():
             return JsonResponse({"topics": []})
         topics = get_topics_for_subject(int(subject_id))
-        return JsonResponse({
-            "topics": [{"id": t.pk, "name": t.name} for t in topics]
-        })
+        return JsonResponse({"topics": [{"id": t.pk, "name": t.name} for t in topics]})
 
 
 class CurriculumYearLevelsView(View):
@@ -83,6 +91,10 @@ class CurriculumYearLevelsView(View):
 
     def get(self, request):
         levels = get_year_levels()
-        return JsonResponse({
-            "year_levels": [{"id": yl.pk, "order": yl.order, "name": yl.name} for yl in levels]
-        })
+        return JsonResponse(
+            {
+                "year_levels": [
+                    {"id": yl.pk, "order": yl.order, "name": yl.name} for yl in levels
+                ]
+            }
+        )

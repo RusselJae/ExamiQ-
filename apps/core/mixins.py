@@ -11,7 +11,10 @@ class RoleRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     required_role: str = ""
 
     def test_func(self) -> bool:
-        return self.request.user.is_authenticated and self.request.user.role == self.required_role
+        return (
+            self.request.user.is_authenticated
+            and self.request.user.role == self.required_role
+        )
 
 
 class StudentRequiredMixin(RoleRequiredMixin):
@@ -46,7 +49,8 @@ class CampusAdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
         user = self.request.user
         return user.is_authenticated and (
             user.is_superuser
-            or user.role in {
+            or user.role
+            in {
                 User.Role.PROGRAM_COORDINATOR,
                 User.Role.CAMPUS_ADMIN,
             }

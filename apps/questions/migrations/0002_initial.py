@@ -5,35 +5,42 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('questions', '0001_initial'),
-        ('users', '0001_initial'),
+        ("questions", "0001_initial"),
+        ("users", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='topic',
-            name='program',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='topics', to='users.program'),
+            model_name="topic",
+            name="program",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="topics",
+                to="users.program",
+            ),
         ),
         migrations.AddField(
-            model_name='question',
-            name='topic',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='questions', to='questions.topic'),
+            model_name="question",
+            name="topic",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="questions",
+                to="questions.topic",
+            ),
         ),
         migrations.AlterUniqueTogether(
-            name='explanationstep',
-            unique_together={('question', 'order')},
+            name="explanationstep",
+            unique_together={("question", "order")},
         ),
         migrations.AlterUniqueTogether(
-            name='questionchoice',
-            unique_together={('question', 'label')},
+            name="questionchoice",
+            unique_together={("question", "label")},
         ),
         migrations.AlterUniqueTogether(
-            name='topic',
-            unique_together={('program', 'name')},
+            name="topic",
+            unique_together={("program", "name")},
         ),
     ]

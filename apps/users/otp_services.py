@@ -58,9 +58,7 @@ def _should_use_resend_api() -> bool:
     if not _resend_api_key():
         return False
     backend = (getattr(settings, "EMAIL_BACKEND", "") or "").lower()
-    return not (
-        "locmem" in backend or "console" in backend or "dummy" in backend
-    )
+    return not ("locmem" in backend or "console" in backend or "dummy" in backend)
 
 
 def _send_via_resend_api(
@@ -187,9 +185,7 @@ def send_signup_otp(user: User, *, force: bool = False) -> EmailSignupOTP:
         .first()
     )
     if active and not force and now - active.last_sent_at < OTP_RESEND_COOLDOWN:
-        wait = int(
-            (OTP_RESEND_COOLDOWN - (now - active.last_sent_at)).total_seconds()
-        )
+        wait = int((OTP_RESEND_COOLDOWN - (now - active.last_sent_at)).total_seconds())
         raise SignupOTPError(
             f"Please wait {max(wait, 1)} seconds before requesting a new code."
         )

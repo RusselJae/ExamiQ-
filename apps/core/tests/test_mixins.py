@@ -9,7 +9,9 @@ class TestRoleAccess:
         response = client.get(reverse("analytics_professor:dashboard"))
         assert response.status_code == 403
 
-    def test_professor_cannot_access_campus_admin_index_as_staff_only(self, client, professor):
+    def test_professor_cannot_access_campus_admin_index_as_staff_only(
+        self, client, professor
+    ):
         client.force_login(professor)
         response = client.get(reverse("admin:index"))
         # Faculty are not staff; Django admin redirects or forbids.
@@ -33,6 +35,4 @@ class TestRoleAccess:
         )
         client.force_login(chairperson)
         assert client.get(reverse("analytics_professor:overview")).status_code == 403
-        assert (
-            client.get(reverse("analytics_chairperson:dashboard")).status_code == 200
-        )
+        assert client.get(reverse("analytics_chairperson:dashboard")).status_code == 200

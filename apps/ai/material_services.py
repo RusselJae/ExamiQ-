@@ -5,6 +5,8 @@ from __future__ import annotations
 import itertools
 import logging
 
+from django.db.models import Q
+
 from apps.ai.ingest import ingest_learning_upload
 from apps.ai.models import LearningChunk, LearningDocument
 from apps.ai.source_extract import SourceMaterialError
@@ -12,12 +14,39 @@ from apps.ai.source_extract import SourceMaterialError
 # Guardrail so a stray paste cannot rewrite a whole corpus through the editor.
 MAX_EDITABLE_CHARS = 400_000
 
+# The content library lists PDFs only. Legacy mixed-format uploads stay in the
+# database (their chunks still feed AI retrieval) but are hidden from every
+# library view: faculty, student hub, and source-material pickers.
+LIBRARY_FILE_SUFFIX = ".pdf"
+
 logger = logging.getLogger(__name__)
 
 
+def _pdf_library_only(queryset):
+    """Restrict a LearningDocument queryset to PDF uploads."""
+    return queryset.filter(
+        Q(original_name__iendswith=LIBRARY_FILE_SUFFIX)
+        | Q(file__iendswith=LIBRARY_FILE_SUFFIX)
+    )
+
+
 def documents_for_course(course_id: int, *, include_archived: bool = False):
-    qs = (
+    qs = _pdf_library_only(
         LearningDocument.objects.filter(course_id=course_id)
+        .select_related("subject", "created_by")
+        .order_by("-created")
+    )
+    if not include_archived:
+        qs = qs.filter(is_archived=False)
+    return qs
+
+
+def documents_for_courses(course_ids, *, include_archived: bool = False):
+    """PDF library across several course offerings (newest first)."""
+    if not course_ids:
+        return LearningDocument.objects.none()
+    qs = _pdf_library_only(
+        LearningDocument.objects.filter(course_id__in=course_ids)
         .select_related("subject", "created_by")
         .order_by("-created")
     )
@@ -101,7 +130,10 @@ def update_document_metadata(
     if title is not None:
         document.title = title.strip() or document.original_name
         fields.append("title")
-    if material_type is not None and material_type in LearningDocument.MaterialType.values:
+    if (
+        material_type is not None
+        and material_type in LearningDocument.MaterialType.values
+    ):
         document.material_type = material_type
         fields.append("material_type")
     if clear_subject:
@@ -373,12 +405,10 @@ def documents_for_subject(subject, *, include_archived: bool = False):
     from apps.reviews.exam_setup_services import course_for_subject
 
     course = course_for_subject(subject)
-    from django.db.models import Q
-
     query = Q(subject=subject)
     if course is not None:
         query |= Q(course_id=course.pk)
-    qs = (
+    qs = _pdf_library_only(
         LearningDocument.objects.filter(query)
         .select_related("subject", "created_by")
         .distinct()
@@ -407,7 +437,9 @@ def ready_documents_for_subject(subject):
 
 def document_download_name(document: LearningDocument) -> str:
     """Safe filename for Content-Disposition downloads."""
-    name = (document.original_name or document.display_title or f"material-{document.pk}").strip()
+    name = (
+        document.original_name or document.display_title or f"material-{document.pk}"
+    ).strip()
     return name or f"material-{document.pk}"
 
 

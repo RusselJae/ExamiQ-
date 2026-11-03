@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -12,6 +13,7 @@ from apps.ai.interfaces import (
     CalibrationAnalyzer,
     ConceptPracticeGenerator,
     ConceptRemediationGenerator,
+    CorSubjectAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -66,7 +68,9 @@ class StubQuestionGenerator(QuestionGenerator):
     ):
         from apps.ai.prompts import coerce_generate_question_type
 
-        logger.info("AI question generation stub called (AI_ENABLED=%s)", settings.AI_ENABLED)
+        logger.info(
+            "AI question generation stub called (AI_ENABLED=%s)", settings.AI_ENABLED
+        )
         if topic is None:
             return []
         from apps.ai.normalize import normalize_generated_questions
@@ -78,53 +82,75 @@ class StubQuestionGenerator(QuestionGenerator):
         for i in range(min(count, 3)):
             if qtype == "true_false":
                 answer = "True" if i % 2 == 0 else "False"
-                items.append({
-                    "question_type": qtype,
-                    "stem": f"{prefix}Sample {difficulty} statement about {topic_name}. ({i + 1})",
-                    "concept_tag": f"Concept: {topic_name}",
-                    "expected_answer": answer,
-                    **_stub_explanation_fields(topic_name, answer),
-                })
+                items.append(
+                    {
+                        "question_type": qtype,
+                        "stem": f"{prefix}Sample {difficulty} statement about {topic_name}. ({i + 1})",
+                        "concept_tag": f"Concept: {topic_name}",
+                        "expected_answer": answer,
+                        **_stub_explanation_fields(topic_name, answer),
+                    }
+                )
             elif qtype == "identification":
                 answer = f"Term {i + 1}"
-                items.append({
-                    "question_type": qtype,
-                    "stem": f"{prefix}Name the key term for {topic_name}. ({i + 1})",
-                    "concept_tag": f"Concept: {topic_name}",
-                    "expected_answer": answer,
-                    **_stub_explanation_fields(topic_name, answer),
-                })
+                items.append(
+                    {
+                        "question_type": qtype,
+                        "stem": f"{prefix}Name the key term for {topic_name}. ({i + 1})",
+                        "concept_tag": f"Concept: {topic_name}",
+                        "expected_answer": answer,
+                        **_stub_explanation_fields(topic_name, answer),
+                    }
+                )
             elif qtype == "enumeration":
                 answer = f"Item {i + 1}\nItem {i + 2}"
-                items.append({
-                    "question_type": qtype,
-                    "stem": f"{prefix}List sample items for {topic_name}. ({i + 1})",
-                    "concept_tag": f"Concept: {topic_name}",
-                    "expected_answer": answer,
-                    **_stub_explanation_fields(topic_name, "the listed items"),
-                })
+                items.append(
+                    {
+                        "question_type": qtype,
+                        "stem": f"{prefix}List sample items for {topic_name}. ({i + 1})",
+                        "concept_tag": f"Concept: {topic_name}",
+                        "expected_answer": answer,
+                        **_stub_explanation_fields(topic_name, "the listed items"),
+                    }
+                )
             else:
                 label = _STUB_LABELS[i % len(_STUB_LABELS)]
-                items.append({
-                    "question_type": "mcq",
-                    "stem": f"{prefix}Sample {difficulty} question about {topic_name}? ({i + 1})",
-                    "concept_tag": f"Concept: {topic_name}",
-                    "correct_label": label,
-                    "choices": [
-                        {"label": "A", "text": "Distractor A", "is_correct": label == "A"},
-                        {"label": "B", "text": "Distractor B", "is_correct": label == "B"},
-                        {"label": "C", "text": "Distractor C", "is_correct": label == "C"},
-                        {"label": "D", "text": "Distractor D", "is_correct": label == "D"},
-                    ],
-                    **_stub_explanation_fields(topic_name, f"choice {label}"),
-                })
+                items.append(
+                    {
+                        "question_type": "mcq",
+                        "stem": f"{prefix}Sample {difficulty} question about {topic_name}? ({i + 1})",
+                        "concept_tag": f"Concept: {topic_name}",
+                        "correct_label": label,
+                        "choices": [
+                            {
+                                "label": "A",
+                                "text": "Distractor A",
+                                "is_correct": label == "A",
+                            },
+                            {
+                                "label": "B",
+                                "text": "Distractor B",
+                                "is_correct": label == "B",
+                            },
+                            {
+                                "label": "C",
+                                "text": "Distractor C",
+                                "is_correct": label == "C",
+                            },
+                            {
+                                "label": "D",
+                                "text": "Distractor D",
+                                "is_correct": label == "D",
+                            },
+                        ],
+                        **_stub_explanation_fields(topic_name, f"choice {label}"),
+                    }
+                )
         items = [
             item
             for item in items
             if _stub_normalized_stem(item.get("stem", ""))
-            not in {
-                _stub_normalized_stem(stem) for stem in (exclude_stems or [])
-            }
+            not in {_stub_normalized_stem(stem) for stem in (exclude_stems or [])}
         ]
         return normalize_generated_questions(items, question_type=qtype)
 
@@ -145,14 +171,14 @@ class StubExplanationGenerator(ExplanationGenerator):
                     "Eliminate distractors that do not match the concept.",
                     f"Select choice {label or 'the correct option'} as the answer.",
                 ],
-                "solution_summary": f"The correct answer is {label}." if label else "Review the correct choice.",
+                "solution_summary": f"The correct answer is {label}."
+                if label
+                else "Review the correct choice.",
                 "what_went_wrong": (
                     "A common miss is choosing a distractor that looks familiar "
                     "but skips a defining condition."
                 ),
-                "why": (
-                    f"The correct choice follows the core idea for {topic_name}."
-                ),
+                "why": (f"The correct choice follows the core idea for {topic_name}."),
                 "quick_check": None,
                 "remember": "Check the defining condition first.",
                 "worked_example": None,
@@ -180,7 +206,9 @@ class StubQuestionValidator:
     def validate(self, stem, choices, topic, difficulty, correct_label=""):
         from apps.ai.interfaces import QuestionValidator
 
-        return QuestionValidator().validate(stem, choices, topic, difficulty, correct_label)
+        return QuestionValidator().validate(
+            stem, choices, topic, difficulty, correct_label
+        )
 
 
 class StubAdaptiveFeedbackGenerator(AdaptiveFeedbackGenerator):
@@ -269,6 +297,35 @@ class StubDifficultyTagger(DifficultyTagger):
         if length > 20:
             return "medium"
         return "easy"
+
+
+class StubCorSubjectAnalyzer(CorSubjectAnalyzer):
+    """No AI off-switch leaks fake rows: deterministic parse only.
+
+    The stub pulls obvious "CODE — Title" lines from the text so the
+    coordinator still gets something useful when the LLM is disabled, and
+    the signup review screen stays the source of truth.
+    """
+
+    def structure_rows(self, text: str) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for line in (text or "").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            match = re.match(
+                r"^([A-Z][A-Z\s]{1,8}\s?\d{1,3}[A-Z]?)\s+[-–—]\s+(.{3,80})$", line
+            )
+            if not match:
+                continue
+            code = re.sub(r"\s+", " ", match.group(1)).strip().upper()
+            title = match.group(2).strip()
+            if code in seen:
+                continue
+            seen.add(code)
+            rows.append({"code": code, "title": title})
+        return rows
 
 
 class StubCalibrationAnalyzer(CalibrationAnalyzer):
@@ -378,7 +435,11 @@ def _stub_concept_check_reply(ctx: dict) -> str:
         ]
     else:
         options = [
-            {"id": "A", "fits": False, "reason": "skips a condition required by the stem"},
+            {
+                "id": "A",
+                "fits": False,
+                "reason": "skips a condition required by the stem",
+            },
             {"id": "B", "fits": False, "reason": "confuses a different rule"},
             {"id": "C", "fits": True, "reason": "matches the defining condition"},
         ]
@@ -401,7 +462,9 @@ def _stub_concept_check_reply(ctx: dict) -> str:
             "remember": "Test the defining condition first.",
             "follow_ups": [
                 f"Why is option {correct} correct?",
-                f"Why not option {student_pick}?" if student_pick else "Test one option now",
+                f"Why not option {student_pick}?"
+                if student_pick
+                else "Test one option now",
                 "State the rule again",
             ],
         }
@@ -622,7 +685,13 @@ class StubConceptPracticeGenerator(ConceptPracticeGenerator):
         prerequisite_mode: bool = False,
         prerequisite_concept: str = "",
     ) -> dict:
-        _ = (subject, topic, previous_questions, prerequisite_mode, prerequisite_concept)
+        _ = (
+            subject,
+            topic,
+            previous_questions,
+            prerequisite_mode,
+            prerequisite_concept,
+        )
         # Vary numbers slightly by attempt so repeats are not identical.
         addend = 3 + (attempt_number % 5)
         coeff = 2 + (attempt_number % 3)
@@ -632,12 +701,10 @@ class StubConceptPracticeGenerator(ConceptPracticeGenerator):
         primary_tag = tags[0] if tags else "wrong_operation_order"
         return {
             "concept": concept_name,
-            "difficulty": difficulty if difficulty in {
-                "beginner", "intermediate", "advanced"
-            } else "beginner",
-            "question": (
-                f"Solve ${coeff}x + {addend} = {right}$. What is $x$?"
-            ),
+            "difficulty": difficulty
+            if difficulty in {"beginner", "intermediate", "advanced"}
+            else "beginner",
+            "question": (f"Solve ${coeff}x + {addend} = {right}$. What is $x$?"),
             "options": [
                 {
                     "id": "A",

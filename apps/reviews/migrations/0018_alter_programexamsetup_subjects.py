@@ -4,16 +4,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0014_question_adaptive_explanation_source'),
-        ('reviews', '0017_answer_ai_feedback'),
+        ("questions", "0014_question_adaptive_explanation_source"),
+        ("reviews", "0017_answer_ai_feedback"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='programexamsetup',
-            name='subjects',
-            field=models.ManyToManyField(blank=True, help_text='Courses students may select for exams. Empty = full catalog.', related_name='program_exam_setups', to='questions.subject'),
+            model_name="programexamsetup",
+            name="subjects",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Courses students may select for exams. Empty = full catalog.",
+                related_name="program_exam_setups",
+                to="questions.subject",
+            ),
         ),
     ]

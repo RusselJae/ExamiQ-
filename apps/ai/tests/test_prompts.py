@@ -112,7 +112,9 @@ class TestQuestionGenerationPrompt:
 
 class TestLegacyTutorPrompts:
     def test_tutor_chat_system_has_new_schema_and_rules(self):
-        system, _user = build_tutor_chat_prompt("algebra", "Help me factor x^2 + 5x + 6")
+        system, _user = build_tutor_chat_prompt(
+            "algebra", "Help me factor x^2 + 5x + 6"
+        )
         assert "ExamiQ+" in system
         assert "clear, concise tutor for college math and computer science" in system
         assert "## SCOPE" in system
@@ -224,9 +226,10 @@ class TestLegacyTutorPrompts:
         assert "Arithmetic slip" in user
         assert "build on this" in user.lower()
         # The system QUALITY RULES anchor curated content as the source of truth.
-        system_text, _user2 = build_tutor_chat_prompt("algebra", "Show the full solution")
+        system_text, _user2 = build_tutor_chat_prompt(
+            "algebra", "Show the full solution"
+        )
         assert "treat them as the source of truth" in system_text
-
 
     def test_tutor_intro_format(self):
         _, user = build_tutor_intro_prompt("Calculus")
@@ -255,7 +258,10 @@ class TestLegacyTutorPrompts:
         assert "solution_steps" in user
         assert "GOOD EXAMPLE" in user
         assert "BAD EXAMPLE" in user
-        assert "Do not mention confidence" in user or "Do not comment on the student's confidence" in user
+        assert (
+            "Do not mention confidence" in user
+            or "Do not comment on the student's confidence" in user
+        )
         assert "Confidence Level:" not in user
         assert "All options:" in user
         assert "B: A is non-singular" in user
@@ -319,7 +325,10 @@ class TestOffTopicRedirect:
         assert "Calculus" in msg
 
     def test_allows_same_topic(self):
-        assert off_topic_redirect("calculus", "What is the limit as h approaches 0?") is None
+        assert (
+            off_topic_redirect("calculus", "What is the limit as h approaches 0?")
+            is None
+        )
 
 
 class TestSubjectRelevancePrompt:
@@ -364,7 +373,9 @@ class TestTokenHelpers:
 
     def test_coerce_generate_question_type_defaults_to_mcq(self):
         assert coerce_generate_question_type(None) == Question.QuestionType.MCQ
-        assert coerce_generate_question_type("identification") == Question.QuestionType.MCQ
+        assert (
+            coerce_generate_question_type("identification") == Question.QuestionType.MCQ
+        )
         assert coerce_generate_question_type("true_false") == Question.QuestionType.MCQ
         assert coerce_generate_question_type("mcq") == Question.QuestionType.MCQ
 

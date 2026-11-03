@@ -42,9 +42,27 @@ urlpatterns = [
         views_campus.CampusRejectUserView.as_view(),
         name="reject_user",
     ),
-    path("sections/", views_campus.CampusSectionListView.as_view(), name="section_list"),
-    path("sections/create/", views_campus.CampusSectionCreateView.as_view(), name="section_create"),
-    path("sections/bulk/", views_campus.CampusSectionBulkCreateView.as_view(), name="section_bulk"),
-    path("sections/<int:pk>/edit/", views_campus.CampusSectionUpdateView.as_view(), name="section_edit"),
-    path("academic-calendar/", views_campus.CampusAcademicCalendarView.as_view(), name="academic_calendar"),
+    path(
+        "sections/", views_campus.CampusSectionListView.as_view(), name="section_list"
+    ),
+    path(
+        "sections/create/",
+        views_campus.CampusSectionCreateView.as_view(),
+        name="section_create",
+    ),
+    path(
+        "sections/bulk/",
+        views_campus.CampusSectionBulkCreateView.as_view(),
+        name="section_bulk",
+    ),
+    path(
+        "sections/<int:pk>/edit/",
+        views_campus.CampusSectionUpdateView.as_view(),
+        name="section_edit",
+    ),
+    path(
+        "academic-calendar/",
+        views_campus.CampusAcademicCalendarView.as_view(),
+        name="academic_calendar",
+    ),
 ]

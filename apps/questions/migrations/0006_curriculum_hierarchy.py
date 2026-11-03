@@ -43,7 +43,6 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("users", "0005_delete_oldtrack"),
         ("questions", "0005_program_replace_track"),
@@ -100,7 +99,12 @@ class Migration(migrations.Migration):
                         verbose_name="modified",
                     ),
                 ),
-                ("semester", models.PositiveSmallIntegerField(choices=[(1, "1st Semester"), (2, "2nd Semester")])),
+                (
+                    "semester",
+                    models.PositiveSmallIntegerField(
+                        choices=[(1, "1st Semester"), (2, "2nd Semester")]
+                    ),
+                ),
                 ("code", models.CharField(max_length=20)),
                 ("name", models.CharField(max_length=200)),
                 (

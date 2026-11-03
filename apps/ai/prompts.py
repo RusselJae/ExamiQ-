@@ -143,7 +143,7 @@ EXPLANATION_JSON_SCHEMA = (
     '"Align like terms.",'
     '"x^2 + 2x^2 = 3x^2",'
     '"Write the final answer: 3x^2 + x + 7"'
-    '],'
+    "],"
     '"solution_summary":"Final answer: B",'
     '"what_went_wrong":"Students often pick a distractor that looks similar but skips a key condition.",'
     '"why":"The correct option follows from the definition / worked algebra above.",'
@@ -440,7 +440,14 @@ def _explanation_type_guidance(qtype: str) -> str:
 def _explanation_math_rules(subject) -> str:
     name = (getattr(subject, "name", "") or "").lower()
     code = (getattr(subject, "code", "") or "").lower()
-    math_hints = ("math", "algebra", "geometry", "trigonometry", "calculus", "statistics")
+    math_hints = (
+        "math",
+        "algebra",
+        "geometry",
+        "trigonometry",
+        "calculus",
+        "statistics",
+    )
     if any(hint in name or hint in code for hint in math_hints):
         return "Use $...$ for formulas and equations in explanation_steps.\n"
     return "Use plain English; avoid LaTeX.\n"
@@ -487,6 +494,11 @@ def build_question_generation_prompt(
     qtype = coerce_generate_question_type(question_type)
     subject = topic.subject
     label = difficulty_label(difficulty)
+    is_auto = (difficulty or "").strip().lower() == "auto"
+    if is_auto:
+        # "AI decides": no pre-set band — the model distributes difficulty
+        # itself and labels every item.
+        label = "Mixed (AI decides)"
     ref = reference_stem.strip() or "none"
     material = (source_material or "").strip()
     material_block = (
@@ -495,6 +507,19 @@ def build_question_generation_prompt(
         else ""
     )
     guidance = _difficulty_guidance(difficulty)
+    if is_auto:
+        guidance = (
+            "Mixed difficulty (AI decides): distribute questions across beginner, "
+            "intermediate, and advanced levels to fit the topic — easy items test "
+            "one concept directly, medium items combine 2-3 ideas, hard items demand "
+            "deep understanding with scenario-based stems. "
+            + " ".join(DIFFICULTY_GUIDANCE.values())
+        )
+    difficulty_line = (
+        "Difficulty: mixed — decide per question and label each one"
+        if is_auto
+        else f"Difficulty: {label} ({difficulty})"
+    )
     type_labels = {
         Question.QuestionType.MCQ: "multiple-choice",
         Question.QuestionType.TRUE_FALSE: "true or false",
@@ -510,9 +535,7 @@ def build_question_generation_prompt(
     elif qtype == Question.QuestionType.IDENTIFICATION:
         system = QUESTION_GENERATION_SYSTEM_IDENTIFICATION
         schema = IDENTIFICATION_JSON_SCHEMA
-        extra = (
-            "Keep expected_answer short. Grading ignores capitalization and extra spaces.\n"
-        )
+        extra = "Keep expected_answer short. Grading ignores capitalization and extra spaces.\n"
     elif qtype == Question.QuestionType.ENUMERATION:
         system = QUESTION_GENERATION_SYSTEM_ENUMERATION
         schema = ENUMERATION_JSON_SCHEMA
@@ -540,7 +563,7 @@ def build_question_generation_prompt(
         f"Generate exactly {count} {type_label} questions.\n"
         f"Topic: {topic.name} | Subject: {subject.code} – {subject.name}\n"
         f"{year_hint}"
-        f"Difficulty: {label} ({difficulty})\n"
+        f"{difficulty_line}\n"
         f"Question type: {qtype}\n"
         f"{guidance}\n"
         f"Reference (optional): {ref}\n\n"
@@ -548,6 +571,7 @@ def build_question_generation_prompt(
         f"{exclusion_block}"
         f"{extra}"
         "Include explanation_steps, solution_summary, and adaptive fields on every item.\n"
+        "Label every item with its own difficulty (easy, medium, or hard).\n"
         f"JSON array schema:\n{schema}"
     )
     if ref != "none":
@@ -595,8 +619,7 @@ def build_explanation_generation_prompt(question) -> tuple[str, str, int]:
         correct = next((c for c in choices if c.is_correct), None)
         correct_label = correct.label if correct else ""
         answer_block = (
-            f"Choices: {json.dumps(choices_payload)}\n"
-            f"Correct label: {correct_label}\n"
+            f"Choices: {json.dumps(choices_payload)}\nCorrect label: {correct_label}\n"
         )
     elif qtype == QuestionModel.QuestionType.NUMERIC:
         answer_block = f"Correct numeric answer: {question.correct_answer}\n"
@@ -705,13 +728,13 @@ TUTOR_CHAT_SYSTEM = (
     "science.\n\n"
     "## SCOPE\n"
     "Answer only about the current topic, exam, or active question. If the "
-    "student asks something unrelated, return a \"text\" reply with one "
+    'student asks something unrelated, return a "text" reply with one '
     "polite sentence redirecting to the topic.\n\n"
     "## CHOOSE THE REPLY TYPE\n"
-    "- \"text\": definitions, concepts, lists, short follow-ups.\n"
-    "- \"solution\": a calculation where each line follows from the previous "
+    '- "text": definitions, concepts, lists, short follow-ups.\n'
+    '- "solution": a calculation where each line follows from the previous '
     "one.\n"
-    "- \"concept_check\": the student asks which option is correct, whether "
+    '- "concept_check": the student asks which option is correct, whether '
     "something is true, or to classify or identify something. There is no "
     "algebra to transform, so NEVER invent equations for these.\n\n"
     "## OUTPUT\n"
@@ -745,13 +768,13 @@ TUTOR_CHAT_SYSTEM = (
     "- Titles, reasons and labels are plain English with no math markup.\n"
     "- Inline math inside prose fields: $...$, short only (example: "
     "$p \\land q$).\n"
-    "- \"latex\" fields hold raw LaTeX with no $ delimiters.\n"
-    "- Mark each term that changed with \\hl{...} inside \"latex\". "
+    '- "latex" fields hold raw LaTeX with no $ delimiters.\n'
+    '- Mark each term that changed with \\hl{...} inside "latex". '
     "Never output HTML.\n"
     "- This is JSON: write every backslash doubled "
     "(\\land, \\frac, \\text).\n\n"
     "## TEXT REPLIES\n"
-    "- Answer in the first sentence. No greeting, no \"Great question\", and "
+    '- Answer in the first sentence. No greeting, no "Great question", and '
     "never restate the question.\n"
     "- For a definition: 1-2 sentences, then one example, one non-example, "
     "and a remember line of 10 words or fewer.\n"
@@ -760,22 +783,22 @@ TUTOR_CHAT_SYSTEM = (
     "- Keep text replies to 80 words or fewer outside tables. A definition "
     "may use its full template; otherwise, if the answer needs more, use a "
     "table, solution, or concept_check.\n"
-    "- If the message is vague (for example \"I don't get it\"), do not "
+    '- If the message is vague (for example "I don\'t get it"), do not '
     "explain yet. Name the active question in one short line (the only "
     "allowed restatement), then offer 3 specific places the confusion could "
     "be as follow_ups.\n"
     "- If the message is off-topic, redirect in one sentence and offer one "
     "math task that fits the current topic.\n\n"
     "## QUALITY RULES\n"
-    "- solution: 3-6 steps. concept_check: no steps, the \"rule\" field "
+    '- solution: 3-6 steps. concept_check: no steps, the "rule" field '
     "replaces them.\n"
     "- One idea per step. Titles are verb phrases of 6 words or fewer, never "
-    "\"Step N\".\n"
-    "- Every \"explain\" says why, not just what. Do not repeat the title.\n"
+    '"Step N".\n'
+    '- Every "explain" says why, not just what. Do not repeat the title.\n'
     "- For an MCQ: always fill student_pick and mistake when an answer is "
     "provided. mistake is one sentence naming the exact trap in the pick "
     "(for example \"The 'and' in B joins numbers, not statements\"), never "
-    "\"you mixed things up\". Give every option one line.\n"
+    '"you mixed things up". Give every option one line.\n'
     "- concept_check options: repeat each option's text, add a short tag when "
     "the answer classifies it, and make each reason apply the rule's test.\n"
     "- concept_check rule: one portable test the student can reuse (split "
@@ -794,8 +817,8 @@ TUTOR_CHAT_SYSTEM = (
     "list; the app records misses and adds that note.\n"
     "- No greeting, praise, filler, or comments about confidence or effort.\n"
     "- follow_ups: 2-3 questions the student would plausibly ask next, "
-    "specific to this reply, 8 words or fewer each. Never \"Learn more\" or "
-    "\"Practice\".\n"
+    'specific to this reply, 8 words or fewer each. Never "Learn more" or '
+    '"Practice".\n'
 )
 
 
@@ -846,7 +869,9 @@ def format_question_context(question_context: dict[str, Any] | None) -> str:
             f"{numbered}"
         )
     adaptive = question_context.get("adaptive_explanation") or {}
-    if isinstance(adaptive, dict) and any(str(adaptive.get(k) or "").strip() for k in adaptive):
+    if isinstance(adaptive, dict) and any(
+        str(adaptive.get(k) or "").strip() for k in adaptive
+    ):
         adaptive_lines = []
         for key in (
             "what_went_wrong",
@@ -935,8 +960,7 @@ Keep everything SHORT and easy to read."""
 # ---------------------------------------------------------------------------
 
 TUTOR_QA_SYSTEM = (
-    f"You are {EXAMIQ_PERSONA}, a helpful and clear tutor.\n"
-    f"{MATH_NOTATION_RULES}"
+    f"You are {EXAMIQ_PERSONA}, a helpful and clear tutor.\n{MATH_NOTATION_RULES}"
 )
 
 
@@ -1288,6 +1312,7 @@ def build_general_tutor_prompt(user_message: str) -> tuple[str, str]:
 # Analytics / professor helpers (not in legacy PHP; kept for provider use)
 # ---------------------------------------------------------------------------
 
+
 def build_calibration_prompt(matrix: dict, weak_topics: list | None) -> str:
     return (
         f"Student calibration matrix: {json.dumps(matrix)}. "
@@ -1311,6 +1336,30 @@ def build_difficulty_tag_prompt(stem: str) -> tuple[str, str]:
         "Rate this exam question difficulty as exactly one of: easy, medium, hard.\n"
         f"Question: {stem}\n"
         "Reply with only the single word."
+    )
+    return system, user
+
+
+# ---------------------------------------------------------------------------
+# COR (Certificate of Registration) subject-row extraction
+# ---------------------------------------------------------------------------
+
+COR_EXTRACTION_SYSTEM = (
+    "You are a registrar assistant that reads plain text extracted from a "
+    "student's Certificate of Registration. Return valid JSON only. "
+    "No markdown fences. Never invent course codes that are not in the text."
+)
+
+
+def build_cor_extraction_prompt(text: str) -> tuple[str, str]:
+    system = COR_EXTRACTION_SYSTEM
+    user = (
+        "From the text below, list every enrolled course row in the order "
+        "they appear. OCR noise is possible: keep the code as printed unless "
+        "it is an obvious OCR misread (l/I confusion), then fix it.\n"
+        'Return {"rows": [{"code": "BSEM 21", "title": "History of Mathematics"}]}\n\n'
+        "Text:\n"
+        f"{text[:8000]}"
     )
     return system, user
 
@@ -1390,7 +1439,9 @@ def build_subject_relevance_prompt(
     existing topic it best matches, so relevance works even when the subject
     code never literally appears in the extracted text.
     """
-    topics_payload = json.dumps([{"id": t.get("id"), "name": t.get("name")} for t in topics])
+    topics_payload = json.dumps(
+        [{"id": t.get("id"), "name": t.get("name")} for t in topics]
+    )
     excerpt = (source_material or "").strip()
     if len(excerpt) > 12000:
         excerpt = excerpt[:12000] + "\n…[truncated]"

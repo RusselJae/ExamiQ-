@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0011_system_revisions_roadmap'),
+        ("questions", "0011_system_revisions_roadmap"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='question',
-            name='faculty_feedback',
-            field=models.TextField(blank=True, default='', help_text='Faculty review notes for high-mistake questions or validation.'),
+            model_name="question",
+            name="faculty_feedback",
+            field=models.TextField(
+                blank=True,
+                default="",
+                help_text="Faculty review notes for high-mistake questions or validation.",
+            ),
         ),
     ]

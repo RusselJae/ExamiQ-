@@ -1,4 +1,5 @@
 """URL configuration for EXAMIQ."""
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -52,11 +53,19 @@ urlpatterns = [
         "coordinator/",
         include("apps.analytics.urls_chairperson", namespace="analytics_chairperson"),
     ),
-    path("coordinator/", include("apps.users.urls_coordinator", namespace="coordinator")),
+    path(
+        "coordinator/", include("apps.users.urls_coordinator", namespace="coordinator")
+    ),
     path("", include("apps.core.urls")),
     path("student/", include("apps.reviews.urls", namespace="reviews")),
-    path("student/", include("apps.analytics.urls_student", namespace="analytics_student")),
-    path("professor/", include("apps.analytics.urls_professor", namespace="analytics_professor")),
+    path(
+        "student/",
+        include("apps.analytics.urls_student", namespace="analytics_student"),
+    ),
+    path(
+        "professor/",
+        include("apps.analytics.urls_professor", namespace="analytics_professor"),
+    ),
 ]
 
 if settings.DEBUG:

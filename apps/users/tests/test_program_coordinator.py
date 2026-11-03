@@ -111,8 +111,16 @@ class TestProgramCoordinator:
 
         assert reverse("coordinator:subject_edit", args=[subject.pk]) in content
         assert reverse("coordinator:subject_delete", args=[subject.pk]) in content
-        assert "lg:grid-cols-[minmax(0,1fr)_22rem]" in content
-        assert "min-w-[40rem]" in content
+        # Add course form lives in a dialog, not a side panel.
+        assert 'id="add-course-dialog"' in content
+        assert 'id="edit-course-dialog"' in content
+        assert "data-open-course-dialog" in content
+        assert "data-edit-course" in content
+        # Search + filter controls and the stat columns.
+        assert 'name="q"' in content
+        assert "Faculty" in content
+        assert "Questions" in content
+        assert "Materials" in content
 
     def test_can_edit_subject_in_managed_program(
         self, client, coordinator, department, year_level

@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('ai', '0007_faculty_feedback_and_regenerate_stem'),
+        ("ai", "0007_faculty_feedback_and_regenerate_stem"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='learningdocument',
-            name='source_text',
-            field=models.TextField(blank=True, default='', help_text='Canonical extracted text. Faculty edits land here; LearningChunk rows are re-derived from it so AI retrieval follows the edits.'),
+            model_name="learningdocument",
+            name="source_text",
+            field=models.TextField(
+                blank=True,
+                default="",
+                help_text="Canonical extracted text. Faculty edits land here; LearningChunk rows are re-derived from it so AI retrieval follows the edits.",
+            ),
         ),
     ]

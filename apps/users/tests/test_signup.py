@@ -18,6 +18,37 @@ def _clear_rate_limit_cache():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _auto_register_student_numbers():
+    """Stand in for the coordinator's pre-registered roster.
+
+    The real app gates signup on a coordinator-added student number; every
+    signup test here posts with numbers the roster already covers.
+    """
+    from apps.users import forms as users_forms
+    from apps.users.models import PendingStudentRegistration
+
+    original = users_forms._has_pending_registration
+
+    def auto_registered(number: str) -> bool:
+        PendingStudentRegistration.objects.get_or_create(student_number=number)
+        return original(number)
+
+    users_forms._has_pending_registration = auto_registered
+    yield
+    users_forms._has_pending_registration = original
+
+
+def _cor_file():
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    return SimpleUploadedFile(
+        "cor.png",
+        b"\x89PNG\r\n\x1a\n" + b"0" * 32,
+        content_type="image/png",
+    )
+
+
 @pytest.fixture
 def bsed_program(db):
     edu, _ = Department.objects.get_or_create(name="College of Education")
@@ -59,7 +90,7 @@ def signup_section(db, bsed_program, signup_year_level):
     return section
 
 
-def _student_data(signup_year_level, signup_section, **extra):
+def _student_data(signup_year_level, **extra):
     data = {
         "role": User.Role.STUDENT,
         "email": "newstudent@test.edu",
@@ -72,13 +103,145 @@ def _student_data(signup_year_level, signup_section, **extra):
         "student_number": "123456789",
         "phone_number": "09123456789",
         "year_level": signup_year_level.pk,
-        "section": signup_section.pk,
     }
     data.update(extra)
     return data
 
 
-def _faculty_data(signup_year_level, signup_section, **extra):
+def _signup_post(
+    client,
+    signup_year_level,
+    data,
+    *,
+    cor_type="regular",
+    bundle_year_id=None,
+    bundle_subject_ids=None,
+):
+    """POST signup with a COR file plus a matching analyze-time session bundle.
+
+    Mirrors the real flow (upload → analyze → submit): the bundle is what the
+    server verified, keyed off the uploaded file's name and size.
+    """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from apps.users.cor_services import COR_SESSION_KEY
+
+    data = dict(data)
+    if "cor_upload" not in data:
+        data["cor_upload"] = SimpleUploadedFile(
+            "cor.pdf", b"%PDF-1.4 fake-cor-bytes", content_type="application/pdf"
+        )
+    uploaded = data["cor_upload"]
+    try:
+        size = uploaded.size
+    except Exception:  # noqa: BLE001
+        size = 0
+    try:
+        year_id = int(data.get("year_level", signup_year_level.pk))
+    except (TypeError, ValueError):
+        year_id = signup_year_level.pk
+    courses = data.get("courses", [])
+    if isinstance(courses, str):
+        courses = [courses]
+    subject_ids = []
+    for course in courses or []:
+        try:
+            subject_ids.append(int(course))
+        except (TypeError, ValueError):
+            pass
+    session = client.session
+    posted_subject_ids = subject_ids
+    if bundle_subject_ids is not None:
+        posted_subject_ids = list(bundle_subject_ids)
+    elif not posted_subject_ids:
+        from apps.questions.models import Subject as _Subject
+
+        real = list(
+            _Subject.objects.filter(year_level_id=year_id).values_list("pk", flat=True)[
+                :3
+            ]
+        )
+        posted_subject_ids = real or [-1]
+    session[COR_SESSION_KEY] = {
+        "name": getattr(uploaded, "name", ""),
+        "size": size,
+        "cor_type": cor_type,
+        "year_level_id": bundle_year_id if bundle_year_id is not None else year_id,
+        "subject_ids": posted_subject_ids,
+        "rows": [],
+    }
+    session.save()
+    return client.post(reverse("account_signup"), data)
+
+
+@pytest.mark.django_db
+class TestBackfillStudentFaculty:
+    def test_backfill_assigns_faculty_from_curriculum(
+        self, bsed_program, signup_year_level
+    ):
+        from django.core.management import call_command
+
+        from apps.questions.models import Subject
+        from apps.users.models import (
+            AcademicTerm,
+            AcademicYear,
+            ProgramSection,
+            StudentFacultyAssignment,
+            TeachingAssignment,
+        )
+
+        year, _ = AcademicYear.objects.get_or_create(
+            label="2025-2026", defaults={"is_current": True}
+        )
+        term, _ = AcademicTerm.objects.get_or_create(
+            academic_year=year,
+            name="1st Sem",
+            defaults={"is_current": True, "semester": 1},
+        )
+        section = ProgramSection.objects.create(
+            program=bsed_program,
+            year_level=signup_year_level,
+            label="BF",
+            academic_year=year,
+            max_students=40,
+        )
+        subject = Subject.objects.create(
+            program=bsed_program,
+            code="BACK101",
+            name="Backfill Subject",
+            year_level=signup_year_level,
+            semester=Subject.Semester.FIRST,
+        )
+        professor = User.objects.create_user(
+            email="backfill.prof@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=section,
+            subject=subject,
+            term=term,
+        )
+        student = User.objects.create_user(
+            email="backfill.student@test.edu",
+            password="testpass123",
+            role=User.Role.STUDENT,
+            year_level=signup_year_level,
+            home_degree_program=User.HomeDegreeProgram.BSED_MATH,
+        )
+        assert not StudentFacultyAssignment.objects.filter(student=student).exists()
+
+        call_command("backfill_student_faculty")
+
+        assignment = StudentFacultyAssignment.objects.filter(
+            student=student, subject=subject
+        ).first()
+        assert assignment is not None
+        assert assignment.faculty_id == professor.pk
+
+
+def _faculty_data(**extra):
     data = {
         "role": User.Role.PROFESSOR,
         "email": "newprof@test.edu",
@@ -91,6 +254,144 @@ def _faculty_data(signup_year_level, signup_section, **extra):
     }
     data.update(extra)
     return data
+
+
+@pytest.mark.django_db
+class TestSignupFacultySelection:
+    """Per-subject faculty picks create StudentFacultyAssignment rows."""
+
+    @pytest.fixture
+    def faculty_setup(self, db, bsed_program, signup_year_level):
+        from apps.questions.models import Subject
+        from apps.users.models import (
+            AcademicTerm,
+            AcademicYear,
+            ProgramSection,
+            TeachingAssignment,
+        )
+
+        year, _ = AcademicYear.objects.get_or_create(
+            label="2025-2026", defaults={"is_current": True}
+        )
+        if not year.is_current:
+            year.is_current = True
+            year.save(update_fields=["is_current"])
+        term, _ = AcademicTerm.objects.get_or_create(
+            academic_year=year,
+            name="1st Sem",
+            defaults={
+                "is_current": True,
+                "semester": AcademicTerm.Semester.FIRST,
+            },
+        )
+        section = ProgramSection.objects.create(
+            program=bsed_program,
+            year_level=signup_year_level,
+            label="9M",
+            academic_year=year,
+            max_students=40,
+        )
+        subject = Subject.objects.create(
+            program=bsed_program,
+            code="FAC101",
+            name="Faculty Pick Subject",
+            year_level=signup_year_level,
+            semester=Subject.Semester.FIRST,
+        )
+        professor = User.objects.create_user(
+            email="facultypick@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=section,
+            subject=subject,
+            term=term,
+        )
+        return {"subject": subject, "professor": professor, "section": section}
+
+    def _regular_data(self, signup_year_level, subject, professor, **extra):
+        data = _student_data(signup_year_level, **extra)
+        data["faculty_selections"] = f'{{"{subject.pk}": {professor.pk}}}'
+        return data
+
+    def test_regular_signup_creates_faculty_assignment(
+        self, client, bsed_program, signup_year_level, faculty_setup
+    ):
+        from apps.users.models import StudentFacultyAssignment
+
+        subject = faculty_setup["subject"]
+        professor = faculty_setup["professor"]
+        response = _signup_post(
+            client,
+            signup_year_level,
+            self._regular_data(signup_year_level, subject, professor),
+        )
+        assert response.status_code == 302
+        user = User.objects.get(email="newstudent@test.edu")
+        assignment = StudentFacultyAssignment.objects.filter(
+            student=user, subject=subject
+        ).first()
+        assert assignment is not None
+        assert assignment.faculty_id == professor.pk
+
+    def test_signup_requires_faculty_pick_when_available(
+        self, client, bsed_program, signup_year_level, faculty_setup
+    ):
+        from apps.users.models import StudentFacultyAssignment
+
+        response = _signup_post(
+            client, signup_year_level, _student_data(signup_year_level)
+        )
+        assert response.status_code == 200
+        assert "Choose a faculty member" in response.content.decode()
+        assert not User.objects.filter(email="newstudent@test.edu").exists()
+        assert not StudentFacultyAssignment.objects.exists()
+
+    def test_irregular_signup_links_enrollment_to_faculty_section(
+        self, client, bsed_program, signup_year_level, faculty_setup
+    ):
+        import json as _json
+
+        from apps.users.models import (
+            IrregularSubjectEnrollment,
+            PendingStudentRegistration,
+            StudentFacultyAssignment,
+        )
+
+        subject = faculty_setup["subject"]
+        professor = faculty_setup["professor"]
+        section = faculty_setup["section"]
+        data = _student_data(signup_year_level, email="irreg@test.edu")
+        data["is_irregular"] = "1"
+        data["courses"] = [str(subject.pk)]
+        data["faculty_selections"] = _json.dumps({str(subject.pk): professor.pk})
+        data["cor_upload"] = _cor_file()
+        data["cor_detected"] = _json.dumps(
+            [{"code": subject.code, "title": subject.name}]
+        )
+        response = _signup_post(client, signup_year_level, data)
+        assert response.status_code == 302
+        user = User.objects.get(email="irreg@test.edu")
+        assert user.is_irregular is True
+        from apps.users.models import CorUpload
+
+        assert CorUpload.objects.filter(student=user).exists()
+        entry = PendingStudentRegistration.objects.get(
+            student_number=user.student_number
+        )
+        assert entry.claimed_by_id == user.pk
+        enrollment = IrregularSubjectEnrollment.objects.filter(
+            student=user, subject=subject
+        ).first()
+        assert enrollment is not None
+        assert enrollment.section_id == section.pk
+        assignment = StudentFacultyAssignment.objects.filter(
+            student=user, subject=subject
+        ).first()
+        assert assignment is not None
+        assert assignment.faculty_id == professor.pk
 
 
 FACULTY_TOKEN = "test-faculty-token-456"
@@ -109,11 +410,12 @@ class TestSignupRoles:
         settings.FACULTY_PORTAL_TOKEN = FACULTY_TOKEN
 
     def test_student_signup_creates_inactive_pending_otp(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
-        response = client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        response = _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         assert response.status_code == 302
         assert reverse("users:signup_verify") in response.url
@@ -123,7 +425,6 @@ class TestSignupRoles:
         assert user.phone_number == "09123456789"
         assert user.home_degree_program == User.HomeDegreeProgram.BSED_MATH
         assert user.year_level_id == signup_year_level.pk
-        assert user.section_id == signup_section.pk
         assert user.is_active is False
         assert user.approval_status == User.ApprovalStatus.APPROVED
         assert user.first_name == "Ana"
@@ -135,18 +436,108 @@ class TestSignupRoles:
         assert "Confirm your email" in html_body
         assert "ExamiQ" in html_body
 
+    def test_signup_requires_coordinator_registered_number(
+        self, client, bsed_program, signup_year_level, monkeypatch
+    ):
+        """The hard gate: no coordinator roster entry, no signup."""
+        from apps.users import forms as users_forms
+
+        monkeypatch.setattr(
+            users_forms, "_has_pending_registration", lambda number: False
+        )
+        response = _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level, email="unrostered@test.edu"),
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "not registered yet" in content.lower()
+        assert not User.objects.filter(email="unrostered@test.edu").exists()
+
+    def test_regular_signup_requires_regular_word_on_cor(
+        self, client, bsed_program, signup_year_level
+    ):
+        """An irregular COR cannot slip through the regular signup path."""
+        response = _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level, email="fakereg@test.edu"),
+            cor_type="unknown",
+        )
+        assert response.status_code == 200
+        assert "does not show regular status" in response.content.decode()
+        assert not User.objects.filter(email="fakereg@test.edu").exists()
+
+    def test_signup_rejects_year_level_mismatch_with_cor(
+        self, client, bsed_program, signup_year_level
+    ):
+        """Posted year must equal the year the COR analysis detected."""
+        from apps.questions.models import YearLevel
+
+        other_year = YearLevel.objects.create(order=9, name="9th Year")
+        data = _student_data(signup_year_level, email="wrongyear@test.edu")
+        data["year_level"] = other_year.pk
+        response = _signup_post(
+            client, signup_year_level, data, bundle_year_id=signup_year_level.pk
+        )
+        assert response.status_code == 200
+        assert "year level" in response.content.decode().lower()
+        assert not User.objects.filter(email="wrongyear@test.edu").exists()
+
+    def test_irregular_signup_rejects_course_not_on_cor(
+        self, client, bsed_program, signup_year_level
+    ):
+        """Irregular courses must come from the analyzed COR, not thin air."""
+        import json as _json
+
+        from apps.questions.models import Subject, YearLevel
+
+        other_year = YearLevel.objects.create(order=9, name="9th Year")
+        other_subject = Subject.objects.create(
+            program=bsed_program,
+            code="OFF9-1",
+            name="Off-scope Subject",
+            year_level=other_year,
+            semester=Subject.Semester.FIRST,
+        )
+        data = _student_data(signup_year_level, email="offscope@test.edu")
+        data["is_irregular"] = "1"
+        data["courses"] = [str(other_subject.pk)]
+        data["faculty_selections"] = _json.dumps({})
+        response = _signup_post(
+            client, signup_year_level, data, bundle_subject_ids=[-999]
+        )
+        assert response.status_code == 200
+        assert "not on your COR" in response.content.decode()
+        assert not User.objects.filter(email="offscope@test.edu").exists()
+
+    def test_signup_without_analysis_is_rejected(
+        self, client, bsed_program, signup_year_level
+    ):
+        """Skipping Analyze COR (no session bundle) fails closed."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        data = _student_data(signup_year_level)
+        data["cor_upload"] = SimpleUploadedFile(
+            "cor.pdf", b"%PDF-1.4 fake-cor-bytes", content_type="application/pdf"
+        )
+        response = client.post(reverse("account_signup"), data)
+        assert response.status_code == 200
+        assert "analyze your cor first" in response.content.decode().lower()
+        assert not User.objects.filter(email="newstudent@test.edu").exists()
+
     def test_student_signup_accepts_optional_middle_name_and_suffix(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         data = _student_data(
             signup_year_level,
-            signup_section,
             email="namedstudent@test.edu",
             student_number="987654321",
             middle_name="Marie",
             suffix="Jr.",
         )
-        response = client.post(reverse("account_signup"), data)
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 302
         user = User.objects.get(email="namedstudent@test.edu")
         assert user.middle_name == "Marie"
@@ -155,12 +546,10 @@ class TestSignupRoles:
         assert user.is_active is False
 
     def test_student_signup_requires_first_and_last_name(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
-        data = _student_data(
-            signup_year_level, signup_section, first_name="", last_name=""
-        )
-        response = client.post(reverse("account_signup"), data)
+        data = _student_data(signup_year_level, first_name="", last_name="")
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
@@ -174,54 +563,52 @@ class TestSignupRoles:
         ],
     )
     def test_signup_rejects_digits_and_specials_in_names(
-        self, client, bsed_program, signup_year_level, signup_section, field, value
+        self, client, bsed_program, signup_year_level, field, value
     ):
-        data = _student_data(signup_year_level, signup_section, **{field: value})
-        response = client.post(reverse("account_signup"), data)
+        data = _student_data(signup_year_level, **{field: value})
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
     @pytest.mark.parametrize("field", ["first_name", "last_name", "middle_name"])
     def test_signup_rejects_names_over_100_characters(
-        self, client, bsed_program, signup_year_level, signup_section, field
+        self, client, bsed_program, signup_year_level, field
     ):
-        data = _student_data(signup_year_level, signup_section, **{field: "A" * 101})
-        response = client.post(reverse("account_signup"), data)
+        data = _student_data(signup_year_level, **{field: "A" * 101})
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
     def test_signup_accepts_hyphens_spaces_and_apostrophes(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         data = _student_data(
             signup_year_level,
-            signup_section,
             email="names@test.edu",
             first_name="Mary-Jane",
             last_name="O'Neil",
             middle_name="de la Cruz",
         )
-        response = client.post(reverse("account_signup"), data)
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 302
         user = User.objects.get(email="names@test.edu")
         assert user.get_full_name() == "Mary-Jane de la Cruz O'Neil"
 
-    def test_student_signup_requires_year_and_section(
-        self, client, bsed_program, signup_year_level, signup_section
+    def test_student_signup_requires_year_level(
+        self, client, bsed_program, signup_year_level
     ):
-        data = _student_data(signup_year_level, signup_section)
+        data = _student_data(signup_year_level)
         data.pop("year_level")
-        data.pop("section")
-        response = client.post(reverse("account_signup"), data)
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
     def test_faculty_signup_creates_inactive_pending_approval_request(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         response = client.post(
             reverse("account_faculty_signup", args=[FACULTY_TOKEN]),
-            _faculty_data(signup_year_level, signup_section),
+            _faculty_data(),
         )
         assert response.status_code == 302
         user = User.objects.get(email="newprof@test.edu")
@@ -232,33 +619,18 @@ class TestSignupRoles:
         assert user.is_active is False
         assert user.approval_status == User.ApprovalStatus.PENDING
         assert user.year_level_id is None
-        assert user.section_id is None
         assert not user.assigned_sections.exists()
         assert len(mail.outbox) == 1
 
-    def test_faculty_signup_does_not_accept_section_assignments(
-        self, client, bsed_program, signup_year_level, signup_section
-    ):
-        data = _faculty_data(
-            signup_year_level,
-            signup_section,
-            assigned_sections=[signup_section.pk],
-        )
-        response = client.post(
-            reverse("account_faculty_signup", args=[FACULTY_TOKEN]), data
-        )
-        assert response.status_code == 302
-        user = User.objects.get(email="newprof@test.edu")
-        assert not user.assigned_sections.exists()
-
     def test_otp_verify_activates_account(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         from allauth.account.models import EmailAddress
 
-        client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         user = User.objects.get(email="newstudent@test.edu")
         assert user.is_active is False
@@ -275,13 +647,14 @@ class TestSignupRoles:
         assert email_addr.primary is True
 
     def test_verified_student_can_login_without_500(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         from allauth.account.models import EmailAddress
 
-        client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         code = _otp_code_from_mailbox()
         client.post(
@@ -305,7 +678,7 @@ class TestSignupRoles:
         assert "_auth_user_id" in client.session
 
     def test_student_signup_needs_no_faculty_activation(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         """Students sign up freely: the email OTP is the only step."""
         coordinator = User.objects.create_user(
@@ -313,9 +686,10 @@ class TestSignupRoles:
             password="testpass123",
             role=User.Role.PROGRAM_COORDINATOR,
         )
-        client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         user = User.objects.get(email="newstudent@test.edu")
         # No approval gate and no activation request mailed to the coordinator.
@@ -337,11 +711,12 @@ class TestSignupRoles:
         assert user.approval_status == User.ApprovalStatus.APPROVED
 
     def test_otp_wrong_code_keeps_inactive(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
-        client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         response = client.post(
             reverse("users:signup_verify"),
@@ -352,11 +727,11 @@ class TestSignupRoles:
         assert user.is_active is False
 
     def test_faculty_email_verification_keeps_account_pending(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         client.post(
             reverse("account_faculty_signup", args=[FACULTY_TOKEN]),
-            _faculty_data(signup_year_level, signup_section),
+            _faculty_data(),
         )
         code = _otp_code_from_mailbox()
         response = client.post(
@@ -369,11 +744,12 @@ class TestSignupRoles:
         assert user.is_active is False
 
     def test_login_blocked_until_otp_verified(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
-        client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         client.logout()
         response = client.post(
@@ -385,13 +761,11 @@ class TestSignupRoles:
         assert "_auth_user_id" not in client.session
 
     def test_faculty_signup_requires_employee_id(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         response = client.post(
             reverse("account_faculty_signup", args=[FACULTY_TOKEN]),
             _faculty_data(
-                signup_year_level,
-                signup_section,
                 email="noprof@test.edu",
                 employee_id="",
             ),
@@ -400,20 +774,19 @@ class TestSignupRoles:
         assert not User.objects.filter(email="noprof@test.edu").exists()
 
     def test_student_signup_does_not_require_employee_id(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
-        data = _student_data(signup_year_level, signup_section, employee_id="")
-        response = client.post(reverse("account_signup"), data)
+        data = _student_data(signup_year_level, employee_id="")
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
         assert user.employee_id == ""
         assert user.is_active is False
 
-    def test_chairperson_role_not_available_on_signup(
-        self, client, signup_year_level, signup_section
-    ):
-        response = client.post(
-            reverse("account_signup"),
+    def test_chairperson_role_not_available_on_signup(self, client, signup_year_level):
+        response = _signup_post(
+            client,
+            signup_year_level,
             {
                 "role": User.Role.CHAIRPERSON,
                 "email": "newchair@test.edu",
@@ -425,17 +798,14 @@ class TestSignupRoles:
                 "employee_id": "EMP-CHAIR-01",
                 "phone_number": "09123456789",
                 "year_level": signup_year_level.pk,
-                "section": signup_section.pk,
             },
         )
         assert response.status_code == 200
         assert not User.objects.filter(email="newchair@test.edu").exists()
 
-    def test_student_number_must_be_nine_digits(
-        self, client, signup_year_level, signup_section
-    ):
-        data = _student_data(signup_year_level, signup_section, student_number="12345")
-        response = client.post(reverse("account_signup"), data)
+    def test_student_number_must_be_nine_digits(self, client, signup_year_level):
+        data = _student_data(signup_year_level, student_number="12345")
+        response = _signup_post(client, signup_year_level, data)
         assert response.status_code == 200
         assert not User.objects.filter(email="newstudent@test.edu").exists()
 
@@ -467,7 +837,7 @@ class TestAlreadyRegisteredEmail:
         settings.FACULTY_PORTAL_TOKEN = FACULTY_TOKEN
 
     def test_unverified_account_points_to_signin_and_resend(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         User.objects.create_user(
             email="newstudent@test.edu",
@@ -476,9 +846,10 @@ class TestAlreadyRegisteredEmail:
             approval_status=User.ApprovalStatus.APPROVED,
             is_active=False,
         )
-        response = client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        response = _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         assert response.status_code == 200
         content = response.content.decode()
@@ -488,7 +859,7 @@ class TestAlreadyRegisteredEmail:
         assert reverse("account_login") in content
 
     def test_active_account_points_to_signin(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         User.objects.create_user(
             email="newstudent@test.edu",
@@ -497,9 +868,10 @@ class TestAlreadyRegisteredEmail:
             approval_status=User.ApprovalStatus.APPROVED,
             is_active=True,
         )
-        response = client.post(
-            reverse("account_signup"),
-            _student_data(signup_year_level, signup_section),
+        response = _signup_post(
+            client,
+            signup_year_level,
+            _student_data(signup_year_level),
         )
         assert response.status_code == 200
         content = response.content.decode()
@@ -507,7 +879,7 @@ class TestAlreadyRegisteredEmail:
         assert "Sign in with it instead" in content
 
     def test_login_of_unverified_account_opens_verify_screen(
-        self, client, bsed_program, signup_year_level, signup_section
+        self, client, bsed_program, signup_year_level
     ):
         User.objects.create_user(
             email="newstudent@test.edu",
@@ -560,7 +932,7 @@ class TestAuthTemplates:
         assert "auth-password-strength--compact" in content
         assert "Employee ID" not in content
         assert "id_year_level" in content
-        assert "id_section" in content
+        assert "id_section" not in content  # Section field removed
         assert "Faculty signup PIN" not in content
         assert "Subjects (choose at least 3)" not in content
         assert "Program" not in content or "home_degree_program" not in content

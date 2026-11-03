@@ -1,28 +1,22 @@
 from django.contrib import messages
-
 from django.db import IntegrityError
 from django.db.models import Count, Q
-
 from django.http import Http404, HttpResponse, JsonResponse
-
 from django.shortcuts import get_object_or_404, redirect, render
-
 from django.urls import reverse
-
+from django.utils.decorators import method_decorator
 from django.views import View
-
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
-
+from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.factory import (
     get_ai_provider_label,
     get_difficulty_tagger,
     get_question_generator,
     get_question_validator,
 )
-from apps.ai.exceptions import AIServiceUnavailableError
 from apps.ai.normalize import normalize_generated_questions
-
 from apps.core.filtering import (
     STANDARD_DATE_SORT_FILTER_SPECS,
     apply_date_range,
@@ -33,19 +27,13 @@ from apps.core.filtering import (
     redirect_preserving_filters,
 )
 from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
-
 from apps.questions.forms import (
     ExplanationStepFormSet,
     QuestionEditForm,
     SimplifiedQuestionChoiceFormSet,
     TopicForm,
 )
-
 from apps.questions.models import ExcludedQuestion, Question, Subject, Topic
-from apps.questions.views_curriculum import (
-    CurriculumTopicsView,
-    ProfessorCurriculumSubjectsView as ProfessorCurriculumSubjectsAPI,
-)
 from apps.questions.services import (
     activate_question,
     build_steps_from_post,
@@ -57,6 +45,13 @@ from apps.questions.services import (
     mistake_student_threshold,
     question_feedback_summary,
 )
+from apps.questions.validation import validate_question_for_submit
+from apps.questions.views_curriculum import (
+    CurriculumTopicsView,
+)
+from apps.questions.views_curriculum import (
+    ProfessorCurriculumSubjectsView as ProfessorCurriculumSubjectsAPI,
+)
 from apps.users.assignment_services import (
     get_assigned_subjects_queryset,
     get_or_create_catalog_course,
@@ -65,7 +60,6 @@ from apps.users.assignment_services import (
     professor_can_access_subject,
 )
 from apps.users.models import Course, User
-from apps.questions.validation import validate_question_for_submit
 
 
 class QuestionListView(ProfessorCourseMixin, ListView):
@@ -126,6 +120,9 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         elif active == "no":
             queryset = queryset.filter(is_active=False)
 
+        # Saved questions list excludes drafts (shown in Needs review).
+        queryset = queryset.exclude(status=Question.Status.DRAFT)
+
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -140,6 +137,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         for question in context["questions"]:
             question.q_label = q_labels.get(question.pk, "")
         topics = topics_for_course_subject(self.course, self.request.user)
+        context["course_subject"] = course_subject
         filter_names = ["q", "topic", "difficulty", "active", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
@@ -186,6 +184,68 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         context["filter_bar_compact"] = True
         context["filter_bar_single_row"] = True
 
+        base_qs = Question.objects.all()
+        if course_subject:
+            base_qs = base_qs.filter(topic__subject=course_subject)
+        else:
+            base_qs = base_qs.none()
+        context["question_total_count"] = base_qs.count()
+        context["draft_count"] = base_qs.filter(status=Question.Status.DRAFT).count()
+        context["saved_count"] = base_qs.exclude(status=Question.Status.DRAFT).count()
+        context["draft_questions"] = list(
+            base_qs.filter(status=Question.Status.DRAFT)
+            .select_related("topic")
+            .order_by("-modified", "-pk")[:8]
+        )
+        context["difficulty_counts"] = {
+            "all": context["saved_count"],
+            "easy": base_qs.filter(
+                status=Question.Status.APPROVED,
+                difficulty=Question.Difficulty.EASY,
+            ).count(),
+            "medium": base_qs.filter(
+                status=Question.Status.APPROVED,
+                difficulty=Question.Difficulty.MEDIUM,
+            ).count(),
+            "hard": base_qs.filter(
+                status=Question.Status.APPROVED,
+                difficulty=Question.Difficulty.HARD,
+            ).count(),
+        }
+
+        # Context for question modals rendered on the list page
+        from apps.questions.forms import (
+            ExplanationStepFormSet,
+            QuestionEditForm,
+            SimplifiedQuestionChoiceFormSet,
+        )
+        from apps.questions.views_materials import _bsed_subjects_queryset
+
+        context["form"] = QuestionEditForm(program=self.course.program)
+        context["choice_formset"] = SimplifiedQuestionChoiceFormSet()
+        context["step_formset"] = ExplanationStepFormSet(prefix="steps")
+        context["difficulty_choices"] = [
+            (Question.Difficulty.EASY, "Beginner"),
+            (Question.Difficulty.MEDIUM, "Intermediate"),
+            (Question.Difficulty.HARD, "Advanced"),
+        ]
+        context["topic_choices"] = topics
+        context["subject_id"] = course_subject.pk if course_subject else ""
+        context["subject_options"] = [
+            {"subject": s, "label": f"{s.code} — {s.name}"}
+            for s in _bsed_subjects_queryset()
+        ]
+        context["adaptive_explanation"] = {
+            "what_went_wrong": "",
+            "why": "",
+            "quick_check": "",
+            "remember": "",
+            "worked_example": "",
+        }
+        context["question"] = None
+        context["needs_revision"] = False
+        context["regenerate_url"] = ""
+
         return context
 
 
@@ -194,7 +254,7 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
 
     form_class = QuestionEditForm
 
-    template_name = "professor/questions/form.html"
+    template_name = "professor/questions/modal_create.html"
 
     def get_form_kwargs(self):
 
@@ -237,6 +297,20 @@ class QuestionCreateView(ProfessorCourseMixin, CreateView):
             (Question.Difficulty.MEDIUM, "Intermediate"),
             (Question.Difficulty.HARD, "Advanced"),
         ]
+        course_subject = _subject_for_course(self.course)
+        context["topic_choices"] = topics_for_course_subject(
+            self.course, self.request.user
+        )
+        context["subject_id"] = course_subject.pk if course_subject else ""
+        from apps.questions.views_materials import _bsed_subjects_queryset
+
+        context["subject_options"] = [
+            {"subject": s, "label": f"{s.code} — {s.name}"}
+            for s in _bsed_subjects_queryset()
+        ]
+        context["modal_id"] = "question-modal-add"
+        context["modal_title"] = "Add questions"
+        context["modal_action_label"] = "Save all"
 
         return context
 
@@ -312,7 +386,7 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
 
     form_class = QuestionEditForm
 
-    template_name = "professor/questions/form.html"
+    template_name = "professor/questions/modal_edit.html"
 
     pk_url_kwarg = "question_pk"
 
@@ -378,6 +452,15 @@ class QuestionUpdateView(ProfessorCourseMixin, UpdateView):
             (Question.Difficulty.EASY, "Beginner"),
             (Question.Difficulty.MEDIUM, "Intermediate"),
             (Question.Difficulty.HARD, "Advanced"),
+        ]
+        context["topic_choices"] = topics_for_course_subject(
+            self.course, self.request.user
+        )
+        from apps.questions.views_materials import _bsed_subjects_queryset
+
+        context["subject_options"] = [
+            {"subject": s, "label": f"{s.code} — {s.name}"}
+            for s in _bsed_subjects_queryset()
         ]
 
         return context
@@ -525,9 +608,7 @@ class QuestionDraftRemoveView(ProfessorCourseMixin, View):
 
         form = QuestionDraftRemoveForm(request.POST)
         if not form.is_valid():
-            return JsonResponse(
-                {"error": "Invalid draft removal request."}, status=400
-            )
+            return JsonResponse({"error": "Invalid draft removal request."}, status=400)
         subject = _subject_for_course(self.course)
         if not subject:
             return JsonResponse(
@@ -611,6 +692,7 @@ class ProfessorCurriculumTopicsView(ProfessorCourseMixin, CurriculumTopicsView):
         return super().get(request)
 
 
+@method_decorator(xframe_options_sameorigin, name="dispatch")
 class QuestionBatchEditView(ProfessorCourseMixin, View):
     """Dedicated edit page for a batch draft question (client-side sessionStorage)."""
 
@@ -620,6 +702,8 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
         batch_url = reverse(
             "analytics_professor:question_create", kwargs={"course_pk": course_pk}
         )
+        if request.GET.get("embed") == "1":
+            batch_url = f"{batch_url}?embed=1"
         context = {
             "course": self.course,
             "active_tab": "questions",
@@ -629,6 +713,7 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
             # The draft itself lives in sessionStorage; the page patches the
             # real total in on load.
             "total_questions": None,
+            "embed_mode": request.GET.get("embed") == "1",
         }
         context.update(
             _editor_shell_context(
@@ -646,6 +731,7 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
         return render(request, self.template_name, context)
 
 
+@method_decorator(xframe_options_sameorigin, name="dispatch")
 class QuestionBatchCreateView(ProfessorCourseMixin, View):
     """Batch question builder with AI generate/validate workflow."""
 
@@ -670,6 +756,10 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             ],
             "question_type_choices": list(Question.AUTHORABLE_QUESTION_TYPE_CHOICES),
             "ai_provider_label": get_ai_provider_label(),
+            "embed_mode": (
+                self.request.GET.get("embed") == "1"
+                or self.request.POST.get("embed") == "1"
+            ),
         }
 
     def get(self, request, course_pk):
@@ -1043,20 +1133,28 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         from apps.ai.subject_relevance import assess_subject_relevance
 
         valid_difficulties = set(Question.Difficulty.values)
-        difficulties: list[str] = []
-        for raw in request.POST.getlist("difficulty"):
-            for part in str(raw or "").split(","):
-                code = part.strip()
-                if code in valid_difficulties and code not in difficulties:
-                    difficulties.append(code)
-        if not difficulties:
-            return JsonResponse(
-                {"error": "Select at least one difficulty before generating."},
-                status=400,
-            )
-        # Cap at three bands (UI allows 1–3); store comma-joined for the job.
-        difficulties = difficulties[:3]
-        difficulty = ",".join(difficulties)
+        raw_difficulties = [
+            str(raw or "").strip().lower() for raw in request.POST.getlist("difficulty")
+        ]
+        if "auto" in raw_difficulties:
+            # "AI decides": the model distributes difficulty itself per item
+            # instead of pre-splitting the count across bands.
+            difficulty = "auto"
+        else:
+            difficulties: list[str] = []
+            for raw in request.POST.getlist("difficulty"):
+                for part in str(raw or "").split(","):
+                    code = part.strip()
+                    if code in valid_difficulties and code not in difficulties:
+                        difficulties.append(code)
+            if not difficulties:
+                return JsonResponse(
+                    {"error": "Select at least one difficulty before generating."},
+                    status=400,
+                )
+            # Cap at three bands (UI allows 1–3); store comma-joined for the job.
+            difficulties = difficulties[:3]
+            difficulty = ",".join(difficulties)
         question_type = Question.QuestionType.MCQ
         try:
             count = int(request.POST.get("count") or 3)

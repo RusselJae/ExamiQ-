@@ -11,6 +11,7 @@ from apps.ai.interfaces import (
     CalibrationAnalyzer,
     ConceptPracticeGenerator,
     ConceptRemediationGenerator,
+    CorSubjectAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -18,8 +19,14 @@ from apps.ai.interfaces import (
     QuestionGenerator,
     QuestionValidator,
 )
+from apps.ai.helpers import (
+    calibration_narrative_from_matrix,
+    course_review_narrative,
+    parse_cor_rows,
+)
 from apps.ai.prompts import (
     build_calibration_prompt,
+    build_cor_extraction_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
     build_explanation_generation_prompt,
@@ -30,6 +37,7 @@ from apps.ai.prompts import (
 from apps.ai.providers import ollama_client
 from apps.ai.stubs import (
     StubCalibrationAnalyzer,
+    StubCorSubjectAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
@@ -95,7 +103,9 @@ def _chat(
     system: str = "You are a concise educational analytics assistant.",
     max_output_tokens: int = 500,
 ) -> str | None:
-    return ollama_client.chat(prompt, system=system, max_output_tokens=max_output_tokens)
+    return ollama_client.chat(
+        prompt, system=system, max_output_tokens=max_output_tokens
+    )
 
 
 class OllamaCalibrationAnalyzer(CalibrationAnalyzer):
@@ -113,6 +123,17 @@ class OllamaCurriculumAdvisor(CurriculumAdvisor):
         fallback = course_review_narrative(summary)
         prompt = build_course_report_prompt(course, summary)
         return _chat(prompt) or fallback
+
+
+class OllamaCorSubjectAnalyzer(CorSubjectAnalyzer):
+    def structure_rows(self, text: str) -> list[dict[str, str]]:
+        if not (text or "").strip():
+            return []
+        system, prompt = build_cor_extraction_prompt(text)
+        raw = _chat(prompt, system=system, max_output_tokens=900)
+        if not raw:
+            return StubCorSubjectAnalyzer().structure_rows(text)
+        return _parse_cor_rows(raw)
 
 
 class OllamaDifficultyTagger(DifficultyTagger):

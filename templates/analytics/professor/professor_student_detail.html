@@ -5,7 +5,9 @@
 {% block main_class %}professor-student-detail{% endblock %}
 
 {% block content %}
+<div class="course-home-panel">
 {% include "analytics/professor/partials/student_detail_dashboard.html" with detail_scope="professor" scope_label=scope_label back_url=back_url back_label="Back to students" empty_body="No answers yet across your courses. Metrics appear once the student completes an exam." %}
+</div>
 {% endblock %}
 
 {% block extra_js %}

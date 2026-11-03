@@ -6,6 +6,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Dashboard" show_live=True %}
 
+<div class="course-home-panel">
 <div class="overview-meta mb-6">
     <span class="overview-meta__item">
         <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -65,7 +66,7 @@
                     <li><strong>Sure</strong> — students rated the answer as Sure.</li>
                     <li><strong>Correct / Incorrect</strong> — whether the answer scored right.</li>
                     <li><strong>Sure &amp; incorrect</strong> — the misconception to address in class first.</li>
-                    <li><strong>Scope</strong> — all students across your active course offerings.</li>
+                    <li><strong>Scope</strong> — students assigned to you this year.</li>
                 </ul>
             </div>
         </div>
@@ -76,34 +77,28 @@
              data-donut-filters
              data-donut-canvas="overviewDonutChart"
              data-donut-data-url="{% url 'analytics_professor:donut_data' %}">
+            {% if handled_course_cards %}
+            <div class="overview-trends-filter">
+                <span class="overview-trends-filter__label" id="overview-donut-course-label">Course</span>
+                <select id="donut-subject-picker" class="course-subjects-toolbar__select" data-donut-param="donut_subject" aria-labelledby="overview-donut-course-label">
+                    <option value=""{% if not donut_subject %} selected{% endif %}>All courses</option>
+                    {% for card in handled_course_cards %}
+                    <option value="{{ card.subject.pk }}"{% if donut_subject == card.subject.pk %} selected{% endif %}>{{ card.subject.code }} — {{ card.subject.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             <div class="overview-trends-filter">
                 <span class="overview-trends-filter__label" id="overview-donut-range-label">Range</span>
                 <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-range-label" data-donut-param="donut_period">
                     {% for value, label in donut_period_choices %}
-                    <a href="?donut_period={{ value }}{% if donut_section %}&amp;donut_section={{ donut_section }}{% endif %}"
+                    <a href="?donut_period={{ value }}"
                        class="overview-pill{% if donut_period == value %} is-selected{% endif %}"
                        data-donut-value="{{ value }}"
                        aria-pressed="{% if donut_period == value %}true{% else %}false{% endif %}">{{ label }}</a>
                     {% endfor %}
                 </div>
             </div>
-            {% if donut_sections %}
-            <div class="overview-trends-filter">
-                <span class="overview-trends-filter__label" id="overview-donut-section-label">Sections</span>
-                <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-section-label" data-donut-param="donut_section">
-                    <a href="?donut_period={{ donut_period }}"
-                       class="overview-pill{% if not donut_section %} is-selected{% endif %}"
-                       data-donut-value=""
-                       aria-pressed="{% if not donut_section %}true{% else %}false{% endif %}">All sections</a>
-                    {% for section in donut_sections %}
-                    <a href="?donut_period={{ donut_period }}&amp;donut_section={{ section.pk }}"
-                       class="overview-pill{% if donut_section == section.pk %} is-selected{% endif %}"
-                       data-donut-value="{{ section.pk }}"
-                       aria-pressed="{% if donut_section == section.pk %}true{% else %}false{% endif %}">{{ section.label }}</a>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
     <div class="student-donut-layout">
@@ -119,10 +114,10 @@
     </div>
 </div>
 
-<div class="bento-card bento-card-inner p-6 mb-6">
+<div class="bento-card bento-card-inner p-6 mb-6" data-activity-card>
     <div class="overview-trends-card__intro">
         <h2 class="overview-trends-card__title">Recent activity</h2>
-        <p class="overview-trends-card__subtitle">Latest completed exam for each student in your assigned sections.</p>
+        <p class="overview-trends-card__subtitle">Latest completed exam per student and course — the picker above narrows the list.</p>
     </div>
     {% if latest_student_sessions %}
     <div class="data-table-wrap data-table-wrap--scroll">
@@ -130,17 +125,16 @@
             <thead>
                 <tr>
                     <th>Student</th>
-                    <th>Section</th>
-                    <th>Subject</th>
-                    <th class="text-center">Accuracy</th>
+                    <th>Course</th>
+                    <th class="text-center">Scores</th>
                     <th class="text-center">Questions</th>
                     <th class="text-right">Completed</th>
                     <th class="text-right"></th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="overview-activity-body">
                 {% for row in latest_student_sessions %}
-                <tr>
+                <tr data-subject-id="{{ row.subject_id|default:'' }}" data-student-id="{{ row.student.pk }}">
                     <td>
                         <div class="flex items-center gap-3">
                             {% include "components/student_avatar.html" with user=row.student size="sm" %}
@@ -150,8 +144,20 @@
                             </div>
                         </div>
                     </td>
-                    <td class="text-examiq-slate whitespace-nowrap">{{ row.section.display_label|default:"—" }}</td>
-                    <td class="text-examiq-slate">{{ row.subject }}</td>
+                    <td class="text-examiq-slate">
+                        {% with session_codes=row.session_subject_codes %}
+                        {% if session_codes and session_codes|length > 1 %}
+                        <button type="button"
+                                class="course-count-chip"
+                                data-courses-dialog-open
+                                data-course-codes="{{ session_codes|join:',' }}"
+                                title="Courses taken: {{ session_codes|join:', ' }}"
+                                aria-haspopup="dialog">{{ session_codes|length }} courses</button>
+                        {% else %}
+                        {{ row.subject }}
+                        {% endif %}
+                        {% endwith %}
+                    </td>
                     <td class="text-center">
                         {% if row.accuracy >= 80 %}
                         <span class="font-semibold text-emerald-700">{{ row.accuracy }}%</span>
@@ -172,8 +178,18 @@
         </table>
     </div>
     {% else %}
-    <p class="text-center text-examiq-slate py-8">No completed exams in your assigned sections yet.</p>
+    <p class="text-center text-examiq-slate py-8">No completed exams from students you handle yet.</p>
     {% endif %}
+    <dialog class="coord-dialog" id="activity-courses-dialog" aria-labelledby="activity-courses-title">
+        <div class="coord-dialog__head">
+            <h2 class="coord-dialog__title" id="activity-courses-title">Courses in this session</h2>
+            <button type="button" class="coord-dialog__close" data-close-courses-dialog aria-label="Close">✕</button>
+        </div>
+        <div class="coord-dialog__body">
+            <ul class="courses-dialog-list" data-courses-dialog-list></ul>
+        </div>
+    </dialog>
+</div>
 </div>
 {% endblock %}
 
@@ -182,4 +198,70 @@
 <script src="{% static 'js/student-performance-donut.js' %}"></script>
 <script src="{% static 'js/donut-filters.js' %}"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
+<script>
+(function () {
+    /* The course picker above also drives the Recent activity table —
+       client-side, so picker changes never reload the page. Rows carry
+       one entry per (student, course): picking a course shows every
+       student's latest exam in it, "All courses" shows each student's
+       overall-latest exam (first occurrence per student). */
+    var picker = document.getElementById("donut-subject-picker");
+    var body = document.getElementById("overview-activity-body");
+    if (!picker || !body) return;
+    function apply() {
+        var value = picker.value || "";
+        var seenStudents = {};
+        body.querySelectorAll("tr[data-subject-id]").forEach(function (tr) {
+            var rowSubject = tr.getAttribute("data-subject-id") || "";
+            var rowStudent = tr.getAttribute("data-student-id") || "";
+            var show;
+            if (value) {
+                show = rowSubject === value;
+            } else {
+                show = !seenStudents[rowStudent];
+                if (show) seenStudents[rowStudent] = true;
+            }
+            tr.classList.toggle("hidden", !show);
+        });
+    }
+    picker.addEventListener("change", apply);
+    apply();
+})();
+
+(function () {
+    /* Multi-course rows carry every course code in data-course-codes; the
+       chip opens a native dialog listing them as pills. */
+    var dialog = document.getElementById("activity-courses-dialog");
+    if (!dialog || typeof dialog.showModal !== "function") return;
+    var list = dialog.querySelector("[data-courses-dialog-list]");
+    dialog.querySelectorAll("[data-close-courses-dialog]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            dialog.close();
+        });
+    });
+    dialog.addEventListener("click", function (event) {
+        if (event.target === dialog) dialog.close();
+    });
+    document.querySelectorAll("[data-courses-dialog-open]").forEach(function (chip) {
+        chip.addEventListener("click", function () {
+            var codes = String(chip.getAttribute("data-course-codes") || "")
+                .split(",")
+                .map(function (code) { return code.trim(); })
+                .filter(Boolean);
+            if (list) {
+                list.innerHTML = "";
+                codes.forEach(function (code) {
+                    var item = document.createElement("li");
+                    var pill = document.createElement("span");
+                    pill.className = "questions-difficulty-chip";
+                    pill.textContent = code;
+                    item.appendChild(pill);
+                    list.appendChild(item);
+                });
+            }
+            dialog.showModal();
+        });
+    });
+})();
+</script>
 {% endblock %}

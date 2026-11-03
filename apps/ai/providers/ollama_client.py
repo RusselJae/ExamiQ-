@@ -52,7 +52,10 @@ def _is_retriable(exc: Exception) -> bool:
     text = str(exc).lower()
     if any(token in text for token in ("429", "quota", "rate limit", "too many")):
         return True
-    if any(token in text for token in ("500", "502", "503", "504", "unavailable", "timeout")):
+    if any(
+        token in text
+        for token in ("500", "502", "503", "504", "unavailable", "timeout")
+    ):
         return True
     return False
 

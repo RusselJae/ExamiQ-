@@ -6,8 +6,21 @@ from apps.users import views_chairperson as chairperson_users
 app_name = "analytics_chairperson"
 
 urlpatterns = [
-    path("dashboard/", views_chairperson.ChairpersonDashboardView.as_view(), name="dashboard"),
-    path("accounts/", chairperson_users.ChairpersonAccountListView.as_view(), name="accounts"),
+    path(
+        "dashboard/",
+        views_chairperson.ChairpersonDashboardView.as_view(),
+        name="dashboard",
+    ),
+    path(
+        "accounts/",
+        chairperson_users.ChairpersonAccountListView.as_view(),
+        name="accounts",
+    ),
+    path(
+        "accounts/add-student-number/",
+        chairperson_users.ChairpersonAddStudentNumberView.as_view(),
+        name="account_add_student_number",
+    ),
     path(
         "accounts/<int:pk>/approve/",
         chairperson_users.ChairpersonApproveUserView.as_view(),
@@ -48,7 +61,11 @@ urlpatterns = [
         chairperson_users.ChairpersonSubjectDeleteView.as_view(),
         name="subject_delete",
     ),
-    path("assignments/", views_assignments.ChairpersonAssignmentListView.as_view(), name="assignments"),
+    path(
+        "assignments/",
+        views_assignments.ChairpersonAssignmentListView.as_view(),
+        name="assignments",
+    ),
     path(
         "assignments/create/",
         views_assignments.ChairpersonAssignmentCreateView.as_view(),
@@ -58,6 +75,11 @@ urlpatterns = [
         "assignments/<int:pk>/delete/",
         views_assignments.ChairpersonAssignmentDeleteView.as_view(),
         name="assignment_delete",
+    ),
+    path(
+        "assignments/<int:pk>/reassign/",
+        views_assignments.ChairpersonAssignmentReassignView.as_view(),
+        name="assignment_reassign",
     ),
     path(
         "assignments/api/subjects/",

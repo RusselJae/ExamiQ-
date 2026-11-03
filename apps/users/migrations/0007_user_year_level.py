@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("questions", "0006_curriculum_hierarchy"),
         ("users", "0006_user_password_changed_at"),

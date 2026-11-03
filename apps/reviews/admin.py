@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from apps.reviews.models import Answer, FeedbackView, ReviewSession, ReviewWindow, StepFeedbackView
+from apps.reviews.models import (
+    Answer,
+    FeedbackView,
+    ReviewSession,
+    ReviewWindow,
+    StepFeedbackView,
+)
 
 
 class AnswerInline(admin.TabularInline):
@@ -12,7 +18,14 @@ class AnswerInline(admin.TabularInline):
 
 @admin.register(ReviewSession)
 class ReviewSessionAdmin(admin.ModelAdmin):
-    list_display = ["student", "topic", "difficulty", "status", "started_at", "accuracy"]
+    list_display = [
+        "student",
+        "topic",
+        "difficulty",
+        "status",
+        "started_at",
+        "accuracy",
+    ]
     list_filter = ["status", "difficulty", "topic"]
     search_fields = ["student__email", "topic__name"]
     ordering = ["-started_at"]

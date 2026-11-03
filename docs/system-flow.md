@@ -14,7 +14,7 @@ This document describes how users, modules, and data move through the system fro
 |-------|-------------------|
 | **Student** | Completes timed review sessions, views feedback, tracks mistakes and progress |
 | **Faculty** | Configures exams, manages the question bank, monitors course performance |
-| **Program Coordinator** | Approves faculty requests, manages faculty sections, and maintains subjects |
+| **Program Coordinator** | Approves faculty requests, manages faculty courses, and maintains subjects |
 
 ### Core modules
 

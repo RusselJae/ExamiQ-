@@ -59,7 +59,7 @@ class TestCoordinatorSectionList:
         assert academic_year.label in content
         assert "All year levels" in content
         assert "Academic year" in content
-        assert "min-w-[52rem]" in content
+        assert "min-w-[56rem]" in content
         assert "Page 1 of 2" in content
         assert "Academic Calendar" in content
 
@@ -108,8 +108,12 @@ class TestCoordinatorSectionList:
         assert response.status_code == 200
         content = response.content.decode()
         assert target.display_label in content
-        assert other_program_section.display_label not in content
-        assert other_year_section.display_label not in content
+        # The table itself is filtered; the sidebar still lists every
+        # managed section for navigation.
+        listed = list(response.context["sections"])
+        assert target in listed
+        assert other_program_section not in listed
+        assert other_year_section not in listed
 
     def test_only_sections_from_managed_programs_are_listed(
         self, client, coordinator, year_level, academic_year

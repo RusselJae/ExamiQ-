@@ -1,5 +1,7 @@
 """Chairperson department-management views (accounts and subjects)."""
 
+import re
+
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
@@ -7,11 +9,12 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, UpdateView
 
+from apps.core.audit import log_audit_event
 from apps.core.filtering import redirect_preserving_filters
 from apps.core.mixins import ChairpersonRequiredMixin
-from apps.questions.models import Subject
+from apps.questions.models import Subject, YearLevel
 from apps.users.assignment_services import (
-    annotate_users_with_section_labels,
+    annotate_users_with_course_labels,
     archive_user,
     create_curriculum_subject,
     delete_curriculum_subject,
@@ -21,9 +24,22 @@ from apps.users.email_services import (
     send_account_approved_email,
     send_account_rejected_email,
 )
-from apps.users.forms import ChairpersonSubjectForm, ProgramCoordinatorSubjectForm
-from apps.users.models import Program, User
+from apps.users.forms import (
+    ChairpersonSubjectForm,
+    ProgramCoordinatorSubjectForm,
+    _clean_digits,
+)
+from apps.users.models import (
+    PendingStudentRegistration,
+    Program,
+    User,
+)
 from apps.users.notification_services import create_notification
+from apps.users.services import (
+    attach_subject_stats,
+    catalog_filter_context,
+    filter_subject_catalog,
+)
 
 
 def _managed_programs(user: User):
@@ -62,7 +78,11 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = _managed_users(self.request.user).select_related(
-            "department", "year_level", "section", "section__program", "section__year_level"
+            "department",
+            "year_level",
+            "section",
+            "section__program",
+            "section__year_level",
         )
         role = self.request.GET.get("role", "")
         if role in {User.Role.STUDENT, User.Role.PROFESSOR}:
@@ -100,7 +120,7 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        annotate_users_with_section_labels(context["users"])
+        annotate_users_with_course_labels(context["users"])
         context["role_filter"] = self.request.GET.get("role", "")
         context["active_filter"] = self.request.GET.get("active", "")
         context["status_filter"] = self.request.GET.get("status", "")
@@ -115,7 +135,62 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
             .filter(approval_status=User.ApprovalStatus.PENDING)
             .count()
         )
+        context["roster_entries"] = PendingStudentRegistration.objects.order_by(
+            "-created_at"
+        )
         return context
+
+
+class ChairpersonAddStudentNumberView(ChairpersonRequiredMixin, View):
+    """Coordinator "add account" step 1: register a student number only.
+
+    Other info stays hidden until the real student signs up with that number
+    (the signup gate matches it) and claims the placeholder.
+    """
+
+    def post(self, request):
+        raw = (request.POST.get("student_number") or "").strip()
+        digits = re.sub(r"\D", "", raw)
+        if len(digits) != 9:
+            messages.error(
+                request, "Student number must be exactly 9 digits."
+            )
+            return redirect_preserving_filters(
+                request, "analytics_chairperson:accounts"
+            )
+        cleaned = _clean_digits(digits, "Student number", 9)
+        if User.objects.filter(student_number=cleaned).exists():
+            messages.error(
+                request,
+                f"Student number {cleaned} is already a registered account.",
+            )
+            return redirect_preserving_filters(
+                request, "analytics_chairperson:accounts"
+            )
+        entry, created = PendingStudentRegistration.objects.get_or_create(
+            student_number=cleaned,
+            defaults={"created_by": request.user},
+        )
+        if created:
+            messages.success(
+                request,
+                f"Student number {cleaned} registered. The student can now sign up "
+                "(they will see only the number here until they claim it).",
+            )
+            log_audit_event(
+                request.user,
+                action="student_number_registered",
+                metadata={"student_number": cleaned},
+            )
+        else:
+            messages.info(
+                request,
+                f"Student number {cleaned} is already waiting for its student "
+                "to sign up.",
+            )
+        return redirect_preserving_filters(
+            request, "analytics_chairperson:accounts"
+        )
 
 
 class ChairpersonApproveUserView(ChairpersonRequiredMixin, View):
@@ -166,7 +241,9 @@ class ChairpersonToggleUserActiveView(ChairpersonRequiredMixin, View):
                 request, "analytics_chairperson:accounts"
             )
         if user.is_archived:
-            messages.error(request, "Restore the archived account before changing access.")
+            messages.error(
+                request, "Restore the archived account before changing access."
+            )
             return redirect_preserving_filters(
                 request, "analytics_chairperson:accounts"
             )
@@ -182,7 +259,9 @@ class ChairpersonArchiveUserView(ChairpersonRequiredMixin, View):
     def post(self, request, pk):
         user = get_object_or_404(_managed_users(request.user), pk=pk)
         if user.approval_status == User.ApprovalStatus.PENDING:
-            messages.error(request, "Reject pending registrations instead of archiving.")
+            messages.error(
+                request, "Reject pending registrations instead of archiving."
+            )
             return redirect_preserving_filters(
                 request, "analytics_chairperson:accounts"
             )
@@ -212,11 +291,12 @@ class ChairpersonSubjectListView(ChairpersonRequiredMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        return (
+        qs = (
             Subject.objects.filter(program__in=_managed_programs(self.request.user))
             .select_related("program", "year_level")
             .order_by("program__name", "year_level__order", "semester", "code")
         )
+        return filter_subject_catalog(qs, self.request.GET)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -224,15 +304,27 @@ class ChairpersonSubjectListView(ChairpersonRequiredMixin, ListView):
             "form",
             ProgramCoordinatorSubjectForm(coordinator=self.request.user),
         )
+        subjects = list(context["subjects"])
+        attach_subject_stats(subjects)
+        context.update(catalog_filter_context(self.request.GET))
+        context["programs"] = (
+            Subject.objects.filter(program__in=_managed_programs(self.request.user))
+            .values("program__pk", "program__name")
+            .distinct()
+            .order_by("program__name")
+        )
+        context["year_levels"] = YearLevel.objects.order_by("order")
+        context["semester_choices"] = Subject.Semester.choices
         return context
 
     def post(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
         form = ProgramCoordinatorSubjectForm(request.POST, coordinator=request.user)
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
 
         subject = create_curriculum_subject(
-            program=form.cleaned_data["program"],
+            program=form.program,
             code=form.cleaned_data["code"],
             name=form.cleaned_data["name"],
             year_level=form.cleaned_data["year_level"],

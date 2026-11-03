@@ -4,20 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('users', '0012_academicyear_alter_user_role_academicterm_and_more'),
+        ("users", "0012_academicyear_alter_user_role_academicterm_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='academicterm',
-            name='semester',
-            field=models.PositiveSmallIntegerField(choices=[(1, '1st Semester'), (2, '2nd Semester')], default=1),
+            model_name="academicterm",
+            name="semester",
+            field=models.PositiveSmallIntegerField(
+                choices=[(1, "1st Semester"), (2, "2nd Semester")], default=1
+            ),
         ),
         migrations.AlterField(
-            model_name='programsection',
-            name='label',
-            field=models.CharField(help_text='Numeric section label, e.g. "1", "2", "3".', max_length=10),
+            model_name="programsection",
+            name="label",
+            field=models.CharField(
+                help_text='Numeric section label, e.g. "1", "2", "3".', max_length=10
+            ),
         ),
     ]

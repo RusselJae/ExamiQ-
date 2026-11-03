@@ -1,13 +1,17 @@
 {% extends "base.html" %}
+{% load examiq_tags %}
 
 {% block title %}Sections - Campus Admin{% endblock %}
 
 {% block content %}
 {% include "components/page_header.html" with title="Program Sections" subtitle="Manage cohort sections per program and year level." %}
 
-<div class="flex flex-wrap gap-3 mb-6">
-    <a href="{% url 'campus:section_create' %}" class="btn-primary btn-primary-sm">Add section</a>
-    <a href="{% url 'campus:section_bulk' %}" class="btn-secondary btn-primary-sm">Bulk create</a>
+<div class="coord-panel">
+<div class="questions-page__toolbar mb-4">
+    <div class="questions-page__actions">
+        <a href="{% url 'campus:section_create' %}" class="btn-primary btn-primary-sm">Add section</a>
+        <a href="{% url 'campus:section_bulk' %}" class="btn-secondary btn-primary-sm">Bulk create</a>
+    </div>
 </div>
 
 <div class="bento-card bento-card-inner mb-4">
@@ -46,50 +50,55 @@
     </form>
 </div>
 
-<div class="bento-card bento-card-inner overflow-x-auto">
-    <table class="data-table w-full min-w-[52rem]">
-        <thead>
-            <tr>
-                <th>Section</th>
-                <th>Program</th>
-                <th>Year level</th>
-                <th>Academic year</th>
-                <th>Enrolled</th>
-                <th>Capacity</th>
-                <th>Status</th>
-                <th class="text-right">Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for section in sections %}
-            <tr>
-                <td class="font-medium text-examiq-navy">{{ section.display_label }}</td>
-                <td>{{ section.program.name }}</td>
-                <td class="text-examiq-slate">{{ section.year_level.name }}</td>
-                <td class="text-examiq-slate">{{ section.academic_year.label }}</td>
-                <td>{{ section.student_count }}</td>
-                <td>{{ section.max_students }}</td>
-                <td>
-                    {% if not section.is_active %}
-                    <span class="profile-pill">Inactive</span>
-                    {% elif section.is_full %}
-                    <span class="profile-pill">Full</span>
-                    {% else %}
-                    <span class="profile-pill profile-pill--role">{{ section.remaining_slots }} slots left</span>
-                    {% endif %}
-                </td>
-                <td class="whitespace-nowrap text-right">
-                    <a href="{% url 'campus:section_edit' section.pk %}" class="text-sm text-link">Edit</a>
-                </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="8" class="py-8 text-center text-sm text-examiq-slate">No sections match these filters. Create a section so students can register.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="coord-table-wrap">
+<table class="data-table w-full min-w-[56rem]">
+    <thead>
+        <tr>
+            <th>Section</th>
+            <th>Program</th>
+            <th>Year level</th>
+            <th>Academic year</th>
+            <th>Enrolled</th>
+            <th>Faculty</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for section in sections %}
+        <tr>
+            <td class="font-medium text-examiq-navy">{{ section.display_label }}</td>
+            <td>{{ section.program.name }}</td>
+            <td class="text-examiq-slate">{{ section.year_level.name }}</td>
+            <td class="text-examiq-slate">{{ section.academic_year.label }}</td>
+            <td>{{ section.student_count }}/{{ section.max_students }}</td>
+            <td class="text-examiq-slate">
+                {% with faculty=faculty_by_section|get_item:section.pk %}
+                {% if faculty %}{{ faculty|join:", " }}{% else %}—{% endif %}
+                {% endwith %}
+            </td>
+            <td>
+                {% if not section.is_active %}
+                <span class="profile-pill">Inactive</span>
+                {% elif section.is_full %}
+                <span class="profile-pill">Full</span>
+                {% else %}
+                <span class="profile-pill profile-pill--role">{{ section.remaining_slots }} slots left</span>
+                {% endif %}
+            </td>
+            <td class="whitespace-nowrap text-right">
+                <a href="{% url 'campus:section_edit' section.pk %}" class="text-sm text-link">Edit</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="py-8 text-center text-sm text-examiq-slate">No sections match these filters. Create a section so students can register.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
 
-    <div class="mt-4">
-        {% include "components/pagination.html" %}
-    </div>
+<div class="mt-4">
+    {% include "components/pagination.html" %}
+</div>
 </div>
 {% endblock %}

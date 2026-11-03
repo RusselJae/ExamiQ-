@@ -1,64 +1,193 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags static %}
 
-{% block title %}Subject Catalog - EXAMIQ+{% endblock %}
+{% block title %}Courses - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Subject Catalog" subtitle="Add, edit, or remove the subjects faculty can be assigned to teach in your programs." %}
+{% include "components/page_header.html" with title="Courses" %}
 
-<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-    <section class="bento-card bento-card-inner min-w-0">
-        <div class="overflow-x-auto">
-            <table class="data-table w-full min-w-[40rem]">
-                <thead>
-                    <tr>
-                        <th>Code</th>
-                        <th>Subject</th>
-                        <th>Program</th>
-                        <th>Year</th>
-                        <th>Semester</th>
-                        <th class="text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for subject in subjects %}
-                    <tr>
-                        <td class="font-semibold">{{ subject.code }}</td>
-                        <td>{{ subject.name }}</td>
-                        <td class="text-examiq-slate">{{ subject.program.name }}</td>
-                        <td class="text-examiq-slate">{{ subject.year_level.name }}</td>
-                        <td class="text-examiq-slate">{{ subject.get_semester_display }}</td>
-                        <td class="whitespace-nowrap text-right">
-                            <a href="{% url 'coordinator:subject_edit' subject.pk %}" class="text-sm text-link">Edit</a>
-                            <form method="post" action="{% url 'coordinator:subject_delete' subject.pk %}" class="inline ml-2"
-                                  data-confirm-message="Remove {{ subject.code }} and its topics and questions?"
-                                  data-confirm-type="warning"
-                                  data-confirm-label="Remove">
-                                {% csrf_token %}
-                                <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="6" class="py-8 text-center text-sm text-examiq-slate">No subjects yet. Add the first subject for your program.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+<div class="coord-panel">
+    <div class="coord-panel__toolbar">
+        <form method="get" class="filter-bar" role="search" aria-label="Search and filter courses" data-filter-bar>
+            <div class="filter-bar__search-row">
+                <div class="filter-bar__search-box">
+                    <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                    <input type="search"
+                           name="q"
+                           id="course-q"
+                           value="{{ search_query }}"
+                           placeholder="Code or course name"
+                           aria-label="Search courses"
+                           class="filter-bar__input filter-bar__input--search">
+                    <details class="filter-bar__picker" data-filter-picker>
+                        <summary class="filter-bar__toggle" aria-label="Open filters">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M7 12h10M11 18h2"/></svg>
+                            Filter
+                        </summary>
+                        <div class="filter-bar__panel" data-filter-panel>
+                            <div class="filter-bar__grid">
+                                <label class="filter-bar__field">
+                                    <span class="filter-bar__label">Program</span>
+                                    <select name="program" id="course-program" class="filter-bar__select">
+                                        <option value="">All programs</option>
+                                        {% for program in programs %}
+                                        <option value="{{ program.program__pk }}" {% if program_filter == program.program__pk|stringformat:"s" %}selected{% endif %}>{{ program.program__name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label class="filter-bar__field">
+                                    <span class="filter-bar__label">Year level</span>
+                                    <select name="year_level" id="course-year" class="filter-bar__select">
+                                        <option value="">All year levels</option>
+                                        {% for year_level in year_levels %}
+                                        <option value="{{ year_level.pk }}" {% if year_level_filter == year_level.pk|stringformat:"s" %}selected{% endif %}>{{ year_level.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label class="filter-bar__field">
+                                    <span class="filter-bar__label">Semester</span>
+                                    <select name="semester" id="course-semester" class="filter-bar__select">
+                                        <option value="">All semesters</option>
+                                        {% for value, label in semester_choices %}
+                                        <option value="{{ value }}" {% if semester_filter == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="filter-bar__actions">
+                                <a href="{% url 'coordinator:subject_list' %}" class="filter-bar__reset">Reset</a>
+                                <button type="submit" class="btn-primary btn-primary-sm filter-bar__apply">Apply filters</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </form>
+        <button type="button" class="btn-primary btn-primary-sm" data-open-course-dialog>Add course</button>
+    </div>
 
-        <div class="mt-4">
-            {% include "components/pagination.html" %}
-        </div>
-    </section>
+    <div class="coord-table-wrap">
+        <table class="data-table w-full min-w-[56rem] coord-table--singleline">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Course</th>
+                    <th class="coord-col-faculty">Faculty</th>
+                    <th>Students</th>
+                    <th>Questions</th>
+                    <th>Materials</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for subject in subjects %}
+                <tr>
+                    <td><span class="course-chip">{{ subject.code }}</span></td>
+                    <td><span class="coord-cell-line" title="{{ subject.name }}">{{ subject.name }}</span></td>
+                    <td class="coord-col-faculty">
+                        {% if subject.faculty_names %}
+                        <span title="{{ subject.faculty_names|join:', ' }}">{{ subject.faculty_names|join:", " }}</span>
+                        {% else %}
+                        <span class="profile-pill">Needs faculty</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-examiq-slate">{{ subject.student_count }}</td>
+                    <td class="text-examiq-slate">{{ subject.question_count }}</td>
+                    <td class="text-examiq-slate">{{ subject.material_count }}</td>
+                    <td class="whitespace-nowrap text-right">
+                        <details class="account-kebab">
+                            <summary aria-label="Actions for {{ subject.code }}">⋮</summary>
+                            <div class="account-kebab__menu">
+                                <button type="button"
+                                        class="text-sm text-link"
+                                        data-edit-course
+                                        data-edit-url="{% url 'coordinator:subject_edit' subject.pk %}"
+                                        data-code="{{ subject.code }}"
+                                        data-name="{{ subject.name }}"
+                                        data-year-level="{{ subject.year_level_id }}"
+                                        data-semester="{{ subject.semester }}">Edit</button>
+                                <form method="post" action="{% url 'coordinator:subject_delete' subject.pk %}"
+                                      data-confirm-message="Remove {{ subject.code }} and its topics and questions?"
+                                      data-confirm-type="warning"
+                                      data-confirm-label="Remove">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove</button>
+                                </form>
+                            </div>
+                        </details>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="py-8 text-center text-sm text-examiq-slate">No courses match these filters. Add the first course for your program.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-    <section class="bento-card bento-card-inner h-fit">
-        <h2 class="text-lg font-semibold text-examiq-navy">Add subject</h2>
-        <p class="mt-1 text-sm text-examiq-slate">Subjects become available when assigning faculty to sections.</p>
-        <form method="post" class="mt-5" novalidate>
+    <div class="mt-4">
+        {% include "components/pagination.html" %}
+    </div>
+</div>
+
+<dialog class="coord-dialog" id="add-course-dialog" aria-labelledby="add-course-title" {% if form.errors %}data-has-errors="1"{% endif %}>
+    <div class="coord-dialog__head">
+        <h2 class="coord-dialog__title" id="add-course-title">Add course</h2>
+        <button type="button" class="coord-dialog__close" data-close-course-dialog aria-label="Close">✕</button>
+    </div>
+    <div class="coord-dialog__body">
+        <p class="text-sm text-examiq-slate">Courses become available when assigning faculty to sections.</p>
+        <form method="post" class="mt-4" novalidate>
             {% csrf_token %}
             {{ form|crispy }}
-            <button type="submit" class="btn-primary btn-primary-sm mt-2 w-full sm:w-auto">Add subject</button>
+            <div class="coord-dialog__actions">
+                <button type="button" class="btn-secondary btn-primary-sm" data-close-course-dialog>Cancel</button>
+                <button type="submit" class="btn-primary btn-primary-sm">Add course</button>
+            </div>
         </form>
-    </section>
-</div>
+    </div>
+</dialog>
+
+<dialog class="coord-dialog" id="edit-course-dialog" aria-labelledby="edit-course-title">
+    <div class="coord-dialog__head">
+        <h2 class="coord-dialog__title" id="edit-course-title">Edit course</h2>
+        <button type="button" class="coord-dialog__close" data-close-course-dialog aria-label="Close">✕</button>
+    </div>
+    <div class="coord-dialog__body">
+        <form method="post" class="mt-4" novalidate data-edit-course-form>
+            {% csrf_token %}
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-examiq-slate mb-1" for="edit-course-code">Course code*</label>
+                <input type="text" name="code" id="edit-course-code" data-edit-field="code" maxlength="20" placeholder="e.g. MATH101" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-examiq-slate mb-1" for="edit-course-name">Course title*</label>
+                <input type="text" name="name" id="edit-course-name" data-edit-field="name" maxlength="200" placeholder="e.g. College Algebra" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-examiq-slate mb-1" for="edit-course-year">Year level*</label>
+                <select name="year_level" id="edit-course-year" data-edit-field="year_level" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+                    {% for year_level in year_levels %}
+                    <option value="{{ year_level.pk }}">{{ year_level.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-examiq-slate mb-1" for="edit-course-semester">Semester*</label>
+                <select name="semester" id="edit-course-semester" data-edit-field="semester" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+                    {% for value, label in semester_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="coord-dialog__actions">
+                <button type="button" class="btn-secondary btn-primary-sm" data-close-course-dialog>Cancel</button>
+                <button type="submit" class="btn-primary btn-primary-sm">Save changes</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/course-dialog.js' %}"></script>
 {% endblock %}

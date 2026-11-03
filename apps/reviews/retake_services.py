@@ -42,9 +42,12 @@ def requires_action_plan(
     subject=None,
     difficulty: str = "",
 ) -> bool:
-    return completed_attempt_count(
-        student, course=course, subject=subject, difficulty=difficulty
-    ) >= retake_threshold()
+    return (
+        completed_attempt_count(
+            student, course=course, subject=subject, difficulty=difficulty
+        )
+        >= retake_threshold()
+    )
 
 
 def build_action_plan_payload(student, *, course=None, subject=None) -> dict:
@@ -88,7 +91,9 @@ def build_action_plan_payload(student, *, course=None, subject=None) -> dict:
                 {
                     "question_id": q.pk,
                     "stem": q.stem[:120],
-                    "steps": list(q.explanation_steps.values_list("content", flat=True)),
+                    "steps": list(
+                        q.explanation_steps.values_list("content", flat=True)
+                    ),
                 }
             )
     return {

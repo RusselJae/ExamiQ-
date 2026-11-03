@@ -4,107 +4,137 @@
 {% block title %}Content Management - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Content Management" subtitle="Upload files to a BSEd Mathematics course. Format is detected automatically." %}
-
-<div class="materials-hub">
-    <section class="materials-upload bento-card" aria-label="Upload files to a course">
-        <form method="post"
-              action="{% if upload_url %}{{ upload_url }}{% else %}#{% endif %}"
-              enctype="multipart/form-data"
-              class="materials-upload__form"
-              id="materials-hub-upload-form"
-              data-materials-upload
-              {% if not hub_subject_selected %}aria-disabled="true"{% endif %}>
-            {% csrf_token %}
-            <input type="hidden" name="hub_return" value="1">
-            {% if selected_subject_pk %}
-            <input type="hidden" name="subject_id" value="{{ selected_subject_pk }}">
-            {% endif %}
-
-            <div class="materials-hub-upload-row">
-                <div class="materials-field materials-field--course">
-                    <label for="hub-subject-search" class="materials-field__label">Course</label>
-                    <div
-                        class="searchable-select searchable-select--batch"
-                        data-searchable-select
-                        data-navigate-url="{% url 'analytics_professor:materials_hub' %}?subject={id}"
-                        data-navigate-clear="{% url 'analytics_professor:materials_hub' %}"
-                    >
-                        <input type="hidden" id="hub-subject-filter" value="{% if selected_subject_pk %}{{ selected_subject_pk }}{% endif %}">
-                        <button type="button" class="searchable-select__trigger materials-course-trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-subject-search">
-                            <span class="searchable-select__value{% if not selected_subject_pk %} is-placeholder{% endif %}">
-                                {% if selected_subject_pk %}
-                                    {% for opt in subject_options %}
-                                        {% if opt.subject.pk == selected_subject_pk %}{{ opt.label }}{% endif %}
-                                    {% endfor %}
-                                {% else %}
-                                    Search or select a course…
-                                {% endif %}
-                            </span>
-                            <span class="searchable-select__chevron" aria-hidden="true">▾</span>
-                        </button>
-                        <div class="searchable-select__panel hidden" role="presentation">
-                            <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
-                            <ul class="searchable-select__list" role="listbox" aria-label="Courses">
-                                <li class="searchable-select__option{% if not selected_subject_pk %} is-selected{% endif %}"
-                                    role="option"
-                                    data-value=""
-                                    data-label="Search or select a course…"
-                                    data-search="">
-                                    Clear selection
-                                </li>
-                                {% for opt in subject_options %}
-                                <li class="searchable-select__option{% if selected_subject_pk == opt.subject.pk %} is-selected{% endif %}"
-                                    role="option"
-                                    data-value="{{ opt.subject.pk }}"
-                                    data-label="{{ opt.label }}"
-                                    data-search="{{ opt.label|lower }}">
-                                    {{ opt.label }}
-                                </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="materials-field materials-field--file">
-                <p class="materials-field__helper materials-field__helper--muted">Supported: TXT, MD, CSV, PDF, DOCX.</p>
-                <div class="materials-dropzone{% if not hub_subject_selected %} is-disabled{% endif %}" data-dropzone>
-                    <span class="materials-dropzone__icon" aria-hidden="true">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-                    </span>
-                    <span class="materials-dropzone__text">
-                        <strong>Drag files here to upload</strong>
-                        <span data-file-name>or browse from your device</span>
-                    </span>
-                    <span class="materials-dropzone__actions">
-                        <label class="materials-dropzone__choose" for="material-file">Choose files</label>
-                        <button type="submit" class="btn-primary materials-dropzone__upload"
-                                data-upload-submit
-                                {% if not hub_subject_selected %}disabled{% endif %}>
-                            Upload
-                        </button>
-                    </span>
-                    <input id="material-file" name="source_file" type="file" accept=".txt,.md,.csv,.pdf,.docx" class="sr-only"
-                           {% if hub_subject_selected %}required{% else %}disabled{% endif %}>
-                    <input type="hidden" name="original_name" id="material-original-name" data-original-name value="">
-                </div>
-                </div>
+<div class="overview-header mb-6">
+    <div class="overview-header__main">
+        <div class="overview-header__copy">
+            <h1 class="overview-title">Content</h1>
+        </div>
+        <div class="overview-header__aside">
+            <div class="page-header-actions">
+                <button type="button"
+                        class="materials-add-btn"
+                        data-content-modal="add"
+                        title="{% if hub_subject_selected %}Add content{% else %}Select a course first{% endif %}"
+                        {% if not hub_subject_selected %}disabled{% endif %}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Add content
+                </button>
             </div>
-            </form>
-    </section>
+        </div>
+    </div>
+</div>
 
-    {% if hub_subject_selected %}
-    {% include "components/materials_library.html" with documents=documents library_count=library_count ext_counts=ext_counts include_archived=include_archived course=course faculty_mode=True hub_subject_pk=selected_subject_pk %}
-    {% else %}
-    <section class="materials-library bento-card">
-        <p class="materials-library__empty">Select a course above to see its library.</p>
+{# Course picker #}
+<div class="hub-toolbar">
+    <div class="materials-field materials-field--course">
+        <label for="hub-subject-search" class="materials-field__label">Course</label>
+        <div
+            class="searchable-select searchable-select--batch"
+            data-searchable-select
+            data-navigate-url="{% url 'analytics_professor:materials_hub' %}?subject={id}"
+            data-navigate-clear="{% url 'analytics_professor:materials_hub' %}"
+        >
+            <input type="hidden" id="hub-subject-filter" value="{% if selected_subject_pk %}{{ selected_subject_pk }}{% endif %}">
+            <button type="button" class="searchable-select__trigger materials-course-trigger" aria-haspopup="listbox" aria-expanded="false" id="hub-subject-search">
+                <span class="searchable-select__value{% if not selected_subject_pk %} is-placeholder{% endif %}">
+                    {% if selected_subject_pk %}
+                    {% for opt in subject_options %}
+                        {% if opt.subject.pk == selected_subject_pk %}{{ opt.label }}{% endif %}
+                    {% endfor %}
+                    {% else %}
+                        Search or select a course…
+                    {% endif %}
+                </span>
+                <span class="searchable-select__chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="searchable-select__panel hidden" role="presentation">
+                <input type="search" class="searchable-select__search" placeholder="Search code or name…" autocomplete="off">
+                <ul class="searchable-select__list" role="listbox" aria-label="Courses">
+                    <li class="searchable-select__option{% if not selected_subject_pk %} is-selected{% endif %}"
+                        role="option"
+                        data-value=""
+                        data-label="Search or select a course…"
+                        data-search="">
+                        Clear selection
+                    </li>
+                    {% for opt in subject_options %}
+                    <li class="searchable-select__option{% if selected_subject_pk == opt.subject.pk %} is-selected{% endif %}"
+                        role="option"
+                        data-value="{{ opt.subject.pk }}"
+                        data-label="{{ opt.label }}"
+                        data-search="{{ opt.label|lower }}">
+                        {{ opt.label }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if hub_subject_selected %}
+    {# Selected course: its library. #}
+    <div class="materials-page">
+        {% include "components/materials_library.html" with documents=documents library_count=library_count ext_counts=ext_counts include_archived=include_archived course=course faculty_mode=True hub_subject_pk=selected_subject_pk %}
+    </div>
+{% else %}
+    {# No course picked yet: explain the flow, then list the professor's courses. #}
+    <div class="hub-empty">
+        <span class="hub-empty__icon" aria-hidden="true">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path d="M14 2v6h6"/>
+                <circle cx="11.5" cy="14.5" r="3.5"/>
+                <path d="m13.5 16.5 3 3"/>
+            </svg>
+        </span>
+        <h2 class="hub-empty__title">Pick a course to see its content</h2>
+        <p class="hub-empty__body">Each course has its own library of files. Choose one below to view, upload, and organize its content.</p>
+    </div>
+
+    {% if subject_options %}
+    <section aria-labelledby="hub-courses-heading">
+        <h2 id="hub-courses-heading" class="hub-section-title">Your courses</h2>
+        <div class="hub-course-grid">
+            {% for opt in subject_options %}
+            <a class="hub-course-card" href="{% url 'analytics_professor:material_list' opt.course.pk %}">
+                <span class="hub-course-card__badge">{{ opt.subject.code }}</span>
+                <span class="hub-course-card__name">{{ opt.subject.name }}</span>
+                <span class="hub-course-card__meta">{% if opt.doc_count %}{{ opt.doc_count }} file{{ opt.doc_count|pluralize }}{% else %}No files yet{% endif %}</span>
+                <span class="hub-course-card__cta">
+                    Open content library
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </span>
+            </a>
+            {% endfor %}
+        </div>
     </section>
     {% endif %}
+{% endif %}
+
+{# Add content modal — posts to the upload endpoint, then returns to this hub. #}
+{% include "components/content_modal.html" with modal_id="content-modal-add" modal_mode="add" modal_title="Add content" modal_style="Material style" modal_action_label="Upload" subject_id=selected_subject_pk|default:"" hub_return="1" form_action=upload_url|default:"" subject_options=subject_options %}
+
+{# Edit content modal — populated from the library Edit buttons. #}
+{% include "components/content_modal.html" with modal_id="content-modal-edit" modal_mode="edit" modal_title="Edit content" modal_action_label="Save" return_to="hub" subject_options=subject_options %}
+
+{# Full-screen host for AI batch generate from a material. #}
+{% if hub_subject_selected %}
+<div id="batch-host-modal" class="question-modal batch-host-modal hidden" role="dialog" aria-modal="true" aria-label="Add questions — Draft batch">
+    <div class="question-modal__backdrop" data-dismiss-batch></div>
+    <div class="question-modal__panel">
+        <iframe class="batch-modal__frame" data-batch-frame title="Add questions — Draft batch" src="about:blank"></iframe>
+    </div>
 </div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/searchable-select.js' %}"></script>
 <script src="{% static 'js/materials-library.js' %}"></script>
+<script src="{% static 'js/content-modal.js' %}"></script>
+<script src="{% static 'js/question-modal.js' %}"></script>
 {% endblock %}

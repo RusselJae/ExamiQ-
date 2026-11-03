@@ -5,7 +5,6 @@ from django.db.models import Q
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("reviews", "0004_answer_confidence_1_to_5"),
         ("questions", "0006_curriculum_hierarchy"),

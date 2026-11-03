@@ -168,10 +168,10 @@
     }
 
     /**
-     * "AI decides" is an exclusive shortcut beside the band pills: it selects
-     * every band at once so the generated questions land across the whole
-     * difficulty range and each one keeps its model-assigned difficulty.
-     * Clicking any band pill hands control back to the faculty member.
+     * "AI decides" is an exclusive shortcut beside the band pills: it clears
+     * every band so the difficulty stays undecided and the model assigns each
+     * generated question its own level. Clicking any band pill hands control
+     * back to the faculty member.
      */
     function initDifficultyAuto(root) {
         (root || document).querySelectorAll("[data-difficulty-auto]").forEach(function (autoBtn) {
@@ -186,10 +186,10 @@
                 function (pill) { return pill !== autoBtn; }
             );
 
-            function syncSelect() {
+            function syncSelect(autoOn) {
                 if (!select) return;
                 Array.prototype.forEach.call(select.options, function (opt) {
-                    opt.selected = true;
+                    opt.selected = autoOn ? opt.value === "auto" : false;
                 });
                 select.dispatchEvent(new Event("change", { bubbles: true }));
             }
@@ -198,10 +198,10 @@
                 autoBtn.classList.toggle("is-selected", on);
                 autoBtn.setAttribute("aria-pressed", on ? "true" : "false");
                 bandPills.forEach(function (pill) {
-                    pill.classList.toggle("is-selected", on);
-                    pill.setAttribute("aria-pressed", on ? "true" : "false");
+                    pill.classList.remove("is-selected");
+                    pill.setAttribute("aria-pressed", "false");
                 });
-                syncSelect();
+                syncSelect(on);
             }
 
             autoBtn.addEventListener("click", function () {

@@ -20,7 +20,11 @@ STUDENT_PRE_SECTIONS = [
     (
         "Section 1 — Profile and Context",
         [
-            ("MC", "What year level are you in?", "1st year | 2nd year | 3rd year | 4th year"),
+            (
+                "MC",
+                "What year level are you in?",
+                "1st year | 2nd year | 3rd year | 4th year",
+            ),
             (
                 "MC",
                 "Which math subjects are you currently enrolled in?",
@@ -96,7 +100,11 @@ STUDENT_PRE_SECTIONS = [
     (
         "Section 3 — Calibration and Metacognition (Pre-Study)",
         [
-            ("Likert", "I am aware of how confidence affects my learning.", "Core thesis item (pre)."),
+            (
+                "Likert",
+                "I am aware of how confidence affects my learning.",
+                "Core thesis item (pre).",
+            ),
             (
                 "Likert",
                 "Before answering, I can usually tell whether I truly know a solution or I am guessing.",
@@ -112,8 +120,16 @@ STUDENT_PRE_SECTIONS = [
                 "Rating or reflecting on confidence after each answer helps me study better.",
                 "Core thesis item (pre).",
             ),
-            ("Likert", "I would recommend ExamiQ to classmates.", "Core thesis item (pre)."),
-            ("Open", "Optional comments before using ExamiQ.", "Core thesis open feedback (pre)."),
+            (
+                "Likert",
+                "I would recommend ExamiQ to classmates.",
+                "Core thesis item (pre).",
+            ),
+            (
+                "Open",
+                "Optional comments before using ExamiQ.",
+                "Core thesis open feedback (pre).",
+            ),
         ],
     ),
 ]
@@ -197,7 +213,11 @@ STUDENT_POST_SECTIONS = [
     (
         "Section 5 — System Improvement and Edge (Post-Study)",
         [
-            ("Likert", "I would recommend ExamiQ to other BSEd Math students.", "Core thesis item (post)."),
+            (
+                "Likert",
+                "I would recommend ExamiQ to other BSEd Math students.",
+                "Core thesis item (post).",
+            ),
             (
                 "Likert",
                 "ExamiQ is more useful than our LMS quizzes because it shows learning gaps, not only scores.",
@@ -208,7 +228,11 @@ STUDENT_POST_SECTIONS = [
                 "I would use ExamiQ more if my professor assigned review windows tied to our class schedule.",
                 None,
             ),
-            ("Likert", "I trust AI-generated explanations or tutor chat for math learning.", None),
+            (
+                "Likert",
+                "I trust AI-generated explanations or tutor chat for math learning.",
+                None,
+            ),
             (
                 "Rank",
                 "Rank which new features would help you most:",
@@ -415,8 +439,14 @@ CHAIR_CLOSING_QUESTIONS = [
 ]
 
 CHAIR_EDGE_MAPPING = [
-    ("Misconception and calibration flags", "Faculty intervention list and chair program dashboard"),
-    ("Curriculum-aligned content", "BSEd Math program scoping and chair question approval"),
+    (
+        "Misconception and calibration flags",
+        "Faculty intervention list and chair program dashboard",
+    ),
+    (
+        "Curriculum-aligned content",
+        "BSEd Math program scoping and chair question approval",
+    ),
     ("Exam readiness under time pressure", "Timed exam mode with post-session summary"),
     ("Department-wide visibility", "Cross-program analytics and course audit"),
     ("Evidence for program improvement", "Anonymized research CSV export"),

@@ -5,6 +5,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Your Courses" subtitle="Monitor how your classes are performing." %}
 
+<div class="course-home-panel">
 {% if courses %}
 <div class="bento-grid">
     {% for course in courses %}
@@ -23,4 +24,5 @@
     {% include "components/empty_state.html" with title="No courses yet" body="Create a course offering to start tracking student performance." cta_url="/professor/courses/create/" cta_label="Create course offering" %}
 </div>
 {% endif %}
+</div>
 {% endblock %}

@@ -60,9 +60,7 @@ def test_faculty_chat_conversations_api(client, professor, other_professor):
     response = client.get(reverse("analytics_professor:faculty_chat_conversations_api"))
     assert response.status_code == 200
     data = response.json()
-    assert any(
-        item.get("conversation_id") == conversation.pk for item in data["items"]
-    )
+    assert any(item.get("conversation_id") == conversation.pk for item in data["items"])
 
 
 @pytest.mark.django_db

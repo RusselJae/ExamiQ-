@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('analytics', '0004_errortype_mistakerecord_error_type'),
+        ("analytics", "0004_errortype_mistakerecord_error_type"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='mistakerecord',
-            name='ai_feedback',
+            model_name="mistakerecord",
+            name="ai_feedback",
             field=models.TextField(blank=True),
         ),
     ]

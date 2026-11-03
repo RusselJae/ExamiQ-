@@ -60,7 +60,10 @@ class TestPasswordResetLimits:
         )
         assert response.status_code == 429
         assert b"Too many requests" in response.content
-        assert b"account_login" in response.content or b"sign in" in response.content.lower()
+        assert (
+            b"account_login" in response.content
+            or b"sign in" in response.content.lower()
+        )
 
     def test_cooldown_blocks_immediate_retry(self, student):
         record_password_reset_request(student.email)

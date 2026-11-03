@@ -12,6 +12,16 @@ data-explanation-selector="[data-adaptive-field]"
 data-steps-selector="[data-step-input]"
 {% endblock %}
 
+{% block editor_notices %}
+<div class="qe-draft-picker" data-draft-picker-wrap hidden>
+    <label class="qe-label" for="draft-question-picker">Draft question</label>
+    <select id="draft-question-picker"
+            class="question-modal__sidebar-select"
+            data-draft-picker
+            aria-label="Choose which draft question to edit"></select>
+</div>
+{% endblock %}
+
 {% block editor_fields %}
 <div class="bento-card bento-card--elevated qe-card">
     <div class="qe-row">
@@ -282,6 +292,33 @@ data-steps-selector="[data-step-input]"
         }
     });
 
+    /* ------------------------- draft picker --------------------------- */
+    (function initDraftPicker() {
+        var wrap = document.querySelector("[data-draft-picker-wrap]");
+        var picker = document.querySelector("[data-draft-picker]");
+        if (!wrap || !picker || !draft.questions.length) return;
+        function labelFor(item, index) {
+            var stem = String((item && item.stem) || "").replace(/\s+/g, " ").trim();
+            if (stem.length > 48) stem = stem.slice(0, 48) + "…";
+            return "Q" + (index + 1) + (stem ? " — " + stem : " — Untitled draft");
+        }
+        draft.questions.forEach(function (item, index) {
+            var option = document.createElement("option");
+            option.value = String(index);
+            option.textContent = labelFor(item, index);
+            if (index === questionIndex) option.selected = true;
+            picker.appendChild(option);
+        });
+        if (draft.questions.length < 2) return;
+        wrap.hidden = false;
+        picker.addEventListener("change", function () {
+            var next = parseInt(picker.value, 10);
+            if (Number.isNaN(next) || next === questionIndex) return;
+            var base = window.location.pathname.replace(/\/\d+\/?$/, "/");
+            window.location.href = base + next + "/" + window.location.search;
+        });
+    })();
+
     form.addEventListener("submit", function(e) {
         e.preventDefault();
         const updated = {
@@ -313,7 +350,11 @@ data-steps-selector="[data-step-input]"
             draft.questionIndex = questionIndex + 1;
         }
         window.ExamiQBatch.saveDraft(coursePk, draft);
-        window.location.href = "{% url 'analytics_professor:question_create' course.pk %}";
+        var backUrl = "{% url 'analytics_professor:question_create' course.pk %}";
+        {% if embed_mode %}
+        backUrl += "?embed=1";
+        {% endif %}
+        window.location.href = backUrl;
     });
 })();
 </script>

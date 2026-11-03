@@ -32,18 +32,26 @@ class ProfessorCourseListView(ProfessorRequiredMixin, ListView):
         )
 
     def get_context_data(self, **kwargs):
+        from apps.users.assignment_services import handled_subject_ids
+
         context = super().get_context_data(**kwargs)
-        cards = []
+        handled_ids = handled_subject_ids(self.request.user)
+        handled_cards = []
+        other_cards = []
         for subject in context["course_cards"]:
             catalog_course = get_or_create_catalog_course(self.request.user, subject)
-            cards.append(
-                {
-                    "subject": subject,
-                    "catalog_course": catalog_course,
-                    "question_count": getattr(subject, "question_count", 0),
-                }
-            )
-        context["course_cards"] = cards
+            card = {
+                "subject": subject,
+                "catalog_course": catalog_course,
+                "question_count": getattr(subject, "question_count", 0),
+            }
+            if subject.pk in handled_ids:
+                handled_cards.append(card)
+            else:
+                other_cards.append(card)
+        context["handled_course_cards"] = handled_cards
+        context["other_course_cards"] = other_cards
+        # Back-compat: full list preserved for anything iterating course_cards.
         context["year_levels"] = YearLevel.objects.order_by("order")
         context["semester_choices"] = Subject.Semester.choices
         context["assignments_managed"] = False

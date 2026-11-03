@@ -308,6 +308,18 @@ class User(AbstractUser):
         default=False,
         help_text="Archived students are hidden from faculty rosters and cannot log in.",
     )
+    is_irregular = models.BooleanField(
+        default=False,
+        help_text="Irregular student — not bound to a single cohort section.",
+    )
+    academic_year = models.ForeignKey(
+        "questions.YearLevel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="students_by_academic_year",
+        help_text="Official year standing for admin purposes (tuition, graduation).",
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []
@@ -430,6 +442,175 @@ class StudentSubject(models.Model):
 
     def __str__(self) -> str:
         return f"{self.student.email} — {self.subject.code}"
+
+
+class IrregularSubjectEnrollment(models.Model):
+    """Subjects an irregular student enrolled in for a specific term/section.
+
+    Irregular students are not bound to a single cohort section. Instead, they
+    pick one section per subject per term (which also determines their
+    professor, schedule, and exam/review access for that subject).
+    """
+
+    class Status(models.TextChoices):
+        ENROLLED = "enrolled", "Enrolled"
+        DROPPED = "dropped", "Dropped"
+        COMPLETED = "completed", "Completed"
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="irregular_enrollments",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    subject = models.ForeignKey(
+        "questions.Subject",
+        on_delete=models.CASCADE,
+        related_name="irregular_enrollments",
+    )
+    section = models.ForeignKey(
+        ProgramSection,
+        on_delete=models.CASCADE,
+        related_name="irregular_students",
+    )
+    term = models.ForeignKey(
+        "users.AcademicTerm",
+        on_delete=models.CASCADE,
+        related_name="irregular_enrollments",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ENROLLED,
+    )
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Irregular Subject Enrollment"
+        verbose_name_plural = "Irregular Subject Enrollments"
+        ordering = ["-enrolled_at"]
+        unique_together = [["student", "subject", "term"]]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.student.email} — {self.subject.code} ({self.section.display_label})"
+        )
+
+
+class StudentFacultyAssignment(models.Model):
+    """Automatic student-faculty assignment based on selected subjects and TeachingAssignment.
+
+    Replaces section-based student assignment. Students are assigned to faculty members
+    based on the subjects they are taking and the TeachingAssignment records that map
+    faculty to subjects and sections.
+    """
+
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="faculty_assignments",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    faculty = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="assigned_students",
+        limit_choices_to={"role": User.Role.PROFESSOR},
+    )
+    subject = models.ForeignKey(
+        "questions.Subject",
+        on_delete=models.CASCADE,
+        related_name="student_faculty_assignments",
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.PROTECT,
+        related_name="student_faculty_assignments",
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Student Faculty Assignment"
+        verbose_name_plural = "Student Faculty Assignments"
+        ordering = ["-assigned_at"]
+        unique_together = [["student", "faculty", "subject", "academic_year"]]
+        indexes = [
+            models.Index(fields=["student", "academic_year"]),
+            models.Index(fields=["faculty", "academic_year"]),
+            models.Index(fields=["subject", "academic_year"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student.email} → {self.faculty.email} ({self.subject.code})"
+
+
+class PendingStudentRegistration(models.Model):
+    """Coordinator-registered student number awaiting a real signup.
+
+    The coordinator records student numbers first ("add account" with just
+    the number). Signup is gated on these: a student number that is not here
+    cannot complete registration, and the coordinator sees only the number
+    until the real account claims it.
+    """
+
+    student_number = models.CharField(max_length=9, unique=True)
+    claimed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_registration",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="added_student_registrations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Pending Student Registration"
+        verbose_name_plural = "Pending Student Registrations"
+        ordering = ["student_number"]
+
+    def __str__(self) -> str:
+        return f"{self.student_number} (unclaimed)"
+
+
+class CorUpload(models.Model):
+    """Certificate of Registration an irregular student uploaded at signup.
+
+    Kept as evidence for the detected subjects; the extracted rows stay in
+    ``detected_json`` for coordinator review.
+    """
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cor_uploads",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    file = models.FileField(upload_to="cor/%Y/%m/")
+    term = models.ForeignKey(
+        "users.AcademicTerm",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cor_uploads",
+    )
+    detected_json = models.JSONField(blank=True, default=list)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "COR Upload"
+        verbose_name_plural = "COR Uploads"
+        ordering = ["-uploaded_at"]
+
+    def __str__(self) -> str:
+        return f"COR {self.student.email} ({self.uploaded_at:%Y-%m-%d})"
 
 
 class TeachingAssignment(models.Model):

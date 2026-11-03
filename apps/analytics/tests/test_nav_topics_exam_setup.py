@@ -60,8 +60,8 @@ class TestCourseTopicScope:
         content = response.content.decode()
         assert "OPEN-1" in content
         assert "Course" in content
-        assert "course-subjects-table" in content
-        assert "Questions" in content
+        assert "Other subjects" in content
+        assert "question" in content
         assert "Saved Questions" not in content or "Open" in content
         course = get_or_create_catalog_course(professor, subject)
         topics = client.get(

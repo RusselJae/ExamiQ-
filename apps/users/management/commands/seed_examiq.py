@@ -6,10 +6,25 @@ from django.utils import timezone
 
 from apps.analytics.models import ErrorType, MistakeRecord
 from apps.analytics.services import log_mistake
-from apps.questions.models import ExplanationStep, Question, QuestionChoice, Subject, Topic, YearLevel
+from apps.questions.models import (
+    ExplanationStep,
+    Question,
+    QuestionChoice,
+    Subject,
+    Topic,
+    YearLevel,
+)
 from apps.reviews.models import Answer, ReviewSession, ReviewWindow
 from apps.reviews.services import complete_session, start_review_session
-from apps.users.models import AcademicTerm, AcademicYear, Course, Department, Program, ProgramSection, User
+from apps.users.models import (
+    AcademicTerm,
+    AcademicYear,
+    Course,
+    Department,
+    Program,
+    ProgramSection,
+    User,
+)
 
 # BSEd Mathematics curriculum: (year_order, semester 1/2/3, code, title)
 # Semester 3 = Midyear. Empty year/term blocks are omitted.
@@ -62,8 +77,12 @@ class Command(BaseCommand):
         self._cleanup_non_bsed_demo_data()
 
         year_levels = {}
-        for order, name in enumerate(["1st Year", "2nd Year", "3rd Year", "4th Year"], start=1):
-            yl, _ = YearLevel.objects.get_or_create(order=order, defaults={"name": name})
+        for order, name in enumerate(
+            ["1st Year", "2nd Year", "3rd Year", "4th Year"], start=1
+        ):
+            yl, _ = YearLevel.objects.get_or_create(
+                order=order, defaults={"name": name}
+            )
             year_levels[order] = yl
 
         academic_year, _ = AcademicYear.objects.get_or_create(
@@ -90,7 +109,9 @@ class Command(BaseCommand):
             if term.semester != semester:
                 term.semester = semester
                 term.save(update_fields=["semester"])
-        AcademicTerm.objects.filter(academic_year=academic_year).update(is_current=False)
+        AcademicTerm.objects.filter(academic_year=academic_year).update(
+            is_current=False
+        )
         AcademicTerm.objects.filter(
             academic_year=academic_year,
             name="1st Semester",
@@ -204,6 +225,7 @@ class Command(BaseCommand):
             students.append(student)
 
         topics = self._seed_curriculum(program, year_levels)
+        self._seed_teaching_assignments(program, academic_year, professor)
         self._seed_error_types()
         self._seed_questions(topics, professor)
         self._seed_review_window(primary_course, professor, topics)
@@ -262,7 +284,9 @@ class Command(BaseCommand):
 
     def _cleanup_non_bsed_demo_data(self):
         """Remove demo accounts/courses outside BSEd Math so seed stays focused."""
-        keep_emails = {FACULTY_EMAIL, "admin@examiq.edu"} | {email for email, _, _ in BSED_STUDENTS}
+        keep_emails = {FACULTY_EMAIL, "admin@examiq.edu"} | {
+            email for email, _, _ in BSED_STUDENTS
+        }
         User.objects.filter(
             role__in=[
                 User.Role.STUDENT,
@@ -275,8 +299,12 @@ class Command(BaseCommand):
         if bsed:
             Course.objects.exclude(program=bsed).delete()
             # Drop non-curriculum leftover offerings from older seeds
-            curriculum_codes = {code for _, _, code, _ in BSED_MATH_CURRICULUM} | {"BSEM 22"}
-            Course.objects.filter(program=bsed).exclude(code__in=curriculum_codes).delete()
+            curriculum_codes = {code for _, _, code, _ in BSED_MATH_CURRICULUM} | {
+                "BSEM 22"
+            }
+            Course.objects.filter(program=bsed).exclude(
+                code__in=curriculum_codes
+            ).delete()
             Program.objects.exclude(pk=bsed.pk).delete()
         Department.objects.exclude(name="College of Education").filter(
             managed_programs__isnull=True,
@@ -300,6 +328,48 @@ class Command(BaseCommand):
             topics[f"bsed_math:{code}"] = topic
             topics[f"bsed_math:{title}"] = topic
         return topics
+
+    def _seed_teaching_assignments(self, program, academic_year, professor):
+        """Give every curriculum subject a teaching assignment for the demo faculty.
+
+        Guarantees the signup faculty picker always has at least one option
+        per subject (enrolled/capacity load included), for both regular
+        (year-level scope) and irregular (course-checkbox scope) students.
+        """
+        from apps.users.models import AcademicTerm, ProgramSection, TeachingAssignment
+
+        terms = {
+            t.semester: t
+            for t in AcademicTerm.objects.filter(academic_year=academic_year)
+        }
+        # Subject.semester uses 1/2/3; AcademicTerm.Semester uses the same ints.
+        created = 0
+        for year_order, semester, code, _title in BSED_MATH_CURRICULUM:
+            subject = Subject.objects.filter(program=program, code=code).first()
+            term = terms.get(semester)
+            if subject is None or term is None:
+                continue
+            section = (
+                ProgramSection.objects.filter(
+                    program=program,
+                    year_level=subject.year_level,
+                    academic_year=academic_year,
+                    is_active=True,
+                )
+                .order_by("label")
+                .first()
+            )
+            if section is None:
+                continue
+            _, was_created = TeachingAssignment.objects.get_or_create(
+                professor=professor,
+                program_section=section,
+                subject=subject,
+                term=term,
+            )
+            created += 1 if was_created else 0
+        if created:
+            self.stdout.write(f"Seeded {created} teaching assignment(s).")
 
     def _seed_error_types(self):
         for slug, label, category in [
@@ -508,7 +578,9 @@ class Command(BaseCommand):
             )
             record.save(update_fields=["student_note", "ai_feedback"])
 
-    def _create_demo_session(self, student, course, topic, difficulty, days_ago, answers_spec):
+    def _create_demo_session(
+        self, student, course, topic, difficulty, days_ago, answers_spec
+    ):
         started = timezone.now() - timedelta(days=days_ago)
         if ReviewSession.objects.filter(
             student=student,
@@ -542,7 +614,9 @@ class Command(BaseCommand):
         ReviewSession.objects.filter(pk=session.pk).update(started_at=started)
         session.refresh_from_db()
 
-        for index, (confidence, is_correct) in enumerate(answers_spec[: len(questions)]):
+        for index, (confidence, is_correct) in enumerate(
+            answers_spec[: len(questions)]
+        ):
             question = questions[index]
             choice = (
                 question.choices.filter(is_correct=True).first()

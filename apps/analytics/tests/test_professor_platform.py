@@ -730,7 +730,7 @@ class TestCourseInsights:
         assert response.status_code == 200
         content = response.content.decode()
         assert course.code in content
-        assert "Enrolled students" in content
+        assert "Question Breakdown" in content
 
     def test_summary_generate_endpoint(self, client, professor, program):
         course = Course.objects.create(
@@ -768,6 +768,16 @@ class TestProfessorOverviewSummary:
         # the faculty profile: assigned sections + assigned subjects.
         professor.assigned_sections.add(program_section)
         professor.assigned_subjects.add(question.topic.subject)
+        from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+        year = AcademicYear.get_current()
+        assert year is not None
+        StudentFacultyAssignment.objects.create(
+            student=student,
+            faculty=professor,
+            subject=question.topic.subject,
+            academic_year=year,
+        )
         course = Course.objects.create(
             program=bsed_program,
             code="AVG101",
@@ -807,15 +817,18 @@ class TestProfessorOverviewSummary:
 @pytest.mark.django_db
 class TestProfessorHighMistakeQuestions:
     def test_filters_by_threshold(
-        self, professor, bsed_program, mcq_question, settings
+        self, professor, bsed_program, mcq_question, settings, academic_year
     ):
         from apps.analytics.models import MistakeRecord
         from apps.analytics.services import professor_high_mistake_questions
         from apps.reviews.models import Answer, ReviewSession
-        from apps.users.models import User
+        from apps.users.models import AcademicYear, StudentFacultyAssignment, User
 
         settings.QUESTION_MISTAKE_STUDENT_THRESHOLD = 2
         question, _ = mcq_question
+
+        year = AcademicYear.get_current() or academic_year
+        assert year is not None
         course = Course.objects.create(
             program=bsed_program,
             code="HM101",
@@ -830,6 +843,12 @@ class TestProfessorHighMistakeQuestions:
             )
             make_bsed_student(
                 student, subject=question.topic.subject, bsed_program=bsed_program
+            )
+            StudentFacultyAssignment.objects.create(
+                student=student,
+                faculty=professor,
+                subject=question.topic.subject,
+                academic_year=year,
             )
             session = ReviewSession.objects.create(
                 student=student,
@@ -862,14 +881,16 @@ class TestProfessorHighMistakeQuestions:
 @pytest.mark.django_db
 class TestProfessorMistakeTrend:
     def test_trend_buckets_mistakes_and_exam_takers(
-        self, professor, bsed_program, mcq_question
+        self, professor, bsed_program, mcq_question, academic_year
     ):
         from apps.analytics.models import MistakeRecord
         from apps.analytics.services import professor_overview_trends
         from apps.reviews.models import Answer, ReviewSession
-        from apps.users.models import User
+        from apps.users.models import AcademicYear, StudentFacultyAssignment, User
 
         question, _ = mcq_question
+        year = AcademicYear.get_current() or academic_year
+        assert year is not None
         course = Course.objects.create(
             program=bsed_program,
             code="MT201",
@@ -883,6 +904,12 @@ class TestProfessorMistakeTrend:
         )
         make_bsed_student(
             student, subject=question.topic.subject, bsed_program=bsed_program
+        )
+        StudentFacultyAssignment.objects.create(
+            student=student,
+            faculty=professor,
+            subject=question.topic.subject,
+            academic_year=year,
         )
         session = ReviewSession.objects.create(
             student=student,
@@ -1057,7 +1084,13 @@ class TestProfessorOverviewTrends:
         assert summary["expected_students"] >= 1
 
     def test_overview_summary_includes_students_by_year_level(
-        self, professor, student, year_level, bsed_program, mcq_question, program_section
+        self,
+        professor,
+        student,
+        year_level,
+        bsed_program,
+        mcq_question,
+        program_section,
     ):
         from apps.analytics.services import professor_overview_summary
         from apps.questions.models import YearLevel
@@ -1094,6 +1127,17 @@ class TestProfessorOverviewTrends:
         # subject), the same scope the Students table uses.
         professor.assigned_sections.add(program_section)
         professor.assigned_subjects.add(question.topic.subject)
+        from apps.users.models import AcademicYear as _AcademicYear
+        from apps.users.models import StudentFacultyAssignment as _SFA
+
+        _year = _AcademicYear.get_current()
+        assert _year is not None
+        _SFA.objects.create(
+            student=student,
+            faculty=professor,
+            subject=question.topic.subject,
+            academic_year=_year,
+        )
         ReviewSession.objects.create(
             student=student,
             course=course,
@@ -1166,6 +1210,17 @@ class TestProfessorOverviewTrends:
         # subject), the same scope the Students table uses.
         professor.assigned_sections.add(program_section)
         professor.assigned_subjects.add(question.topic.subject)
+        from apps.users.models import AcademicYear as _AcademicYear2
+        from apps.users.models import StudentFacultyAssignment as _SFA2
+
+        _year2 = _AcademicYear2.get_current()
+        assert _year2 is not None
+        _SFA2.objects.create(
+            student=student,
+            faculty=professor,
+            subject=question.topic.subject,
+            academic_year=_year2,
+        )
         ReviewSession.objects.create(
             student=student,
             course=course,
@@ -1368,6 +1423,7 @@ class TestSessionHistoryHelpers:
         program,
         program_section,
         department,
+        academic_year,
     ):
         """New faculty with section/subject profile can open roster students."""
         question, _correct = mcq_question
@@ -1397,6 +1453,16 @@ class TestSessionHistoryHelpers:
         professor.assigned_subjects.add(question.topic.subject)
         student.section = program_section
         student.save(update_fields=["section"])
+        from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+        year = AcademicYear.get_current() or academic_year
+        assert year is not None
+        StudentFacultyAssignment.objects.create(
+            student=student,
+            faculty=professor,
+            subject=question.topic.subject,
+            academic_year=year,
+        )
 
         client.force_login(professor)
         response = client.get(

@@ -7,6 +7,8 @@ from apps.users.models import User
 
 
 @receiver(post_save, sender=User)
-def notify_on_pending_staff_registration(sender, instance: User, created: bool, **kwargs):
+def notify_on_pending_staff_registration(
+    sender, instance: User, created: bool, **kwargs
+):
     """No-op: faculty are auto-approved; Campus Admin approval flow removed."""
     return

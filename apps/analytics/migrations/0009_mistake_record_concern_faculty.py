@@ -5,16 +5,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('analytics', '0008_mistake_concern_messages'),
+        ("analytics", "0008_mistake_concern_messages"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='mistakerecord',
-            name='concern_faculty',
-            field=models.ManyToManyField(blank=True, limit_choices_to={'role': 'professor'}, related_name='concern_mistake_records', to=settings.AUTH_USER_MODEL),
+            model_name="mistakerecord",
+            name="concern_faculty",
+            field=models.ManyToManyField(
+                blank=True,
+                limit_choices_to={"role": "professor"},
+                related_name="concern_mistake_records",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
     ]

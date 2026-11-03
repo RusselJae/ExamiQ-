@@ -1,16 +1,132 @@
 {% extends "base.html" %}
+{% load static examiq_tags %}
 
 {% block title %}Session History - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Session History" subtitle="Review your past practice sessions and track improvement." %}
+{% include "components/page_header.html" with title="Session History" subtitle="Every practice session: how you felt and how you scored." %}
+
+<div class="student-panel">
+<div class="session-history-kpis">
+    <div class="session-history-kpi">
+        <p class="session-history-kpi__label">Sessions</p>
+        <p class="session-history-kpi__value">{{ history_session_count }}</p>
+        <p class="session-history-kpi__sub">Since {{ request.user.date_joined|date:"M d" }}</p>
+    </div>
+    <div class="session-history-kpi">
+        <p class="session-history-kpi__label">Average score</p>
+        <p class="session-history-kpi__value">{{ history_avg_accuracy }}%</p>
+        <p class="session-history-kpi__sub">Across all sessions</p>
+    </div>
+    <div class="session-history-kpi">
+        <p class="session-history-kpi__label">Needs review</p>
+        <p class="session-history-kpi__value">{{ history_needs_review }}</p>
+        <p class="session-history-kpi__sub">Open in Action Plan</p>
+    </div>
+</div>
 
 <div class="bento-grid">
-    {% include "components/filter_bar.html" %}
-
-    {% if session_history_rows %}
     <div class="span-full">
-        {% include "components/session_history_table.html" %}
+        <div class="filter-bar-card">
+        <form method="get" class="filter-bar" role="search" data-filter-bar data-auto-filter-form aria-label="Filter sessions">
+            <div class="filter-bar__search-row">
+                <div class="filter-bar__search-box">
+                    <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                    <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Topic name" aria-label="Topic name" class="filter-bar__input filter-bar__input--search">
+                    <details class="filter-bar__picker" data-filter-picker{% if filter_has_active %} open{% endif %}>
+                        <summary class="filter-bar__toggle" aria-label="Open filters">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M7 12h10M11 18h2"/></svg>
+                            Filter
+                        </summary>
+                        <div class="filter-bar__panel" data-filter-panel>
+                            <div class="filter-bar__grid">
+                                <label class="filter-bar__field">
+                                    <span class="filter-bar__label">Difficulty</span>
+                                    <select name="difficulty" data-auto-filter aria-label="Difficulty" class="filter-bar__select">
+                                        <option value="">All difficulties</option>
+                                        {% for value, label in difficulty_choices %}
+                                        <option value="{{ value }}" {% if request.GET.difficulty == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label class="filter-bar__field">
+                                    <span class="filter-bar__label">Status</span>
+                                    <select name="status" data-auto-filter aria-label="Status" class="filter-bar__select">
+                                        <option value="">All statuses</option>
+                                        <option value="completed" {% if request.GET.status == "completed" %}selected{% endif %}>Completed</option>
+                                        <option value="expired" {% if request.GET.status == "expired" %}selected{% endif %}>Expired</option>
+                                    </select>
+                                </label>
+                                <label class="filter-bar__field">
+                                    <span class="filter-bar__label">Order</span>
+                                    <select name="sort" data-auto-filter aria-label="Order" class="filter-bar__select">
+                                        <option value="">Newest first</option>
+                                        <option value="oldest" {% if request.GET.sort == "oldest" %}selected{% endif %}>Oldest first</option>
+                                    </select>
+                                </label>
+                                <div class="filter-bar__field">
+                                    <span class="filter-bar__label">Completed between</span>
+                                    <div class="filter-bar__dates">
+                                        <label class="sr-only" for="session-date-from">From date</label>
+                                        <input type="date" id="session-date-from" name="date_from" value="{{ request.GET.date_from }}" data-auto-filter aria-label="From date" class="filter-bar__input">
+                                        <span aria-hidden="true">–</span>
+                                        <label class="sr-only" for="session-date-to">To date</label>
+                                        <input type="date" id="session-date-to" name="date_to" value="{{ request.GET.date_to }}" data-auto-filter aria-label="To date" class="filter-bar__input">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="filter-bar__actions">
+                                {% if filter_has_active %}
+                                <a href="{{ request.path }}" class="filter-bar__reset">Reset</a>
+                                {% endif %}
+                                <span class="text-xs text-examiq-slate">Filters apply instantly</span>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </form>
+        </div>
+    </div>
+
+    {% if session_month_groups %}
+    <div class="span-full">
+        {% for group in session_month_groups %}
+        <h2 class="session-month-heading">{{ group.label }} <span>· {{ group.count }} session{{ group.count|pluralize }}</span></h2>
+        <ul class="session-month-list">
+            {% for row in group.rows %}
+            <li class="session-month-card">
+                <div class="session-month-date" aria-hidden="true">
+                    <span class="session-month-date__month">{{ row.date|date:"M" }}</span>
+                    <span class="session-month-date__day">{{ row.date|date:"d" }}</span>
+                    <span class="session-month-date__year">{{ row.date|date:"Y" }}</span>
+                </div>
+                <div class="session-month-main">
+                    <p class="session-month-subjects">
+                        {{ row.subjects_taken_count }} subject{{ row.subjects_taken_count|pluralize }}
+                        <span class="session-month-year">{{ row.date|date:"Y" }}</span>
+                    </p>
+                    <p class="session-month-topic">{{ row.topic_name }}</p>
+                </div>
+                <span class="confidence-tier-badge confidence-tier-badge--{{ row.avg_confidence|confidence_tier_key }}">{{ row.confidence_label }}</span>
+                <div class="session-month-score">
+                    <span class="session-month-fraction">{{ row.score_display }}</span>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill {% if row.accuracy >= 70 %}progress-bar-fill--good{% elif row.accuracy >= 50 %}progress-bar-fill--warning{% else %}progress-bar-fill--mistake{% endif %}"
+                             style="width: {{ row.accuracy }}%"></div>
+                    </div>
+                    <span class="session-month-pct {% if row.accuracy < 50 %}stat-value-mistake{% elif row.accuracy < 70 %}stat-value-warning{% else %}stat-value-good{% endif %}">{{ row.accuracy }}%</span>
+                </div>
+                <span class="session-status-pill {% if row.status_label == 'Needs review' %}session-status-pill--review{% else %}session-status-pill--complete{% endif %}">
+                    {{ row.status_label }}
+                </span>
+                {% if row.session %}
+                <a href="{% url 'reviews:summary' row.session.pk %}" class="btn-secondary btn-primary-sm">View summary</a>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endfor %}
     </div>
 
     <div class="span-full">
@@ -26,4 +142,10 @@
     </div>
     {% endif %}
 </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/filter-bar.js' %}"></script>
+<script src="{% static 'js/filter-chips.js' %}"></script>
 {% endblock %}

@@ -127,6 +127,7 @@ class TestConfigurationGating:
     def test_disabled_when_url_unset(self, settings, docx_doc):
         settings.ONLYOFFICE_DOCUMENT_SERVER_URL = ""
         assert is_editable(docx_doc) is False
+
     @pytest.mark.django_db
     def test_enabled_for_docx_when_configured(self, office, docx_doc):
         assert is_editable(docx_doc) is True
@@ -242,7 +243,7 @@ class TestEditorConfig:
 
 
 @pytest.mark.django_db
-class TestPublicBaseUrl:
+class TestAbsoluteUrl:
     """The Document Server must not be handed a private origin."""
 
     def test_falls_back_to_request_host(self, settings):
@@ -265,7 +266,9 @@ class TestDownloadGuards:
     @pytest.mark.django_db
     def test_rejects_foreign_host(self, office, docx_doc):
         with pytest.raises(OfficeEditorError):
-            download_edited_document(docx_doc, "http://169.254.169.254/latest/meta-data/")
+            download_edited_document(
+                docx_doc, "http://169.254.169.254/latest/meta-data/"
+            )
 
     @pytest.mark.django_db
     def test_rejects_empty_url(self, office, docx_doc):
@@ -348,9 +351,7 @@ class TestSignedFileEndpoint:
             kwargs={"course_pk": course.pk, "pk": document.pk},
         )
 
-    def test_valid_token_serves_the_file(
-        self, client, course, office, docx_doc
-    ):
+    def test_valid_token_serves_the_file(self, client, course, office, docx_doc):
         url = f"{self._url(course, docx_doc)}?token={file_token(docx_doc)}"
         response = client.get(url)
         assert response.status_code == 200
@@ -389,9 +390,7 @@ class TestCallbackEndpoint:
             body["url"] = url
         return json.dumps(sign_payload(body))
 
-    def test_callback_is_exempt_from_csrf(
-        self, course, office, docx_doc, monkeypatch
-    ):
+    def test_callback_is_exempt_from_csrf(self, course, office, docx_doc, monkeypatch):
         """The Document Server posts without a CSRF token, so it must not 403.
 
         Uses a CSRF-enforcing client: the default test client skips CSRF checks,
@@ -437,9 +436,7 @@ class TestCallbackEndpoint:
 
         response = client.post(
             self._url(course, docx_doc),
-            self._payload(
-                2, "https://office.example.test/cache/files/new.docx"
-            ),
+            self._payload(2, "https://office.example.test/cache/files/new.docx"),
             content_type="application/json",
         )
         assert response.status_code == 200
@@ -469,9 +466,7 @@ class TestCallbackEndpoint:
         )
         assert response.status_code == 403
 
-    def test_rejects_foreign_download_host(
-        self, client, course, office, docx_doc
-    ):
+    def test_rejects_foreign_download_host(self, client, course, office, docx_doc):
         response = client.post(
             self._url(course, docx_doc),
             self._payload(2, "http://169.254.169.254/latest/meta-data/"),
@@ -490,9 +485,10 @@ class TestCallbackEndpoint:
 
 @pytest.mark.django_db
 class TestDetailPageIntegration:
-    def test_office_editor_is_mounted_when_enabled(
+    def test_detail_page_mounts_full_screen_edit_modal(
         self, client, professor, course, office, docx_doc
     ):
+        """The material detail page hosts the pre-filled edit dialog."""
         client.force_login(professor)
         response = client.get(
             reverse(
@@ -501,12 +497,17 @@ class TestDetailPageIntegration:
             )
         )
         content = response.content.decode()
-        assert "data-office-root" in content
-        assert "materials-office.js" in content
-        # The built-in editor stays in the DOM as the fallback.
-        assert "data-editor-form" in content
+        assert "content-modal-edit" in content
+        assert 'data-auto-open="1"' in content
+        assert "Save changes" in content
+        # No inline document editor surface is mounted anymore: the modal owns
+        # metadata editing, and replacement files go through the same dialog.
+        assert "data-editor-surface" not in content
+        assert "data-editor-toolbar" not in content
+        assert "materials-office.js" not in content
+        assert "materials-editor.js" not in content
 
-    def test_builtin_editor_used_when_disabled(
+    def test_detail_page_has_no_inline_editor_when_disabled(
         self, client, professor, course, settings, docx_doc
     ):
         settings.ONLYOFFICE_DOCUMENT_SERVER_URL = ""
@@ -518,12 +519,13 @@ class TestDetailPageIntegration:
             )
         ).content.decode()
         assert "data-office-root" not in content
-        assert "materials-editor.js" in content
+        assert "materials-editor.js" not in content
+        assert "content-modal-edit" in content
 
     def test_pdf_offers_no_editor_at_all(
         self, client, professor, course, office, pdf_doc
     ):
-        """PDFs are view/download only: neither editor may mount."""
+        """PDFs get the metadata dialog only: no editor may mount."""
         client.force_login(professor)
         content = client.get(
             reverse(
@@ -532,14 +534,11 @@ class TestDetailPageIntegration:
             )
         ).content.decode()
         assert "data-office-root" not in content
-        # The form is shared with the document header, but no editing surface
-        # or formatting toolbar may be mounted for a PDF.
         assert "data-editor-surface" not in content
         assert "data-editor-toolbar" not in content
         assert "materials-office.js" not in content
         assert "materials-editor.js" not in content
-        # Read-only notice plus a way to get the file.
-        assert "be edited here yet" in content
+        # The attached-file card still offers a way to get the file.
         assert "/download/" in content
 
 

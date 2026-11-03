@@ -93,10 +93,21 @@ class UserAdmin(BaseUserAdmin):
                 )
             },
         ),
-        ("Role", {"fields": ("role", "approval_status", "employee_id", "student_number")}),
+        (
+            "Role",
+            {"fields": ("role", "approval_status", "employee_id", "student_number")},
+        ),
         (
             "Permissions",
-            {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")},
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                )
+            },
         ),
         ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
@@ -122,7 +133,16 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ["code", "name", "program", "term", "academic_year", "section", "professor", "is_archived"]
+    list_display = [
+        "code",
+        "name",
+        "program",
+        "term",
+        "academic_year",
+        "section",
+        "professor",
+        "is_archived",
+    ]
     list_filter = ["program", "term", "academic_year", "is_archived"]
     search_fields = ["code", "name", "professor__email"]
     ordering = ["-academic_year", "term", "code"]

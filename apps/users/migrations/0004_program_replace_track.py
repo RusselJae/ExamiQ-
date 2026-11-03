@@ -49,7 +49,6 @@ def seed_programs_and_migrate_courses(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("users", "0003_v2_alignment"),
         ("questions", "0004_v2_alignment"),
@@ -70,7 +69,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Program",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("slug", models.SlugField(max_length=30, unique=True)),
                 ("name", models.CharField(max_length=200)),
                 (
@@ -103,7 +110,9 @@ class Migration(migrations.Migration):
             name="course",
             unique_together=set(),
         ),
-        migrations.RunPython(seed_programs_and_migrate_courses, migrations.RunPython.noop),
+        migrations.RunPython(
+            seed_programs_and_migrate_courses, migrations.RunPython.noop
+        ),
         migrations.RemoveField(
             model_name="course",
             name="track",

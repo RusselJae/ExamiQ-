@@ -116,6 +116,12 @@
             }
             checkBtn.classList.add("hidden");
           } else {
+            if (typeof data.correct_index === "number") {
+              var correct = qsa(".concept-option", qs("#try-it-options", root))[data.correct_index];
+              if (correct && correct !== label) {
+                correct.classList.add("is-correct");
+              }
+            }
             if (label) {
               label.classList.add("is-wrong");
             }
@@ -139,6 +145,8 @@
           (trySection && trySection.dataset.hint) ||
           "Undo the constant term before touching the coefficient.";
         hintText.classList.remove("hidden");
+        var reminder = qs("#try-it-reminder", root);
+        if (reminder) reminder.classList.remove("hidden");
         renderMath(hintText);
       });
     }
@@ -153,7 +161,7 @@
     legend.className = "sr-only";
     legend.textContent = "Answer choices";
     container.appendChild(legend);
-    (options || []).forEach(function (opt) {
+    (options || []).forEach(function (opt, index) {
       var label = document.createElement("label");
       label.className = "concept-option";
       label.dataset.optionId = opt.id;
@@ -161,9 +169,15 @@
       input.type = "radio";
       input.name = "practice_choice";
       input.value = opt.id;
+      input.className = "sr-only";
+      var badge = document.createElement("span");
+      badge.className = "concept-option__badge";
+      badge.setAttribute("aria-hidden", "true");
+      badge.textContent = ["A", "B", "C", "D"][index] || String(index + 1);
       var span = document.createElement("span");
       span.textContent = opt.text;
       label.appendChild(input);
+      label.appendChild(badge);
       label.appendChild(span);
       container.appendChild(label);
     });
@@ -198,6 +212,8 @@
           section.dataset.hint ||
           "Start by undoing the outermost operation.";
         hintText.classList.remove("hidden");
+        var reminder = qs("#practice-reminder", root);
+        if (reminder) reminder.classList.remove("hidden");
         renderMath(hintText);
       });
     }
@@ -290,6 +306,7 @@
             if (questionEl) {
               questionEl.textContent = payload.question || "";
               renderMath(questionEl);
+              formatQuestion(questionEl);
             }
             fillPracticeOptions(optionsEl, payload.options || []);
             if (payload.hint) {
@@ -308,7 +325,7 @@
             }
             if (checkBtn) {
               checkBtn.classList.remove("hidden");
-              checkBtn.disabled = false;
+              checkBtn.disabled = true;
             }
           })
           .catch(function (err) {
@@ -339,12 +356,105 @@
     renderMath(section);
   }
 
+  /* Footer check buttons stay disabled until an option is selected. */
+  function initCheckGating(root) {
+    var pairs = [
+      ["#try-it-check", 'input[name="try_it_choice"]'],
+      ["#practice-check", 'input[name="practice_choice"]'],
+    ];
+    pairs.forEach(function (pair) {
+      var btn = qs(pair[0], root);
+      if (!btn) return;
+      var note = btn.parentElement
+        ? qs("[data-hint-note]", btn.parentElement)
+        : null;
+      var sync = function () {
+        var picked = !!qs(pair[1] + ":checked", root);
+        btn.disabled = !picked;
+        if (note) {
+          if (picked) note.setAttribute("hidden", "");
+          else note.removeAttribute("hidden");
+        }
+      };
+      root.addEventListener("change", function (e) {
+        if (e.target && e.target.matches(pair[1])) sync();
+      });
+      sync();
+    });
+  }
+
+  /* Split "Sentence $math$." headings into a 20px sentence line and a
+     28px equation line. Only fires for a single math node with real
+     leading text and at most trailing punctuation; tolerates one
+     wrapper element around the KaTeX output. Idempotent. */
+  function formatQuestion(head) {
+    if (!head || head.querySelector(".concept-question__equation")) return;
+    var candidates = head.querySelectorAll(".katex-display, .katex");
+    var tops = [];
+    var i, m, p, nested;
+    for (i = 0; i < candidates.length; i++) {
+      m = candidates[i];
+      nested = false;
+      p = m.parentNode;
+      while (p && p !== head) {
+        if (
+          p.nodeType === 1 &&
+          (p.classList.contains("katex") ||
+            p.classList.contains("katex-display"))
+        ) {
+          nested = true;
+          break;
+        }
+        p = p.parentNode;
+      }
+      if (!nested) tops.push(m);
+    }
+    if (tops.length !== 1) return;
+    var top = tops[0];
+    var anchor = top;
+    while (anchor.parentNode !== head) {
+      anchor = anchor.parentNode;
+    }
+    var leading = "";
+    var node = head.firstChild;
+    while (node && node !== anchor) {
+      leading += node.textContent || "";
+      node = node.nextSibling;
+    }
+    if (!leading.trim()) return;
+    var trailing = "";
+    node = anchor.nextSibling;
+    while (node) {
+      trailing += node.textContent || "";
+      node = node.nextSibling;
+    }
+    if (trailing.trim() && !/^[.,;:!?)\]\s]*$/.test(trailing)) return;
+    var sentence = document.createElement("span");
+    sentence.className = "concept-question__sentence";
+    node = head.firstChild;
+    while (node && node !== anchor) {
+      var next = node.nextSibling;
+      sentence.appendChild(node);
+      node = next;
+    }
+    var equation = document.createElement("span");
+    equation.className = "concept-question__equation";
+    while (head.firstChild) {
+      equation.appendChild(head.firstChild);
+    }
+    head.appendChild(sentence);
+    head.appendChild(equation);
+  }
+
   function init() {
-    var root = qs("#concept-flow");
+    var root = qs("#review-overlay");
     if (!root) {
       return;
     }
+    document.body.classList.add("review-open");
     renderMath(root);
+    qsa(".concept-question", root).forEach(formatQuestion);
+    initCheckGating(root);
     if (root.dataset.step === "try_it") {
       initTryIt(root);
     }

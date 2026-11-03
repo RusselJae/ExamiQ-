@@ -88,8 +88,10 @@ class TestSectionAndSubjectAnalytics:
         assert "CAT-1" in content
         assert "Clone to 2nd Sem" not in content
         assert "Course" in content
-        assert "course-subjects-table" in content
-        assert "Questions" in content
+        # Card grid with client-side search + filter panel.
+        assert "subject-banner-card" in content
+        assert 'data-filter-bar' in content
+        assert "Filter" in content
 
     def test_section_nav_links_to_section_detail(
         self, client, professor, bsed_program, year_level, academic_year

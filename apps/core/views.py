@@ -46,6 +46,9 @@ class HealthCheckView(View):
             db_status = "error"
             status_code = 503
         return JsonResponse(
-            {"status": "ok" if db_status == "ok" else "degraded", "database": db_status},
+            {
+                "status": "ok" if db_status == "ok" else "degraded",
+                "database": db_status,
+            },
             status=status_code,
         )

@@ -1,7 +1,12 @@
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
-
-from apps.questions.models import ExplanationStep, Question, QuestionChoice, Subject, Topic
+from apps.questions.models import (
+    ExplanationStep,
+    Question,
+    QuestionChoice,
+    Subject,
+    Topic,
+)
 
 INPUT_CLASS = (
     "w-full rounded-xl border border-slate-200 px-4 py-2.5 text-examiq-navy "
@@ -31,13 +36,17 @@ class QuestionForm(forms.ModelForm):
             "stem": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 4}),
             "correct_answer": forms.NumberInput(attrs={"class": INPUT_CLASS}),
             "tolerance": forms.NumberInput(attrs={"class": INPUT_CLASS}),
-            "is_active": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "is_active": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300"}
+            ),
         }
 
     def __init__(self, *args, program=None, **kwargs):
         super().__init__(*args, **kwargs)
         if program:
-            self.fields["topic"].queryset = Topic.objects.filter(subject__program=program)
+            self.fields["topic"].queryset = Topic.objects.filter(
+                subject__program=program
+            )
         self.fields["correct_answer"].required = False
         self.fields["tolerance"].required = False
 
@@ -69,7 +78,9 @@ class QuestionEditForm(forms.ModelForm):
         widgets = {
             "topic": forms.Select(attrs={"class": INPUT_CLASS}),
             "difficulty": forms.Select(attrs={"class": INPUT_CLASS}),
-            "question_type": forms.Select(attrs={"class": INPUT_CLASS, "id": "id_question_type"}),
+            "question_type": forms.Select(
+                attrs={"class": INPUT_CLASS, "id": "id_question_type"}
+            ),
             "stem": forms.Textarea(
                 attrs={
                     "class": INPUT_CLASS,
@@ -88,7 +99,9 @@ class QuestionEditForm(forms.ModelForm):
                     "placeholder": "Expected answer (one item per line for Enumeration)",
                 }
             ),
-            "is_active": forms.CheckboxInput(attrs={"class": "rounded border-slate-300"}),
+            "is_active": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300"}
+            ),
         }
 
     def __init__(self, *args, program=None, **kwargs):
@@ -133,10 +146,24 @@ class SimplifiedQuestionChoiceForm(forms.ModelForm):
         widgets = {
             # data-choice-input drives the shared question editor's live
             # student preview and readiness checklist.
-            "text": forms.TextInput(attrs={"class": INPUT_CLASS, "data-choice-input": ""}),
-            "is_correct": forms.CheckboxInput(attrs={"class": "rounded border-slate-300 correct-choice-cb"}),
+            "text": forms.TextInput(
+                attrs={"class": INPUT_CLASS, "data-choice-input": ""}
+            ),
+            "is_correct": forms.CheckboxInput(
+                attrs={"class": "rounded border-slate-300 correct-choice-cb"}
+            ),
             "error_type": forms.Select(attrs={"class": INPUT_CLASS}),
         }
+
+    def __init__(self, *args, **kwargs):
+        """Tag each choice input with its A–D letter so the editor can
+        render the student preview without guessing form positions."""
+        super().__init__(*args, **kwargs)
+        suffix = (self.prefix or "").rsplit("-", 1)[-1]
+        if suffix.isdigit() and int(suffix) < len(CHOICE_LABELS):
+            self.fields["text"].widget.attrs["data-choice-label"] = CHOICE_LABELS[
+                int(suffix)
+            ]
 
 
 class BaseSimplifiedChoiceFormSet(BaseInlineFormSet):
@@ -206,7 +233,9 @@ ExplanationStepFormSet = inlineformset_factory(
         "order": forms.NumberInput(attrs={"class": INPUT_CLASS}),
         # data-step-input drives the shared question editor's step count,
         # readiness checklist, and unsaved-changes tracking.
-        "content": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 3, "data-step-input": ""}),
+        "content": forms.Textarea(
+            attrs={"class": INPUT_CLASS, "rows": 3, "data-step-input": ""}
+        ),
         "professor_note": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 2}),
     },
 )

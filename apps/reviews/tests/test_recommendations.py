@@ -4,7 +4,10 @@ from django.utils import timezone
 from apps.analytics.models import MistakeRecord
 from apps.questions.models import Question, QuestionChoice
 from apps.reviews.models import Answer, ReviewSession
-from apps.reviews.recommendations import build_session_summary, get_review_recommendations
+from apps.reviews.recommendations import (
+    build_session_summary,
+    get_review_recommendations,
+)
 from apps.reviews.services import complete_session, start_review_session
 
 
@@ -24,7 +27,9 @@ class TestRecommendations:
             stem="Test?",
             status=Question.Status.APPROVED,
         )
-        correct = QuestionChoice.objects.create(question=q, label="A", text="yes", is_correct=True)
+        correct = QuestionChoice.objects.create(
+            question=q, label="A", text="yes", is_correct=True
+        )
         Answer.objects.create(
             session=session,
             question=q,
@@ -43,7 +48,9 @@ class TestRecommendations:
         assert "avg_confidence_label" in summary
         assert summary["avg_confidence_label"] == "Sure"
 
-    def test_misconception_triggers_high_priority_recommendation(self, student, course, topic):
+    def test_misconception_triggers_high_priority_recommendation(
+        self, student, course, topic
+    ):
         session = start_review_session(
             student=student,
             topic=topic,
@@ -57,7 +64,9 @@ class TestRecommendations:
             stem="Wrong?",
             status=Question.Status.APPROVED,
         )
-        wrong = QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+        wrong = QuestionChoice.objects.create(
+            question=q, label="B", text="no", is_correct=False
+        )
         answer = Answer.objects.create(
             session=session,
             question=q,

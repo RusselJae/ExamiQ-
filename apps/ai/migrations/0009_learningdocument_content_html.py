@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('ai', '0008_learningdocument_source_text'),
+        ("ai", "0008_learningdocument_source_text"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='learningdocument',
-            name='content_html',
-            field=models.TextField(blank=True, default='', help_text='Editor-facing HTML (headings, lists, bold, images) derived from the upload. source_text stays the plain-text projection for AI.'),
+            model_name="learningdocument",
+            name="content_html",
+            field=models.TextField(
+                blank=True,
+                default="",
+                help_text="Editor-facing HTML (headings, lists, bold, images) derived from the upload. source_text stays the plain-text projection for AI.",
+            ),
         ),
     ]

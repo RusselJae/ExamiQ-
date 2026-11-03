@@ -10,9 +10,7 @@ def test_stub_text_reply_includes_table_and_remember():
     structured = parse_tutor_structured_reply(reply)
     assert structured["type"] == "text"
     assert structured["remember"]
-    assert any(
-        block.get("kind") == "table" for block in structured["blocks"]
-    )
+    assert any(block.get("kind") == "table" for block in structured["blocks"])
 
 
 class TestParseTextReplies:
@@ -199,8 +197,7 @@ class TestParseConceptCheckReplies:
 
     def test_concept_check_without_correct_fails(self):
         reply = (
-            '{"type":"concept_check",'
-            '"options":[{"id":"A","fits":true,"reason":"ok"}]}'
+            '{"type":"concept_check","options":[{"id":"A","fits":true,"reason":"ok"}]}'
         )
         assert parse_tutor_structured_reply(reply) is None
 

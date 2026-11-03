@@ -3,10 +3,10 @@
 {% block title %}Programs - EXAMIQ+{% endblock %}
 
 {% block content %}
+<div class="course-home-panel">
 <div class="overview-header mb-6">
     <div class="overview-header__main">
         <h1 class="overview-title">Programs dashboard</h1>
-        <p class="overview-as-of">Math performance by degree program{% if department %} in {{ department.name }}{% endif %}.</p>
     </div>
 </div>
 
@@ -61,110 +61,6 @@
             </a>
         </div>
     </section>
-
-    <section class="campus-panel">
-        <h2 class="campus-panel__title">Program performance</h2>
-        {% if program_summaries %}
-        <div class="dash-toolbar mb-6">
-            <div class="dash-toolbar__search">
-                <svg class="dash-toolbar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-                <input type="search" id="program-search" class="dash-toolbar__input" placeholder="Search programs" aria-label="Search programs">
-            </div>
-            <div class="dash-toolbar__sort">
-                <label for="program-sort" class="sr-only">Sort programs</label>
-                <select id="program-sort" class="dash-toolbar__select">
-                    <option value="accuracy-desc">Sort by accuracy</option>
-                    <option value="accuracy-asc">Accuracy (low to high)</option>
-                    <option value="name-asc">Name (A–Z)</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="overview-course-grid" id="program-card-grid">
-            {% for summary in program_summaries %}
-            <article class="overview-course-card program-card {% if summary.has_activity %}overview-course-card--active{% endif %}"
-                     data-program-name="{{ summary.program.name|lower }}"
-                     data-accuracy="{{ summary.accuracy }}">
-                <div class="overview-course-card__header">
-                    <div class="program-card__identity">
-                        <span class="program-card__icon" aria-hidden="true">{{ summary.program.name|slice:":1" }}</span>
-                        <div>
-                            <h2 class="overview-course-card__title">{{ summary.program.name }}</h2>
-                            <p class="overview-course-card__subtitle">{{ summary.topic_count }} math topic{{ summary.topic_count|pluralize }}</p>
-                        </div>
-                    </div>
-                    {% if summary.has_activity %}
-                    <span class="overview-course-badge overview-course-badge--open">Active</span>
-                    {% else %}
-                    <span class="overview-course-badge overview-course-badge--muted">No data</span>
-                    {% endif %}
-                </div>
-
-                <div class="program-card__accuracy">
-                    <div class="program-card__accuracy-row">
-                        <span class="program-card__accuracy-label">Accuracy</span>
-                        <span class="program-card__accuracy-value">{{ summary.accuracy }}%</span>
-                    </div>
-                    <div class="program-card__progress" role="presentation">
-                        <div class="program-card__progress-fill" style="width: {{ summary.accuracy }}%"></div>
-                    </div>
-                </div>
-            </article>
-            {% endfor %}
-        </div>
-        {% else %}
-        {% include "components/empty_state.html" with title="No programs in scope" body="Programs managed by your department will appear here." %}
-        {% endif %}
-    </section>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-    const grid = document.getElementById("program-card-grid");
-    const searchInput = document.getElementById("program-search");
-    const sortSelect = document.getElementById("program-sort");
-    if (!grid) return;
-
-    function getCards() {
-        return Array.from(grid.querySelectorAll(".program-card"));
-    }
-
-    function filterCards() {
-        const query = (searchInput && searchInput.value || "").trim().toLowerCase();
-        getCards().forEach(function (card) {
-            const name = card.dataset.programName || "";
-            card.hidden = query && name.indexOf(query) === -1;
-        });
-    }
-
-    function sortCards() {
-        const mode = sortSelect ? sortSelect.value : "accuracy-desc";
-        const cards = getCards().filter(function (card) { return !card.hidden; });
-        cards.sort(function (a, b) {
-            if (mode === "name-asc") {
-                return (a.dataset.programName || "").localeCompare(b.dataset.programName || "");
-            }
-            if (mode === "accuracy-asc") {
-                return Number(a.dataset.accuracy) - Number(b.dataset.accuracy);
-            }
-            return Number(b.dataset.accuracy) - Number(a.dataset.accuracy);
-        });
-        cards.forEach(function (card) { grid.appendChild(card); });
-    }
-
-    if (searchInput) {
-        searchInput.addEventListener("input", function () {
-            filterCards();
-            sortCards();
-        });
-    }
-    if (sortSelect) {
-        sortSelect.addEventListener("change", sortCards);
-    }
-})();
-</script>
+</div>
 {% endblock %}

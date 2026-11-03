@@ -2,7 +2,7 @@
 
 ExamiQ is a self-regulated mathematics exam review system for college students with dynamic feedback, mistake tracking, and confidence-based test flow. This document defines functional test cases and a functional testing checklist for manual verification and thesis appendix use.
 
-**Related documentation:** [System Flow](system-flow.md) · [User Roles and Workflows](user-roles-and-workflows.md) · [DFD Diagrams](dfd/README.md)
+**Related documentation:** [Role-Based Test Cases](role-test-cases.md) · [System Flow](system-flow.md) · [User Roles and Workflows](user-roles-and-workflows.md) · [DFD Diagrams](dfd/README.md)
 
 ---
 

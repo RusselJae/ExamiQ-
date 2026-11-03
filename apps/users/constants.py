@@ -23,7 +23,11 @@ PROGRAM_DEFINITIONS: list[tuple[str, str, str]] = [
     (User.HomeDegreeProgram.PSYCHOLOGY, "Psychology", "Psychology"),
     (User.HomeDegreeProgram.MARKETING, "Marketing", "Business Administration"),
     (User.HomeDegreeProgram.HR, "Human Resources", "Business Administration"),
-    (User.HomeDegreeProgram.HOSPITALITY, "Hospitality Management", "Hospitality Management"),
+    (
+        User.HomeDegreeProgram.HOSPITALITY,
+        "Hospitality Management",
+        "Hospitality Management",
+    ),
     (User.HomeDegreeProgram.CRIMINOLOGY, "Criminology", "Criminology"),
 ]
 

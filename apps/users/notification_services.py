@@ -32,7 +32,9 @@ def recent_notifications(user: User, *, limit: int = 8) -> list[Notification]:
     return unread + read
 
 
-def mark_notifications_read(user: User, notification_ids: list[int] | None = None) -> int:
+def mark_notifications_read(
+    user: User, notification_ids: list[int] | None = None
+) -> int:
     qs = Notification.objects.filter(user=user, read_at__isnull=True)
     if notification_ids:
         qs = qs.filter(pk__in=notification_ids)

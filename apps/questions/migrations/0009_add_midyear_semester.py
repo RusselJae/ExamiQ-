@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0008_auto_approve_pending'),
+        ("questions", "0008_auto_approve_pending"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='subject',
-            name='semester',
-            field=models.PositiveSmallIntegerField(choices=[(1, '1st Semester'), (2, '2nd Semester'), (3, 'Midyear')]),
+            model_name="subject",
+            name="semester",
+            field=models.PositiveSmallIntegerField(
+                choices=[(1, "1st Semester"), (2, "2nd Semester"), (3, "Midyear")]
+            ),
         ),
     ]

@@ -16,7 +16,10 @@ from apps.core.filtering import (
     has_active_filters,
 )
 from apps.users.models import Notification
-from apps.users.notification_services import mark_notifications_read, unread_notification_count
+from apps.users.notification_services import (
+    mark_notifications_read,
+    unread_notification_count,
+)
 
 
 def _safe_relative_link(link: str) -> str:

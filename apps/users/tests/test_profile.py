@@ -15,8 +15,6 @@ def _student_profile_fields(student, **overrides):
     fields = {}
     if student.year_level_id:
         fields["year_level"] = student.year_level_id
-    if student.section_id:
-        fields["section"] = student.section.label
     fields.update(overrides)
     return fields
 
@@ -46,42 +44,7 @@ class TestProfileView:
         assert "profile-update-form" in content
         assert "Pilot Study" not in content
         assert "id_year_level" in content
-        assert "id_section" in content
-
-    def test_student_can_save_section(
-        self, client, student, bsed_program, year_level, program_section, academic_year
-    ):
-        from apps.users.models import ProgramSection
-
-        ProgramSection.objects.filter(pk=program_section.pk).update(program=bsed_program)
-        program_section.refresh_from_db()
-        make_bsed_student(student, bsed_program=bsed_program)
-        student.year_level = year_level
-        student.section = program_section
-        student.save(update_fields=["year_level", "section"])
-
-        other_section, _ = ProgramSection.objects.get_or_create(
-            program=bsed_program,
-            year_level=year_level,
-            label="2M",
-            academic_year=academic_year,
-            defaults={"max_students": 40, "is_active": True},
-        )
-
-        client.force_login(student)
-        response = client.post(
-            reverse("users:profile"),
-            {
-                "action": "update_profile",
-                "first_name": student.first_name,
-                "last_name": student.last_name,
-                "year_level": year_level.pk,
-                "section": other_section.label,
-            },
-        )
-        assert response.status_code == 302
-        student.refresh_from_db()
-        assert student.section_id == other_section.pk
+        assert "id_section" not in content  # Section field removed
 
     def test_student_profile_uses_bento_layout(self, client, student):
         client.force_login(student)
@@ -97,7 +60,9 @@ class TestProfileView:
         assert "profile-page--student" not in content
         assert "profile-bento" in content
 
-    def test_professor_profile_does_not_allow_self_assignment_changes(self, client, professor):
+    def test_professor_profile_does_not_allow_self_assignment_changes(
+        self, client, professor
+    ):
         client.force_login(professor)
         response = client.get(reverse("users:profile"))
         content = response.content.decode()
@@ -112,7 +77,9 @@ class TestProfileView:
         from apps.users.models import ProgramSection
 
         Subject.objects.filter(pk=subject.pk).update(program=bsed_program)
-        ProgramSection.objects.filter(pk=program_section.pk).update(program=bsed_program)
+        ProgramSection.objects.filter(pk=program_section.pk).update(
+            program=bsed_program
+        )
         subject.refresh_from_db()
         program_section.refresh_from_db()
 
@@ -192,7 +159,9 @@ class TestProfileView:
         buf = BytesIO()
         Image.new("RGB", (8, 8), color="red").save(buf, format="PNG")
         client.force_login(student)
-        photo = SimpleUploadedFile("avatar.png", buf.getvalue(), content_type="image/png")
+        photo = SimpleUploadedFile(
+            "avatar.png", buf.getvalue(), content_type="image/png"
+        )
         response = client.post(
             reverse("users:profile"),
             {

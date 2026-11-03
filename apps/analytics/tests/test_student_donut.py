@@ -14,6 +14,7 @@ from apps.analytics.services import (
 from apps.questions.models import Question
 from apps.reviews.models import Answer, ReviewSession
 from apps.reviews.services import start_review_session
+from apps.users.models import User
 
 
 @pytest.mark.django_db
@@ -56,6 +57,77 @@ def test_student_performance_donut_counts(
     period_donut = student_performance_donut(student, period="7")
     assert period_donut["period"] == "7"
     assert "scope_line" in period_donut
+
+
+@pytest.mark.django_db
+def test_professor_donut_only_counts_assigned_students(
+    professor, topic, mcq_question, academic_year
+):
+    """Answers flow to the donut of each student's assigned faculty only."""
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    question, _correct = mcq_question
+    other_professor = User.objects.create_user(
+        email="other.prof@test.edu",
+        password="testpass123",
+        role=User.Role.PROFESSOR,
+        first_name="Other",
+        last_name="Prof",
+    )
+    other_student = User.objects.create_user(
+        email="other.student@test.edu",
+        password="testpass123",
+        role=User.Role.STUDENT,
+    )
+    first_student = User.objects.create_user(
+        email="first.student@test.edu",
+        password="testpass123",
+        role=User.Role.STUDENT,
+    )
+    year = AcademicYear.get_current()
+    assert year is not None
+    subject = question.topic.subject
+    me = User.objects.get(pk=professor.pk)
+    StudentFacultyAssignment.objects.create(
+        student=first_student, faculty=me, subject=subject, academic_year=year
+    )
+    StudentFacultyAssignment.objects.create(
+        student=other_student,
+        faculty=other_professor,
+        subject=subject,
+        academic_year=year,
+    )
+
+    for student, confidence, correct in (
+        (first_student, 5, True),
+        (other_student, 1, False),
+    ):
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=topic,
+            difficulty="easy",
+            status=ReviewSession.Status.COMPLETED,
+        )
+        Answer.objects.create(
+            session=session,
+            question=question,
+            confidence=confidence,
+            is_correct=correct,
+        )
+
+    mine = professor_confidence_donut(me)
+    assert mine["total"] == 1
+    by_key = {s["key"]: s for s in mine["slices"]}
+    assert by_key["sure_correct"]["value"] == 1
+
+    theirs = professor_confidence_donut(other_professor)
+    assert theirs["total"] == 1
+    theirs_by_key = {s["key"]: s for s in theirs["slices"]}
+    assert theirs_by_key["guessing_incorrect"]["value"] == 1
+
+    assert professor_donut_sections(me) == []
+    # Sections appear once handled students belong to one. Covered by
+    # test_professor_confidence_donut_section_filter.
 
 
 @pytest.mark.django_db
@@ -201,7 +273,8 @@ def test_faculty_mistake_bar_links_to_question_edit(
 def test_professor_confidence_donut_spans_scope(
     professor, course, student, topic, mcq_question, numeric_question
 ):
-    """Overview donut aggregates every answer in the professor's courses."""
+    """Overview donut aggregates answers from the professor's handled students."""
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
     from apps.users.models import Course as CourseModel
 
     question, _correct = mcq_question
@@ -212,6 +285,21 @@ def test_professor_confidence_donut_spans_scope(
     )
     other_student.set_password("testpass123")
     other_student.save()
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
+    StudentFacultyAssignment.objects.create(
+        student=other_student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
 
     session = ReviewSession.objects.create(
         student=student,
@@ -259,7 +347,18 @@ def test_professor_confidence_donut_period_filter(
 
     from django.utils import timezone
 
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
     question, _correct = mcq_question
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
 
     old_session = ReviewSession.objects.create(
         student=student,
@@ -352,7 +451,18 @@ def test_donut_daily_period_covers_last_24_hours(
 
     from django.utils import timezone
 
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
     question, _correct = mcq_question
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
 
     old_session = ReviewSession.objects.create(
         student=student,
@@ -392,10 +502,23 @@ def test_donut_daily_period_covers_last_24_hours(
 def test_professor_confidence_donut_section_filter(
     professor, course, student, program_section, topic, mcq_question
 ):
-    """Picking a section narrows the donut to that cohort."""
-    from apps.users.models import ProgramSection, User
+    """Picking a section narrows the donut to that cohort of handled students."""
+    from apps.users.models import (
+        AcademicYear,
+        ProgramSection,
+        StudentFacultyAssignment,
+        User,
+    )
 
     question, _correct = mcq_question
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
     other_section = ProgramSection.objects.create(
         program=program_section.program,
         year_level=program_section.year_level,
@@ -410,6 +533,12 @@ def test_professor_confidence_donut_section_filter(
         home_degree_program=student.home_degree_program,
         year_level=student.year_level,
         section=other_section,
+    )
+    StudentFacultyAssignment.objects.create(
+        student=other_student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
     )
 
     session = ReviewSession.objects.create(
@@ -446,11 +575,82 @@ def test_professor_confidence_donut_section_filter(
     assert professor_confidence_donut(professor, section="all")["total"] == 2
     assert professor_confidence_donut(professor, section="999999")["total"] == 2
 
-    sections = professor_donut_sections(professor)
-    labels = [entry["label"] for entry in sections]
-    assert len(sections) == 2
-    assert program_section.display_label in labels
-    assert other_section.display_label in labels
+
+@pytest.mark.django_db
+def test_professor_confidence_donut_subject_filter(
+    professor, course, student, topic, mcq_question, bsed_program, year_level
+):
+    """The course tab scopes the donut to that handled subject."""
+    from apps.questions.models import Question, QuestionChoice, Subject
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    question = mcq_question[0]
+    other_subject = Subject.objects.create(
+        program=topic.subject.program,
+        code="TEST-202",
+        name="Second Subject",
+        year_level=year_level,
+        semester=2,
+    )
+    other_topic = topic.__class__.objects.create(
+        subject=other_subject, name="Second Topic"
+    )
+    other_question = Question.objects.create(
+        topic=other_topic,
+        difficulty=Question.Difficulty.EASY,
+        question_type=Question.QuestionType.MCQ,
+        stem="What is 3x + 5 - 2x?",
+        status=Question.Status.APPROVED,
+    )
+    QuestionChoice.objects.create(
+        question=other_question, label="A", text="x + 5", is_correct=True
+    )
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=topic.subject,
+        academic_year=year,
+    )
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=other_subject,
+        academic_year=year,
+    )
+
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    other_session = ReviewSession.objects.create(
+        student=student,
+        topic=other_topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=other_session, question=other_question, confidence=1, is_correct=False
+    )
+
+    everything = professor_confidence_donut(professor)
+    assert everything["total"] == 2
+    assert everything["subject"] == ""
+
+    scoped = professor_confidence_donut(professor, subject=other_subject.pk)
+    assert scoped["total"] == 1
+    assert scoped["subject"] == other_subject.pk
+
+    # Unknown subject id falls back to everything.
+    assert professor_confidence_donut(professor, subject=999999)["total"] == 2
 
 
 @pytest.mark.django_db
@@ -459,6 +659,16 @@ def test_donut_reports_calibration_status(
 ):
     """Sure-but-wrong answers mark the group as overconfident."""
     question, _correct = mcq_question
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
     session = ReviewSession.objects.create(
         student=student,
         topic=topic,
@@ -499,6 +709,16 @@ def test_professor_overview_renders_donut_filters(
 ):
     """The donut ships the range pills and the section filter."""
     question, _correct = mcq_question
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
     session = ReviewSession.objects.create(
         student=student,
         topic=topic,
@@ -516,16 +736,27 @@ def test_professor_overview_renders_donut_filters(
     assert "donut_period=7" in content
     assert "donut_period=30" in content
     assert "donut_period=all" in content
-    assert "All sections" in content
-    assert student.section.display_label in content
+    assert 'id="donut-subject-picker"' in content
+    assert 'data-donut-param="donut_subject"' in content
+    assert "All sections" not in content
 
 
 @pytest.mark.django_db
 def test_donut_filters_are_wired_for_in_place_updates(
     client, professor, course, student, topic, mcq_question
 ):
-    """The pills point at the JSON endpoint so the page need not reload."""
+    """The picker and pills point at the JSON endpoint so the page need not reload."""
     question, _correct = mcq_question
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
     session = ReviewSession.objects.create(
         student=student,
         topic=topic,
@@ -540,10 +771,11 @@ def test_donut_filters_are_wired_for_in_place_updates(
     client.force_login(professor)
     content = client.get(reverse("analytics_professor:overview")).content.decode()
     assert "data-donut-filters" in content
-    assert "data-donut-canvas=\"overviewDonutChart\"" in content
+    assert 'data-donut-canvas="overviewDonutChart"' in content
     assert reverse("analytics_professor:donut_data") in content
     assert 'data-donut-param="donut_period"' in content
-    assert 'data-donut-param="donut_section"' in content
+    assert 'data-donut-param="donut_subject"' in content
+    assert 'id="donut-subject-picker"' in content
     assert "donut-filters.js" in content
 
 
@@ -553,6 +785,16 @@ def test_professor_donut_data_endpoint(
 ):
     """The JSON endpoint re-scopes the donut for the filter."""
     question, _correct = mcq_question
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
     session = ReviewSession.objects.create(
         student=student,
         topic=topic,
@@ -574,12 +816,296 @@ def test_professor_donut_data_endpoint(
     assert data["donut"]["total"] == 1
     assert data["donut"]["period"] == "7"
     assert data["donut"]["section"] == student.section_id
+    # Distinct students behind the answers travel with the payload so the
+    # "students answered" pill can render beside the calibration badge.
+    assert data["donut"]["student_count"] == 1
     # The explanation travels with the payload.
     assert data["donut"]["calibration"]["status"] in {
         "overconfident",
         "underconfident",
         "confident",
     }
+
+    scoped = client.get(
+        reverse("analytics_professor:donut_data"),
+        {"donut_subject": str(question.topic.subject_id)},
+    )
+    assert scoped.status_code == 200
+    assert scoped.json()["donut"]["total"] == 1
+    assert scoped.json()["donut"]["subject"] == question.topic.subject_id
+
+
+@pytest.mark.django_db
+def test_recent_activity_has_one_row_per_student_per_subject(
+    professor, course, student, topic, subject, mcq_question
+):
+    """Rows pair students with courses so the picker filter matches each.
+
+    A student's overall-latest exam lives in BSEM 22 while an older exam
+    they completed in BSEM 36 still needs its own visible row when the
+    picker narrows to that course.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.analytics.services import professor_latest_student_sessions
+    from apps.questions.models import Subject, Topic
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    question, _correct = mcq_question
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
+
+    other_subject = Subject.objects.create(
+        program=subject.program,
+        code="OTHER-202",
+        name="Other Subject",
+        year_level=subject.year_level,
+        semester=Subject.Semester.FIRST,
+    )
+    other_topic = Topic.objects.create(
+        subject=other_subject,
+        name="Other Topic",
+    )
+
+    older = ReviewSession.objects.create(
+        student=student,
+        topic=other_topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+        ended_at=timezone.now() - timedelta(days=3),
+    )
+    newer = ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+        ended_at=timezone.now() - timedelta(days=1),
+    )
+
+    rows = professor_latest_student_sessions(professor)
+    assert len(rows) == 2
+    by_subject = {row["subject_id"]: row for row in rows}
+    assert set(by_subject) == {
+        question.topic.subject_id,
+        other_topic.subject_id,
+    }
+    # Newest row first; each row carries its own session's numbers.
+    assert rows[0]["latest_session"].pk == newer.pk
+    assert rows[1]["latest_session"].pk == older.pk
+
+
+@pytest.mark.django_db
+def test_recent_activity_attributes_session_to_answer_subject(
+    professor, course, student, topic, subject, mcq_question
+):
+    """A session tagged with one topic is attributed to its questions' course.
+
+    The donut scopes answers by ``question__topic__subject``; recent activity
+    must match, otherwise legacy sessions tagged with an unrelated topic
+    vanish from the course they really belong to.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.analytics.services import professor_latest_student_sessions
+    from apps.questions.models import Subject, Topic
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    question, _correct = mcq_question
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
+
+    tagging_subject = Subject.objects.create(
+        program=subject.program,
+        code="TAG-01",
+        name="Tag Subject",
+        year_level=subject.year_level,
+        semester=Subject.Semester.FIRST,
+    )
+    unrelated_topic = Topic.objects.create(
+        subject=tagging_subject,
+        name="Tag Topic",
+    )
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=unrelated_topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+        ended_at=timezone.now() - timedelta(days=1),
+    )
+    answer = Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+    del answer
+
+    rows = professor_latest_student_sessions(professor)
+    assert len(rows) == 1
+    assert rows[0]["subject_id"] == question.topic.subject_id
+    assert rows[0]["subject"] == question.topic.subject.code
+
+
+@pytest.mark.django_db
+def test_recent_activity_splits_pooled_session_by_course(
+    professor, course, student, topic, subject, mcq_question
+):
+    """A session pooling several courses contributes a row per course.
+
+    Legacy pooled exams answer questions across many subjects in one
+    session; the course picker must still surface each course's own slice
+    of scores instead of swallowing them into the dominant course.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.analytics.services import professor_latest_student_sessions
+    from apps.questions.models import (
+        Question,
+        QuestionChoice,
+        Subject,
+        Topic,
+    )
+    from apps.reviews.models import Answer
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    question, correct_choice = mcq_question
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
+
+    pooled_subject = Subject.objects.create(
+        program=subject.program,
+        code="POOL-02",
+        name="Pooled Subject",
+        year_level=subject.year_level,
+        semester=Subject.Semester.FIRST,
+    )
+    pooled_topic = Topic.objects.create(
+        subject=pooled_subject,
+        name="Pooled Topic",
+    )
+
+    session = ReviewSession.objects.create(
+        student=student,
+        topic=pooled_topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+        ended_at=timezone.now() - timedelta(days=1),
+    )
+    # One completed session pools answers from two different courses.
+    second_main = Question.objects.create(
+        topic=question.topic,
+        difficulty=Question.Difficulty.EASY,
+        question_type=Question.QuestionType.MCQ,
+        stem="Second main stem.",
+        status=Question.Status.APPROVED,
+    )
+    QuestionChoice.objects.create(
+        question=second_main, label="A", text="x", is_correct=True
+    )
+    Answer.objects.create(
+        session=session, question=question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=session, question=second_main, confidence=2, is_correct=False
+    )
+    pooled_question = Question.objects.create(
+        topic=pooled_topic,
+        difficulty=Question.Difficulty.EASY,
+        question_type=Question.QuestionType.MCQ,
+        stem="Pooled stem round to nearest ten.",
+        status=Question.Status.APPROVED,
+    )
+    QuestionChoice.objects.create(
+        question=pooled_question, label="A", text="10", is_correct=True
+    )
+    pooled_question_two = Question.objects.create(
+        topic=pooled_topic,
+        difficulty=Question.Difficulty.EASY,
+        question_type=Question.QuestionType.MCQ,
+        stem="Pooled stem alkane formula.",
+        status=Question.Status.APPROVED,
+    )
+    QuestionChoice.objects.create(
+        question=pooled_question_two, label="A", text="CH4", is_correct=True
+    )
+    Answer.objects.create(
+        session=session, question=pooled_question, confidence=5, is_correct=True
+    )
+    Answer.objects.create(
+        session=session, question=pooled_question_two, confidence=5, is_correct=True
+    )
+    del correct_choice
+
+    rows = professor_latest_student_sessions(professor)
+    by_subject = {row["subject_id"]: row for row in rows}
+    assert set(by_subject) == {
+        question.topic.subject_id,
+        pooled_subject.pk,
+    }
+    main = by_subject[question.topic.subject_id]
+    assert main["total_questions"] == 2
+    assert main["correct_questions"] == 1
+    pooled = by_subject[pooled_subject.pk]
+    assert pooled["total_questions"] == 2
+    assert pooled["correct_questions"] == 2
+
+
+@pytest.mark.django_db
+def test_overview_activity_table_drops_section_and_renames_scores(
+    client, professor, course, student, topic, mcq_question
+):
+    """The Recent activity table shows Student/Subject/Scores columns only."""
+    question, _correct = mcq_question
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
+    ReviewSession.objects.create(
+        student=student,
+        topic=topic,
+        difficulty=question.difficulty,
+        course=course,
+        status=ReviewSession.Status.COMPLETED,
+    )
+
+    client.force_login(professor)
+    content = client.get(reverse("analytics_professor:overview")).content.decode()
+    assert ">Scores</th>" in content
+    assert ">Course</th>" in content
+    assert "Accuracy</th>" not in content
+    assert "<th>Section</th>" not in content
+    assert 'data-student-id="' in content
 
 
 @pytest.mark.django_db
@@ -597,9 +1123,7 @@ def test_student_donut_data_endpoint(client, student, topic, mcq_question):
     )
 
     client.force_login(student)
-    response = client.get(
-        reverse("analytics_student:donut_data"), {"period": "7"}
-    )
+    response = client.get(reverse("analytics_student:donut_data"), {"period": "7"})
     assert response.status_code == 200
     data = response.json()
     assert data["donut"]["total"] == 1
@@ -612,6 +1136,16 @@ def test_calibration_payload_explains_the_verdict(
 ):
     """The modal payload spells out the numbers and the rule applied."""
     question, _correct = mcq_question
+    from apps.users.models import AcademicYear, StudentFacultyAssignment
+
+    year = AcademicYear.get_current()
+    assert year is not None
+    StudentFacultyAssignment.objects.create(
+        student=student,
+        faculty=professor,
+        subject=question.topic.subject,
+        academic_year=year,
+    )
     session = ReviewSession.objects.create(
         student=student,
         topic=topic,

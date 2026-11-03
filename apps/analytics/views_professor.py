@@ -6,7 +6,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 
-from apps.ai.factory import get_ai_provider_label, get_curriculum_advisor, is_ai_configured
+from apps.ai.factory import (
+    get_ai_provider_label,
+    get_curriculum_advisor,
+    is_ai_configured,
+)
 from apps.analytics.services import (
     DONUT_PERIOD_CHOICES,
     _course_answers,
@@ -84,7 +88,9 @@ class ProfessorDashboardView(ProfessorRequiredMixin, ListView):
     context_object_name = "courses"
 
     def get_queryset(self):
-        return Course.objects.filter(professor=self.request.user, is_archived=False).select_related("program")
+        return Course.objects.filter(
+            professor=self.request.user, is_archived=False
+        ).select_related("program")
 
 
 class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
@@ -98,12 +104,19 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
             self.request.user,
             period=self.request.GET.get("donut_period"),
             section=self.request.GET.get("donut_section"),
+            subject=self.request.GET.get("donut_subject"),
         )
         context["donut_period"] = context["overview_donut"]["period"]
         context["donut_period_choices"] = DONUT_PERIOD_CHOICES
-        context["donut_section"] = context["overview_donut"].get("section", "")
         context["donut_sections"] = professor_donut_sections(self.request.user)
-        context["latest_student_sessions"] = professor_latest_student_sessions(self.request.user)
+        context["donut_section"] = context["overview_donut"]["section"]
+        context["donut_subject"] = context["overview_donut"]["subject"]
+        context["latest_student_sessions"] = professor_latest_student_sessions(
+            self.request.user
+        )
+        context["handled_course_cards"] = professor_overview_course_cards(
+            self.request.user
+        )
         return context
 
 
@@ -119,6 +132,7 @@ class ProfessorDonutDataView(ProfessorRequiredMixin, View):
             request.user,
             period=request.GET.get("donut_period"),
             section=request.GET.get("donut_section"),
+            subject=request.GET.get("donut_subject"),
         )
         return JsonResponse({"donut": donut})
 
@@ -127,9 +141,7 @@ class ProfessorStudentDonutDataView(ProfessorRequiredMixin, View):
     """JSON payload for one student's confidence donut (faculty student detail)."""
 
     def get(self, request, student_pk):
-        student = get_object_or_404(
-            User, pk=student_pk, role=User.Role.STUDENT
-        )
+        student = get_object_or_404(User, pk=student_pk, role=User.Role.STUDENT)
         if not professor_can_view_student(request.user, student):
             from django.http import Http404
 
@@ -288,7 +300,9 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
         ]
         filter_names = ["q", "sort", "show_archived", "year_level"]
         context["year_level"] = year_level
-        context["show_archived"] = get_filter_param(self.request, "show_archived") == "1"
+        context["show_archived"] = (
+            get_filter_param(self.request, "show_archived") == "1"
+        )
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -391,10 +405,14 @@ class ProfessorStudentDetailView(ProfessorRequiredMixin, DetailView):
 
         last_date = summary.get("last_session_date")
         context["last_session_subtext"] = (
-            f"Last session {last_date.strftime('%b %d')}" if last_date else "No sessions yet"
+            f"Last session {last_date.strftime('%b %d')}"
+            if last_date
+            else "No sessions yet"
         )
         context["review_hours_subtext"] = (
-            "Logged practice time" if summary["review_hours"] else "No review logged yet"
+            "Logged practice time"
+            if summary["review_hours"]
+            else "No review logged yet"
         )
         context["student_initials"] = _student_initials(self.object)
         context["back_url"] = reverse("analytics_professor:students")
@@ -518,15 +536,147 @@ class CourseDetailView(ProfessorCourseMixin, DetailView):
     def get_queryset(self):
         return Course.objects.filter(professor=self.request.user)
 
+    def get_sibling_offerings(self) -> list:
+        """Other offerings of this subject code the professor still teaches."""
+        offerings = list(
+            Course.objects.filter(
+                professor=self.request.user,
+                program=self.object.program,
+                code=self.object.code,
+                term=self.object.term,
+                academic_year=self.object.academic_year,
+                is_archived=False,
+            ).order_by("section")
+        )
+        if not any(offering.pk == self.object.pk for offering in offerings):
+            offerings.append(self.object)
+        return offerings
+
+    def get_selected_section(self, offerings: list) -> str:
+        """Section label from ?section=, validated against sibling offerings."""
+        selected = (self.request.GET.get("section") or "").strip()
+        labels = {(offering.section or "").strip() for offering in offerings}
+        labels.discard("")
+        labels.discard("Catalog")
+        if selected in labels:
+            return selected
+        return ""
+
+    def get_section_student_counts(self, offerings: list) -> dict[str, int]:
+        """Distinct practicing students per sibling offering section label."""
+        from django.db.models import Count
+
+        rows = (
+            ReviewSession.objects.filter(course__in=offerings)
+            .values("course__section")
+            .annotate(students=Count("student_id", distinct=True))
+        )
+        return {
+            (row["course__section"] or "").strip(): row["students"] for row in rows
+        }
+
+    def get_course_home_stats(self) -> dict:
+        """Content + question counts powering the course home cards."""
+        from apps.ai.material_services import documents_for_course
+        from apps.questions.models import Question
+        from apps.questions.views_professor import _subject_for_course
+
+        subject = _subject_for_course(self.object)
+        documents = documents_for_course(self.object.pk)
+        stats = {
+            "course_subject": subject,
+            "document_count": documents.count(),
+            "latest_upload": documents.order_by("-created").first(),
+            "question_count": 0,
+            "draft_count": 0,
+        }
+        if subject is not None:
+            questions = Question.objects.filter(topic__subject=subject)
+            stats["question_count"] = questions.count()
+            stats["draft_count"] = questions.filter(
+                status=Question.Status.DRAFT
+            ).count()
+        return stats
+
     def get_context_data(self, **kwargs):
+        from apps.analytics.services import _heatmap_from_answers
+
         context = super().get_context_data(**kwargs)
-        summary = course_performance_summary(self.object)
+        offerings = self.get_sibling_offerings()
+        selected_section = self.get_selected_section(offerings)
+        counts = self.get_section_student_counts(offerings)
+        section_labels = [
+            (offering.section or "").strip()
+            for offering in offerings
+            if (offering.section or "").strip()
+            and (offering.section or "").strip() != "Catalog"
+        ]
+        total_students = sum(counts.get(label, 0) for label in section_labels) or sum(
+            counts.values()
+        )
+        section_options = [
+            {
+                "label": label,
+                "count": counts.get(label, 0),
+                "active": selected_section == label,
+            }
+            for label in section_labels
+        ]
+        context["section_options"] = section_options
+        context["selected_section"] = selected_section
+        context["section_total_students"] = total_students
+        context["has_multiple_sections"] = len(section_labels) >= 2
+        # The viewing bar always renders — even for a single section — so the
+        # "All sections · N / Section X · N" chips are always visible.
+        context["show_viewing_bar"] = True
+
+        if selected_section:
+            scoped_offerings = [
+                offering
+                for offering in offerings
+                if (offering.section or "").strip() == selected_section
+            ]
+        else:
+            scoped_offerings = offerings
+
+        student_ids = list(
+            ReviewSession.objects.filter(course__in=scoped_offerings)
+            .values_list("student_id", flat=True)
+            .distinct()
+        )
+        # Faculty only ever see students they handle. Outsiders who sat exams
+        # in these offerings are counted in aggregate, never listed.
+        from apps.users.assignment_services import students_visible_to_faculty
+
+        visible_ids = students_visible_to_faculty(self.request.user)
+        handled_ids = [sid for sid in student_ids if sid in visible_ids]
+        external_takers = len(student_ids) - len(handled_ids)
+        answers = Answer.objects.filter(
+            session__course__in=scoped_offerings,
+            session__student_id__in=handled_ids,
+        ).select_related("question__topic")
+
+        summary = course_performance_summary(self.object, student_ids=handled_ids)
+        summary["enrolled_count"] = len(handled_ids)
+        summary["external_takers"] = external_takers
         context["summary"] = summary
-        context["interventions"] = get_intervention_list(self.object)
-        context["active_tab"] = "analytics"
+        context["interventions"] = get_intervention_list(
+            self.object, student_ids=handled_ids
+        )
+        context["active_tab"] = "overview"
         context["ai_enabled"] = is_ai_configured()
-        calibration = summary.get("calibration_matrix") or {}
-        context["calibration_max"] = max(calibration.values()) if calibration else 1
+        context.update(self.get_course_home_stats())
+        if selected_section or (self.object.section or "").strip() != "Catalog":
+            subject = Subject.objects.filter(
+                code=self.object.code, program=self.object.program
+            ).first()
+            context["heatmap"] = _heatmap_from_answers(
+                answers,
+                student_ids=student_ids,
+                subject=subject,
+            )
+        else:
+            context["heatmap"] = get_topic_mastery_heatmap(self.object)
         return context
 
 
@@ -536,10 +686,12 @@ class CourseSummaryGenerateView(ProfessorCourseMixin, View):
     def post(self, request, pk):
         advisor = get_curriculum_advisor()
         narrative = advisor.course_report(self.course)
-        return JsonResponse({
-            "narrative": narrative,
-            "ai_enabled": is_ai_configured(),
-        })
+        return JsonResponse(
+            {
+                "narrative": narrative,
+                "ai_enabled": is_ai_configured(),
+            }
+        )
 
 
 class CourseInsightsRedirectView(ProfessorCourseMixin, View):
@@ -577,7 +729,9 @@ class CourseRosterView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, Li
         if sort == "accuracy":
             roster = sorted(roster, key=lambda row: row["accuracy"], reverse=True)
         elif sort == "sessions":
-            roster = sorted(roster, key=lambda row: row["sessions_completed"], reverse=True)
+            roster = sorted(
+                roster, key=lambda row: row["sessions_completed"], reverse=True
+            )
 
         return roster
 
@@ -621,7 +775,9 @@ class CourseRosterView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, Li
         return context
 
 
-class StudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, DetailView):
+class StudentDetailView(
+    FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, DetailView
+):
     template_name = "analytics/professor/student_detail.html"
     context_object_name = "student"
     pk_url_kwarg = "student_pk"
@@ -668,10 +824,14 @@ class StudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, D
 
         last_date = summary.get("last_session_date")
         context["last_session_subtext"] = (
-            f"Last session {last_date.strftime('%b %d')}" if last_date else "No sessions yet"
+            f"Last session {last_date.strftime('%b %d')}"
+            if last_date
+            else "No sessions yet"
         )
         context["review_hours_subtext"] = (
-            "Logged practice time" if summary["review_hours"] else "No review logged yet"
+            "Logged practice time"
+            if summary["review_hours"]
+            else "No review logged yet"
         )
         context["student_initials"] = _student_initials(self.object)
         context["back_url"] = reverse(
@@ -680,7 +840,9 @@ class StudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorCourseMixin, D
         return context
 
 
-class SectionStudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
+class SectionStudentDetailView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView
+):
     """Student detail for a ProgramSection — never 404s for missing practice."""
 
     template_name = "analytics/professor/section_student_detail.html"
@@ -728,10 +890,14 @@ class SectionStudentDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequire
 
         last_date = summary.get("last_session_date")
         context["last_session_subtext"] = (
-            f"Last session {last_date.strftime('%b %d')}" if last_date else "No sessions yet"
+            f"Last session {last_date.strftime('%b %d')}"
+            if last_date
+            else "No sessions yet"
         )
         context["review_hours_subtext"] = (
-            "Logged practice time" if summary["review_hours"] else "No review logged yet"
+            "Logged practice time"
+            if summary["review_hours"]
+            else "No review logged yet"
         )
         context["student_initials"] = _student_initials(self.object)
         context["back_url"] = reverse(
@@ -751,9 +917,23 @@ class CourseHeatmapView(ProfessorCourseMixin, DetailView):
         return Course.objects.filter(professor=self.request.user)
 
     def get_context_data(self, **kwargs):
+        from apps.questions.views_professor import _subject_for_course
+
         context = super().get_context_data(**kwargs)
+        from apps.questions.models import Question
+
         context["heatmap"] = get_topic_mastery_heatmap(self.object)
-        context["active_tab"] = "heatmap"
+        context["course_subject"] = _subject_for_course(self.object)
+        context["active_tab"] = "level"
+        subject = context["course_subject"]
+        context["draft_count"] = (
+            Question.objects.filter(
+                topic__subject=subject,
+                status=Question.Status.DRAFT,
+            ).count()
+            if subject is not None
+            else 0
+        )
         return context
 
 
@@ -791,7 +971,9 @@ class CourseInterventionsExportView(ProfessorCourseMixin, View):
         course = self.course
         rows = get_intervention_list(course)
         response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="{course.code}_interventions.csv"'
+        response["Content-Disposition"] = (
+            f'attachment; filename="{course.code}_interventions.csv"'
+        )
         writer = csv.writer(response)
         writer.writerow(
             [
@@ -807,7 +989,9 @@ class CourseInterventionsExportView(ProfessorCourseMixin, View):
         )
         for row in rows:
             student = row["student"]
-            student_hash = hashlib.sha256(f"examiq-{student.pk}".encode()).hexdigest()[:12]
+            student_hash = hashlib.sha256(f"examiq-{student.pk}".encode()).hexdigest()[
+                :12
+            ]
             writer.writerow(
                 [
                     student_hash,
@@ -823,7 +1007,9 @@ class CourseInterventionsExportView(ProfessorCourseMixin, View):
         return response
 
 
-class SectionDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
+class SectionDetailView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView
+):
     """Section-scoped analytics: students in a ProgramSection across subjects."""
 
     model = ProgramSection
@@ -846,7 +1032,9 @@ class SectionDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin,
         return context
 
 
-class SectionRosterView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView):
+class SectionRosterView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView
+):
     template_name = "analytics/professor/section_roster.html"
     context_object_name = "roster"
 
@@ -876,7 +1064,9 @@ class SectionRosterView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin,
         context = super().get_context_data(**kwargs)
         context["section"] = self.section
         context["active_tab"] = "roster"
-        context["show_archived"] = get_filter_param(self.request, "show_archived") == "1"
+        context["show_archived"] = (
+            get_filter_param(self.request, "show_archived") == "1"
+        )
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -968,7 +1158,9 @@ class SectionStudentRestoreView(ProfessorRequiredMixin, View):
         )
 
 
-class SectionExamSetupRedirectView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View):
+class SectionExamSetupRedirectView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, View
+):
     """Legacy per-section exam setup URLs redirect to program-wide setup."""
 
     def get(self, request, section_pk):
@@ -978,7 +1170,9 @@ class SectionExamSetupRedirectView(FacultyLegacyRosterBlockedMixin, ProfessorReq
         return redirect("analytics_professor:exam_setup_hub")
 
 
-class SectionHeatmapView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
+class SectionHeatmapView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView
+):
     model = ProgramSection
     template_name = "analytics/professor/section_heatmap.html"
     context_object_name = "section"
@@ -1000,14 +1194,14 @@ class SectionHeatmapView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin
 
         context["heatmap_subjects"] = subjects
         context["selected_subject"] = selected_subject
-        context["heatmap"] = get_section_heatmap(
-            self.object, subject=selected_subject
-        )
+        context["heatmap"] = get_section_heatmap(self.object, subject=selected_subject)
         context["active_tab"] = "heatmap"
         return context
 
 
-class SectionFeedbackView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView):
+class SectionFeedbackView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView
+):
     """Student concerns from anyone in this ProgramSection."""
 
     template_name = "analytics/professor/section_feedback.html"
@@ -1058,7 +1252,9 @@ class SectionFeedbackView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixi
         return context
 
 
-class SubjectDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView):
+class SubjectDetailView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, DetailView
+):
     """Catalog subject analytics across all year levels."""
 
     model = Subject
@@ -1085,7 +1281,9 @@ class SubjectDetailView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin,
         return context
 
 
-class SubjectRosterView(FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView):
+class SubjectRosterView(
+    FacultyLegacyRosterBlockedMixin, ProfessorRequiredMixin, ListView
+):
     template_name = "analytics/professor/subject_roster.html"
     context_object_name = "roster"
 

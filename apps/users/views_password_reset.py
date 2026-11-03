@@ -15,7 +15,10 @@ class ExamiQPasswordResetView(PasswordResetView):
 
     def form_invalid(self, form):
         throttle = getattr(form, "throttle_error", None)
-        if isinstance(throttle, PasswordResetThrottleError) and throttle.status_code == 429:
+        if (
+            isinstance(throttle, PasswordResetThrottleError)
+            and throttle.status_code == 429
+        ):
             return render(
                 self.request,
                 "account/password_reset_too_many.html",

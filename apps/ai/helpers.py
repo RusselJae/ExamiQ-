@@ -1,5 +1,8 @@
 """Shared rule-based AI fallback helpers."""
 
+import json
+import re
+
 from apps.analytics.confidence import (
     CLASSIFICATION_LUCKY_GUESS,
     CLASSIFICATION_MASTERY,
@@ -7,7 +10,46 @@ from apps.analytics.confidence import (
 )
 
 
-def calibration_narrative_from_matrix(matrix: dict, weak_topics: list | None = None) -> str:
+def parse_cor_rows(raw: str) -> list[dict[str, str]]:
+    """Extract ``{"rows": [{"code": ..., "title": ...}]}`` from model output.
+
+    Tolerates markdown fences and trailing commas; strips unknowable rows.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return []
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        text = match.group(0)
+    text = re.sub(r",\s*]", "]", text)
+    text = re.sub(r",\s*}", "}", text)
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    rows = data.get("rows") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return []
+    cleaned: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get("code") or "").strip().upper()
+        title = str(row.get("title") or "").strip()
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        cleaned.append({"code": code, "title": title})
+    return cleaned
+
+
+def calibration_narrative_from_matrix(
+    matrix: dict, weak_topics: list | None = None
+) -> str:
     """Build a short confidence/score summary without calling an LLM."""
     parts = []
     misconception = matrix.get(CLASSIFICATION_MISCONCEPTION, 0)
@@ -19,20 +61,23 @@ def calibration_narrative_from_matrix(matrix: dict, weak_topics: list | None = N
             f"Overconfidence pattern: {misconception} high-confidence wrong answers."
         )
     if lucky >= 2:
-        parts.append(
-            f"Anxiety pattern: {lucky} low-confidence correct answers."
-        )
+        parts.append(f"Anxiety pattern: {lucky} low-confidence correct answers.")
     if mastery >= 3 and not parts:
         parts.append("Strong match — most high-confidence answers are correct.")
 
     if weak_topics:
         names = ", ".join(
-            t.get("topic__name", t.get("question__topic__name", "")) for t in weak_topics[:3]
+            t.get("topic__name", t.get("question__topic__name", ""))
+            for t in weak_topics[:3]
         )
         if names:
             parts.append(f"Top mistake topics: {names}.")
 
-    return " ".join(parts) if parts else "Not enough answer data for confidence insights yet."
+    return (
+        " ".join(parts)
+        if parts
+        else "Not enough answer data for confidence insights yet."
+    )
 
 
 def course_review_narrative(summary: dict) -> str:

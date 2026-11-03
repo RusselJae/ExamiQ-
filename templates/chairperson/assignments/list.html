@@ -1,15 +1,16 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static examiq_tags %}
 
-{% block title %}Faculty Sections - Chairperson{% endblock %}
+{% block title %}Faculty Courses - Chairperson{% endblock %}
 
 {% block content %}
 <div class="overview-header mb-6">
     <div class="overview-header__main">
-        <h1 class="overview-title">Faculty Sections</h1>
+        <h1 class="overview-title">Faculty Courses</h1>
     </div>
 </div>
 
+<div class="coord-panel">
 <div class="overview-kpi-grid mb-6">
     <div class="overview-kpi-grid__item">
         {% include "components/overview_stat_card.html" with value=assignment_stats.faculty label="Faculty" icon="users" variant="blue" %}
@@ -23,7 +24,7 @@
     <div class="assign-panel__header assign-panel__header--row">
         <div>
             <h2 class="assign-panel__title">New assignment</h2>
-            <p class="assign-panel__subtitle">Select faculty, course, and one or more sections.</p>
+            <p class="assign-panel__subtitle">Select faculty and course — we cover every section of that course's year level.</p>
         </div>
         <span class="assign-term-pill" aria-label="Current term">{{ current_term_label }}</span>
     </div>
@@ -33,7 +34,6 @@
         action="{% url 'analytics_chairperson:assignment_create' %}"
         id="assignment-form"
         class="assign-form assign-new-form"
-        data-sections-api="{% url 'analytics_chairperson:assignment_sections_api' %}"
     >
         {% csrf_token %}
 
@@ -54,36 +54,8 @@
             </div>
         </div>
 
-        <div class="assign-section-panel" id="assign-section-panel">
-            <div class="assign-section-panel__toolbar">
-                <label class="assign-section-search" for="assign-section-search">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    <input
-                        type="search"
-                        id="assign-section-search"
-                        class="assign-section-search__input"
-                        placeholder="Search sections..."
-                        autocomplete="off"
-                    >
-                </label>
-                <label class="assign-section-select-all">
-                    <input type="checkbox" id="assign-section-select-all">
-                    <span>Select all visible</span>
-                </label>
-            </div>
-
-            <div id="assign-section-groups" class="assign-section-groups" role="group" aria-label="Program sections">
-                <p class="assign-section-empty" id="assign-section-placeholder">Select a subject to load sections.</p>
-            </div>
-
-            <div class="assign-section-hidden" aria-hidden="true">
-                {{ assignment_form.program_sections }}
-            </div>
-        </div>
-
         <div class="assign-section-footer">
-            <p class="assign-section-footer__count" id="assign-section-count" aria-live="polite">0 sections selected</p>
-            <button type="submit" class="btn-primary assign-section-footer__submit" id="assign-section-submit" disabled>
+            <button type="submit" class="btn-primary assign-section-footer__submit">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 Assign faculty
             </button>
@@ -91,6 +63,7 @@
 
         <div class="sr-only">
             {{ assignment_form.term }}
+            {{ assignment_form.program_sections }}
         </div>
     </form>
 </div>
@@ -100,16 +73,6 @@
         <div>
             <h2 class="assign-panel__title">Current assignments</h2>
         </div>
-        <div class="assign-term-tabs" role="tablist" aria-label="Filter by term">
-            {% for tab in term_tabs %}
-            <a href="{% if tab.key %}{% querystring term=tab.key page=None %}{% else %}{% querystring term=None page=None %}{% endif %}"
-               class="assign-term-tab{% if term_filter == tab.key %} assign-term-tab--active{% endif %}"
-               role="tab"
-               {% if term_filter == tab.key %}aria-selected="true"{% endif %}>
-                {{ tab.label }}
-            </a>
-            {% endfor %}
-        </div>
     </div>
 
     <div class="bento-grid mb-4">
@@ -117,48 +80,85 @@
     </div>
 
     {% if assignments %}
-    <div class="assign-table" role="table">
-        <div class="assign-table__head" role="row">
-            <span role="columnheader">Faculty</span>
-            <span role="columnheader">Section</span>
-            <span role="columnheader">Course</span>
-            <span role="columnheader">Term</span>
-            <span role="columnheader" class="sr-only">Actions</span>
-        </div>
-        {% for assignment in assignments %}
-        <div class="assign-table__row" role="row">
-            <div class="assign-table__cell assign-table__cell--faculty" role="cell">
-                <span class="assign-avatar" aria-hidden="true">{{ assignment.professor.initials }}</span>
-                <span class="assign-faculty-name truncate" title="{{ assignment.professor.get_full_name|default:assignment.professor.email }}">{{ assignment.professor.get_full_name|default:assignment.professor.email }}</span>
-            </div>
-            <div class="assign-table__cell assign-table__cell--section" role="cell">
-                <span class="assign-section-title">{{ assignment.program_section.program.name }}</span>
-                <span class="assign-section-meta">{{ assignment.program_section.year_level.name }} · Section {{ assignment.program_section.label }} · {{ assignment.program_section.academic_year.label }}</span>
-            </div>
-            <div class="assign-table__cell" role="cell">
-                <span class="assign-pill assign-pill--subject">{{ assignment.subject.code }}</span>
-            </div>
-            <div class="assign-table__cell" role="cell">
-                <span class="assign-pill assign-pill--term">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    {{ assignment.term }}
-                </span>
-            </div>
-            <div class="assign-table__cell assign-table__cell--action" role="cell">
-                <form method="post"
-                      action="{% url 'analytics_chairperson:assignment_delete' assignment.pk %}"
-                      data-confirm-message="Remove this teaching assignment?"
-                      data-confirm-type="warning"
-                      data-confirm-label="Remove">
-                    {% csrf_token %}
-                    <button type="submit" class="assign-remove-btn" aria-label="Remove assignment">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                        <span>Remove</span>
-                    </button>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
+    <div class="coord-table-wrap">
+        <table class="data-table w-full min-w-[56rem] coord-table--singleline">
+            <thead>
+                <tr>
+                    <th>Faculty</th>
+                    <th>Course</th>
+                    <th>Students</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assignment in assignments %}
+                <tr>
+                    <td>
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="assign-avatar" aria-hidden="true">{{ assignment.professor.initials }}</span>
+                            <span class="coord-cell-line" title="{{ assignment.professor.get_full_name|default:assignment.professor.email }}">{{ assignment.professor.get_full_name|default:assignment.professor.email }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="course-chip">{{ assignment.subject.code }}</span>
+                        <span class="coord-cell-line" title="{{ assignment.subject.name }}">{{ assignment.subject.name }}</span>
+                    </td>
+                    <td>
+                        {% with handled=handled_student_counts|get_item:assignment.pk|default:0 max=assignment.program_section.max_students|default:40 %}
+                        <div class="assign-capacity" title="{{ handled }} of {{ max }} seats assigned">
+                            <span class="assign-capacity__text">{{ handled }} / {{ max }} students</span>
+                            <span class="assign-capacity__track" aria-hidden="true">
+                                <span class="assign-capacity__fill" style="width: {% widthratio handled max 100 %}%"></span>
+                            </span>
+                        </div>
+                        {% endwith %}
+                    </td>
+                    <td class="whitespace-nowrap text-right">
+                        <details class="account-kebab">
+                            <summary aria-label="Actions for {{ assignment.subject.code }}">⋮</summary>
+                            <div class="account-kebab__menu">
+                                <button type="button" class="text-sm text-link" data-reassign-open="reassign-dialog-{{ assignment.pk }}">Reassign</button>
+                                <form method="post"
+                                      action="{% url 'analytics_chairperson:assignment_delete' assignment.pk %}"
+                                      data-confirm-message="Remove this teaching assignment?"
+                                      data-confirm-type="warning"
+                                      data-confirm-label="Remove">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove</button>
+                                </form>
+                            </div>
+                        </details>
+                        <dialog id="reassign-dialog-{{ assignment.pk }}" class="coord-dialog" aria-labelledby="reassign-title-{{ assignment.pk }}">
+                            <div class="coord-dialog__head">
+                                <h2 class="coord-dialog__title" id="reassign-title-{{ assignment.pk }}">Reassign {{ assignment.subject.code }}</h2>
+                                <button type="button" class="coord-dialog__close" data-close-reassign aria-label="Close">✕</button>
+                            </div>
+                            <div class="coord-dialog__body">
+                                <p class="text-sm text-examiq-slate">
+                                    Currently {{ assignment.professor.get_full_name|default:assignment.professor.email }}.
+                                    Handled students stay assigned; visibility follows the new faculty.
+                                </p>
+                                <form method="post" action="{% url 'analytics_chairperson:assignment_reassign' assignment.pk %}" class="mt-4">
+                                    {% csrf_token %}
+                                    <label class="block text-xs font-medium text-examiq-slate mb-1" for="reassign-professor-{{ assignment.pk }}">Faculty*</label>
+                                    <select id="reassign-professor-{{ assignment.pk }}" name="professor" required class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+                                        <option value="">Select faculty…</option>
+                                        {% for professor in reassign_professors %}
+                                        <option value="{{ professor.pk }}" {% if professor.pk == assignment.professor_id %}selected{% endif %}>{{ professor.get_full_name|default:professor.email }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="coord-dialog__actions">
+                                        <button type="button" class="btn-secondary btn-primary-sm" data-close-reassign>Cancel</button>
+                                        <button type="submit" class="btn-primary btn-primary-sm">Reassign</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </dialog>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% else %}
     <div class="assign-empty">
@@ -166,8 +166,9 @@
     </div>
     {% endif %}
 </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/assignment-sections.js' %}"></script>
+<script src="{% static 'js/assignment-reassign.js' %}"></script>
 {% endblock %}

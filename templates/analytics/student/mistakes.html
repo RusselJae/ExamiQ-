@@ -4,30 +4,59 @@
 {% block title %}Mistakes - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Mistake Log" subtitle="Every wrong answer is a lesson. Review them." %}
+{% include "components/page_header.html" with title="Mistake Log" subtitle="Concepts you keep missing. Practice each one until you get 3 right." %}
 
 {% if active_tab == 'concepts' %}
+<div class="student-panel">
 <div class="concept-review-list">
+    <h2 class="concept-review-list__title">Concepts review</h2>
     <div class="concept-status-chips" role="group" aria-label="Concept status">
         <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=needs_review"
            class="concept-status-chip{% if concept_status == 'needs_review' %} is-active{% endif %}">
-            Needs Review {{ concept_counts.needs_review }}
+            Needs review · {{ concept_counts.needs_review }}
         </a>
         <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=practicing"
            class="concept-status-chip{% if concept_status == 'practicing' %} is-active{% endif %}">
-            Practicing {{ concept_counts.practicing }}
+            Practicing · {{ concept_counts.practicing }}
         </a>
         <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=resolved"
            class="concept-status-chip{% if concept_status == 'resolved' %} is-active{% endif %}">
-            Resolved {{ concept_counts.resolved }}
+            Resolved · {{ concept_counts.resolved }}
         </a>
     </div>
 
     {% if concept_cards %}
-    <div class="concept-card-list">
-        {% for card in concept_cards %}
-        {% include "analytics/student/partials/concept_card.html" with card=card %}
-        {% endfor %}
+    <div class="concept-filter-bar" data-concept-filter-bar>
+        <input type="search"
+               id="concept-card-search"
+               class="filter-bar__input"
+               placeholder="Search course or concept…"
+               aria-label="Search concepts"
+               autocomplete="off">
+        <select id="concept-card-status" class="filter-bar__select" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="needs_review"{% if concept_status == 'needs_review' %} selected{% endif %}>Needs review</option>
+            <option value="practicing"{% if concept_status == 'practicing' %} selected{% endif %}>Practicing</option>
+            <option value="resolved"{% if concept_status == 'resolved' %} selected{% endif %}>Resolved</option>
+        </select>
+        <select id="concept-card-year" class="filter-bar__select" aria-label="Filter by year">
+            <option value="">All years</option>
+        </select>
+    </div>
+    <div class="concept-review-layout">
+        <div class="concept-card-list">
+            {% for card in concept_cards %}
+            {% include "analytics/student/partials/concept_card.html" with card=card %}
+            {% endfor %}
+        </div>
+        <aside class="concept-aside-card concept-review-aside" aria-label="How a concept gets resolved">
+            <h2 class="concept-aside-card__title">How a concept gets resolved</h2>
+            <ol class="concept-aside-steps">
+                <li><span class="concept-aside-steps__num" aria-hidden="true">1</span>Miss a question in an exam and the concept lands here.</li>
+                <li><span class="concept-aside-steps__num" aria-hidden="true">2</span>Practice it. Three correct answers resolves it.</li>
+                <li><span class="concept-aside-steps__num" aria-hidden="true">3</span>Miss it again in an exam and it comes back.</li>
+            </ol>
+        </aside>
     </div>
     <p class="concept-review-list__note">
         {% if concept_status == 'resolved' %}
@@ -36,11 +65,14 @@
         Resolved concepts move out of this list. If you miss one again in an exam, it comes back here.
         {% endif %}
     </p>
+    <p class="concept-review-list__note hidden" id="concept-cards-empty-filter">No concepts match your filters.</p>
     {% else %}
     {% include "components/empty_state.html" with compact=True title="No concepts here" body="Missed exam questions for a concept will appear in this list." %}
     {% endif %}
 </div>
+</div>
 {% else %}
+<div class="student-panel">
 <div class="bento-grid">
     {% include "components/filter_bar.html" %}
 
@@ -50,10 +82,9 @@
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Subject</th>
-                        <th>Topic</th>
+                        <th>Course</th>
+                        <th>Course name</th>
                         <th>Question</th>
-                        <th>Type</th>
                         <th>Confidence</th>
                         <th>Date</th>
                         <th></th>
@@ -74,11 +105,6 @@
                             {{ mistake.question.stem|truncatewords:12 }}
                         </td>
                         <td>
-                            <span class="exam-type-badge exam-type-badge--table">
-                                {{ mistake.question.get_question_type_display }}
-                            </span>
-                        </td>
-                        <td>
                             {% if mistake.answer.confidence %}
                             <span class="confidence-tier-badge confidence-tier-badge--{{ mistake.answer.confidence|confidence_tier_key }}">
                                 {{ mistake.answer.confidence|confidence_label }}
@@ -87,7 +113,7 @@
                             <span class="confidence-tier-badge confidence-tier-badge--none">No Confidence</span>
                             {% endif %}
                         </td>
-                        <td class="text-examiq-slate whitespace-nowrap">{{ mistake.occurred_at|date:"M d, Y H:i" }}</td>
+                        <td class="text-examiq-slate whitespace-nowrap">{{ mistake.occurred_at|date:"M d, Y" }}</td>
                         <td class="text-right whitespace-nowrap">
                             <button type="button"
                                     class="btn-primary btn-primary-sm open-tutor-btn"
@@ -116,10 +142,14 @@
     </div>
     {% endif %}
 </div>
+</div>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
+{% if active_tab == 'concepts' %}
+<script src="{% static 'js/concept-review-filter.js' %}" defer></script>
+{% endif %}
 <script>
 window.ExamiQTutor = Object.assign(window.ExamiQTutor || {}, {
     csrfToken: "{{ csrf_token }}",

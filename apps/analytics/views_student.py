@@ -18,6 +18,7 @@ from apps.analytics.concept_review_services import (
     ensure_learn_content,
     list_concept_reviews,
     miss_history_for_sidebar,
+    next_practice_attempt_number,
     restart_concept_review,
     start_or_next_practice,
     submit_practice_answer,
@@ -178,7 +179,9 @@ class MistakeListView(StudentRequiredMixin, ListView):
                     *STANDARD_DATE_SORT_FILTER_SPECS,
                 ],
             )
-            context["filter_has_active"] = has_active_filters(self.request, filter_names)
+            context["filter_has_active"] = has_active_filters(
+                self.request, filter_names
+            )
             context["filter_bar_compact"] = True
 
         context["tutor_url_templates"] = {
@@ -281,9 +284,46 @@ class SessionHistoryView(StudentRequiredMixin, ListView):
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
+        context["difficulty_choices"] = Question.Difficulty.choices
         sessions = context.get("sessions") or context.get("object_list") or []
-        context["session_history_rows"] = build_session_history_rows(sessions)
+        rows = build_session_history_rows(sessions)
+        context["session_history_rows"] = rows
+        context["session_month_groups"] = _group_session_rows_by_month(rows)
+
+        scoped = list(self.get_queryset())
+        accuracies = [r["accuracy"] for r in build_session_history_rows(scoped)]
+        context["history_session_count"] = len(scoped)
+        context["history_avg_accuracy"] = (
+            round(sum(accuracies) / len(accuracies), 1) if accuracies else 0.0
+        )
+        context["history_needs_review"] = sum(
+            1 for r in build_session_history_rows(scoped) if r["accuracy"] < 70
+        )
         return context
+
+
+def _group_session_rows_by_month(rows: list[dict]) -> list[dict]:
+    """Group history rows under 'Month Year · N sessions' headings."""
+    groups: dict[tuple[int, int], dict] = {}
+    order: list[tuple[int, int]] = []
+    for row in rows:
+        date = row.get("date")
+        if date is None:
+            continue
+        key = (date.year, date.month)
+        if key not in groups:
+            groups[key] = {
+                "label": date.strftime("%B %Y"),
+                "rows": [],
+            }
+            order.append(key)
+        groups[key]["rows"].append(row)
+    result = []
+    for key in order:
+        group = groups[key]
+        group["count"] = len(group["rows"])
+        result.append(group)
+    return result
 
 
 class TopicProgressView(StudentRequiredMixin, TemplateView):
@@ -504,8 +544,14 @@ class StudentMaterialHubView(StudentRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         from apps.ai.material_services import ready_documents_for_subject
         from apps.questions.models import Subject, YearLevel
+        from apps.reviews.exam_setup_services import subjects_available_for_student
 
         context = super().get_context_data(**kwargs)
+        year_ids = set(
+            subjects_available_for_student(self.request.user).values_list(
+                "pk", flat=True
+            )
+        )
         cards = []
         for subject in _student_material_subjects(self.request.user):
             docs = ready_documents_for_subject(subject)
@@ -513,10 +559,12 @@ class StudentMaterialHubView(StudentRequiredMixin, TemplateView):
                 {
                     "subject": subject,
                     "document_count": len(docs),
+                    "is_year_subject": subject.pk in year_ids,
                 }
             )
         # Filters match the faculty course-subjects table toolbar
         context["subject_cards"] = cards
+        context["year_subject_count"] = sum(1 for c in cards if c["is_year_subject"])
         context["year_levels"] = YearLevel.objects.order_by("order")
         context["semester_choices"] = Subject.Semester.choices
         return context
@@ -615,7 +663,10 @@ class ConceptReviewDetailView(StudentRequiredMixin, View):
         }:
             step = review.current_step
 
-        if review.status == ConceptReview.Status.RESOLVED and step != ConceptReview.Step.PRACTICE:
+        if (
+            review.status == ConceptReview.Status.RESOLVED
+            and step != ConceptReview.Step.PRACTICE
+        ):
             # Allow viewing learn content after resolve; default stay on practice summary.
             pass
 
@@ -645,7 +696,8 @@ class ConceptReviewDetailView(StudentRequiredMixin, View):
                 "try_it": review.try_it_payload,
                 "practice_attempt": practice_attempt,
                 "practice_payload": (
-                    (practice_attempt.question_payload if practice_attempt else {}) or {}
+                    (practice_attempt.question_payload if practice_attempt else {})
+                    or {}
                 ),
                 "history_lines": miss_history_for_sidebar(review),
                 "card": build_concept_card_context(review),
@@ -710,8 +762,11 @@ class ConceptReviewPracticeView(StudentRequiredMixin, View):
         if action == "regenerate":
             # Discard the unanswered question so a fresh one is generated.
             # Answered attempts stay, so the 3-correct streak is preserved.
+            # Capture the next number first: deleting drops the max, which
+            # would otherwise reuse the discarded attempt's number.
+            next_number = next_practice_attempt_number(review)
             review.practice_attempts.filter(is_correct__isnull=True).delete()
-            attempt = start_or_next_practice(review)
+            attempt = start_or_next_practice(review, attempt_number=next_number)
             return JsonResponse(
                 {
                     "ok": True,
@@ -741,7 +796,8 @@ class ConceptReviewPracticeView(StudentRequiredMixin, View):
                 **result,
                 "status": review.status,
                 "redirect_url": (
-                    reverse("analytics_student:mistakes") + "?tab=concepts&status=resolved"
+                    reverse("analytics_student:mistakes")
+                    + "?tab=concepts&status=resolved"
                     if result.get("resolved")
                     else None
                 ),

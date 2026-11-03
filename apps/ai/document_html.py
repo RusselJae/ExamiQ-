@@ -23,13 +23,35 @@ logger = logging.getLogger(__name__)
 # Narrow whitelist: this HTML is rendered in the browser and re-exported to
 # DOCX, so anything scriptable, styleable, or frameable stays out.
 ALLOWED_TAGS = [
-    "h1", "h2", "h3", "h4", "h5", "h6",
-    "p", "br", "hr",
-    "ul", "ol", "li",
-    "strong", "b", "em", "i", "u", "s",
-    "img", "a",
-    "blockquote", "pre", "code",
-    "table", "thead", "tbody", "tr", "th", "td",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "br",
+    "hr",
+    "ul",
+    "ol",
+    "li",
+    "strong",
+    "b",
+    "em",
+    "i",
+    "u",
+    "s",
+    "img",
+    "a",
+    "blockquote",
+    "pre",
+    "code",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
 ]
 ALLOWED_ATTRIBUTES = {
     "a": ["href", "title"],
@@ -58,7 +80,17 @@ i => em
 
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 _BLOCK_TAGS = (
-    "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "blockquote", "pre",
+    "p",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "tr",
+    "blockquote",
+    "pre",
 )
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
@@ -277,10 +309,21 @@ def html_from_upload(name: str, raw: bytes, *, extracted_text: str = "") -> str:
 # --------------------------------------------------------------------------- #
 # HTML -> DOCX
 # --------------------------------------------------------------------------- #
-_DOCX_HEADING = {"h1": "Heading 1", "h2": "Heading 2", "h3": "Heading 3",
-                 "h4": "Heading 4", "h5": "Heading 5", "h6": "Heading 6"}
+_DOCX_HEADING = {
+    "h1": "Heading 1",
+    "h2": "Heading 2",
+    "h3": "Heading 3",
+    "h4": "Heading 4",
+    "h5": "Heading 5",
+    "h6": "Heading 6",
+}
 _DOCX_LIST = {"ul": "List Bullet", "ol": "List Number"}
-_DOCX_ALIGN = {"left": "LEFT", "center": "CENTER", "right": "RIGHT", "justify": "JUSTIFY"}
+_DOCX_ALIGN = {
+    "left": "LEFT",
+    "center": "CENTER",
+    "right": "RIGHT",
+    "justify": "JUSTIFY",
+}
 
 
 def html_to_docx_bytes(html: str, *, title: str = "") -> bytes:
@@ -333,7 +376,11 @@ def html_to_docx_bytes(html: str, *, title: str = "") -> bytes:
             except KeyError:
                 paragraph = document.add_paragraph()
         else:
-            paragraph = document.add_paragraph(style=style) if style else document.add_paragraph()
+            paragraph = (
+                document.add_paragraph(style=style)
+                if style
+                else document.add_paragraph()
+            )
         align = aligns.get((node.get("align") or "").upper())
         if align is not None:
             paragraph.alignment = align
@@ -388,7 +435,9 @@ def html_to_docx_bytes(html: str, *, title: str = "") -> bytes:
         rows = node.find_all("tr")
         if not rows:
             return
-        table = document.add_table(rows=len(rows), cols=len(rows[0].find_all(["td", "th"])))
+        table = document.add_table(
+            rows=len(rows), cols=len(rows[0].find_all(["td", "th"]))
+        )
         try:
             table.style = "Table Grid"
         except KeyError:

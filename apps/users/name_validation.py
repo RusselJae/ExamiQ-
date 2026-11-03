@@ -11,7 +11,9 @@ NAME_PATTERN = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[ '\-][A-Za-zÀ-ÖØ-ö�
 NAME_MAX_LENGTH = 100
 
 
-def clean_person_name(value: str, *, field_label: str = "Name", required: bool = True) -> str:
+def clean_person_name(
+    value: str, *, field_label: str = "Name", required: bool = True
+) -> str:
     """Normalize and validate a person name; raise ValidationError on failure."""
     cleaned = (value or "").strip()
     if not cleaned:

@@ -125,9 +125,7 @@ class TestChairpersonAccounts:
         faculty.refresh_from_db()
         assert faculty.is_active is True
 
-    def test_can_deactivate_and_archive_student(
-        self, client, program_section
-    ):
+    def test_can_deactivate_and_archive_student(self, client, program_section):
         edu, _ = Department.objects.get_or_create(name="College of Education")
         chairperson = User.objects.create_user(
             email="edu-chair@test.edu",
@@ -151,7 +149,8 @@ class TestChairpersonAccounts:
         assert "chair-student@test.edu" in content
         assert "Deactivate" in content
         assert "Archive" in content
-        assert program_section.display_label in content
+        assert "Courses" in content
+        assert program_section.display_label not in content
 
         response = client.post(
             reverse("analytics_chairperson:account_toggle_active", args=[student.pk])
@@ -182,7 +181,7 @@ class TestChairpersonAccounts:
         assert student.is_archived is False
         assert student.is_active is True
 
-    def test_accounts_list_shows_faculty_section_labels(
+    def test_accounts_list_shows_faculty_course_codes(
         self,
         client,
         chairperson,
@@ -227,11 +226,49 @@ class TestChairpersonAccounts:
         client.force_login(chairperson)
         content = client.get(reverse("analytics_chairperson:accounts")).content.decode()
         assert faculty.email in content
-        assert section.display_label in content
+        assert "CHAIR-SEC" in content
 
 
 @pytest.mark.django_db
 class TestChairpersonSubjects:
+    def test_subject_list_shows_stats_and_filters(
+        self, client, chairperson, chair_program, year_level
+    ):
+        """Table shows faculty/student/question/material counts and filters."""
+        subject = Subject.objects.create(
+            program=chair_program,
+            code="CHAIR101",
+            name="Chair Subject",
+            year_level=year_level,
+            semester=Subject.Semester.FIRST,
+        )
+        other = Subject.objects.create(
+            program=chair_program,
+            code="OTHER999",
+            name="Unrelated Topic",
+            year_level=year_level,
+            semester=Subject.Semester.FIRST,
+        )
+        client.force_login(chairperson)
+
+        response = client.get(reverse("analytics_chairperson:subjects"))
+        assert response.status_code == 200
+        row = next(
+            s for s in response.context["subjects"] if s.pk == subject.pk
+        )
+        assert row.faculty_count == 0
+        assert row.student_count == 0
+        assert row.question_count == 0
+        assert row.material_count == 0
+
+        filtered = client.get(
+            reverse("analytics_chairperson:subjects"), {"q": "CHAIR101"}
+        )
+        assert filtered.status_code == 200
+        assert subject in list(filtered.context["subjects"])
+        assert other not in list(filtered.context["subjects"])
+        assert filtered.context["filter_has_active"] is True
+
     def test_add_edit_remove_subject(
         self, client, chairperson, chair_program, year_level
     ):
@@ -240,8 +277,16 @@ class TestChairpersonSubjects:
         response = client.get(reverse("analytics_chairperson:subjects"))
         assert response.status_code == 200
         content = response.content.decode()
-        assert "lg:grid-cols-[minmax(0,1fr)_22rem]" in content
-        assert "min-w-[40rem]" in content
+        # Add course form lives in a dialog, not a side panel.
+        assert 'id="add-course-dialog"' in content
+        assert 'id="edit-course-dialog"' in content
+        assert "data-open-course-dialog" in content
+        assert "data-edit-course" in content
+        # Search + filter controls and the stat columns.
+        assert 'name="q"' in content
+        assert "Faculty" in content
+        assert "Questions" in content
+        assert "Materials" in content
 
         response = client.post(
             reverse("analytics_chairperson:subjects"),
@@ -350,3 +395,11 @@ class TestChairpersonDashboard:
         assert "Total answers" not in content
         assert "Most sessions" not in content
         assert "data-sessions" not in content
+
+    def test_dashboard_has_no_program_performance(self, client, chairperson):
+        client.force_login(chairperson)
+        content = client.get(
+            reverse("analytics_chairperson:dashboard")
+        ).content.decode()
+        assert "Program performance" not in content
+        assert "program-card" not in content

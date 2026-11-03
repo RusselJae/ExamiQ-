@@ -5,50 +5,84 @@
             <h2 id="materials-library-title" class="materials-library__title">Library</h2>
             <span class="materials-library__count" data-library-count>{{ library_count }} item{{ library_count|pluralize }}</span>
         </div>
-        <div class="materials-library__controls">
-            <label class="sr-only" for="materials-library-search">Search library</label>
-            <input type="search"
-                   id="materials-library-search"
-                   class="materials-library__search"
-                   placeholder="Search library…"
-                   autocomplete="off"
-                   data-library-search>
-            <label class="materials-library__sort-wrap">
-                <span class="sr-only">Sort</span>
-                <select class="materials-library__sort" data-library-sort aria-label="Sort materials">
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="title">Title A–Z</option>
-                </select>
-            </label>
-            {% if faculty_mode %}
-            <span class="materials-library__archived">
-                {% if include_archived %}
-                <a href="{% if hub_subject_pk %}?subject={{ hub_subject_pk }}{% else %}?{% endif %}" class="materials-library__archived-link">Hide archived</a>
-                {% else %}
-                <a href="{% if hub_subject_pk %}?subject={{ hub_subject_pk }}&amp;archived=1{% else %}?archived=1{% endif %}" class="materials-library__archived-link">Show archived</a>
-                {% endif %}
-            </span>
-            {% endif %}
-        </div>
-        <div class="materials-library__filters" role="group" aria-label="Filter by file type">
-            <button type="button" class="materials-filter-chip is-active" data-library-filter="" data-ext="">All · {{ library_count }}</button>
-            {% for ext, count in ext_counts %}
-            <button type="button" class="materials-filter-chip" data-library-filter="{{ ext }}" data-ext="{{ ext }}">{{ ext }} · {{ count }}</button>
-            {% endfor %}
+        <div class="materials-library__controls filter-bar__search-row">
+            <div class="filter-bar__search-box">
+                <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                <input type="search"
+                       id="materials-library-search"
+                       class="materials-library__search filter-bar__input filter-bar__input--search"
+                       placeholder="Search library…"
+                       autocomplete="off"
+                       aria-label="Search library"
+                       data-library-search>
+                <details class="filter-bar__picker" data-filter-picker>
+                    <summary class="filter-bar__toggle" aria-label="Open filters">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M7 12h10M11 18h2"/></svg>
+                        Filter
+                    </summary>
+                    <div class="filter-bar__panel" data-filter-panel>
+                        <div class="filter-bar__grid">
+                            <label class="materials-library__sort-wrap filter-bar__field">
+                                <span class="filter-bar__label">Sort</span>
+                                <select class="materials-library__sort filter-bar__select" data-library-sort aria-label="Sort materials">
+                                    <option value="newest">Newest first</option>
+                                    <option value="oldest">Oldest first</option>
+                                    <option value="title">Title A–Z</option>
+                                </select>
+                            </label>
+                            {% if faculty_mode %}
+                            <div class="filter-bar__field">
+                                <span class="filter-bar__label">Archived</span>
+                                <span class="materials-library__archived">
+                                    {# Preserve the section filter when toggling archived docs. #}
+                                    {% if include_archived %}
+                                    {% if selected_section %}
+                                    <a href="?section={{ selected_section|urlencode }}" class="materials-library__archived-link">Hide archived</a>
+                                    {% elif hub_subject_pk %}
+                                    <a href="?subject={{ hub_subject_pk }}" class="materials-library__archived-link">Hide archived</a>
+                                    {% else %}
+                                    <a href="?" class="materials-library__archived-link">Hide archived</a>
+                                    {% endif %}
+                                    {% else %}
+                                    {% if selected_section %}
+                                    <a href="?section={{ selected_section|urlencode }}&amp;archived=1" class="materials-library__archived-link">Show archived</a>
+                                    {% elif hub_subject_pk %}
+                                    <a href="?subject={{ hub_subject_pk }}&amp;archived=1" class="materials-library__archived-link">Show archived</a>
+                                    {% else %}
+                                    <a href="?archived=1" class="materials-library__archived-link">Show archived</a>
+                                    {% endif %}
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="materials-library__filters" role="group" aria-label="Filter by file type">
+                            <button type="button" class="materials-filter-chip is-active" data-library-filter="" data-ext="">All · {{ library_count }}</button>
+                            {% for ext, count in ext_counts %}
+                            <button type="button" class="materials-filter-chip" data-library-filter="{{ ext }}" data-ext="{{ ext }}">{{ ext }} · {{ count }}</button>
+                            {% endfor %}
+                        </div>
+                        <div class="filter-bar__actions">
+                            <button type="button" class="filter-bar__reset" data-toolbar-reset>Reset</button>
+                            <span class="text-xs text-examiq-slate">Filters apply instantly</span>
+                        </div>
+                    </div>
+                </details>
+            </div>
         </div>
     </div>
 
     {% if documents %}
-    <ul class="materials-library__list" data-library-list>
+    <div class="materials-library__list" data-library-list>
         {% for doc in documents %}
-        <li class="materials-library__item{% if doc.is_archived %} materials-library__item--archived{% endif %}"
+        <article class="materials-library__item{% if doc.is_archived %} materials-library__item--archived{% endif %}"
             data-library-item
             data-title="{{ doc.display_title|lower }}"
             data-type="{{ doc.material_type }}"
             data-ext="{{ doc.file_type_label|upper }}"
             data-status="{{ doc.status }}"
-            data-created="{{ doc.created|date:'c' }}">
+            data-created="{{ doc.created|date:'c' }}"
+            data-month="{{ doc.created|date:'F Y' }}">
             <span class="materials-library__icon materials-library__icon--{{ doc.file_type_label|lower }}" aria-hidden="true">{{ doc.file_type_label|upper }}</span>
             <div class="materials-library__body">
                 {% if doc.status != "ready" or doc.is_archived %}
@@ -62,7 +96,7 @@
                 </div>
                 {% endif %}
                 {% if faculty_mode and course %}
-                <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}" class="materials-library__name">
+                <a href="{% url 'analytics_professor:material_detail' doc.course_id doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}" class="materials-library__name">
                     {{ doc.display_title }}
                 </a>
                 {% else %}
@@ -80,38 +114,90 @@
                 {% elif course %}
                 <span class="materials-course-chip">{{ course.code }}</span>
                 {% endif %}
+                <span class="materials-library__date">{{ doc.created|date:"M j" }}</span>
                 <div class="materials-library__actions">
                     {% if faculty_mode and course %}
-                    <a href="{% url 'analytics_professor:material_download' course.pk doc.pk %}"
-                       class="materials-download-btn"
-                       download
-                       aria-label="Download {{ doc.display_title }}">
-                        <span class="materials-download-btn__label">Download</span>
-                        <svg class="materials-download-btn__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>
-                        </svg>
-                    </a>
-                    {% if doc.is_content_editable %}
-                    <a href="{% url 'analytics_professor:material_detail' course.pk doc.pk %}{% if hub_subject_pk %}?from=hub{% endif %}"
-                       class="materials-edit-btn"
-                       aria-label="Edit {{ doc.display_title }}">
+                    <button type="button"
+                            class="materials-edit-btn materials-edit-btn--row"
+                            data-content-modal="edit"
+                            data-url="{% url 'analytics_professor:material_detail' doc.course_id doc.pk %}"
+                            data-download-url="{% url 'analytics_professor:material_download' doc.course_id doc.pk %}"
+                            data-doc-pk="{{ doc.pk }}"
+                            data-doc-title="{{ doc.display_title }}"
+                            data-doc-description="{{ doc.description }}"
+                            data-doc-subject="{{ doc.subject_id|default:'' }}"
+                            data-doc-ext="{{ doc.file_type_label|upper|default:'DOCX' }}"
+                            data-doc-size="{{ doc.file_size_bytes|default:'0' }}"
+                            data-doc-pages="{{ doc.page_count|default:'0' }}"
+                            data-doc-created="{{ doc.created|date:'M j, Y' }}"
+                            data-doc-subject-label="{% if doc.subject %}{{ doc.subject.code }} — {{ doc.subject.name }}{% elif doc.course %}{{ doc.course.code }}{% if doc.course.name %} — {{ doc.course.name }}{% endif %}{% else %}Current course{% endif %}"
+                            data-course-pk="{{ doc.course_id }}"
+                            aria-label="Edit {{ doc.display_title }}">
                         <span class="materials-edit-btn__label">Edit</span>
-                    </a>
-                    {% endif %}
-                    <form method="post"
-                          action="{% url 'analytics_professor:material_detail' course.pk doc.pk %}"
-                          class="materials-archive-form"
-                          data-confirm-message="Delete this material permanently? This cannot be undone."
-                          data-confirm-type="danger"
-                          data-confirm-label="Delete">
-                        {% csrf_token %}
-                        {% if hub_subject_pk %}
-                        <input type="hidden" name="hub_return" value="1">
-                        <input type="hidden" name="subject_id" value="{{ hub_subject_pk }}">
-                        {% endif %}
-                        <input type="hidden" name="action" value="delete">
-                        <button type="submit" class="materials-archive-btn materials-archive-btn--delete">Delete</button>
-                    </form>
+                    </button>
+                    <div class="materials-kebab" data-dropdown>
+                        <button type="button"
+                                class="materials-kebab__toggle"
+                                data-dropdown-toggle
+                                aria-expanded="false"
+                                aria-haspopup="true"
+                                aria-label="Actions for {{ doc.display_title }}">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <circle cx="12" cy="5" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="12" cy="19" r="1.75"/>
+                            </svg>
+                        </button>
+                        <ul class="materials-kebab__menu hidden" data-dropdown-menu role="menu">
+                            <li>
+                                <button type="button"
+                                        role="menuitem"
+                                        data-batch-modal
+                                        data-batch-modal-src="{% url 'analytics_professor:question_create' doc.course_id %}?embed=1&material={{ doc.pk }}">
+                                    Generate questions
+                                </button>
+                            </li>
+                            <li>
+                                <a role="menuitem"
+                                   class="materials-download-btn"
+                                   href="{% url 'analytics_professor:material_download' doc.course_id doc.pk %}"
+                                   download>Download</a>
+                            </li>
+                            {% if doc.is_content_editable %}
+                            <li>
+                                <button type="button"
+                                        role="menuitem"
+                                        class="materials-edit-btn"
+                                        data-content-modal="edit"
+                                        data-url="{% url 'analytics_professor:material_detail' doc.course_id doc.pk %}"
+                                        data-download-url="{% url 'analytics_professor:material_download' doc.course_id doc.pk %}"
+                                        data-doc-pk="{{ doc.pk }}"
+                                        data-doc-title="{{ doc.display_title }}"
+                                        data-doc-description="{{ doc.description }}"
+                                        data-doc-subject="{{ doc.subject_id|default:'' }}"
+                                        data-doc-ext="{{ doc.file_type_label|upper|default:'DOCX' }}"
+                                        data-doc-size="{{ doc.file_size_bytes|default:'0' }}"
+                                        data-doc-pages="{{ doc.page_count|default:'0' }}"
+                                        data-doc-created="{{ doc.created|date:'M j, Y' }}"
+                                        data-doc-subject-label="{% if doc.subject %}{{ doc.subject.code }} — {{ doc.subject.name }}{% elif doc.course %}{{ doc.course.code }}{% if doc.course.name %} — {{ doc.course.name }}{% endif %}{% else %}Current course{% endif %}"
+                                        data-course-pk="{{ doc.course_id }}">Edit</button>
+                            </li>
+                            {% endif %}
+                            <li>
+                                <form method="post"
+                                      action="{% url 'analytics_professor:material_detail' doc.course_id doc.pk %}"
+                                      data-confirm-message="Delete this material permanently? This cannot be undone."
+                                      data-confirm-type="danger"
+                                      data-confirm-label="Delete">
+                                    {% csrf_token %}
+                                    {% if hub_subject_pk %}
+                                    <input type="hidden" name="hub_return" value="1">
+                                    <input type="hidden" name="subject_id" value="{{ hub_subject_pk }}">
+                                    {% endif %}
+                                    <input type="hidden" name="action" value="delete">
+                                    <button type="submit" role="menuitem" class="materials-kebab__danger">Delete</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
                     {% elif download_url_name and subject %}
                     <a href="{% url download_url_name subject.pk doc.pk %}"
                        class="materials-download-btn"
@@ -125,9 +211,9 @@
                     {% endif %}
                 </div>
             </div>
-        </li>
+        </article>
         {% endfor %}
-    </ul>
+    </div>
     <p class="materials-library__empty-filter hidden" data-library-empty-filter>No materials match your filters.</p>
     {% else %}
     <div class="materials-library__empty" data-library-empty>

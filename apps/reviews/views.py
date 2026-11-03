@@ -8,7 +8,10 @@ from django.views.generic import DetailView
 
 from apps.core.mixins import StudentRequiredMixin
 from apps.questions.models import Question, Topic
-from apps.questions.services import count_available_questions, get_adaptive_questions_for_session
+from apps.questions.services import (
+    count_available_questions,
+    get_adaptive_questions_for_session,
+)
 from apps.questions.views_curriculum import CurriculumSubjectsView, CurriculumTopicsView
 from apps.reviews.exam_setup_services import (
     assignment_for_student_subject,
@@ -17,7 +20,10 @@ from apps.reviews.exam_setup_services import (
     student_setup_eligibility,
     subjects_available_for_student,
 )
-from apps.reviews.recommendations import build_session_summary, get_review_recommendations
+from apps.reviews.recommendations import (
+    build_session_summary,
+    get_review_recommendations,
+)
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
 from apps.reviews.models import Answer, ReviewSession
 from apps.reviews.services import (
@@ -215,7 +221,9 @@ class ReviewSetupView(StudentRequiredMixin, View):
                 questions_per_subject = int(form.data.get("questions_per_subject"))
             except (TypeError, ValueError):
                 questions_per_subject = 3
-        elif hasattr(form, "cleaned_data") and form.cleaned_data.get("questions_per_subject"):
+        elif hasattr(form, "cleaned_data") and form.cleaned_data.get(
+            "questions_per_subject"
+        ):
             questions_per_subject = int(form.cleaned_data["questions_per_subject"])
         else:
             questions_per_subject = 3
@@ -315,7 +323,8 @@ class ReviewSetupView(StudentRequiredMixin, View):
                 seconds_per_question=target["seconds_per_question"],
                 question_queue=target["question_queue"],
                 subjects=target["subjects"],
-                pre_session_confidence=form.cleaned_data.get("pre_session_confidence") or "",
+                pre_session_confidence=form.cleaned_data.get("pre_session_confidence")
+                or "",
                 session_goal=form.cleaned_data.get("session_goal") or "",
             )
             return redirect("reviews:session", pk=session.pk)
@@ -343,7 +352,10 @@ class ReviewSetupTimingView(StudentRequiredMixin, View):
 
     def get(self, request):
         from apps.questions.models import Subject
-        from apps.reviews.exam_setup_services import assignment_for_student_subject, exam_seconds_per_question
+        from apps.reviews.exam_setup_services import (
+            assignment_for_student_subject,
+            exam_seconds_per_question,
+        )
 
         subject_id = request.GET.get("subject", "")
         if not subject_id.isdigit():
@@ -354,9 +366,11 @@ class ReviewSetupTimingView(StudentRequiredMixin, View):
         assignment = assignment_for_student_subject(request.user, subject)
         if not assignment or not assignment.course:
             return JsonResponse({})
-        return JsonResponse({
-            "seconds_per_question": exam_seconds_per_question(assignment.course),
-        })
+        return JsonResponse(
+            {
+                "seconds_per_question": exam_seconds_per_question(assignment.course),
+            }
+        )
 
 
 class ReviewSetupPreviewAPIView(StudentRequiredMixin, View):
@@ -372,12 +386,14 @@ class ReviewSetupPreviewAPIView(StudentRequiredMixin, View):
         assignment = assignment_for_student_subject(request.user, topic.subject)
         if not assignment or not assignment.course:
             return JsonResponse({})
-        return JsonResponse({
-            "easy": count_available_questions(topic, Question.Difficulty.EASY),
-            "medium": count_available_questions(topic, Question.Difficulty.MEDIUM),
-            "hard": count_available_questions(topic, Question.Difficulty.HARD),
-            "seconds_per_question": exam_seconds_per_question(assignment.course),
-        })
+        return JsonResponse(
+            {
+                "easy": count_available_questions(topic, Question.Difficulty.EASY),
+                "medium": count_available_questions(topic, Question.Difficulty.MEDIUM),
+                "hard": count_available_questions(topic, Question.Difficulty.HARD),
+                "seconds_per_question": exam_seconds_per_question(assignment.course),
+            }
+        )
 
 
 class ReviewSessionView(StudentRequiredMixin, DetailView):
@@ -398,11 +414,11 @@ class ReviewSessionView(StudentRequiredMixin, DetailView):
         context["planned_question_count"] = planned
         context["remaining_seconds"] = self.object.remaining_seconds
         context["is_timed_exam"] = self.object.mode == ReviewSession.Mode.TIMED_EXAM
-        context["question_position"] = min(answered + 1, planned) if planned else answered + 1
-        context["remaining_questions"] = max(0, (planned or 0) - answered)
-        context["progress_percent"] = (
-            int(answered / planned * 100) if planned else 0
+        context["question_position"] = (
+            min(answered + 1, planned) if planned else answered + 1
         )
+        context["remaining_questions"] = max(0, (planned or 0) - answered)
+        context["progress_percent"] = int(answered / planned * 100) if planned else 0
         context["question_dot_range"] = range(1, (planned or 0) + 1)
         return context
 
@@ -519,9 +535,15 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
         context["recommendations"] = get_review_recommendations(
             self.request.user, limit=5
         )
-        context["feedback_url"] = reverse("reviews:session_generate_feedback", kwargs={"pk": self.object.pk})
-        context["tutor_history_url"] = reverse("reviews:tutor_history", kwargs={"pk": self.object.pk})
-        context["tutor_chat_url"] = reverse("reviews:tutor_chat", kwargs={"pk": self.object.pk})
+        context["feedback_url"] = reverse(
+            "reviews:session_generate_feedback", kwargs={"pk": self.object.pk}
+        )
+        context["tutor_history_url"] = reverse(
+            "reviews:tutor_history", kwargs={"pk": self.object.pk}
+        )
+        context["tutor_chat_url"] = reverse(
+            "reviews:tutor_chat", kwargs={"pk": self.object.pk}
+        )
         context["open_tutor"] = self.request.GET.get("open_tutor") == "1"
         context["incorrect_answers"] = (
             self.object.answers.filter(is_correct=False)
@@ -547,7 +569,9 @@ class AcknowledgeActionPlanView(StudentRequiredMixin, View):
 
         plan = get_object_or_404(RetakeActionPlan, pk=pk, student=request.user)
         acknowledge_action_plan(plan)
-        messages.success(request, "Action plan marked complete. You can start another attempt.")
+        messages.success(
+            request, "Action plan marked complete. You can start another attempt."
+        )
         if plan.subject_id:
             return redirect(f"{reverse('reviews:setup')}?subject={plan.subject_id}")
         return redirect("reviews:setup")
@@ -558,7 +582,10 @@ class SessionGenerateFeedbackView(StudentRequiredMixin, View):
 
     def post(self, request, pk):
         from apps.analytics.confidence import confidence_tier_key
-        from apps.analytics.services import generate_answer_feedback, generate_session_feedback
+        from apps.analytics.services import (
+            generate_answer_feedback,
+            generate_session_feedback,
+        )
 
         session = get_object_or_404(
             ReviewSession,
@@ -703,7 +730,9 @@ class SessionTutorChatView(StudentRequiredMixin, View):
                 payload = json.loads(request.body.decode() or "{}")
             except json.JSONDecodeError:
                 payload = {}
-            message = (payload.get("message") or request.POST.get("message") or "").strip()
+            message = (
+                payload.get("message") or request.POST.get("message") or ""
+            ).strip()
             answer_id = payload.get("answer_id") or request.POST.get("answer_id")
 
         if answer_id is not None:

@@ -8,7 +8,7 @@
     <link rel="icon" href="{% static 'assets/examiq-logo.png' %}" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
@@ -30,15 +30,15 @@
                     },
                     borderRadius: { xl: '0', lg: '0', md: '0', DEFAULT: '0' },
                     fontFamily: {
-                        sans: ['"Figtree"', 'system-ui', 'sans-serif'],
-                        serif: ['"Newsreader"', 'Georgia', 'serif'],
+                        sans: ['"Nunito Sans"', 'system-ui', 'sans-serif'],
+                        serif: ['"Fraunces"', 'Georgia', 'serif'],
                     },
                 }
             }
         }
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}?v=20261103d">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -87,7 +87,7 @@
 
     <script src="{% static 'js/examiq-ui.js' %}"></script>
     <script src="{% static 'js/notifications-dropdown.js' %}"></script>
-    <script src="{% static 'js/filter-bar.js' %}"></script>
+    <script src="{% static 'js/filter-bar.js' %}?v=20261103a"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             if (typeof renderMathInElement !== "undefined" && window.ExamiQKatex) {

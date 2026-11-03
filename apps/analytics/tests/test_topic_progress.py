@@ -32,7 +32,9 @@ class TestTopicProgressSummary:
 
 @pytest.mark.django_db
 class TestTopicProgressPage:
-    def test_topic_progress_includes_review_setup_link(self, client, student, topic, mcq_question):
+    def test_topic_progress_includes_review_setup_link(
+        self, client, student, topic, mcq_question
+    ):
         question, correct = mcq_question
         session = start_review_session(
             student=student,

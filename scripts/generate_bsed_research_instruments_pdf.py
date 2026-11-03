@@ -9,7 +9,14 @@ from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -95,7 +102,9 @@ FOOTNOTE = ParagraphStyle(
     textColor=colors.HexColor("#64748b"),
     spaceBefore=16,
 )
-CELL = ParagraphStyle("DocCell", parent=styles["Normal"], fontSize=8.5, leading=11, alignment=TA_LEFT)
+CELL = ParagraphStyle(
+    "DocCell", parent=styles["Normal"], fontSize=8.5, leading=11, alignment=TA_LEFT
+)
 
 
 def esc(text: str) -> str:
@@ -112,7 +121,9 @@ def p(text: str, style=BODY) -> Paragraph:
     return Paragraph(esc(text), style)
 
 
-def make_table(headers: list[str], rows: list[list[str]], col_widths: list[float]) -> Table:
+def make_table(
+    headers: list[str], rows: list[list[str]], col_widths: list[float]
+) -> Table:
     data = [[Paragraph(esc(h), CELL) for h in headers]]
     for row in rows:
         data.append([Paragraph(esc(c), CELL) for c in row])
@@ -203,7 +214,9 @@ def build_student_survey() -> None:
             [7.5 * cm, 9.5 * cm],
         )
     )
-    story.append(p("ExamiQ+ · BSEd Mathematics pilot · Student survey instrument", FOOTNOTE))
+    story.append(
+        p("ExamiQ+ · BSEd Mathematics pilot · Student survey instrument", FOOTNOTE)
+    )
 
     STUDENT_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
@@ -260,7 +273,9 @@ def build_chair_interview() -> None:
             [7.5 * cm, 9.5 * cm],
         )
     )
-    story.append(p("ExamiQ+ · BSEd Mathematics pilot · Chairperson interview guide", FOOTNOTE))
+    story.append(
+        p("ExamiQ+ · BSEd Mathematics pilot · Chairperson interview guide", FOOTNOTE)
+    )
 
     CHAIR_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(

@@ -93,7 +93,12 @@ class FacultyMessageInline(admin.TabularInline):
 
 @admin.register(FacultyConversation)
 class FacultyConversationAdmin(admin.ModelAdmin):
-    list_display = ["participant_low", "participant_high", "last_message_at", "created_at"]
+    list_display = [
+        "participant_low",
+        "participant_high",
+        "last_message_at",
+        "created_at",
+    ]
     search_fields = [
         "participant_low__email",
         "participant_high__email",

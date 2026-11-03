@@ -77,16 +77,26 @@ def _chunk_sizes(total: int, size: int) -> list[int]:
     return [min(size, total - start) for start in range(0, total, size)]
 
 
+AUTO_DIFFICULTY = "auto"
+
+
 def parse_job_difficulties(difficulty: str) -> list[str]:
-    """Parse job.difficulty as one value or comma-joined list (e.g. ``easy,medium``)."""
+    """Parse job.difficulty as one value or comma-joined list (e.g. ``easy,medium``).
+
+    ``"auto"`` (the "AI decides" mode) is returned as-is so the generator
+    distributes difficulty itself instead of pre-splitting bands.
+    """
+    parts = [
+        part.strip().lower() for part in (difficulty or "").split(",") if part.strip()
+    ]
+    if AUTO_DIFFICULTY in parts:
+        return [AUTO_DIFFICULTY]
     valid = {choice.value for choice in Question.Difficulty}
     ordered: list[str] = []
-    for part in (difficulty or "").split(","):
-        code = part.strip()
+    for code in parts:
         if code in valid and code not in ordered:
             ordered.append(code)
     return ordered or [Question.Difficulty.EASY]
-
 
 
 def _resolve_item_difficulty(item: dict, requested: str) -> str:
@@ -101,13 +111,14 @@ def _resolve_item_difficulty(item: dict, requested: str) -> str:
     stem = (item.get("stem") or "").strip()
     if stem:
         try:
-            tagged = (get_difficulty_tagger().tag(stem, requested) or "").strip().lower()
+            tagged = (
+                (get_difficulty_tagger().tag(stem, requested) or "").strip().lower()
+            )
             if tagged in valid:
                 return tagged
         except Exception:
             pass
     return requested if requested in valid else Question.Difficulty.MEDIUM
-
 
 
 def split_counts_across(total: int, n: int) -> list[int]:

@@ -16,19 +16,21 @@ from apps.ai.source_extract import (
 logger = logging.getLogger(__name__)
 
 # Full multi-page documents are accepted; students download this original file.
-# This is the single source of truth for uploads: it is also the exact set the
-# text extractor understands, so every allowed upload can be chunked for AI.
-_ALLOWED_SUFFIXES = (".txt", ".md", ".csv", ".pdf", ".docx")
+# _EXTRACTABLE_SUFFIXES is what the text extractor understands (kept broad so
+# legacy documents keep working); the library only accepts PDF uploads.
+_EXTRACTABLE_SUFFIXES = (".txt", ".md", ".csv", ".pdf", ".docx")
+_LIBRARY_UPLOAD_SUFFIXES = (".pdf",)
 
 
 def allowed_upload_suffixes() -> tuple[str, ...]:
-    """Extensions accepted for learning-material uploads."""
-    return _ALLOWED_SUFFIXES
+    """Extensions accepted for learning-material uploads (PDF only)."""
+    return _LIBRARY_UPLOAD_SUFFIXES
 
 
 def is_allowed_upload(name: str) -> bool:
     """True when ``name`` may be uploaded as a learning material."""
-    return (name or "").lower().endswith(_ALLOWED_SUFFIXES)
+    return (name or "").lower().endswith(_LIBRARY_UPLOAD_SUFFIXES)
+
 
 # Sentinel: "no extraction attempted yet", so callers that already extracted
 # (e.g. to gate on subject relevance) do not pay for OCR twice.
@@ -69,7 +71,7 @@ def ingest_learning_upload(
     """
     original_name = getattr(uploaded_file, "name", "") or "module"
     lower_name = original_name.lower()
-    if not lower_name.endswith(_ALLOWED_SUFFIXES):
+    if not lower_name.endswith(_EXTRACTABLE_SUFFIXES):
         raise SourceMaterialError(
             "Unsupported file type. Upload a TXT, MD, CSV, DOCX, or PDF file."
         )
@@ -98,8 +100,7 @@ def ingest_learning_upload(
                 extraction_error = ""
             elif not pages:
                 raise SourceMaterialError(
-                    extraction_error
-                    or "Could not extract enough text from that file."
+                    extraction_error or "Could not extract enough text from that file."
                 )
 
             chunks = chunk_pages(pages)

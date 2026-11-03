@@ -111,9 +111,7 @@ class TestQuestionDraftRemoveView:
         assert response.status_code == 404
         assert ExcludedQuestion.objects.count() == 0
 
-    def test_unauthenticated_gives_404(
-        self, client, course_with_subject, topic
-    ):
+    def test_unauthenticated_gives_404(self, client, course_with_subject, topic):
         # ProfessorCourseMixin.dispatch runs before the login redirect and
         # raises Http404 when the requester cannot access the course.
         url = reverse(

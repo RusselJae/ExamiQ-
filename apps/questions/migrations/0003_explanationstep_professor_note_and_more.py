@@ -5,21 +5,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('analytics', '0004_errortype_mistakerecord_error_type'),
-        ('questions', '0002_initial'),
+        ("analytics", "0004_errortype_mistakerecord_error_type"),
+        ("questions", "0002_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='explanationstep',
-            name='professor_note',
-            field=models.TextField(blank=True, help_text='Custom professor hint shown alongside this step.'),
+            model_name="explanationstep",
+            name="professor_note",
+            field=models.TextField(
+                blank=True, help_text="Custom professor hint shown alongside this step."
+            ),
         ),
         migrations.AddField(
-            model_name='questionchoice',
-            name='error_type',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='question_choices', to='analytics.errortype'),
+            model_name="questionchoice",
+            name="error_type",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="question_choices",
+                to="analytics.errortype",
+            ),
         ),
     ]

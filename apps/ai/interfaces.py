@@ -46,8 +46,22 @@ class DifficultyTagger:
         return current_difficulty
 
 
+class CorSubjectAnalyzer:
+    """Structures already-extracted COR text into subject rows.
+
+    Read-only inputs only: the LLM never invents codes, it reorganizes text
+    that deterministic extraction (PDF text layer / OCR) already produced.
+    """
+
+    def structure_rows(self, text: str) -> list[dict[str, str]]:
+        """Return ``[{"code": "...", "title": "..."}]`` rows from COR text."""
+        return []
+
+
 class CalibrationAnalyzer:
-    def analyze(self, student, answers_qs, weak_topics: list | None = None) -> dict[str, Any]:
+    def analyze(
+        self, student, answers_qs, weak_topics: list | None = None
+    ) -> dict[str, Any]:
         from apps.analytics.confidence import confidence_accuracy_matrix
         from apps.ai.helpers import calibration_narrative_from_matrix
 
@@ -77,9 +91,7 @@ class TutorEngine:
         exam_context: dict | None = None,
         question_context: dict | None = None,
     ) -> str:
-        return (
-            f"Let's focus on {topic}. Ask about the exam question or the steps to solve it."
-        )
+        return f"Let's focus on {topic}. Ask about the exam question or the steps to solve it."
 
 
 class ErrorClassifier:

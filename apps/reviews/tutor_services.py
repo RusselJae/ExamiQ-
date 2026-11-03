@@ -7,7 +7,13 @@ import re
 from typing import Any
 
 from apps.ai.factory import get_tutor_engine
-from apps.reviews.models import Answer, Question, ReviewSession, TutorConversation, TutorMessage
+from apps.reviews.models import (
+    Answer,
+    Question,
+    ReviewSession,
+    TutorConversation,
+    TutorMessage,
+)
 from apps.users.models import User
 
 
@@ -81,7 +87,9 @@ def conversation_messages_payload(
     return payload
 
 
-def conversation_history(conversation: TutorConversation, limit: int = 40) -> list[dict[str, str]]:
+def conversation_history(
+    conversation: TutorConversation, limit: int = 40
+) -> list[dict[str, str]]:
     return [
         {"role": msg.role, "text": msg.content}
         for msg in conversation.messages.order_by("created")[:limit]
@@ -153,9 +161,7 @@ def _question_context(answer: Answer | None) -> dict:
         ]
         if choices:
             ctx["choices"] = choices
-            correct = next(
-                (c for c in question.choices.all() if c.is_correct), None
-            )
+            correct = next((c for c in question.choices.all() if c.is_correct), None)
             if correct:
                 ctx["correct_pick"] = correct.label
             if answer.selected_choice_id and answer.selected_choice:
@@ -284,7 +290,9 @@ def session_answer_items(session: ReviewSession) -> list[dict]:
     return items
 
 
-def tutor_history_payload(session: ReviewSession, *, answer_id: int | None = None) -> dict:
+def tutor_history_payload(
+    session: ReviewSession, *, answer_id: int | None = None
+) -> dict:
     items = session_answer_items(session)
     active_answer_id = answer_id
     if not active_answer_id and items:
@@ -312,8 +320,7 @@ def tutor_history_payload(session: ReviewSession, *, answer_id: int | None = Non
             if conversation:
                 subject = (
                     answer.question.topic.subject
-                    if answer.question.topic_id
-                    and answer.question.topic.subject_id
+                    if answer.question.topic_id and answer.question.topic.subject_id
                     else None
                 )
                 messages = conversation_messages_payload(
@@ -447,9 +454,7 @@ def _normalize_table_block(block: dict) -> dict | None:
     rows_raw = block.get("rows")
     if not isinstance(headers_raw, list) or not isinstance(rows_raw, list):
         return None
-    headers = [
-        str(value).strip() if value is not None else "" for value in headers_raw
-    ]
+    headers = [str(value).strip() if value is not None else "" for value in headers_raw]
     if not 2 <= len(headers) <= MAX_TABLE_COLUMNS:
         return None
     if any(not header for header in headers):
@@ -458,9 +463,7 @@ def _normalize_table_block(block: dict) -> dict | None:
     for row in rows_raw[:MAX_TABLE_ROWS]:
         if not isinstance(row, list) or len(row) != len(headers):
             continue
-        cells = [
-            str(cell).strip() if cell is not None else "" for cell in row
-        ]
+        cells = [str(cell).strip() if cell is not None else "" for cell in row]
         if not any(cells):
             continue
         rows.append(cells)
@@ -484,11 +487,11 @@ def _normalize_text_blocks(blocks: Any) -> list[dict]:
                 cleaned.append({"kind": "paragraph", "text": text})
         elif kind == "list":
             items = block.get("items")
-            items = [
-                str(item).strip()
-                for item in items
-                if str(item or "").strip()
-            ] if isinstance(items, list) else []
+            items = (
+                [str(item).strip() for item in items if str(item or "").strip()]
+                if isinstance(items, list)
+                else []
+            )
             if items:
                 cleaned.append({"kind": "list", "items": items})
         elif kind == "table":
@@ -744,7 +747,9 @@ def process_tutor_chat(
 
     prompt_message = user_message
     if image and not prompt_message:
-        prompt_message = "I attached a photo of my work. Please help with this question."
+        prompt_message = (
+            "I attached a photo of my work. Please help with this question."
+        )
     elif image:
         prompt_message = f"{user_message}\n\n[Student attached an image of their work.]"
 

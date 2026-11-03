@@ -1,106 +1,175 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Saved Questions - {{ course.code }}{% endblock %}
+{% block title %}Questions - {{ course.code }}{% endblock %}
 
 {% block content %}
-{% url 'analytics_professor:question_create' course.pk as add_question_url %}
-{% include "components/professor_section_header.html" with course=course page_label="Saved Questions" cta_url=add_question_url cta_label="Add Question" %}
-{% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
+{% url 'analytics_professor:question_create' course.pk as add_questions_url %}
+{% url 'analytics_professor:question_create_single' course.pk as add_manual_url %}
+{% include "components/professor_course_nav.html" with course=course active_tab="questions" panel=True draft_count=draft_count %}
 
-<div class="bento-grid{% if filter_bar_single_row %} filter-bar-grid--single-row{% endif %}">
-    {% include "components/filter_bar.html" %}
-
-    <div class="span-full">
-        <div class="bento-card p-0 data-table-wrap questions-table-wrap">
-            <table class="data-table questions-data-table">
-                <thead>
-                    <tr>
-                        <th class="w-16">Q</th>
-                        <th>Stem</th>
-                        <th>Course</th>
-                        <th>Topic</th>
-                        <th>Difficulty</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Validated</th>
-                        <th>Mistakes</th>
-                        <th>Students</th>
-                        <th>Active</th>
-                        <th class="questions-table-actions">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for question in questions %}
-                    <tr class="{% if question.distinct_student_mistake_count >= mistake_student_threshold %}bg-amber-50/70{% endif %}">
-                        <td class="text-examiq-slate font-semibold">{{ question.q_label }}</td>
-                        <td class="max-w-xs truncate">
-                            {{ question.stem|truncatechars:60 }}
-                            {% if question.distinct_student_mistake_count >= mistake_student_threshold %}
-                            <span class="block text-xs font-semibold text-amber-800 mt-1">Needs revision</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-examiq-slate">{{ question.topic.subject.name }}</td>
-                        <td class="text-examiq-slate">{{ question.topic.name }}</td>
-                        <td>{% include "components/difficulty_pill.html" with difficulty=question.difficulty %}</td>
-                        <td class="text-examiq-slate">{{ question.get_question_type_display }}</td>
-                        <td>
-                            {% if question.status == "approved" %}
-                            <span class="text-emerald-700 text-sm font-medium">Published</span>
-                            {% else %}
-                            <span class="text-amber-700 text-sm font-medium">Draft</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if question.status == "approved" and question.validated_by_id %}
-                            <span class="text-emerald-700 text-sm font-medium">Validated by faculty</span>
-                            {% if question.validated_by %}
-                            <span class="block text-xs text-examiq-slate">{{ question.validated_by.get_full_name|default:question.validated_by.username }}</span>
-                            {% endif %}
-                            {% elif question.status == "approved" %}
-                            <span class="text-amber-700 text-sm font-medium">Pending faculty validation</span>
-                            {% else %}
-                            <span class="text-examiq-slate text-sm">Draft</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-examiq-mistake font-medium">{{ question.mistake_count }}</td>
-                        <td class="{% if question.distinct_student_mistake_count >= mistake_student_threshold %}text-amber-800 font-semibold{% else %}text-examiq-slate{% endif %}">
-                            {{ question.distinct_student_mistake_count }}
-                        </td>
-                        <td>{% if question.is_active %}Yes{% else %}No{% endif %}</td>
-                        <td class="text-right whitespace-nowrap questions-table-actions">
-                            <a href="{% url 'analytics_professor:question_edit' course.pk question.pk %}" class="text-link">Edit</a>
-                            {% if question.status != "approved" %}
-                            <form method="post" action="{% url 'analytics_professor:question_publish' course.pk question.pk %}" class="inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="faculty_attest" value="1">
-                                <input type="hidden" name="approve_explanations" value="1">
-                                <button type="submit" class="text-examiq-green text-sm">Publish</button>
-                            </form>
-                            {% endif %}
-                            <form method="post" action="{% url 'analytics_professor:question_toggle_active' course.pk question.pk %}" class="inline">
-                                {% csrf_token %}
-                                {% if question.is_active %}
-                                <button type="submit" class="text-examiq-mistake text-sm">Deactivate</button>
-                                {% else %}
-                                <button type="submit" class="text-examiq-green text-sm">Reactivate</button>
-                                {% endif %}
-                            </form>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="12" class="text-examiq-slate">
-                            {% if filter_has_active %}No questions match your filters.{% else %}No questions yet.{% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="course-home-panel">
+    <div class="questions-page">
+        <div class="questions-page__toolbar">
+            <div class="questions-page__actions">
+                <button type="button"
+                        class="materials-add-btn"
+                        data-batch-modal
+                        data-batch-modal-src="{{ add_questions_url }}?embed=1">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Add questions
+                </button>
+                <button type="button"
+                        class="btn-secondary btn-primary-sm"
+                        data-question-modal="add"
+                        data-question-modal-title="Add questions — Manually"
+                        data-question-modal-action="Save all"
+                        data-form-action="{{ add_manual_url }}"
+                        data-course-pk="{{ course.pk }}">
+                    Add manually
+                </button>
+            </div>
+            <p class="questions-page__meta">
+                {{ question_total_count }} question{{ question_total_count|pluralize }}
+                · {{ saved_count }} saved
+                · <a href="{% url 'analytics_professor:question_create' course.pk %}#draft-batch-card"
+                      class="questions-meta-pill"
+                      title="Open the draft batch"> {{ draft_count }} draft{{ draft_count|pluralize }}</a>
+            </p>
         </div>
-    </div>
 
-    <div class="span-full">
-        {% include "components/pagination.html" %}
+        {% if draft_questions %}
+        <section class="questions-section" aria-labelledby="needs-review-heading">
+            <div class="questions-section__header">
+                <h2 id="needs-review-heading" class="questions-section__title">Needs review</h2>
+                <span class="questions-section__count">{{ draft_count }}</span>
+            </div>
+            <ul class="questions-draft-list">
+                {% for question in draft_questions %}
+                <li class="questions-draft-card">
+                    <div class="questions-draft-card__body">
+                        <p class="questions-draft-card__title">{{ question.stem|truncatechars:90 }}</p>
+                        <p class="questions-draft-card__meta">
+                            {{ question.topic.name }}
+                            · {{ question.get_difficulty_display }}
+                            · Draft
+                        </p>
+                    </div>
+                    <a class="btn-primary btn-primary-sm"
+                       href="{% url 'analytics_professor:question_edit' course.pk question.pk %}">Review</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if draft_count > draft_questions|length %}
+            <p class="questions-section__more text-sm text-examiq-slate mt-2">
+                Showing {{ draft_questions|length }} of {{ draft_count }} drafts.
+            </p>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <section class="questions-section" aria-labelledby="saved-questions-heading">
+            <div class="questions-section__header">
+                <h2 id="saved-questions-heading" class="questions-section__title">Saved questions</h2>
+            </div>
+
+            <div class="questions-difficulty-chips" role="group" aria-label="Difficulty filters">
+                <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}{% if request.GET.topic %}topic={{ request.GET.topic }}&{% endif %}{% if request.GET.active %}active={{ request.GET.active }}&{% endif %}{% if request.GET.sort %}sort={{ request.GET.sort }}{% endif %}"
+                   class="questions-difficulty-chip{% if not request.GET.difficulty %} is-active{% endif %}">
+                    All · {{ difficulty_counts.all }}
+                </a>
+                <a href="?difficulty=easy{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.topic %}&topic={{ request.GET.topic }}{% endif %}{% if request.GET.active %}&active={{ request.GET.active }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+                   class="questions-difficulty-chip{% if request.GET.difficulty == 'easy' %} is-active{% endif %}">
+                    Beginner · {{ difficulty_counts.easy }}
+                </a>
+                <a href="?difficulty=medium{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.topic %}&topic={{ request.GET.topic }}{% endif %}{% if request.GET.active %}&active={{ request.GET.active }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+                   class="questions-difficulty-chip{% if request.GET.difficulty == 'medium' %} is-active{% endif %}">
+                    Intermediate · {{ difficulty_counts.medium }}
+                </a>
+                <a href="?difficulty=hard{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.topic %}&topic={{ request.GET.topic }}{% endif %}{% if request.GET.active %}&active={{ request.GET.active }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+                   class="questions-difficulty-chip{% if request.GET.difficulty == 'hard' %} is-active{% endif %}">
+                    Advanced · {{ difficulty_counts.hard }}
+                </a>
+            </div>
+
+            <div class="bento-grid{% if filter_bar_single_row %} filter-bar-grid--single-row{% endif %} mb-4">
+                {% include "components/filter_bar.html" %}
+            </div>
+
+            <ul class="questions-card-list">
+                {% for question in questions %}
+                <li class="questions-card{% if question.distinct_student_mistake_count >= mistake_student_threshold %} questions-card--flagged{% endif %}">
+                    <div class="questions-card__main">
+                        <p class="questions-card__stem">
+                            {% if question.q_label %}<span class="questions-card__label">{{ question.q_label }}</span>{% endif %}
+                            {{ question.stem|truncatechars:120 }}
+                        </p>
+                        <div class="questions-card__tags">
+                            {% include "components/difficulty_pill.html" with difficulty=question.difficulty %}
+                            <span class="questions-card__tag">{{ question.topic.name }}</span>
+                            {% if question.distinct_student_mistake_count >= mistake_student_threshold %}
+                            <span class="questions-card__tag questions-card__tag--warn">Needs revision</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="questions-card__stats">
+                        <span>{{ question.mistake_count }} mistake{{ question.mistake_count|pluralize }}</span>
+                        <span>{{ question.distinct_student_mistake_count }} student{{ question.distinct_student_mistake_count|pluralize }}</span>
+                    </div>
+                    <div class="questions-card__actions">
+                        <a href="{% url 'analytics_professor:question_edit' course.pk question.pk %}"
+                           class="questions-card__edit"
+                           aria-label="Edit question">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                            </svg>
+                        </a>
+                        {% if question.status != "approved" %}
+                        <form method="post" action="{% url 'analytics_professor:question_publish' course.pk question.pk %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="faculty_attest" value="1">
+                            <input type="hidden" name="approve_explanations" value="1">
+                            <button type="submit" class="text-examiq-green text-sm">Publish</button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="{% url 'analytics_professor:question_toggle_active' course.pk question.pk %}">
+                            {% csrf_token %}
+                            {% if question.is_active %}
+                            <button type="submit" class="text-examiq-mistake text-sm">Deactivate</button>
+                            {% else %}
+                            <button type="submit" class="text-examiq-green text-sm">Reactivate</button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="questions-card questions-card--empty">
+                    {% if filter_has_active %}No questions match your filters.{% else %}No saved questions yet.{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+
+            {% include "components/pagination.html" %}
+        </section>
     </div>
 </div>
+
+{% url 'analytics_professor:question_list' course.pk as question_list_url %}
+{% include "components/question_modal.html" with modal_id="question-modal-add" modal_mode="add" modal_title="Add questions — Manually" modal_action_label="Save all" form_action=add_manual_url form=form choice_formset=choice_formset step_formset=step_formset difficulty_choices=difficulty_choices topic_choices=topic_choices course=course course_pk=course.pk|default:"" subject_id=subject_id|default:"" subject_options=subject_options adaptive_explanation=adaptive_explanation cancel_url=question_list_url %}
+
+{# Full-screen host for AI batch / review-batch embed. #}
+<div id="batch-host-modal" class="question-modal batch-host-modal hidden" role="dialog" aria-modal="true" aria-label="Add questions — Draft batch">
+    <div class="question-modal__backdrop" data-dismiss-batch></div>
+    <div class="question-modal__panel">
+        <iframe class="batch-modal__frame" data-batch-frame title="Add questions — Draft batch" src="about:blank"></iframe>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/question-editor.js' %}"></script>
+<script src="{% static 'js/question-regenerate.js' %}"></script>
+<script src="{% static 'js/question-modal.js' %}"></script>
 {% endblock %}

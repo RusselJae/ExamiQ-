@@ -5,24 +5,31 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('analytics', '0001_initial'),
-        ('questions', '0001_initial'),
-        ('reviews', '0001_initial'),
+        ("analytics", "0001_initial"),
+        ("questions", "0001_initial"),
+        ("reviews", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='mistakerecord',
-            name='answer',
-            field=models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='mistake_record', to='reviews.answer'),
+            model_name="mistakerecord",
+            name="answer",
+            field=models.OneToOneField(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="mistake_record",
+                to="reviews.answer",
+            ),
         ),
         migrations.AddField(
-            model_name='mistakerecord',
-            name='question',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mistake_records', to='questions.question'),
+            model_name="mistakerecord",
+            name="question",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="mistake_records",
+                to="questions.question",
+            ),
         ),
     ]

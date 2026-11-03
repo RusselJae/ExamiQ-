@@ -5,7 +5,6 @@ from django.db.models import Q
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("reviews", "0003_reviewwindow_stepfeedbackview_reviewsession_course_and_more"),
     ]

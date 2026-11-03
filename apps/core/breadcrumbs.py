@@ -69,7 +69,7 @@ LABELS: dict[str, str] = {
     "profile": "Profile",
     "notifications": "Notifications",
     "user_list": "Accounts",
-    "assignments": "Faculty Sections",
+    "assignments": "Faculty Courses",
 }
 
 
@@ -116,7 +116,9 @@ def _professor_course_trail(course) -> list[dict[str, Any]]:
     if course:
         label = (course.code or "").strip().upper() or "Course"
         crumbs.append(
-            _crumb(label, _safe_reverse("analytics_professor:course_detail", pk=course.pk))
+            _crumb(
+                label, _safe_reverse("analytics_professor:course_detail", pk=course.pk)
+            )
         )
     return crumbs
 
@@ -204,7 +206,9 @@ def _build_student_crumbs(
     query = query or {}
 
     if url_name == "mistakes":
-        crumbs.append(_crumb("Action Plan", _safe_reverse("analytics_student:mistakes")))
+        crumbs.append(
+            _crumb("Action Plan", _safe_reverse("analytics_student:mistakes"))
+        )
         if query.get("tab") == "concepts":
             crumbs.append(_crumb("Concepts to Review", None))
         else:
@@ -218,7 +222,9 @@ def _build_student_crumbs(
         "concept_review_practice",
         "concept_review_again",
     }:
-        crumbs.append(_crumb("Action Plan", _safe_reverse("analytics_student:mistakes")))
+        crumbs.append(
+            _crumb("Action Plan", _safe_reverse("analytics_student:mistakes"))
+        )
         crumbs.append(
             _crumb(
                 "Concepts to Review",
@@ -230,23 +236,27 @@ def _build_student_crumbs(
         if pk:
             from apps.analytics.models import ConceptReview
 
-            review = (
-                ConceptReview.objects.filter(pk=pk).only("concept_name").first()
-            )
+            review = ConceptReview.objects.filter(pk=pk).only("concept_name").first()
             if review and review.concept_name:
                 concept_label = review.concept_name
         crumbs.append(_crumb(concept_label, None))
         return crumbs
 
     if url_name == "answer_detail":
-        crumbs.append(_crumb("Action Plan", _safe_reverse("analytics_student:mistakes")))
-        crumbs.append(_crumb("All Mistakes", _safe_reverse("analytics_student:mistakes")))
+        crumbs.append(
+            _crumb("Action Plan", _safe_reverse("analytics_student:mistakes"))
+        )
+        crumbs.append(
+            _crumb("All Mistakes", _safe_reverse("analytics_student:mistakes"))
+        )
         crumbs.append(_crumb("Answer Detail", None))
         return crumbs
 
     if url_name in {"materials_list", "materials_download"}:
         crumbs.append(
-            _crumb("Learning Materials", _safe_reverse("analytics_student:materials_hub"))
+            _crumb(
+                "Learning Materials", _safe_reverse("analytics_student:materials_hub")
+            )
         )
         crumbs.append(_crumb(humanize_url_name(url_name), None))
         return crumbs

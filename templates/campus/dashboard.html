@@ -4,12 +4,7 @@
 {% block title %}Program Coordinator - EXAMIQ+{% endblock %}
 
 {% block content %}
-<div class="overview-header mb-6">
-    <div class="overview-header__main">
-        <h1 class="overview-title">Program coordinator</h1>
-        <p class="overview-as-of">Approve faculty accounts, manage sections, subjects, and teaching assignments.</p>
-    </div>
-</div>
+{% include "components/page_header.html" with title="Program coordinator" subtitle="Approve faculty accounts, manage sections, subjects, and teaching assignments." %}
 
 {% if current_academic_year or current_term %}
 <div class="campus-period-banner mb-6">

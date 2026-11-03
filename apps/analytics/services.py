@@ -25,7 +25,7 @@ from apps.analytics.confidence import (
     pace_from_answer,
 )
 from apps.analytics.models import MistakeRecord
-from apps.questions.models import Question, Subject, Topic
+from apps.questions.models import Question, Topic
 from apps.reviews.models import Answer, FeedbackView, ReviewSession
 from apps.reviews.tutor_services import (
     format_answer_user_text,
@@ -267,7 +267,9 @@ def question_feedback_is_faculty_validated(question: Question) -> bool:
 
 def _explanation_steps_text(question) -> str:
     """Join approved explanation steps for display feedback."""
-    lines = list(question.explanation_steps.order_by("order").values_list("content", flat=True))
+    lines = list(
+        question.explanation_steps.order_by("order").values_list("content", flat=True)
+    )
     return "\n".join(lines) if lines else ""
 
 
@@ -434,7 +436,9 @@ def generate_answer_feedback(answer) -> str:
         unanswered = answer_is_unanswered(answer)
         is_correct = bool(answer.is_correct) and not unanswered
 
-        confidence = "high" if answer.confidence and answer.confidence >= 4 else "medium"
+        confidence = (
+            "high" if answer.confidence and answer.confidence >= 4 else "medium"
+        )
         ai_feedback = get_adaptive_feedback_generator().generate(
             topic=question.topic.name,
             question=question.stem,
@@ -612,7 +616,9 @@ def _calibration_status(
     guess_wrong = buckets.get("guessing_incorrect", 0)
 
     wrong_sure_pct = (100.0 * sure_wrong / incorrect_total) if incorrect_total else 0.0
-    wrong_guess_pct = (100.0 * guess_wrong / incorrect_total) if incorrect_total else 0.0
+    wrong_guess_pct = (
+        (100.0 * guess_wrong / incorrect_total) if incorrect_total else 0.0
+    )
     right_sure_pct = (100.0 * sure_right / correct_total) if correct_total else 0.0
     right_guess_pct = (100.0 * guess_right / correct_total) if correct_total else 0.0
 
@@ -732,7 +738,9 @@ def student_performance_donut(
         since = timezone.now() - window
         answers_qs = answers_qs.filter(session__started_at__gte=since)
 
-    answers = list(answers_qs.only("confidence", "is_correct", "session_id", "session__started_at"))
+    answers = list(
+        answers_qs.only("confidence", "is_correct", "session_id", "session__started_at")
+    )
 
     buckets = {
         "guessing_correct": 0,
@@ -796,9 +804,7 @@ def student_performance_donut(
         },
     ]
     for item in slices:
-        item["percent"] = (
-            round(100.0 * item["value"] / total, 1) if total else 0.0
-        )
+        item["percent"] = round(100.0 * item["value"] / total, 1) if total else 0.0
 
     if period_key in {"1", "7", "30"}:
         range_label = _donut_range_label(period_key)
@@ -876,16 +882,18 @@ def student_dashboard_trends(student: User, *, period: str | None = None) -> dic
     session_ids = [s.pk for s in sessions]
     answers_by_session: dict[int, list] = {sid: [] for sid in session_ids}
     if session_ids:
-        for answer in Answer.objects.filter(session_id__in=session_ids).select_related(
-            "session"
-        ).only(
-            "session_id",
-            "confidence",
-            "is_correct",
-            "time_spent_seconds",
-            "selected_choice_id",
-            "numeric_response",
-            "session__seconds_per_question",
+        for answer in (
+            Answer.objects.filter(session_id__in=session_ids)
+            .select_related("session")
+            .only(
+                "session_id",
+                "confidence",
+                "is_correct",
+                "time_spent_seconds",
+                "selected_choice_id",
+                "numeric_response",
+                "session__seconds_per_question",
+            )
         ):
             answers_by_session.setdefault(answer.session_id, []).append(answer)
 
@@ -906,9 +914,8 @@ def student_dashboard_trends(student: User, *, period: str | None = None) -> dic
 
 def session_question_trends(session: ReviewSession) -> dict:
     """Per-question series for session summary heatmap / answer-review grids."""
-    answers = (
-        session.answers.select_related("question", "selected_choice")
-        .order_by("answered_at", "id")
+    answers = session.answers.select_related("question", "selected_choice").order_by(
+        "answered_at", "id"
     )
     seconds_per_question = session.seconds_per_question or 30
     confidence_points = []
@@ -1041,39 +1048,23 @@ def enrolled_bsed_students_by_year_level() -> list[dict]:
 def professor_scope_student_ids(professor: User) -> set[int]:
     """Student IDs visible to this professor in the Students table.
 
-    Mirrors the scope used by :func:`get_professor_students_with_exams`:
-    students in the professor's assigned sections who completed a session on
-    one of their assigned subjects. The dashboard KPIs and the year-level grid
-    reuse this so the card, the grid and the table always agree.
+    Uses the canonical :func:`students_visible_to_faculty` scope (students
+    assigned to this professor) who have completed at least one session.
+    The dashboard KPIs and the year-level grid reuse this so the card, the
+    grid and the table always agree.
     """
-    from apps.users.assignment_services import (
-        faculty_has_chat_scope,
-        get_faculty_profile_section_ids,
-        get_faculty_profile_subject_ids,
-    )
+    from apps.users.assignment_services import students_visible_to_faculty
 
-    if not faculty_has_chat_scope(professor):
+    assigned_student_ids = students_visible_to_faculty(professor)
+    if not assigned_student_ids:
         return set()
 
-    section_ids = get_faculty_profile_section_ids(professor)
-    subject_ids = get_faculty_profile_subject_ids(professor)
-    if not section_ids or not subject_ids:
-        return set()
-
+    # Filter to students who have completed at least one session
     return set(
         ReviewSession.objects.filter(
-            student__section_id__in=section_ids,
+            student_id__in=assigned_student_ids,
             status=ReviewSession.Status.COMPLETED,
             student__is_archived=False,
-        )
-        .filter(
-            Q(subjects__in=subject_ids)
-            | Q(topic__subject_id__in=subject_ids)
-            | Q(
-                course__code__in=Subject.objects.filter(
-                    pk__in=subject_ids
-                ).values("code")
-            )
         )
         .values_list("student_id", flat=True)
         .distinct()
@@ -1119,17 +1110,25 @@ def handled_students_by_year_level(professor: User) -> list[dict]:
 
 
 def professor_overview_summary(professor: User) -> dict:
-    """Aggregate KPIs for the professor overview dashboard."""
+    """Aggregate KPIs for the professor overview dashboard.
+
+    Every count is scoped to students this professor handles (see
+    ``students_visible_to_faculty``): exams a student sat outside the
+    professor's handled subjects never surface here.
+    """
     from django.db.models import Max
 
-    from apps.questions.models import Subject
     from apps.reviews.models import ExamSetup
+    from apps.users.assignment_services import (
+        handled_subjects_for_faculty,
+        students_visible_to_faculty,
+    )
 
-    subject_count = Subject.objects.filter(
-        program__slug=User.HomeDegreeProgram.BSED_MATH
-    ).count()
+    visible_ids = students_visible_to_faculty(professor)
+    handled_subjects = list(handled_subjects_for_faculty(professor))
+    subject_count = len(handled_subjects)
     answers = Answer.objects.filter(
-        session__course__professor=professor,
+        session__student_id__in=visible_ids,
         session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
     )
     total_answers = answers.count()
@@ -1145,21 +1144,16 @@ def professor_overview_summary(professor: User) -> dict:
         is_enabled=True,
     ).count()
 
-    last_activity_at = (
-        ReviewSession.objects.filter(
-            course__professor=professor,
-            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
-        )
-        .aggregate(last=Max("started_at"))
-        .get("last")
-    )
-    total_sessions = ReviewSession.objects.filter(
-        course__professor=professor,
+    visible_sessions = ReviewSession.objects.filter(
+        student_id__in=visible_ids,
         course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+    )
+    last_activity_at = visible_sessions.aggregate(last=Max("started_at")).get("last")
+    total_sessions = visible_sessions.filter(
         status__in=[ReviewSession.Status.COMPLETED, ReviewSession.Status.EXPIRED],
     ).count()
     mistake_count = MistakeRecord.objects.filter(
-        answer__session__course__professor=professor,
+        answer__session__student_id__in=visible_ids,
         answer__session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
     ).count()
     avg_mistakes_per_session = (
@@ -1175,9 +1169,7 @@ def professor_overview_summary(professor: User) -> dict:
         "students_by_year_level": handled_students_by_year_level(professor),
         "student_count": student_count,
         "accuracy": accuracy,
-        "sessions_this_week": ReviewSession.objects.filter(
-            course__professor=professor,
-            course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+        "sessions_this_week": visible_sessions.filter(
             started_at__gte=week_ago,
         ).count(),
         "enabled_exam_setups": enabled_exam_setups,
@@ -1194,52 +1186,58 @@ def professor_overview_summary(professor: User) -> dict:
 
 
 def professor_overview_course_cards(professor: User) -> list[dict]:
-    """Return per-course stats for the professor overview page."""
+    """Per-handled-subject stats for the professor overview page.
 
-    from apps.reviews.models import ExamSetup
+    One card per subject in the professor's teaching load: handled students
+    with completed sessions touching that subject, plus accuracy across
+    their answers. Students outside the professor's handled scope never
+    contribute to these numbers.
+    """
+    from apps.questions.models import Subject
+    from apps.reviews.models import Answer, ReviewSession
+    from apps.users.assignment_services import (
+        handled_subject_ids,
+        students_visible_to_faculty,
+    )
 
-    now = timezone.now()
-    week_ago = now - timezone.timedelta(days=7)
-    courses = Course.objects.filter(
-        professor=professor,
-        is_archived=False,
-        program__slug=User.HomeDegreeProgram.BSED_MATH,
-    ).select_related("program")
+    subject_ids = handled_subject_ids(professor)
+    visible_ids = students_visible_to_faculty(professor)
+    if not subject_ids:
+        return []
 
+    subjects = list(
+        Subject.objects.filter(pk__in=subject_ids)
+        .select_related("program", "year_level")
+        .order_by("year_level__order", "code")
+    )
     cards = []
-    for course in courses:
-        student_ids = _course_student_ids(course)
-        enrolled_count = student_ids.count()
-        answers = _course_answers(course)
+    for subject in subjects:
+        sessions = ReviewSession.objects.filter(
+            student_id__in=visible_ids,
+            status=ReviewSession.Status.COMPLETED,
+        ).filter(
+            Q(topic__subject=subject)
+            | Q(subjects=subject)
+            | Q(course__code=subject.code)
+        )
+        student_ids = sessions.values_list("student_id", flat=True).distinct()
+        student_count = student_ids.count()
+        answers = Answer.objects.filter(
+            session__student_id__in=visible_ids,
+            question__topic__subject=subject,
+        )
         total_answers = answers.count()
         correct_answers = answers.filter(is_correct=True).count()
-        accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
-
-        sessions_this_week = ReviewSession.objects.filter(
-            course=course,
-            started_at__gte=week_ago,
-        ).count()
-
-        exam_setup_enabled = ExamSetup.objects.filter(
-            course=course,
-            is_enabled=True,
-        ).exists()
-
-        last_session_at = (
-            ReviewSession.objects.filter(course=course)
-            .order_by("-started_at")
-            .values_list("started_at", flat=True)
-            .first()
+        accuracy = (
+            round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
         )
-
         cards.append(
             {
-                "course": course,
-                "enrolled_count": enrolled_count,
+                "subject": subject,
+                "student_count": student_count,
+                "sessions_completed": sessions.count(),
                 "accuracy": accuracy,
-                "sessions_this_week": sessions_this_week,
-                "exam_setup_enabled": exam_setup_enabled,
-                "last_session_at": last_session_at,
+                "total_answers": total_answers,
             }
         )
     return cards
@@ -1346,16 +1344,9 @@ def build_confidence_insight(confidence_points: list[dict]) -> str:
         if (p.get("sure", 0) + p.get("not_sure", 0) + p.get("guessing", 0)) > 0
     ]
     if not rated:
-        return (
-            "Rate Guessing or Sure after each question to unlock "
-            "confidence trends."
-        )
+        return "Rate Guessing or Sure after each question to unlock confidence trends."
 
-    ahead = [
-        p
-        for p in rated
-        if p.get("sure", 0) > (p.get("correct_pct", 0) + 8)
-    ]
+    ahead = [p for p in rated if p.get("sure", 0) > (p.get("correct_pct", 0) + 8)]
     latest = rated[-1]
     sure = latest.get("sure", 0)
     correct = latest.get("correct_pct", 0)
@@ -1391,10 +1382,18 @@ def professor_overview_trends(professor: User) -> dict:
     """
 
     now = timezone.now()
-    course_filter = Q(course__professor=professor, course__is_archived=False)
+    from apps.users.assignment_services import students_visible_to_faculty
+
+    visible_ids = students_visible_to_faculty(professor)
+    course_filter = Q(
+        student_id__in=visible_ids,
+        course__is_archived=False,
+        course__program__slug=User.HomeDegreeProgram.BSED_MATH,
+    )
     answer_filter = Q(
-        session__course__professor=professor,
+        session__student_id__in=visible_ids,
         session__course__is_archived=False,
+        session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
     )
 
     ranges = {
@@ -1648,66 +1647,81 @@ def professor_overview_trends(professor: User) -> dict:
     return result
 
 
-def professor_latest_student_sessions(professor: User, limit: int = 20) -> list[dict]:
-    """Return latest completed session for each student in professor's scope.
+def professor_latest_student_sessions(professor: User, limit: int = 60) -> list[dict]:
+    """Return latest completed session per (student, subject) in scope.
 
     Used for the "Recent Activity" table on the professor overview dashboard.
-    Returns a list of dicts with: student, latest_session, course, subject, accuracy, time_ago.
-    Ordered by session ended_at descending (most recent first).
+    One row per student per course they completed so the course picker can
+    filter rows client-side; when "All courses" is selected the table shows
+    each student's overall latest exam (first occurrence per student, since
+    rows are ordered by ``ended_at`` descending).
+    Returns a list of dicts with: student, latest_session, subject, subject_id,
+    accuracy, total_questions, correct_questions, ended_at.
     """
-    from apps.users.assignment_services import (
-        faculty_has_chat_scope,
-        get_faculty_profile_section_ids,
-        get_faculty_profile_subject_ids,
-    )
     from apps.reviews.models import ReviewSession
+    from apps.users.models import StudentFacultyAssignment
+    from apps.users.section_services import get_current_academic_year
+
+    current_year = get_current_academic_year()
+    if not current_year:
+        return []
+
+    # Get student IDs assigned to this professor
+    assigned_student_ids = set(
+        StudentFacultyAssignment.objects.filter(
+            faculty=professor, academic_year=current_year
+        ).values_list("student_id", flat=True)
+    )
+
+    if not assigned_student_ids:
+        return []
+
+    from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+
+    # Per (session, subject) answer slices — matching how the confidence donut
+    # scopes answers (``question__topic__subject``). Sessions can pool
+    # questions from several courses, so every course a session touched gets
+    # its own slice of scores; ``session.topic`` is only a fallback.
+    subject_code_map: dict[int, str] = {}
+    session_subjects: dict[int, list[int]] = {}
+    slice_totals: dict[tuple[int, int], dict[str, int]] = {}
+    agg_rows = (
+        Answer.objects.filter(
+            session__student_id__in=assigned_student_ids,
+            session__status=ReviewSession.Status.COMPLETED,
+        )
+        .values(
+            "session_id",
+            "session__student_id",
+            "question__topic__subject_id",
+        )
+        .annotate(
+            slice_total=Count("id"),
+            slice_correct=Count("id", filter=Q(is_correct=True)),
+        )
+        .order_by("session_id", "-slice_total")
+    )
+    for row in agg_rows:
+        subject_id = row["question__topic__subject_id"]
+        if not subject_id:
+            continue
+        session_id = row["session_id"]
+        slice_totals[(session_id, subject_id)] = {
+            "total": row["slice_total"],
+            "correct": row["slice_correct"],
+        }
+        subjects_for_session = session_subjects.setdefault(session_id, [])
+        subjects_for_session.append(subject_id)
+        subject_code_map[subject_id] = ""
+
     from apps.questions.models import Subject
 
-    if not faculty_has_chat_scope(professor):
-        return []
-
-    section_ids = get_faculty_profile_section_ids(professor)
-    subject_ids = get_faculty_profile_subject_ids(professor)
-
-    if not section_ids:
-        return []
-
-    # Get latest completed session per student in scope (DB-agnostic approach)
-    # First, get the max ended_at per student
-    from django.db.models import Max, OuterRef, Subquery
-
-    latest_sessions_subq = (
-        ReviewSession.objects.filter(
-            student_id=OuterRef("student_id"),
-            status=ReviewSession.Status.COMPLETED,
+    if subject_code_map:
+        subject_code_map = dict(
+            Subject.objects.filter(id__in=subject_code_map).values_list(
+                "id", "code"
+            )
         )
-        .filter(
-            Q(subjects__in=subject_ids)
-            | Q(topic__subject_id__in=subject_ids)
-            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
-        )
-        .values("student_id")
-        .annotate(max_ended=Max("ended_at"))
-        .values("max_ended")
-    )
-
-    sessions = (
-        ReviewSession.objects.filter(
-            student__section_id__in=section_ids,
-            status=ReviewSession.Status.COMPLETED,
-        )
-        .filter(
-            Q(subjects__in=subject_ids)
-            | Q(topic__subject_id__in=subject_ids)
-            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
-        )
-        .filter(ended_at=Subquery(latest_sessions_subq[:1]))
-        .select_related("student", "student__section", "course", "topic", "topic__subject")
-        .order_by("-ended_at")[:limit]
-    )
-
-    # Annotate with accuracy for this session - use names that don't conflict with model properties
-    from django.db.models import Count, IntegerField
 
     correct_subq = (
         Answer.objects.filter(session_id=OuterRef("pk"), is_correct=True)
@@ -1722,60 +1736,112 @@ def professor_latest_student_sessions(professor: User, limit: int = 20) -> list[
         .values("c")[:1]
     )
 
-    sessions = sessions.annotate(
-        annotated_correct=Subquery(correct_subq, output_field=IntegerField()),
-        annotated_total=Subquery(total_subq, output_field=IntegerField()),
+    sessions = (
+        ReviewSession.objects.filter(
+            student_id__in=assigned_student_ids,
+            status=ReviewSession.Status.COMPLETED,
+        )
+        .select_related("student", "topic__subject", "course")
+        .annotate(
+            annotated_correct=Subquery(correct_subq, output_field=IntegerField()),
+            annotated_total=Subquery(total_subq, output_field=IntegerField()),
+        )
+        .order_by("-ended_at", "-pk")
     )
 
     result = []
-    for session in sessions:
-        total = session.annotated_total or 0
-        correct = session.annotated_correct or 0
-        accuracy = round(correct / total * 100, 1) if total else 0.0
+    seen_pairs: set[tuple[int, int]] = set()
+    # Scan a bounded recency window; each completed (student, course) pair
+    # contributes exactly one row — the student's latest exam touching it.
+    for session in sessions[:500]:
+        had_fallback = False
+        subject_ids = session_subjects.get(session.pk, [])
+        if not subject_ids:
+            if session.topic_id:
+                subject_ids = [session.topic.subject_id]
+                had_fallback = True
+            else:
+                continue
 
-        subject_name = "—"
-        if session.topic and session.topic.subject:
-            subject_name = session.topic.subject.code
-        elif session.course:
-            subject_name = session.course.code
+        for subject_id in subject_ids:
+            if not subject_id:
+                continue
+            pair = (session.student_id, subject_id)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
 
-        result.append(
-            {
-                "student": session.student,
-                "section": session.student.section,
-                "latest_session": session,
-                "subject": subject_name,
-                "accuracy": accuracy,
-                "total_questions": total,
-                "correct_questions": correct,
-                "ended_at": session.ended_at or session.started_at,
-            }
-        )
+            if had_fallback:
+                total = session.annotated_total or 0
+                correct = session.annotated_correct or 0
+            else:
+                counts = slice_totals.get((session.pk, subject_id), {})
+                total = counts.get("total", 0)
+                correct = counts.get("correct", 0)
+            accuracy = round(correct / total * 100, 1) if total else 0.0
 
-    # Already ordered by -ended_at from the query
+            subject_name = "—"
+            if subject_id:
+                subject_name = subject_code_map.get(subject_id) or "—"
+            elif session.course:
+                subject_name = session.course.code
+
+            result.append(
+                {
+                    "student": session.student,
+                    "latest_session": session,
+                    "subject": subject_name,
+                    "subject_id": subject_id,
+                    # Every course the underlying session touched — the
+                    # dashboard collapses multi-course sessions into a count
+                    # with the full list on hover.
+                    "session_subject_codes": list(
+                        dict.fromkeys(
+                            subject_code_map.get(sid, "")
+                            for sid in session_subjects.get(session.pk, [])
+                            if sid
+                        )
+                    ),
+                    "accuracy": accuracy,
+                    "total_questions": total,
+                    "correct_questions": correct,
+                    "ended_at": session.ended_at or session.started_at,
+                }
+            )
+            if len(result) >= limit:
+                return result
+
+        # Already ordered by -ended_at from the query
     return result
 
 
 def professor_confidence_donut(
-    professor: User, *, period: str | None = None, section: str | None = None
+    professor: User,
+    *,
+    period: str | None = None,
+    section: str | None = None,
+    subject=None,
 ) -> dict:
-    """Confidence × correctness donut across every student in a professor's scope.
+    """Confidence × correctness donut across a professor's handled students.
 
     Same payload shape as :func:`student_performance_donut` so the shared donut
-    renderer drives both. Scope matches ``professor_overview_trends``:
-    sessions on the professor's non-archived course offerings. ``period``
-    accepts the same ``1`` / ``7`` / ``30`` / ``all`` keys as the student
-    dashboard. ``section`` narrows the scope to one program section (the
-    students' cohort section); unknown or missing values mean "all sections".
+    renderer drives both. Scope is the professor's handled students
+    (StudentFacultyAssignment, current academic year) — exams sat by anyone
+    else never surface here. ``period`` accepts the same ``1`` / ``7`` /
+    ``30`` / ``all`` keys as the student dashboard. ``section`` optionally
+    narrows to one cohort section of handled students; ``subject`` narrows to
+    one subject the handled students actually answered; unknown or missing
+    values mean "all".
     """
 
     from apps.analytics.confidence import CONFIDENCE_HIGH, CONFIDENCE_LOW
+    from apps.users.assignment_services import students_visible_to_faculty
 
     period_key, window = _parse_donut_period(period)
+    visible_ids = students_visible_to_faculty(professor)
 
     answers = Answer.objects.filter(
-        session__course__professor=professor,
-        session__course__is_archived=False,
+        session__student_id__in=visible_ids,
         session__status=ReviewSession.Status.COMPLETED,
         confidence__isnull=False,
     ).only("confidence", "is_correct", "session_id", "session__started_at")
@@ -1787,9 +1853,24 @@ def professor_confidence_donut(
     if section_id:
         answers = answers.filter(session__student__section_id=section_id)
 
+    subject_id = None
+    if str(subject or "").strip().isdigit():
+        candidate = int(subject)
+        handled_subject_ids = set(
+            Answer.objects.filter(session__student_id__in=visible_ids)
+            .values_list("question__topic__subject_id", flat=True)
+        )
+        if candidate in handled_subject_ids:
+            subject_id = candidate
+            answers = answers.filter(question__topic__subject_id=subject_id)
+
     rows = list(
         answers.values_list(
-            "confidence", "is_correct", "session_id", "session__started_at"
+            "confidence",
+            "is_correct",
+            "session_id",
+            "session__started_at",
+            "session__student_id",
         )
     )
 
@@ -1800,10 +1881,13 @@ def professor_confidence_donut(
         "sure_incorrect": 0,
     }
     session_ids: set[int] = set()
+    student_ids: set[int] = set()
     earliest = None
     latest = None
-    for confidence, is_correct, session_id, started_at in rows:
+    for confidence, is_correct, session_id, started_at, student_id in rows:
         session_ids.add(session_id)
+        if student_id:
+            student_ids.add(student_id)
         is_sure = confidence == CONFIDENCE_HIGH
         is_guessing = confidence == CONFIDENCE_LOW or (not is_sure)
         if is_sure:
@@ -1885,9 +1969,12 @@ def professor_confidence_donut(
         "total": total,
         "slices": slices,
         "period": period_key,
+        "section": section_id or "",
+        "subject": subject_id or "",
         "percent_correct": percent_correct,
         "correct_total": correct_total,
         "session_count": len(session_ids),
+        "student_count": len(student_ids),
         "range_label": range_label,
         "scope_line": (
             f"{total} answer{'s' if total != 1 else ''} · "
@@ -1900,7 +1987,6 @@ def professor_confidence_donut(
         "calibration_status": calibration["status"],
         "calibration_detail": calibration["detail"],
         "calibration": calibration,
-        "section": section_id or "",
     }
 
 
@@ -1923,26 +2009,24 @@ def _resolve_program_section(section: str | None) -> int | None:
 
 
 def professor_donut_sections(professor: User) -> list[dict]:
-    """Program sections represented among the professor's completed sessions.
+    """Cohort sections represented among the professor's handled students.
 
-    Powers the donut's section filter. Each entry carries ``pk`` and ``label``.
+    Powers the donut's section filter. Each entry carries ``pk`` and
+    ``label`` (the section display label).
     """
+    from apps.users.assignment_services import students_visible_to_faculty
     from apps.users.models import ProgramSection
 
+    visible_ids = students_visible_to_faculty(professor)
+    if not visible_ids:
+        return []
     section_ids = (
-        ReviewSession.objects.filter(
-            course__professor=professor,
-            course__is_archived=False,
-            status=ReviewSession.Status.COMPLETED,
-        )
-        .exclude(student__section__isnull=True)
-        .values_list("student__section_id", flat=True)
+        User.objects.filter(pk__in=visible_ids, section_id__isnull=False)
+        .values_list("section_id", flat=True)
         .distinct()
     )
-    sections = (
-        ProgramSection.objects.filter(pk__in=list(section_ids))
-        .select_related("program", "year_level")
-        .order_by("program__name", "year_level__order", "label")
+    sections = ProgramSection.objects.filter(pk__in=section_ids).order_by(
+        "year_level__order", "label"
     )
     return [{"pk": section.pk, "label": section.display_label} for section in sections]
 
@@ -1956,6 +2040,9 @@ def professor_mistake_trend(professor: User, *, ranges: dict, bucket_starts) -> 
     who sat an exam) and ``mistake_students`` (students with >=1 mistake).
     """
     result: dict[str, list[dict]] = {}
+    from apps.users.assignment_services import students_visible_to_faculty
+
+    visible_ids = students_visible_to_faculty(professor)
 
     for range_key, cfg in ranges.items():
         trunc_fn = cfg["trunc"]
@@ -1963,7 +2050,7 @@ def professor_mistake_trend(professor: User, *, ranges: dict, bucket_starts) -> 
 
         mistake_rows = (
             MistakeRecord.objects.filter(
-                answer__session__course__professor=professor,
+                student_id__in=visible_ids,
                 answer__session__course__is_archived=False,
                 occurred_at__gte=earliest,
             )
@@ -1986,7 +2073,7 @@ def professor_mistake_trend(professor: User, *, ranges: dict, bucket_starts) -> 
 
         exam_rows = (
             ReviewSession.objects.filter(
-                course__professor=professor,
+                student_id__in=visible_ids,
                 course__is_archived=False,
                 started_at__gte=earliest,
             )
@@ -2018,16 +2105,16 @@ def professor_mistake_trend(professor: User, *, ranges: dict, bucket_starts) -> 
     return result
 
 
-def professor_high_mistake_questions(
-    professor: User, *, limit: int = 15
-) -> list[dict]:
-    """Questions with ≥ threshold unique student mistakes for this professor."""
+def professor_high_mistake_questions(professor: User, *, limit: int = 15) -> list[dict]:
+    """Questions with ≥ threshold unique handled-student mistakes."""
     from apps.questions.services import mistake_student_threshold
+    from apps.users.assignment_services import students_visible_to_faculty
 
+    visible_ids = students_visible_to_faculty(professor)
     threshold = mistake_student_threshold()
     rows = (
         MistakeRecord.objects.filter(
-            answer__session__course__professor=professor,
+            student_id__in=visible_ids,
             answer__session__course__program__slug=User.HomeDegreeProgram.BSED_MATH,
         )
         .values("question_id", "question__stem")
@@ -2167,9 +2254,16 @@ def _peer_accuracy_for_answers(answers_qs) -> float:
     return round(correct / total * 100, 1)
 
 
-def course_performance_summary(course: Course) -> dict:
-    """Return aggregated performance for a course offering."""
-    student_ids = _course_student_ids(course)
+def course_performance_summary(course: Course, student_ids=None) -> dict:
+    """Return aggregated performance for a course offering.
+
+    Pass ``student_ids`` to scope every count to handled students only.
+    """
+    course_student_ids = _course_student_ids(course)
+    if student_ids is not None:
+        student_ids = course_student_ids.filter(pk__in=set(student_ids))
+    else:
+        student_ids = course_student_ids
 
     sessions = ReviewSession.objects.filter(
         course=course,
@@ -2204,7 +2298,9 @@ def course_performance_summary(course: Course) -> dict:
     )
 
     mistake_patterns_by_error_type = list(
-        MistakeRecord.objects.filter(student_id__in=student_ids, error_type__isnull=False)
+        MistakeRecord.objects.filter(
+            student_id__in=student_ids, error_type__isnull=False
+        )
         .values("error_type__label", "error_type__slug")
         .annotate(mistake_count=Count("id"))
         .order_by("-mistake_count")[:10]
@@ -2264,7 +2360,11 @@ def program_performance_summary(program: Program, department=None) -> dict:
     accuracy = round(correct_answers / total_answers * 100, 1) if total_answers else 0.0
 
     question_distribution = list(
-        Question.objects.filter(topic__subject__program=program, status=Question.Status.APPROVED, is_active=True)
+        Question.objects.filter(
+            topic__subject__program=program,
+            status=Question.Status.APPROVED,
+            is_active=True,
+        )
         .values("topic__name", "difficulty")
         .annotate(count=Count("id"))
         .order_by("topic__name", "difficulty")
@@ -2297,7 +2397,9 @@ def department_math_analytics(department) -> dict:
 
     for program_value in programs:
         label = dict(User.HomeDegreeProgram.choices).get(program_value, program_value)
-        students = User.objects.filter(role=User.Role.STUDENT, home_degree_program=program_value)
+        students = User.objects.filter(
+            role=User.Role.STUDENT, home_degree_program=program_value
+        )
         student_ids = students.values_list("pk", flat=True)
         answers = Answer.objects.filter(session__student_id__in=student_ids)
         total = answers.count()
@@ -2415,7 +2517,9 @@ def build_session_history_rows(sessions) -> list[dict]:
         subject_code = ""
         subject_ids: set[int] = set()
         if total:
-            prefetched = getattr(session, "_prefetched_objects_cache", {}).get("answers")
+            prefetched = getattr(session, "_prefetched_objects_cache", {}).get(
+                "answers"
+            )
             if prefetched is not None:
                 answer_rows = prefetched
             else:
@@ -2453,9 +2557,7 @@ def build_session_history_rows(sessions) -> list[dict]:
             else (session.duration_minutes or 0)
         )
         seg_total = sum(segments.values()) or 1
-        segment_pcts = {
-            k: round(v / seg_total * 100, 1) for k, v in segments.items()
-        }
+        segment_pcts = {k: round(v / seg_total * 100, 1) for k, v in segments.items()}
 
         rows.append(
             {
@@ -2502,7 +2604,11 @@ def build_confidence_performance_series(sessions) -> list[dict]:
         else:
             avg_conf = 0.0
         started = session.started_at
-        label = f"{session.topic.name} {started.strftime('%m-%d %I:%M %p')}" if started else session.topic.name
+        label = (
+            f"{session.topic.name} {started.strftime('%m-%d %I:%M %p')}"
+            if started
+            else session.topic.name
+        )
         series.append(
             {
                 "label": label,
@@ -2527,7 +2633,9 @@ def get_roster_summaries(course: Course) -> list[dict]:
         correct = student_answers.filter(is_correct=True).count()
         accuracy = round(correct / total * 100, 1) if total else 0.0
         avg_conf = student_answers.aggregate(avg=Avg("confidence"))["avg"] or 0
-        total_seconds = student_answers.aggregate(total=Sum("time_spent_seconds"))["total"] or 0
+        total_seconds = (
+            student_answers.aggregate(total=Sum("time_spent_seconds"))["total"] or 0
+        )
         sessions_count = ReviewSession.objects.filter(
             student=student,
             course=course,
@@ -2548,32 +2656,33 @@ def get_roster_summaries(course: Course) -> list[dict]:
 def get_professor_students_with_exams(
     professor: User, *, include_archived: bool = False
 ) -> list[dict]:
-    """Students in faculty-assigned sections who completed exams on assigned subjects.
+    """Students assigned to this professor who completed exams.
 
-    Option B: no profile sections/subjects → empty roster.
+    Uses StudentFacultyAssignment to determine student scope.
     """
-    from apps.users.assignment_services import (
-        faculty_has_chat_scope,
-        get_faculty_profile_section_ids,
-        get_faculty_profile_subject_ids,
-    )
+    from apps.users.models import StudentFacultyAssignment
+    from apps.users.section_services import get_current_academic_year
 
-    if not faculty_has_chat_scope(professor):
+    current_year = get_current_academic_year()
+    if not current_year:
         return []
 
-    section_ids = get_faculty_profile_section_ids(professor)
-    subject_ids = get_faculty_profile_subject_ids(professor)
+    # Get student IDs assigned to this professor
+    assigned_student_ids = set(
+        StudentFacultyAssignment.objects.filter(
+            faculty=professor, academic_year=current_year
+        ).values_list("student_id", flat=True)
+    )
+
+    if not assigned_student_ids:
+        return []
+
     completed = (
         ReviewSession.objects.filter(
-            student__section_id__in=section_ids,
+            student_id__in=assigned_student_ids,
             status=ReviewSession.Status.COMPLETED,
         )
-        .filter(
-            Q(subjects__in=subject_ids)
-            | Q(topic__subject_id__in=subject_ids)
-            | Q(course__code__in=Subject.objects.filter(pk__in=subject_ids).values("code"))
-        )
-        .select_related("student", "student__section", "course")
+        .select_related("student", "course")
         .distinct()
         .order_by("-ended_at", "-started_at")
     )
@@ -2605,7 +2714,6 @@ def get_professor_students_with_exams(
         row["session__student_id"]: row["n"]
         for row in Answer.objects.filter(
             session__student_id__in=by_student.keys(),
-            question__topic__subject_id__in=subject_ids,
         )
         .values("session__student_id")
         .annotate(n=Count("question__topic__subject_id", distinct=True))
@@ -2617,7 +2725,6 @@ def get_professor_students_with_exams(
         row["student_id"]: row["n"]
         for row in MistakeRecord.objects.filter(
             student_id__in=by_student.keys(),
-            question__topic__subject_id__in=subject_ids,
         )
         .values("student_id")
         .annotate(n=Count("id"))
@@ -2642,29 +2749,29 @@ def student_professor_summary(
 ) -> dict:
     """Performance summary for a student across a professor's visible scope.
 
-    Includes sessions on courses they own plus completed exams in their
-    assigned section/subject profile scope (same gate as the Students list).
+    Includes sessions on courses they own plus, for handled students, exams
+    touching the professor's handled subjects — every faculty sees their own
+    slice of the student, never another subject's exams.
     ``period`` narrows the confidence donut to a time window.
     """
+    from apps.questions.models import Subject
     from apps.users.assignment_services import (
-        faculty_has_chat_scope,
-        get_faculty_profile_section_ids,
-        get_faculty_profile_subject_ids,
+        handled_subject_ids,
+        students_visible_to_faculty,
     )
 
     owned = Q(course__professor=professor)
     scoped = Q(pk__in=[])
-    if faculty_has_chat_scope(professor):
-        section_ids = get_faculty_profile_section_ids(professor)
-        subject_ids = get_faculty_profile_subject_ids(professor)
-        if student.section_id in section_ids:
-            scoped = Q(subjects__in=subject_ids) | Q(
-                topic__subject_id__in=subject_ids
-            ) | Q(
-                course__code__in=Subject.objects.filter(pk__in=subject_ids).values(
-                    "code"
-                )
-            )
+    if student.pk in students_visible_to_faculty(professor):
+        subject_ids = handled_subject_ids(professor)
+        codes = list(
+            Subject.objects.filter(pk__in=subject_ids).values_list("code", flat=True)
+        )
+        scoped = (
+            Q(topic__subject_id__in=subject_ids)
+            | Q(subjects__id__in=subject_ids)
+            | Q(course__code__in=codes)
+        )
 
     sessions = (
         ReviewSession.objects.filter(
@@ -2724,9 +2831,9 @@ def get_section_heatmap(section, subject=None) -> dict:
     When ``subject`` is set, only that curriculum subject's questions are
     included (one subject at a time on the section heatmap).
     """
-    answers = Answer.objects.filter(
-        session__student__section=section
-    ).select_related("question__topic", "session__student")
+    answers = Answer.objects.filter(session__student__section=section).select_related(
+        "question__topic", "session__student"
+    )
     if subject is not None:
         answers = answers.filter(question__topic__subject=subject)
     student_ids = answers.values_list("session__student_id", flat=True).distinct()
@@ -2735,9 +2842,9 @@ def get_section_heatmap(section, subject=None) -> dict:
 
 def get_subject_heatmap(subject) -> dict:
     """Heatmap for all answers tied to a curriculum subject (any year)."""
-    answers = Answer.objects.filter(
-        question__topic__subject=subject
-    ).select_related("question__topic", "session__student")
+    answers = Answer.objects.filter(question__topic__subject=subject).select_related(
+        "question__topic", "session__student"
+    )
     student_ids = answers.values_list("session__student_id", flat=True).distinct()
     return _heatmap_from_answers(answers, student_ids=student_ids, subject=subject)
 
@@ -2848,14 +2955,20 @@ def get_step_feedback_stats(question: Question) -> list[dict]:
         stats.append(
             {
                 "step": step,
-                "view_count": StepFeedbackView.objects.filter(explanation_step=step).count(),
+                "view_count": StepFeedbackView.objects.filter(
+                    explanation_step=step
+                ).count(),
             }
         )
     return stats
 
 
-def get_intervention_list(course: Course) -> list[dict]:
-    """Return students flagged for professor intervention in a course."""
+def get_intervention_list(course: Course, student_ids=None) -> list[dict]:
+    """Return students flagged for professor intervention in a course.
+
+    Pass ``student_ids`` to scope flags to handled students only; outsiders
+    never appear in a faculty member's intervention queue.
+    """
 
     from apps.analytics.confidence import (
         CLASSIFICATION_LUCKY_GUESS,
@@ -2863,9 +2976,13 @@ def get_intervention_list(course: Course) -> list[dict]:
         classify_answer,
     )
 
-    student_ids = list(_course_student_ids(course))
+    student_ids = (
+        list(student_ids)
+        if student_ids is not None
+        else list(_course_student_ids(course))
+    )
     students = User.objects.filter(pk__in=student_ids).order_by("last_name", "email")
-    answers = _course_answers(course)
+    answers = _course_answers(course).filter(session__student_id__in=student_ids)
     now = timezone.now()
     cutoff = now - timezone.timedelta(days=14)
 
@@ -2875,9 +2992,12 @@ def get_intervention_list(course: Course) -> list[dict]:
         total = student_answers.count()
         correct = student_answers.filter(is_correct=True).count()
         accuracy = round(correct / total * 100, 1) if total else 0.0
-        avg_confidence = student_answers.aggregate(
-            avg=Avg(_confidence_scale_0_3_annotation())
-        )["avg"] or 0
+        avg_confidence = (
+            student_answers.aggregate(avg=Avg(_confidence_scale_0_3_annotation()))[
+                "avg"
+            ]
+            or 0
+        )
         sessions_count = ReviewSession.objects.filter(
             student=student,
             course=course,
@@ -2934,7 +3054,12 @@ def get_intervention_list(course: Course) -> list[dict]:
             }
         )
 
-    priority = {"overconfident": 0, "low_accuracy": 1, "under_practicing": 2, "lucky_guess_pattern": 3}
+    priority = {
+        "overconfident": 0,
+        "low_accuracy": 1,
+        "under_practicing": 2,
+        "lucky_guess_pattern": 3,
+    }
     rows.sort(key=lambda r: (priority.get(r["flags"][0], 9), -r["misconception_count"]))
     return rows
 
@@ -3173,9 +3298,7 @@ def _build_student_activity_summary(
     subjects_taken = sorted(
         {
             code
-            for code in answers.values_list(
-                "question__topic__subject__code", flat=True
-            )
+            for code in answers.values_list("question__topic__subject__code", flat=True)
             if code
         }
     )
@@ -3307,6 +3430,7 @@ def student_section_summary(student: User, section) -> dict:
         confidence_group_by="subject",
     )
 
+
 def _subject_answers(subject, student: User | None = None):
     qs = Answer.objects.filter(question__topic__subject=subject)
     if student:
@@ -3371,7 +3495,9 @@ def subject_performance_summary(subject) -> dict:
         item["date"] = item["date"].isoformat() if item["date"] else ""
 
     year_breakdown = list(
-        answers.values("session__student__year_level__name", "session__student__year_level__order")
+        answers.values(
+            "session__student__year_level__name", "session__student__year_level__order"
+        )
         .annotate(
             student_count=Count("session__student_id", distinct=True),
             answer_count=Count("id"),

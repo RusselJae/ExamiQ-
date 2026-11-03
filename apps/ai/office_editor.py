@@ -142,9 +142,7 @@ def document_from_token(token: str) -> LearningDocument | None:
     if not pk.isdigit():
         return None
     document = (
-        LearningDocument.objects.filter(pk=int(pk))
-        .select_related("subject")
-        .first()
+        LearningDocument.objects.filter(pk=int(pk)).select_related("subject").first()
     )
     # The token is bound to the exact stored path, so replacing the file
     # invalidates older tokens.

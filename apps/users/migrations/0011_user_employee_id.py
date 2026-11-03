@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('users', '0010_user_signup_approval_fields'),
+        ("users", "0010_user_signup_approval_fields"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='employee_id',
-            field=models.CharField(blank=True, default='', help_text='Employee ID for faculty and chairperson accounts.', max_length=50),
+            model_name="user",
+            name="employee_id",
+            field=models.CharField(
+                blank=True,
+                default="",
+                help_text="Employee ID for faculty and chairperson accounts.",
+                max_length=50,
+            ),
         ),
     ]

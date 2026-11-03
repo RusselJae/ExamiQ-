@@ -32,7 +32,9 @@ class TestAnswerDetailAndMistakeLog:
         assert "open-tutor-btn" in content
         assert f'data-answer-id="{answer.pk}"' in content
 
-    def test_weak_areas_redirects_to_mistakes(self, client, student, topic, mcq_question):
+    def test_weak_areas_redirects_to_mistakes(
+        self, client, student, topic, mcq_question
+    ):
         question, _ = mcq_question
         session = start_review_session(
             student=student,
@@ -53,7 +55,9 @@ class TestAnswerDetailAndMistakeLog:
         assert response.status_code == 302
         assert response.url == reverse("analytics_student:mistakes")
 
-    def test_answer_detail_shows_feedback_after_generate(self, client, student, topic, mcq_question):
+    def test_answer_detail_shows_feedback_after_generate(
+        self, client, student, topic, mcq_question
+    ):
         question, _ = mcq_question
         ExplanationStep.objects.create(
             question=question,
@@ -75,7 +79,9 @@ class TestAnswerDetailAndMistakeLog:
         )
 
         client.force_login(student)
-        detail_url = reverse("analytics_student:answer_detail", kwargs={"answer_pk": answer.pk})
+        detail_url = reverse(
+            "analytics_student:answer_detail", kwargs={"answer_pk": answer.pk}
+        )
         response = client.get(detail_url)
         content = response.content.decode()
         assert response.status_code == 200

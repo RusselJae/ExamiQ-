@@ -4,46 +4,43 @@
 {% block title %}Content Management - {{ course.code }}{% endblock %}
 
 {% block content %}
-{% include "components/professor_section_header.html" with course=course page_label="Content" %}
-{% include "components/professor_course_nav.html" with course=course active_tab="materials" %}
+{% include "components/professor_course_nav.html" with course=course active_tab="content" panel=True draft_count=draft_count %}
 
-<div class="materials-page">
-    <section class="materials-upload bento-card">
-        <form method="post"
-              action="{% url 'analytics_professor:material_upload' course.pk %}"
-              enctype="multipart/form-data"
-              class="materials-upload__form">
-            {% csrf_token %}
-            {% if subject %}<input type="hidden" name="subject_id" value="{{ subject.pk }}">{% endif %}
-            <div class="materials-hub-upload-row">
-                <div class="materials-field materials-field--file">
-                    <p class="materials-field__helper materials-field__helper--muted">Supported: TXT, MD, CSV, PDF, DOCX.</p>
-                    <div class="materials-dropzone" data-dropzone>
-                        <span class="materials-dropzone__icon" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-                        </span>
-                        <span class="materials-dropzone__text">
-                            <strong>Drag files here to upload</strong>
-                            <span data-file-name>or browse from your device</span>
-                        </span>
-                        <span class="materials-dropzone__actions">
-                            <label class="materials-dropzone__choose" for="material-file">Choose file</label>
-                            <button type="submit" class="btn-primary materials-dropzone__upload" data-upload-submit>
-                                Upload
-                            </button>
-                        </span>
-                        <input id="material-file" name="source_file" type="file" required accept=".txt,.md,.csv,.pdf,.docx" class="sr-only">
-                        <input type="hidden" name="original_name" id="material-original-name" data-original-name value="">
-                    </div>
-                </div>
-            </div>
-        </form>
-    </section>
+{% url 'analytics_professor:material_upload' course.pk as add_content_url %}
 
-    {% include "components/materials_library.html" with documents=documents library_count=library_count ext_counts=ext_counts include_archived=include_archived course=course faculty_mode=True %}
+<div class="course-home-panel">
+    <div class="materials-page">
+        <div class="materials-page__actions">
+            <button type="button" class="materials-add-btn" data-content-modal="add" title="Add content">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Add content
+            </button>
+        </div>
+
+        {% include "components/materials_library.html" with documents=documents library_count=library_count ext_counts=ext_counts include_archived=include_archived course=course faculty_mode=True %}
+    </div>
 </div>
+
+{# Add content modal — posts to the upload endpoint, then returns to the list. #}
+{% include "components/content_modal.html" with modal_id="content-modal-add" modal_mode="add" modal_title="Add content" modal_action_label="Upload" subject_id=subject.pk|default:"" form_action=add_content_url subject_options=subject_options %}
+
+{# Edit content modal — populated from the library Edit buttons. #}
+{% include "components/content_modal.html" with modal_id="content-modal-edit" modal_mode="edit" modal_title="Edit content" modal_action_label="Save" return_to="list" subject_options=subject_options %}
+
+{# Full-screen host for AI batch generate from a material. #}
+<div id="batch-host-modal" class="question-modal batch-host-modal hidden" role="dialog" aria-modal="true" aria-label="Add questions — Draft batch">
+    <div class="question-modal__backdrop" data-dismiss-batch></div>
+    <div class="question-modal__panel">
+        <iframe class="batch-modal__frame" data-batch-frame title="Add questions — Draft batch" src="about:blank"></iframe>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/materials-library.js' %}"></script>
+<script src="{% static 'js/content-modal.js' %}"></script>
+<script src="{% static 'js/question-modal.js' %}"></script>
 {% endblock %}

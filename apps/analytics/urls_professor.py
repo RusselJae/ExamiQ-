@@ -17,7 +17,9 @@ urlpatterns = [
         views_professor.ProfessorDonutDataView.as_view(),
         name="donut_data",
     ),
-    path("dashboard/", views_professor.ProfessorDashboardView.as_view(), name="dashboard"),
+    path(
+        "dashboard/", views_professor.ProfessorDashboardView.as_view(), name="dashboard"
+    ),
     path("students/", views_professor.ProfessorStudentsView.as_view(), name="students"),
     path(
         "students/<int:student_pk>/",
@@ -39,7 +41,11 @@ urlpatterns = [
         views_professor.ProfessorAnswerDetailView.as_view(),
         name="professor_answer_detail",
     ),
-    path("chat/", views_professor_feedback.GlobalChatInboxView.as_view(), name="chat_inbox"),
+    path(
+        "chat/",
+        views_professor_feedback.GlobalChatInboxView.as_view(),
+        name="chat_inbox",
+    ),
     path(
         "chat/conversations/",
         views_professor_feedback.GlobalChatConversationsApiView.as_view(),
@@ -80,10 +86,24 @@ urlpatterns = [
         views_professor.ExamSetupHubView.as_view(),
         name="exam_setup_hub",
     ),
-    path("courses/", course_views.ProfessorCourseListView.as_view(), name="course_list"),
-    path("courses/create/", course_views.ProfessorCourseCreateView.as_view(), name="course_create"),
-    path("courses/<int:pk>/clone/", course_views.ProfessorCourseCloneView.as_view(), name="course_clone"),
-    path("courses/<int:pk>/archive/", course_views.ProfessorCourseArchiveView.as_view(), name="course_archive"),
+    path(
+        "courses/", course_views.ProfessorCourseListView.as_view(), name="course_list"
+    ),
+    path(
+        "courses/create/",
+        course_views.ProfessorCourseCreateView.as_view(),
+        name="course_create",
+    ),
+    path(
+        "courses/<int:pk>/clone/",
+        course_views.ProfessorCourseCloneView.as_view(),
+        name="course_clone",
+    ),
+    path(
+        "courses/<int:pk>/archive/",
+        course_views.ProfessorCourseArchiveView.as_view(),
+        name="course_archive",
+    ),
     path(
         "courses/subjects/<int:subject_pk>/remove/",
         course_views.ProfessorCourseRemoveView.as_view(),
@@ -154,7 +174,11 @@ urlpatterns = [
         views_professor.SubjectRosterView.as_view(),
         name="subject_roster",
     ),
-    path("courses/<int:pk>/", views_professor.CourseDetailView.as_view(), name="course_detail"),
+    path(
+        "courses/<int:pk>/",
+        views_professor.CourseDetailView.as_view(),
+        name="course_detail",
+    ),
     path(
         "courses/<int:pk>/summary/generate/",
         views_professor.CourseSummaryGenerateView.as_view(),
@@ -165,17 +189,41 @@ urlpatterns = [
         views_professor.CourseInterventionsExportView.as_view(),
         name="course_interventions_export",
     ),
-    path("courses/<int:course_pk>/roster/", views_professor.CourseRosterView.as_view(), name="course_roster"),
+    path(
+        "courses/<int:course_pk>/roster/",
+        views_professor.CourseRosterView.as_view(),
+        name="course_roster",
+    ),
     path(
         "courses/<int:course_pk>/roster/<int:student_pk>/",
         views_professor.StudentDetailView.as_view(),
         name="student_detail",
     ),
-    path("courses/<int:pk>/insights/", views_professor.CourseInsightsRedirectView.as_view(), name="course_insights"),
-    path("courses/<int:pk>/heatmap/", views_professor.CourseHeatmapView.as_view(), name="course_heatmap"),
-    path("courses/<int:course_pk>/exam-setup/", review_views.ExamSetupUpdateView.as_view(), name="exam_setup"),
-    path("courses/<int:course_pk>/windows/", review_views.ReviewWindowListView.as_view(), name="window_list"),
-    path("courses/<int:course_pk>/windows/create/", review_views.ReviewWindowCreateView.as_view(), name="window_create"),
+    path(
+        "courses/<int:pk>/insights/",
+        views_professor.CourseInsightsRedirectView.as_view(),
+        name="course_insights",
+    ),
+    path(
+        "courses/<int:pk>/heatmap/",
+        views_professor.CourseHeatmapView.as_view(),
+        name="course_heatmap",
+    ),
+    path(
+        "courses/<int:course_pk>/exam-setup/",
+        review_views.ExamSetupUpdateView.as_view(),
+        name="exam_setup",
+    ),
+    path(
+        "courses/<int:course_pk>/windows/",
+        review_views.ReviewWindowListView.as_view(),
+        name="window_list",
+    ),
+    path(
+        "courses/<int:course_pk>/windows/create/",
+        review_views.ReviewWindowCreateView.as_view(),
+        name="window_create",
+    ),
     path(
         "courses/<int:course_pk>/windows/<int:window_pk>/edit/",
         review_views.ReviewWindowUpdateView.as_view(),
@@ -186,7 +234,11 @@ urlpatterns = [
         review_views.ReviewWindowDeleteView.as_view(),
         name="window_delete",
     ),
-    path("courses/<int:course_pk>/topics/", question_views.TopicListView.as_view(), name="topic_list"),
+    path(
+        "courses/<int:course_pk>/topics/",
+        question_views.TopicListView.as_view(),
+        name="topic_list",
+    ),
     path(
         "materials/",
         material_views.MaterialHubView.as_view(),
@@ -257,7 +309,11 @@ urlpatterns = [
         question_views.TopicDeleteView.as_view(),
         name="topic_delete",
     ),
-    path("courses/<int:course_pk>/questions/", question_views.QuestionListView.as_view(), name="question_list"),
+    path(
+        "courses/<int:course_pk>/questions/",
+        question_views.QuestionListView.as_view(),
+        name="question_list",
+    ),
     path(
         "courses/<int:course_pk>/questions/create/",
         question_views.QuestionBatchCreateView.as_view(),

@@ -7,13 +7,18 @@ from django.views import View
 from django.views.generic import ListView, UpdateView
 
 from apps.core.mixins import ProgramCoordinatorRequiredMixin
-from apps.questions.models import Subject
+from apps.questions.models import Subject, YearLevel
 from apps.users.assignment_services import (
     create_curriculum_subject,
     delete_curriculum_subject,
 )
 from apps.users.forms import ChairpersonSubjectForm, ProgramCoordinatorSubjectForm
 from apps.users.models import User
+from apps.users.services import (
+    attach_subject_stats,
+    catalog_filter_context,
+    filter_subject_catalog,
+)
 
 
 def _managed_subjects(user: User):
@@ -32,26 +37,39 @@ class ProgramCoordinatorSubjectListView(ProgramCoordinatorRequiredMixin, ListVie
     paginate_by = 25
 
     def get_queryset(self):
-        return (
+        qs = (
             _managed_subjects(self.request.user)
             .select_related("program", "year_level")
             .order_by("program__name", "year_level__order", "semester", "code")
         )
+        return filter_subject_catalog(qs, self.request.GET)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["form"] = kwargs.get(
             "form", ProgramCoordinatorSubjectForm(coordinator=self.request.user)
         )
+        subjects = list(context["subjects"])
+        attach_subject_stats(subjects)
+        context.update(catalog_filter_context(self.request.GET))
+        context["programs"] = (
+            _managed_subjects(self.request.user)
+            .values("program__pk", "program__name")
+            .distinct()
+            .order_by("program__name")
+        )
+        context["year_levels"] = YearLevel.objects.order_by("order")
+        context["semester_choices"] = Subject.Semester.choices
         return context
 
     def post(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
         form = ProgramCoordinatorSubjectForm(request.POST, coordinator=request.user)
         if not form.is_valid():
             return render(request, self.template_name, self.get_context_data(form=form))
 
         subject = create_curriculum_subject(
-            program=form.cleaned_data["program"],
+            program=form.program,
             code=form.cleaned_data["code"],
             name=form.cleaned_data["name"],
             year_level=form.cleaned_data["year_level"],

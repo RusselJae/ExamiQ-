@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.users.views import ProfileView
+from apps.users.views_cor_analysis import CorAnalyzeView
 from apps.users.views_notifications import (
     NotificationListView,
     NotificationMarkLinkView,
@@ -17,7 +18,11 @@ urlpatterns = [
     path("", ProfileView.as_view(), name="profile"),
     path("signup/verify/", SignupOTPVerifyView.as_view(), name="signup_verify"),
     path("notifications/", NotificationListView.as_view(), name="notifications"),
-    path("notifications/read/", NotificationMarkReadView.as_view(), name="notifications_read"),
+    path(
+        "notifications/read/",
+        NotificationMarkReadView.as_view(),
+        name="notifications_read",
+    ),
     path(
         "notifications/<int:pk>/open/",
         NotificationOpenView.as_view(),
@@ -29,5 +34,10 @@ urlpatterns = [
         name="notifications_mark_link",
     ),
     path("api/sections/", ProgramSectionsAPIView.as_view(), name="api_sections"),
-    path("api/notifications/unread/", NotificationUnreadCountAPIView.as_view(), name="api_notifications_unread"),
+    path("signup/cor/analyze/", CorAnalyzeView.as_view(), name="cor_analyze"),
+    path(
+        "api/notifications/unread/",
+        NotificationUnreadCountAPIView.as_view(),
+        name="api_notifications_unread",
+    ),
 ]

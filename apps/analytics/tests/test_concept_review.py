@@ -50,13 +50,17 @@ class TestRecordExamMiss:
             topic=question.topic,
             difficulty=question.difficulty,
         )
-        return Answer.objects.create(
-            session=session,
-            question=question,
-            selected_choice=wrong,
-            confidence=confidence,
-            is_correct=False,
-        ), question, wrong
+        return (
+            Answer.objects.create(
+                session=session,
+                question=question,
+                selected_choice=wrong,
+                confidence=confidence,
+                is_correct=False,
+            ),
+            question,
+            wrong,
+        )
 
     def test_log_mistake_creates_concept_review(self, student, mcq_question):
         answer, question, _ = self._wrong_answer(student, mcq_question)
@@ -108,7 +112,9 @@ class TestLearnTryPractice:
             confidence=5,
             is_correct=False,
         )
-        return record_exam_miss_for_concept(student, question, answer, error_slug="sign_error")
+        return record_exam_miss_for_concept(
+            student, question, answer, error_slug="sign_error"
+        )
 
     def test_ensure_learn_content_caches_stub(self, student, mcq_question):
         review = self._review(student, mcq_question)
@@ -243,7 +249,14 @@ class TestConceptReviewViews:
         assert b"Continue to Try it" in response.content
 
     def test_student_cannot_view_others_review(
-        self, client, student, professor, mcq_question, department, year_level, program_section
+        self,
+        client,
+        student,
+        professor,
+        mcq_question,
+        department,
+        year_level,
+        program_section,
     ):
         from apps.users.models import User
 
@@ -301,7 +314,9 @@ class TestConceptReviewViews:
         correct_index = review.try_it_payload["correct_index"]
         client.force_login(student)
         response = client.post(
-            reverse("analytics_student:concept_review_try_it", kwargs={"pk": review.pk}),
+            reverse(
+                "analytics_student:concept_review_try_it", kwargs={"pk": review.pk}
+            ),
             data=json.dumps({"choice_index": correct_index}),
             content_type="application/json",
         )
@@ -309,3 +324,39 @@ class TestConceptReviewViews:
         data = response.json()
         assert data["ok"] is True
         assert data["is_correct"] is True
+
+    def test_practice_regenerate_returns_new_question(
+        self, client, student, mcq_question
+    ):
+        question, _ = mcq_question
+        question.concept_tag = "Regeneration probe"
+        question.save(update_fields=["concept_tag"])
+        wrong = question.choices.exclude(is_correct=True).first()
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+        )
+        answer = Answer.objects.create(
+            session=session,
+            question=question,
+            selected_choice=wrong,
+            confidence=5,
+            is_correct=False,
+        )
+        review = record_exam_miss_for_concept(student, question, answer)
+        first = start_or_next_practice(review)
+        first_question = first.question_payload.get("question")
+        client.force_login(student)
+        response = client.post(
+            reverse(
+                "analytics_student:concept_review_practice",
+                kwargs={"pk": review.pk},
+            ),
+            data=json.dumps({"action": "regenerate"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["payload"].get("question") != first_question

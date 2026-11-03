@@ -4,20 +4,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('ai', '0006_system_revisions_roadmap'),
+        ("ai", "0006_system_revisions_roadmap"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='aigenerationjob',
-            name='reference_question_id',
-            field=models.PositiveIntegerField(blank=True, help_text='Source question pk when regenerating from the edit screen.', null=True),
+            model_name="aigenerationjob",
+            name="reference_question_id",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="Source question pk when regenerating from the edit screen.",
+                null=True,
+            ),
         ),
         migrations.AddField(
-            model_name='aigenerationjob',
-            name='reference_stem',
-            field=models.TextField(blank=True, default='', help_text='Existing question stem when regenerating a high-mistake item.'),
+            model_name="aigenerationjob",
+            name="reference_stem",
+            field=models.TextField(
+                blank=True,
+                default="",
+                help_text="Existing question stem when regenerating a high-mistake item.",
+            ),
         ),
     ]

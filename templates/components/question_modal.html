@@ -1,0 +1,240 @@
+{# Question modal — Add / Edit question dialogs matching screenshot design. #}
+{# Cream body, white rounded section panels, right rail: For / Concept tag / #}
+{# Difficulty / Admin / Student view / Ready to publish. #}
+{# Expected include vars: modal_id, modal_mode ("add"|"edit"), modal_title, modal_action_label, #}
+{# form_action, question, form, choice_formset, step_formset, difficulty_choices, topic_choices, #}
+{# course_pk, subject_id, hub_return, return_to, needs_revision, regenerate_url. #}
+<div id="{{ modal_id }}" class="question-modal{% if not auto_open %} hidden{% endif %}" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id }}-heading" data-modal-mode="{{ modal_mode }}"{% if auto_open %} data-auto-open="1"{% endif %}{% if course %} data-course-pk="{{ course.pk }}"{% endif %}{% if cancel_url %} data-cancel-url="{{ cancel_url }}"{% endif %}>
+    <div class="question-modal__backdrop" data-dismiss-content></div>
+    <div class="question-modal__panel">
+        <header class="question-modal__header">
+            <div class="question-modal__header-left">
+                <button type="button" class="question-modal__close" data-dismiss-content aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M18 6 6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+                <h2 id="{{ modal_id }}-heading" class="question-modal__title">{{ modal_title }}</h2>
+            </div>
+            <button type="submit" class="question-modal__action" form="{{ modal_id }}-form">{{ modal_action_label }}</button>
+        </header>
+
+        <form method="post" id="{{ modal_id }}-form" class="question-modal__inner question-editor"{% if form_action %} action="{{ form_action }}"{% endif %} data-question-editor data-stem-selector="#id_stem" data-choice-selector="[data-choice-input]" data-correct-selector="[name$='-is_correct']" data-explanation-selector="[data-adaptive-field]" data-steps-selector="[data-step-input]"{% if modal_mode == "edit" and needs_revision %} data-confirm-unchanged-stem="1"{% endif %}>
+            {% csrf_token %}
+            {% if modal_mode == "edit" and needs_revision %}
+            <div class="qe-banner qe-banner--warn" data-question-edit-banner data-needs-revision="1" data-original-stem="{{ question.stem|escape }}">
+                <p>
+                    {{ mistake_count }} recorded mistake{{ mistake_count|pluralize }}
+                    from {{ distinct_student_mistake_count }} distinct student{{ distinct_student_mistake_count|pluralize }}.
+                    <a href="{% url 'analytics_professor:feedback_list' course.pk %}" class="qe-banner__link">View student concerns &rarr;</a>
+                </p>
+                <p class="qe-banner__strong">
+                    This question should be revised — {{ mistake_student_threshold }}+ distinct students are missing it.
+                </p>
+            </div>
+            {% endif %}
+            <input type="hidden" name="subject_id" value="{{ subject_id|default:'' }}" data-modal-subject-input>
+            <input type="hidden" name="course_pk" value="{{ course_pk|default:'' }}" data-modal-course-pk>
+            {% if modal_mode == "add" %}
+            {% if hub_return %}<input type="hidden" name="hub_return" value="1">{% endif %}
+            {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+            {% else %}
+            <input type="hidden" name="action" value="save" data-modal-action-input>
+            {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+            {% if hub_return %}<input type="hidden" name="hub_return" value="1">{% endif %}
+            {% endif %}
+            <div class="question-modal__body">
+                <div class="question-modal__main">
+                    <!-- Question -->
+                    <div class="question-modal__field question-modal__panel-block">
+                        <label class="question-modal__label" for="{{ modal_id }}-stem">Question<span class="question-modal__required" aria-hidden="true">*</span></label>
+                        {{ form.stem }}
+                        {% if form.stem.errors %}<p class="question-modal__error">{{ form.stem.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <!-- Topic (add mode picks it; edit keeps the question's topic) -->
+                    {% if modal_mode == "add" %}
+                    <div class="question-modal__field question-modal__panel-block">
+                        <label class="question-modal__label" for="{{ modal_id }}-topic">Topic</label>
+                        {{ form.topic }}
+                        {% if form.topic.errors %}<p class="question-modal__error">{{ form.topic.errors.0 }}</p>{% endif %}
+                    </div>
+                    {% else %}
+                    <div class="question-modal__field-hidden">{{ form.topic }}</div>
+                    {% endif %}
+
+                    <!-- Answer choices -->
+                    <div class="question-modal__field question-modal__panel-block">
+                        <div class="question-modal__field-head">
+                            <h3 class="question-modal__subtitle">Answer choices</h3>
+                            <p class="question-modal__hint">Select the circle to mark the correct answer</p>
+                        </div>
+                        {{ choice_formset.management_form }}
+                        {% if choice_formset.non_form_errors %}
+                        <p class="question-modal__error">{{ choice_formset.non_form_errors.0 }}</p>
+                        {% endif %}
+                        <div class="question-modal__choices-grid">
+                            {% for choice_form in choice_formset %}
+                            <div class="question-modal__choice-row">
+                                {{ choice_form.id }}
+                                <label class="question-modal__choice-label">
+                                    <span class="question-modal__choice-letter">{% cycle "A" "B" "C" "D" %}</span>
+                                    {{ choice_form.text }}
+                                </label>
+                                <label class="question-modal__choice-mark" data-choice-radio data-choice-value="{% cycle "A" "B" "C" "D" %}">
+                                    {{ choice_form.is_correct }}
+                                </label>
+                                {% if choice_form.text.errors %}<p class="question-modal__error">{{ choice_form.text.errors.0 }}</p>{% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="question-modal__field-hidden">{{ form.question_type }}</div>
+
+                    <!-- Explanation / Solution steps -->
+                    <div class="question-modal__field question-modal__panel-block">
+                        <div class="question-modal__field-head">
+                            <div class="question-modal__subtabs" role="tablist">
+                                <button type="button" class="question-modal__subtab is-active" data-subtab="explanation" aria-selected="true">Explanation</button>
+                                <button type="button" class="question-modal__subtab" data-subtab="steps" aria-selected="false">Solution steps</button>
+                            </div>
+                            <p class="question-modal__hint">Shown when a student misses this question</p>
+                        </div>
+                        <div data-subpanel="explanation">
+                            <div class="question-modal__explanation-grid">
+                                <div class="question-modal__field">
+                                    <label for="{{ form.adaptive_what_went_wrong.id_for_label }}" class="question-modal__label">What went wrong</label>
+                                    <textarea name="adaptive_what_went_wrong" id="{{ form.adaptive_what_went_wrong.id_for_label }}" rows="3" class="question-modal__textarea" data-adaptive-field>{{ adaptive_explanation.what_went_wrong }}</textarea>
+                                </div>
+                                <div class="question-modal__field">
+                                    <label for="{{ form.adaptive_why.id_for_label }}" class="question-modal__label">Why</label>
+                                    <textarea name="adaptive_why" id="{{ form.adaptive_why.id_for_label }}" rows="3" class="question-modal__textarea" data-adaptive-field>{{ adaptive_explanation.why }}</textarea>
+                                </div>
+                                <div class="question-modal__field">
+                                    <label for="{{ form.adaptive_quick_check.id_for_label }}" class="question-modal__label">Quick check</label>
+                                    <textarea name="adaptive_quick_check" id="{{ form.adaptive_quick_check.id_for_label }}" rows="3" class="question-modal__textarea" data-adaptive-field>{{ adaptive_explanation.quick_check }}</textarea>
+                                </div>
+                                <div class="question-modal__field">
+                                    <label for="{{ form.adaptive_remember.id_for_label }}" class="question-modal__label">Remember</label>
+                                    <textarea name="adaptive_remember" id="{{ form.adaptive_remember.id_for_label }}" rows="3" class="question-modal__textarea" data-adaptive-field>{{ adaptive_explanation.remember }}</textarea>
+                                </div>
+                                <div class="question-modal__field">
+                                    <label for="{{ form.adaptive_worked_example.id_for_label }}" class="question-modal__label">Worked example</label>
+                                    <textarea name="adaptive_worked_example" id="{{ form.adaptive_worked_example.id_for_label }}" rows="3" class="question-modal__textarea" data-adaptive-field>{{ adaptive_explanation.worked_example }}</textarea>
+                                </div>
+                            </div>
+                        </div>
+                        <div data-subpanel="steps" class="hidden">
+                            {{ step_formset.management_form }}
+                            {% if step_formset.non_form_errors %}
+                            <p class="question-modal__error">{{ step_formset.non_form_errors.0 }}</p>
+                            {% endif %}
+                            {% if modal_mode == "edit" and needs_revision %}
+                            <button type="button" class="question-modal__regenerate-btn" data-regenerate-url="{{ regenerate_url }}" data-csrf="{{ csrf_token }}">
+                                Regenerate question
+                            </button>
+                            {% endif %}
+                            <div class="question-modal__steps-list">
+                                {% for step_form in step_formset %}
+                                <div class="question-modal__step">
+                                    {{ step_form.id }}
+                                    <div class="question-modal__step-head">
+                                        <label class="question-modal__label" for="{{ step_form.content.id_for_label }}">Step {{ forloop.counter }}</label>
+                                        {% if step_form.DELETE %}
+                                        <label class="question-modal__step-delete">{{ step_form.DELETE }}<span>Remove</span></label>
+                                        {% endif %}
+                                    </div>
+                                    {{ step_form.content }}
+                                    {% if step_form.content.errors %}<p class="question-modal__error">{{ step_form.content.errors.0 }}</p>{% endif %}
+                                    {{ step_form.order }}
+                                    {{ step_form.professor_note }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="question-modal__add-step" data-add-step>+ Add step</button>
+                        </div>
+                    </div>
+
+                    <div class="question-modal__field-hidden">{{ form.expected_answer }}</div>
+                </div>
+
+                <div class="question-modal__sidebar">
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">For</span>
+                        <div class="question-modal__sidebar-value question-modal__sidebar-value--readonly" data-sidebar-course>{{ course.code }} — {{ course.name }}</div>
+                    </div>
+
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Concept tag</span>
+                        <input type="text" id="{{ modal_id }}-concept-tag" name="concept_tag" class="question-modal__input" placeholder="Short concept label" value="{{ form.concept_tag.value|default:'' }}">
+                        {% if form.concept_tag.errors %}<p class="question-modal__error">{{ form.concept_tag.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Difficulty</span>
+                        <div class="question-modal__field-hidden">{{ form.difficulty }}</div>
+                        <div class="question-modal__difficulty question-modal__difficulty--stack">
+                            {% for value, label in difficulty_choices %}
+                            <button type="button" class="question-modal__difficulty-pill{% if form.difficulty.value == value %} question-modal__difficulty-pill--active{% endif %}" data-difficulty-value="{{ value }}">{{ label }}</button>
+                            {% endfor %}
+                        </div>
+                        {% if form.difficulty.errors %}<p class="question-modal__error">{{ form.difficulty.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div class="question-modal__sidebar-section question-modal__sidebar-section--admin">
+                        <span class="question-modal__sidebar-title">Admin</span>
+                        <div class="question-modal__admin-toggle">
+                            <label class="question-modal__toggle">
+                                <input type="checkbox" name="is_active" value="1"{% if form.is_active.value %} checked{% endif %}>
+                                <span class="question-modal__toggle-slider"></span>
+                                Active in question bank
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Student view</span>
+                        <div class="qe-student">
+                            <div class="qe-student__bar">
+                                <span class="qe-student__label">How students see it</span>
+                                <div class="qe-segmented" role="group" aria-label="Student view mode">
+                                    <button type="button" class="qe-segmented__btn is-active" data-student-mode-btn="correct">Correct</button>
+                                    <button type="button" class="qe-segmented__btn" data-student-mode-btn="wrong">Wrong</button>
+                                </div>
+                            </div>
+                            <div class="qe-student__body">
+                                <div data-student-preview></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Ready to publish</span>
+                        <div class="qe-ready question-modal__ready-card">
+                            <ul class="qe-ready__list">
+                                <li class="qe-ready__item" data-ready-check="question">
+                                    <span class="qe-ready__mark" aria-hidden="true"></span><span class="qe-ready__label">Question</span>
+                                </li>
+                                <li class="qe-ready__item" data-ready-check="choices">
+                                    <span class="qe-ready__mark" aria-hidden="true"></span><span class="qe-ready__label">Choices</span>
+                                </li>
+                                <li class="qe-ready__item" data-ready-check="explanation">
+                                    <span class="qe-ready__mark" aria-hidden="true"></span><span class="qe-ready__label">Explanation</span>
+                                </li>
+                                <li class="qe-ready__item" data-ready-check="steps">
+                                    <span class="qe-ready__mark" aria-hidden="true"></span><span class="qe-ready__label">Steps</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="question-modal__sidebar-actions">
+                        <button type="button" class="question-modal__cancel-btn" data-editor-cancel{% if cancel_url %} data-cancel-url="{{ cancel_url }}"{% endif %}>Cancel</button>
+                        <button type="submit" class="question-modal__save-btn">{{ modal_action_label }}</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

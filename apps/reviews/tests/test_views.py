@@ -185,7 +185,7 @@ class TestReviewSetupPage:
         assert "id_setup_difficulty" in content
         assert "id_setup_question_type" in content
         assert "How this works" in content
-        assert "up to 100 total" in content
+        assert "up to 100 in total" in content
         assert "Numeric Answer" not in content
         assert "exam-setup-summary" in content
         assert "pre-exam-step-goal" in content
@@ -536,11 +536,7 @@ class TestTutorChat:
         history_response = client.get(history_url + f"?answer_id={answer.pk}")
         assert history_response.status_code == 200
         history_data = history_response.json()
-        assistant = [
-            msg
-            for msg in history_data["messages"]
-            if msg["role"] != "user"
-        ]
+        assistant = [msg for msg in history_data["messages"] if msg["role"] != "user"]
         assert assistant
         assert assistant[-1]["structured"]["type"] == "concept_check"
         assert assistant[-1]["structured"]["subject_code"] == topic.subject.code
@@ -593,11 +589,7 @@ class TestTutorChat:
         history_response = client.get(history_url + f"?answer_id={answer.pk}")
         assert history_response.status_code == 200
         history_data = history_response.json()
-        assistant = [
-            msg
-            for msg in history_data["messages"]
-            if msg["role"] != "user"
-        ]
+        assistant = [msg for msg in history_data["messages"] if msg["role"] != "user"]
         assert assistant[-1]["structured"]["history_note"] == expected_note
 
     def test_tutor_chat_accepts_image(self, client, student, topic, mcq_question):

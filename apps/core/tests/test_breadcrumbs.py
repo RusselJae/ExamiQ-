@@ -51,7 +51,9 @@ class TestBuildNavBreadcrumbs:
             section="Catalog",
         )
         request = RequestFactory().get(
-            reverse("analytics_professor:question_list", kwargs={"course_pk": course.pk})
+            reverse(
+                "analytics_professor:question_list", kwargs={"course_pk": course.pk}
+            )
         )
         request.user = professor
         request.resolver_match = SimpleNamespace(
@@ -127,12 +129,14 @@ class TestQuestionListHeaderCta:
     def test_add_question_button_on_header_row(self, client, professor, course):
         client.force_login(professor)
         response = client.get(
-            reverse("analytics_professor:question_list", kwargs={"course_pk": course.pk})
+            reverse(
+                "analytics_professor:question_list", kwargs={"course_pk": course.pk}
+            )
         )
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Add Question" in content
-        # CTA lives in the overview header aside, not a separate justify-end row.
-        assert "overview-header__aside" in content
+        # The questions page toolbar carries the create CTAs.
+        assert "Add questions" in content
+        assert "questions-page__actions" in content
         assert 'class="btn-primary btn-primary-sm"' in content
         assert "flex justify-end items-center mb-4" not in content

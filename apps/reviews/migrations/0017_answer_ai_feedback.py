@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('reviews', '0016_system_revisions_roadmap'),
+        ("reviews", "0016_system_revisions_roadmap"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='answer',
-            name='ai_feedback',
-            field=models.TextField(blank=True, default=''),
+            model_name="answer",
+            name="ai_feedback",
+            field=models.TextField(blank=True, default=""),
         ),
     ]

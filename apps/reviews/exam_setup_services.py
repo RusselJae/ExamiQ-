@@ -39,7 +39,9 @@ def get_or_create_exam_setup(course) -> ExamSetup:
     return setup
 
 
-def get_or_create_program_exam_setup(program: Program | None = None) -> ProgramExamSetup:
+def get_or_create_program_exam_setup(
+    program: Program | None = None,
+) -> ProgramExamSetup:
     """Ensure BSED Math (or given program) has a program-wide exam setup."""
     if program is None:
         program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
@@ -148,6 +150,7 @@ def other_subjects_available_for_student(student: User | None = None):
         return base.none()
     return base.exclude(year_level_id=student.year_level_id)
 
+
 def program_has_approved_questions() -> bool:
     return Question.objects.filter(
         topic__subject__program__slug=User.HomeDegreeProgram.BSED_MATH,
@@ -168,7 +171,6 @@ def year_has_approved_questions(student: User) -> bool:
         status=Question.Status.APPROVED,
         is_active=True,
     ).exists()
-
 
 
 def topics_for_open_subject(subject: Subject):
@@ -339,7 +341,9 @@ def exam_timing_for_course(course) -> tuple[int, int]:
     return setup.duration_minutes, setup.seconds_per_question
 
 
-def resolve_exam_target(student: User, subject: Subject, difficulty: str) -> dict | None:
+def resolve_exam_target(
+    student: User, subject: Subject, difficulty: str
+) -> dict | None:
     """Pick a topic under subject with the most questions at difficulty."""
     from apps.questions.services import count_available_questions
 
@@ -423,9 +427,7 @@ def build_multi_subject_exam_target(
         )
 
     avail = [
-        count_available_questions_for_subject(
-            s, difficulty, question_types=types
-        )
+        count_available_questions_for_subject(s, difficulty, question_types=types)
         for s in subject_list
     ]
 
@@ -451,7 +453,9 @@ def build_multi_subject_exam_target(
         else:
             caps = [min(a, MAX_QUESTIONS_SINGLE_SUBJECT) for a in avail]
             if sum(caps) <= MAX_TOTAL_QUESTIONS:
-                per_subject = [random.randint(floors[i], caps[i]) for i in range(len(subject_list))]
+                per_subject = [
+                    random.randint(floors[i], caps[i]) for i in range(len(subject_list))
+                ]
             else:
                 per_subject = list(floors)
                 budget = MAX_TOTAL_QUESTIONS - sum(floors)

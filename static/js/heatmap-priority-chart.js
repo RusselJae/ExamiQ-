@@ -5,8 +5,6 @@
  */
 (function () {
     const PAGE_SIZE = 10;
-    const COL_PX = 56;
-    const COMPACT_COL_PX = 30;
     const CHART_CHROME_PX = 120;
     const MIN_HEIGHT_PX = 320;
     const MISTAKE_COLOR = "#D32F2F";
@@ -36,14 +34,6 @@
 
     function chartHeight(visibleCount) {
         return Math.max(MIN_HEIGHT_PX, Math.min(420, visibleCount * 8 + CHART_CHROME_PX));
-    }
-
-    function chartMinWidth(visibleCount) {
-        if (isCompact()) {
-            // Keep every bar on one screen instead of clipping to the first few.
-            return Math.max(260, visibleCount * COMPACT_COL_PX + 30);
-        }
-        return Math.max(480, visibleCount * COL_PX + 80);
     }
 
     /* Narrow screens must still show the whole page of bars at once.
@@ -198,7 +188,10 @@
             const slice = sorted.slice(startIdx, startIdx + pageSize);
             if (wrapEl) {
                 wrapEl.style.height = chartHeight(slice.length) + "px";
-                wrapEl.style.minWidth = chartMinWidth(slice.length) + "px";
+                // Never force a min-width: the wrap is overflow:hidden, so a
+                // fixed 480–640px floor clips the right-hand bars and the
+                // tooltip inside narrow cards. Chart.js shrinks bars to fit.
+                wrapEl.style.minWidth = "";
                 wrapEl.classList.remove("hidden");
             }
 

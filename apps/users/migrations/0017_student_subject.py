@@ -6,31 +6,55 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0009_add_midyear_semester'),
-        ('users', '0016_add_midyear_semester'),
+        ("questions", "0009_add_midyear_semester"),
+        ("users", "0016_add_midyear_semester"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='programsection',
-            name='label',
-            field=models.CharField(help_text='Section block label, e.g. "1M", "2M".', max_length=10),
+            model_name="programsection",
+            name="label",
+            field=models.CharField(
+                help_text='Section block label, e.g. "1M", "2M".', max_length=10
+            ),
         ),
         migrations.CreateModel(
-            name='StudentSubject',
+            name="StudentSubject",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created', models.DateTimeField(auto_now_add=True)),
-                ('student', models.ForeignKey(limit_choices_to={'role': 'student'}, on_delete=django.db.models.deletion.CASCADE, related_name='student_subjects', to=settings.AUTH_USER_MODEL)),
-                ('subject', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='student_selections', to='questions.subject')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                (
+                    "student",
+                    models.ForeignKey(
+                        limit_choices_to={"role": "student"},
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="student_subjects",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "subject",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="student_selections",
+                        to="questions.subject",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Student Subject',
-                'verbose_name_plural': 'Student Subjects',
-                'ordering': ['subject__code'],
-                'unique_together': {('student', 'subject')},
+                "verbose_name": "Student Subject",
+                "verbose_name_plural": "Student Subjects",
+                "ordering": ["subject__code"],
+                "unique_together": {("student", "subject")},
             },
         ),
     ]

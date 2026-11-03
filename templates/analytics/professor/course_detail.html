@@ -1,128 +1,133 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}{{ course.section|default:course.code }} - EXAMIQ+{% endblock %}
+{% block title %}{{ course.name }} - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/professor_section_header.html" with course=course %}
 {% include "components/professor_course_nav.html" with course=course active_tab=active_tab %}
 
-<div class="overview-kpi-grid mb-6">
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.enrolled_count label="Enrolled students" variant="neutral" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" variant="neutral" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=summary.accuracy suffix="%" label="Average score" variant="neutral" %}</div>
-</div>
+{# One panel holds the banner, aggregate grids, cards, and labels.
+   Aggregate-only: no section tabs are rendered; ?section= handling in views is untouched. #}
+<div class="course-home-panel course-home-panel--tabbed">
+    {% include "components/chalk_banner.html" with course=course %}
 
-<div class="bento-grid mb-6">
-    <div class="span-half">
-        {% include "components/calibration_tier_card.html" with calibration_matrix=summary.calibration_matrix calibration_max=calibration_max %}
-    </div>
-    <div class="span-half">
-        <div class="bento-card bento-card--list bento-card-inner h-full">
-            <h2 class="text-lg font-semibold text-examiq-navy mb-4">Misconception Topics</h2>
-            {% if summary.misconception_topics %}
-            <ul class="space-y-2 bento-card-scroll">
-                {% for item in summary.misconception_topics %}
-                <li class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-examiq-navy">{{ item.question__topic__name }}</span>
-                    <span class="misconception-badge">{{ item.mistake_count }}</span>
-                </li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            {% include "components/empty_state.html" with compact=True title="No high-confidence mistakes yet" body="Students haven't logged confident wrong answers in this course." %}
+    <div class="course-home-grid--two">
+        {# Left: content + questions stats, then the enrolled-students KPI. #}
+        <div class="course-home-stack">
+            <section class="course-home-card" aria-labelledby="course-home-content-heading">
+                <h2 class="course-home-card__title" id="course-home-content-heading">Content</h2>
+                <p class="course-home-card__count">{{ document_count }}<small>file{{ document_count|pluralize }}</small></p>
+                <div class="course-home-card__foot">
+                    <p class="course-home-card__note">{% if latest_upload %}Latest upload {{ latest_upload.created|date:"M j, Y" }}{% else %}Nothing uploaded yet{% endif %}</p>
+                    <a class="course-home-card__link" href="{% url 'analytics_professor:material_list' course.pk %}">Open content</a>
+                </div>
+            </section>
+
+            <section class="course-home-card" aria-labelledby="course-home-questions-heading">
+                <h2 class="course-home-card__title" id="course-home-questions-heading">Questions</h2>
+                <p class="course-home-card__count">{{ question_count }}<small>question{{ question_count|pluralize }}</small></p>
+                <div class="course-home-card__foot">
+                    <p class="course-home-card__note">{% if draft_count %}{{ draft_count }} draft{{ draft_count|pluralize }} waiting for review{% else %}No drafts waiting for review{% endif %}</p>
+                    <a class="course-home-card__link" href="{% url 'analytics_professor:question_list' course.pk %}">Open questions</a>
+                </div>
+            </section>
+
+            {% if summary.external_takers %}
+            <p class="text-xs text-examiq-slate mt-2" role="note">+{{ summary.external_takers }} external student{{ summary.external_takers|pluralize }} sat exams here (outside your handled scope — aggregate only).</p>
             {% endif %}
         </div>
-    </div>
-</div>
 
-<div class="bento-grid mb-6">
-    <div class="span-full">
-        <div class="bento-card bento-card-inner">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                <h2 class="text-lg font-semibold text-examiq-navy">Interventions</h2>
-                {% if interventions %}
-                <a href="{% url 'analytics_professor:course_interventions_export' course.pk %}" class="btn-secondary btn-primary-sm">Export CSV</a>
-                {% endif %}
+        {# Right: question breakdown (questions data). #}
+        <section class="course-breakdown-card" aria-labelledby="course-breakdown-heading">
+            <div class="course-breakdown-card__header">
+                <h2 class="course-breakdown-card__title" id="course-breakdown-heading">Question Breakdown</h2>
+                <span class="course-breakdown-card__scope">Questions data · {{ course.code }}</span>
             </div>
+            {% if heatmap.questions %}
+            <p class="text-xs text-examiq-slate mb-2" id="courseHomeChartStatus"></p>
+            <div class="heatmap-chart-wrap mb-3" id="courseHomeChartWrap">
+                <canvas id="courseHomeChart" aria-label="Confidence levels by question"></canvas>
+            </div>
+            <div class="heatmap-chart-pager" id="courseHomeChartPager" aria-label="Chart pagination">
+                <button type="button" class="btn-secondary heatmap-chart-btn" id="courseHomePrevPage">Previous</button>
+                <span class="heatmap-chart-page-label" id="courseHomePageLabel">Page 1 of 1</span>
+                <button type="button" class="btn-secondary heatmap-chart-btn" id="courseHomeNextPage">Next</button>
+            </div>
+            {% else %}
+            <p class="text-examiq-slate">No answer data yet for this course.</p>
+            {% endif %}
+        </section>
+    </div>
+
+    {# Interventions — kept from the original overview, same panel. #}
+    <div class="course-home-panel__divider" aria-hidden="true"></div>
+    <section aria-labelledby="course-home-interventions-heading">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h2 class="text-lg font-semibold text-examiq-navy" id="course-home-interventions-heading">Interventions</h2>
             {% if interventions %}
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="text-left text-examiq-slate border-b border-slate-100">
-                            <th class="pb-2 font-medium">Student</th>
-                            <th class="pb-2 font-medium">Flags</th>
-                            <th class="pb-2 font-medium">Average Score</th>
-                            <th class="pb-2 font-medium">Average Conf.</th>
-                            <th class="pb-2 font-medium">Sessions</th>
-                            <th class="pb-2 font-medium">Suggested Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in interventions %}
-                        <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
-                            <td class="py-2 text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</td>
-                            <td class="py-2">
-                                {% for flag in row.flags %}
-                                <span class="flag-pill {% if 'low' in flag or 'accuracy' in flag %}flag-pill--coral{% else %}flag-pill--amber{% endif %}">{{ flag|cut:"_" }}</span>
-                                {% endfor %}
-                            </td>
-                            <td class="py-2 font-medium {% if row.accuracy < 60 %}stat-value-coral{% else %}stat-value-good{% endif %}">{{ row.accuracy }}%</td>
-                            <td class="py-2 text-examiq-slate">{{ row.avg_confidence }}</td>
-                            <td class="py-2 text-examiq-slate">{{ row.sessions }}</td>
-                            <td class="py-2 text-examiq-slate text-xs max-w-xs">{{ row.suggested_action }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            {% include "components/empty_state.html" with compact=True title="All students on track" body="No intervention flags for this course offering." %}
+            <a href="{% url 'analytics_professor:course_interventions_export' course.pk %}" class="btn-secondary btn-primary-sm">Export CSV</a>
             {% endif %}
         </div>
-    </div>
+        {% if interventions %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-examiq-slate border-b border-slate-100">
+                        <th class="pb-2 font-medium">Student</th>
+                        <th class="pb-2 font-medium">Flags</th>
+                        <th class="pb-2 font-medium">Average Score</th>
+                        <th class="pb-2 font-medium">Average Conf.</th>
+                        <th class="pb-2 font-medium">Sessions</th>
+                        <th class="pb-2 font-medium">Suggested Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in interventions %}
+                    <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                        <td class="py-2 text-examiq-navy">{{ row.student.get_full_name|default:row.student.email }}</td>
+                        <td class="py-2">
+                            {% for flag in row.flags %}
+                            <span class="flag-pill {% if 'low' in flag or 'accuracy' in flag %}flag-pill--coral{% else %}flag-pill--amber{% endif %}">{{ flag|cut:"_" }}</span>
+                            {% endfor %}
+                        </td>
+                        <td class="py-2 font-medium {% if row.accuracy < 60 %}stat-value-coral{% else %}stat-value-good{% endif %}">{{ row.accuracy }}%</td>
+                        <td class="py-2 text-examiq-slate">{{ row.avg_confidence }}</td>
+                        <td class="py-2 text-examiq-slate">{{ row.sessions }}</td>
+                        <td class="py-2 text-examiq-slate text-xs max-w-xs">{{ row.suggested_action }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        {% include "components/empty_state.html" with compact=True title="All students on track" body="No intervention flags for this course offering." %}
+        {% endif %}
+    </section>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-24">
-    <div class="bento-card p-6">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Confidence by Topic</h2>
-        {% if summary.confidence_by_topic %}
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="text-left text-examiq-slate border-b border-slate-100">
-                    <th class="pb-2 font-medium">Topic</th>
-                    <th class="pb-2 font-medium">Average confidence (0–3)</th>
-                    <th class="pb-2 font-medium">Answers</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in summary.confidence_by_topic %}
-                <tr class="border-b border-slate-50">
-                    <td class="py-2 text-examiq-navy">{{ item.question__topic__name }}</td>
-                    <td class="py-2 text-examiq-cyan font-medium">{{ item.avg_confidence|floatformat:1 }}</td>
-                    <td class="py-2 text-examiq-slate">{{ item.total }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-examiq-slate">No data yet.</p>
-        {% endif %}
-    </div>
+{% endblock %}
 
-    <div class="bento-card p-6">
-        <h2 class="text-lg font-semibold text-examiq-navy mb-4">Top Mistake Patterns</h2>
-        {% if summary.mistake_patterns %}
-        <ul class="space-y-2">
-            {% for item in summary.mistake_patterns %}
-            <li class="flex justify-between py-2 border-b border-slate-100">
-                <span class="text-examiq-navy">{{ item.topic__name }}</span>
-                <span class="misconception-badge">{{ item.mistake_count }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-examiq-slate">No mistakes recorded for this course.</p>
-        {% endif %}
-    </div>
-</div>
+{% block extra_js %}
+{% if heatmap.questions %}
+{{ heatmap.questions|json_script:"course-home-questions-data" }}
+<script src="{% static 'js/heatmap-priority-chart.js' %}"></script>
+<script>
+(function () {
+    var el = document.getElementById("course-home-questions-data");
+    if (el && window.ExamiQUI && window.ExamiQUI.renderHeatmapPriorityChart) {
+        window.ExamiQUI.renderHeatmapPriorityChart({
+            canvas: "courseHomeChart",
+            wrapEl: "courseHomeChartWrap",
+            prevBtn: "courseHomePrevPage",
+            nextBtn: "courseHomeNextPage",
+            pageLabel: "courseHomePageLabel",
+            statusEl: "courseHomeChartStatus",
+            pagerEl: "courseHomeChartPager",
+            questions: JSON.parse(el.textContent),
+            pageSize: 10,
+        });
+    }
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("users", "0021_faculty_signup_pin_settings"),
     ]
@@ -30,7 +29,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("email", models.EmailField(db_index=True, max_length=254)),
-                ("requested_at", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "requested_at",
+                    models.DateTimeField(auto_now_add=True, db_index=True),
+                ),
                 (
                     "ip_address",
                     models.GenericIPAddressField(blank=True, null=True),
@@ -59,7 +61,10 @@ class Migration(migrations.Migration):
                     models.GenericIPAddressField(blank=True, null=True),
                 ),
                 ("user_agent_hash", models.CharField(max_length=64)),
-                ("user_agent", models.CharField(blank=True, default="", max_length=512)),
+                (
+                    "user_agent",
+                    models.CharField(blank=True, default="", max_length=512),
+                ),
                 ("first_seen_at", models.DateTimeField(auto_now_add=True)),
                 ("last_seen_at", models.DateTimeField(auto_now=True)),
                 (

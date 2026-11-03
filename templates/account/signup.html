@@ -1,4 +1,5 @@
 {% extends "account/auth_base.html" %}
+{% load static %}
 
 {% block title %}Student Sign Up - EXAMIQ+{% endblock %}
 
@@ -10,7 +11,7 @@
 <h2 class="auth-page__heading">Create your student account</h2>
 <p class="auth-page__subheading">Join EXAMIQ+ and start reviewing smarter.</p>
 
-<form method="post" action="{% url 'account_signup' %}" class="auth-form" novalidate id="signup-form">
+<form method="post" action="{% url 'account_signup' %}" enctype="multipart/form-data" class="auth-form" novalidate id="signup-form">
     {% csrf_token %}
     {% for field in form.hidden_fields %}{{ field }}{% endfor %}
     {% if form.non_field_errors %}
@@ -18,6 +19,40 @@
         {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
     </div>
     {% endif %}
+
+    <!-- Student type switch — Regular | Irregular (top of form, full width) -->
+    <div class="auth-form-row auth-form-row--full">
+        <div class="student-type-switch">
+            <span class="student-type-switch__label">Student type</span>
+            <div class="student-type-switch__group" role="radiogroup" aria-label="Student type">
+                <label class="student-type-switch__btn{% if form.is_irregular.value == "1" or form.is_irregular.value == True %}{% else %} student-type-switch__btn--active{% endif %}"
+                       data-type="regular"
+                       role="radio"
+                       aria-pressed="{% if form.is_irregular.value == "1" or form.is_irregular.value == True %}false{% else %}true{% endif %}">
+                    <input type="radio" name="{{ form.is_irregular.html_name }}" value="0"
+                           id="{{ form.is_irregular.id_for_label }}-regular"
+                           {% if form.is_irregular.value == "1" or form.is_irregular.value == True %}{% else %}checked{% endif %}
+                           class="sr-only"
+                           aria-label="Regular student">
+                    Regular student
+                </label>
+                <label class="student-type-switch__btn{% if form.is_irregular.value == "1" or form.is_irregular.value == True %} student-type-switch__btn--active{% endif %}"
+                       data-type="irregular"
+                       role="radio"
+                       aria-pressed="{% if form.is_irregular.value == "1" or form.is_irregular.value == True %}true{% else %}false{% endif %}">
+                    <input type="radio" name="{{ form.is_irregular.html_name }}" value="1"
+                           id="{{ form.is_irregular.id_for_label }}-irregular"
+                           {% if form.is_irregular.value == "1" or form.is_irregular.value == True %}checked{% endif %}
+                           class="sr-only"
+                           aria-label="Irregular student">
+                    Irregular student
+                </label>
+            </div>
+            <input type="hidden" name="{{ form.is_irregular.html_name }}"
+                   id="{{ form.is_irregular.id_for_label }}"
+                   value="{% if form.is_irregular.value == "1" or form.is_irregular.value == True %}1{% else %}0{% endif %}">
+        </div>
+    </div>
 
     <div class="auth-form-row auth-form-row--2">
         {% include "components/auth_field.html" with field=form.first_name %}
@@ -29,18 +64,83 @@
     </div>
     {% include "components/auth_field.html" with field=form.student_number %}
 
-    <div class="auth-form-row auth-form-row--2">
-        <label class="auth-field{% if form.year_level.errors %} auth-field--error{% endif %}" for="{{ form.year_level.id_for_label }}">
-            <span class="auth-field__label">{{ form.year_level.label }}</span>
-            {{ form.year_level }}
-            {% if form.year_level.errors %}<p class="auth-field__error">{{ form.year_level.errors.0 }}</p>{% endif %}
-        </label>
-        <label class="auth-field{% if form.section.errors %} auth-field--error{% endif %}" for="{{ form.section.id_for_label }}">
-            <span class="auth-field__label">{{ form.section.label }}</span>
-            {{ form.section }}
-            {% if form.section.errors %}<p class="auth-field__error">{{ form.section.errors.0 }}</p>{% endif %}
-        </label>
+    <!-- COR upload (required for every student): drives year/courses -->
+    <div class="auth-form-row auth-form-row--full" id="cor-upload-wrapper">
+        <div class="auth-field{% if form.cor_upload.errors %} auth-field--error{% endif %}">
+            <span class="auth-field__label">Certificate of Registration <span class="auth-field__required">Required</span></span>
+            <div class="cor-upload-zone" id="cor-upload-zone">
+                {{ form.cor_upload }}
+                <div class="cor-upload-zone__empty" id="cor-upload-empty">
+                    <label class="cor-upload-zone__drop" for="{{ form.cor_upload.id_for_label }}">
+                        <span class="cor-upload-zone__icon" aria-hidden="true">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+                        </span>
+                        <span class="cor-upload-zone__title">Drag and drop your COR here</span>
+                        <span class="cor-upload-zone__or">or</span>
+                        <span class="cor-upload-zone__browse">Browse files</span>
+                        <span class="cor-upload-zone__formats">PDF&nbsp;&nbsp;&nbsp;PNG&nbsp;&nbsp;&nbsp;JPG&nbsp;&nbsp;&nbsp;&nbsp;Up to 8 MB</span>
+                    </label>
+                </div>
+                <div class="cor-upload-zone__file hidden" id="cor-upload-file">
+                    <div class="cor-upload-zone__chip">
+                        <span class="cor-upload-zone__ext" id="cor-file-ext">PDF</span>
+                        <span class="cor-upload-zone__meta">
+                            <span class="cor-upload-zone__name" id="cor-file-name">COR_2026-2027.pdf</span>
+                            <span class="cor-upload-zone__status" id="cor-file-status">Ready to analyze</span>
+                        </span>
+                        <button type="button" class="cor-upload-zone__clear" id="cor-file-clear" aria-label="Remove file">✕</button>
+                    </div>
+                    <button type="button" class="cor-upload-zone__analyze" id="cor-analyze-btn">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+                        Analyze COR
+                    </button>
+                    <button type="button" class="cor-upload-zone__switch" id="cor-switch-file">Choose a different file</button>
+                    <p class="cor-upload-zone__result" id="cor-analyze-result" role="status" aria-live="polite"></p>
+                    <p class="cor-upload-zone__note">ⓘ&nbsp;&nbsp;We read your COR to find your courses. You review and confirm everything before anything saves.</p>
+                </div>
+            </div>
+            {% if form.cor_upload.errors %}<p class="auth-field__error">{{ form.cor_upload.errors.0 }}</p>{% endif %}
+        </div>
     </div>
+
+    <!-- Regular student: year level (detected from COR, read-only) -->
+    <div class="auth-form-row auth-form-row--full" id="regular-fields"
+         style="{% if form.is_irregular.value %}display: none;{% endif %}">
+        <input type="hidden" name="year_level" id="id_year_level" value="{{ form.year_level.value|default:'' }}">
+        <div class="auth-field{% if form.year_level.errors %} auth-field--error{% endif %}">
+            <span class="auth-field__label">Year level</span>
+            <div class="cor-year-display" id="regular-year-display">
+                <span class="cor-year-display__empty">Upload and analyze your COR first — we'll detect your year level.</span>
+            </div>
+            {% if form.year_level.errors %}<p class="auth-field__error">{{ form.year_level.errors.0 }}</p>{% endif %}
+        </div>
+    </div>
+
+    <!-- Irregular student: detected courses (read-only, from COR) -->
+    <div class="auth-form-row auth-form-row--full irregular-fields" id="irregular-courses-wrapper"
+         style="{% if not form.is_irregular.value %}display: none;{% endif %}">
+        <div class="auth-field{% if form.courses.errors %} auth-field--error{% endif %} irregular-field">
+            <span class="auth-field__label">{{ form.courses.label }}</span>
+            <div id="detected-courses-store"></div>
+            <div id="detected-courses-list" class="detected-courses">
+                <p class="detected-courses__empty">Upload and analyze your COR first — your courses will appear here.</p>
+            </div>
+            {% if form.courses.errors %}<p class="auth-field__error">{{ form.courses.errors.0 }}</p>{% endif %}
+        </div>
+    </div>
+
+    <!-- Faculty picker (per selected subject, both student types) -->
+    <div class="auth-form-row auth-form-row--full" id="faculty-picker-wrapper" style="display: none;">
+        <div class="auth-field{% if form.faculty_selections.errors %} auth-field--error{% endif %}">
+            <span class="auth-field__label">Choose your faculty</span>
+            <div id="faculty-picker" class="faculty-picker"></div>
+            {% if form.faculty_selections.errors %}<p class="auth-field__error">{{ form.faculty_selections.errors.0 }}</p>{% endif %}
+        </div>
+    </div>
+    {{ form.faculty_selections }}
+    {{ faculty_options|json_script:"faculty-options-data" }}
+    {{ subject_year_map|json_script:"subject-year-map" }}
+    {{ subject_meta|json_script:"subject-meta-data" }}
 
     <div class="auth-form-row auth-form-row--2">
         <label class="auth-field{% if form.phone_number.errors %} auth-field--error{% endif %}" for="id_phone_display">
@@ -66,6 +166,342 @@
     </p>
     {% endif %}
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/signup-faculty.js' %}"></script>
+<script>
+(function () {
+    "use strict";
+
+    var regularBtn = document.querySelector('.student-type-switch__btn[data-type="regular"]');
+    var irregularBtn = document.querySelector('.student-type-switch__btn[data-type="irregular"]');
+    var regularInput = document.getElementById("{{ form.is_irregular.id_for_label }}-regular");
+    var irregularInput = document.getElementById("{{ form.is_irregular.id_for_label }}-irregular");
+    var hiddenInput = document.getElementById("{{ form.is_irregular.id_for_label }}");
+    var regularFields = document.getElementById("regular-fields");
+    var irregularFields = document.getElementById("irregular-courses-wrapper");
+    var yearLevel = document.getElementById("id_year_level");
+
+    var courseCheckboxes = document.querySelectorAll(".course-checkbox__input");
+    var courseSelectionsInput = document.getElementById("{{ form.course_selections.id_for_label }}");
+    var signupForm = document.getElementById("signup-form");
+    var detectedStore = document.getElementById("detected-courses-store");
+    var detectedList = document.getElementById("detected-courses-list");
+    var regularYearDisplay = document.getElementById("regular-year-display");
+
+    function setStudentType(isIrregular) {
+        irregularInput.checked = isIrregular;
+        regularInput.checked = !isIrregular;
+        hiddenInput.value = isIrregular ? "1" : "0";
+        regularBtn.classList.toggle("student-type-switch__btn--active", !isIrregular);
+        irregularBtn.classList.toggle("student-type-switch__btn--active", isIrregular);
+        regularBtn.setAttribute("aria-pressed", !isIrregular);
+        irregularBtn.setAttribute("aria-pressed", isIrregular);
+
+        if (regularFields) {
+            regularFields.style.display = isIrregular ? "none" : "";
+        }
+        if (irregularFields) {
+            irregularFields.style.display = isIrregular ? "" : "none";
+        }
+
+        if (yearLevel) {
+            if (isIrregular) {
+                yearLevel.removeAttribute("required");
+            } else {
+                yearLevel.setAttribute("required", "required");
+            }
+        }
+    }
+
+    function escHtml(text) {
+        return String(text == null ? "" : text).replace(/[&<>"']/g, function (c) {
+            return {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;"
+            }[c];
+        });
+    }
+
+    /* Detected courses (from COR analysis): hidden inputs for the POST plus a
+       read-only display list. No manual add/remove — change the COR instead. */
+    function renderDetectedCourses(courses) {
+        if (detectedStore) {
+            detectedStore.innerHTML = "";
+            (courses || []).forEach(function (c) {
+                var input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "courses";
+                input.value = String(c.id);
+                detectedStore.appendChild(input);
+            });
+        }
+        if (!detectedList) return;
+        if (!courses || !courses.length) {
+            detectedList.innerHTML =
+                '<p class="detected-courses__empty">Upload and analyze your COR first — your courses will appear here.</p>';
+            return;
+        }
+        detectedList.innerHTML = courses.map(function (c) {
+            var badge = c.confidence && c.confidence !== "high"
+                ? '<span class="detected-courses__badge">check</span>'
+                : "";
+            return '<div class="detected-courses__row">' +
+                '<span class="course-chip">' + escHtml(c.code) + "</span>" +
+                '<span class="detected-courses__name">' + escHtml(c.name || "") + "</span>" +
+                badge +
+                "</div>";
+        }).join("");
+    }
+
+    function renderDetectedYear(year) {
+        var hidden = document.getElementById("id_year_level");
+        if (hidden && year && year.id) {
+            hidden.value = String(year.id);
+            hidden.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (!regularYearDisplay) return;
+        if (year && year.name) {
+            regularYearDisplay.innerHTML =
+                '<span class="cor-year-display__value">' + escHtml(year.name) + "</span>";
+        } else {
+            regularYearDisplay.innerHTML =
+                '<span class="cor-year-display__empty">Upload and analyze your COR first — we\'ll detect your year level.</span>';
+        }
+    }
+
+    function resetAnalysis() {
+        analyzed = false;
+        renderDetectedCourses([]);
+        renderDetectedYear(null);
+        if (window.ExamiQSignupFaculty && window.ExamiQSignupFaculty.unlock) {
+            window.ExamiQSignupFaculty.unlock();
+        }
+    }
+
+    if (regularBtn && irregularBtn) {
+        regularBtn.addEventListener("click", function () { setStudentType(false); });
+        irregularBtn.addEventListener("click", function () { setStudentType(true); });
+    }
+
+    // COR upload zone: empty dropzone <-> file chip states, then analyze.
+    var corAnalyzeBtn = document.getElementById("cor-analyze-btn");
+    var corResult = document.getElementById("cor-analyze-result");
+    var corZone = document.getElementById("cor-upload-zone");
+    var corEmpty = document.getElementById("cor-upload-empty");
+    var corFileState = document.getElementById("cor-upload-file");
+    var corFileInput = document.getElementById("id_cor_upload");
+    var corFileName = document.getElementById("cor-file-name");
+    var corFileStatus = document.getElementById("cor-file-status");
+    var corFileExt = document.getElementById("cor-file-ext");
+    var corFileClear = document.getElementById("cor-file-clear");
+    var corSwitchFile = document.getElementById("cor-switch-file");
+    var corDetectedInput = null;
+    var analyzed = false;
+
+    function formatSize(bytes) {
+        if (!bytes && bytes !== 0) return "";
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1).replace(/\.0$/, "") + " KB";
+        return (bytes / 1048576).toFixed(1).replace(/\.0$/, "") + " MB";
+    }
+
+    function showCorEmpty() {
+        if (corEmpty) corEmpty.classList.remove("hidden");
+        if (corFileState) corFileState.classList.add("hidden");
+    }
+
+    function showCorFile(file) {
+        if (corEmpty) corEmpty.classList.add("hidden");
+        if (corFileState) corFileState.classList.remove("hidden");
+        if (corFileName) corFileName.textContent = file.name;
+        if (corFileExt) {
+            var ext = (file.name.split(".").pop() || "").toUpperCase().slice(0, 4);
+            corFileExt.textContent = ext || "FILE";
+        }
+        if (corFileStatus) {
+            var size = formatSize(file.size);
+            corFileStatus.textContent =
+                (size ? "✓ " + size + " · " : "") + "Ready to analyze";
+        }
+        if (corResult) corResult.textContent = "";
+    }
+
+    function clearCorFile() {
+        if (corFileInput) {
+            try {
+                corFileInput.value = "";
+            } catch (e) { /* ignore */ }
+        }
+        analyzed = false;
+        resetAnalysis();
+        showCorEmpty();
+    }
+
+    if (corFileInput) {
+        corFileInput.classList.add("sr-only");
+        corFileInput.addEventListener("change", function () {
+            if (corFileInput.files && corFileInput.files.length) {
+                // A changed COR invalidates any previous detection.
+                resetAnalysis();
+                showCorFile(corFileInput.files[0]);
+            } else {
+                resetAnalysis();
+                showCorEmpty();
+            }
+        });
+    }
+    if (corZone) {
+        ["dragenter", "dragover"].forEach(function (evt) {
+            corZone.addEventListener(evt, function (e) {
+                e.preventDefault();
+                corZone.classList.add("is-dragover");
+            });
+        });
+        ["dragleave", "drop"].forEach(function (evt) {
+            corZone.addEventListener(evt, function (e) {
+                e.preventDefault();
+                corZone.classList.remove("is-dragover");
+            });
+        });
+        corZone.addEventListener("drop", function (e) {
+            var files = e.dataTransfer && e.dataTransfer.files;
+            if (files && files.length && corFileInput) {
+                try {
+                    var dt = new DataTransfer();
+                    dt.items.add(files[0]);
+                    corFileInput.files = dt.files;
+                } catch (err) { /* ignore */ }
+                showCorFile(files[0]);
+                corFileInput.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+        });
+    }
+    if (corFileClear) {
+        corFileClear.addEventListener("click", clearCorFile);
+    }
+    if (corSwitchFile) {
+        corSwitchFile.addEventListener("click", function () {
+            if (corFileInput) corFileInput.click();
+        });
+    }
+
+    // Form validation: a COR file must be attached (server enforces the rest)
+    if (corAnalyzeBtn) {
+        corAnalyzeBtn.addEventListener("click", function () {
+            var fileInput = document.getElementById("id_cor_upload");
+            if (!fileInput || !fileInput.files || !fileInput.files.length) {
+                corResult.textContent = "Choose your COR file first.";
+                return;
+            }
+            corAnalyzeBtn.disabled = true;
+            corResult.textContent = "Reading your COR…";
+            var fd = new FormData();
+            fd.append("cor_file", fileInput.files[0]);
+            var controller = null;
+            var timeoutId = null;
+            try {
+                controller = new AbortController();
+                timeoutId = setTimeout(function () { controller.abort(); }, 60000);
+            } catch (err) { /* ignore */ }
+            fetch("{% url 'users:cor_analyze' %}", {
+                method: "POST",
+                headers: { Accept: "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+                body: fd,
+                credentials: "same-origin",
+                signal: controller ? controller.signal : undefined,
+            })
+                .then(function (r) { if (timeoutId) clearTimeout(timeoutId); return r.json().catch(function () { return { error: "Analyzer error." }; }); })
+                .then(function (data) {
+                    corAnalyzeBtn.disabled = false;
+                    if (data.error) {
+                        corResult.textContent = data.error;
+                        return;
+                    }
+                    var matched = data.matched || [];
+                    var isIrregular = irregularInput && irregularInput.checked;
+                    if (!isIrregular && data.cor_type !== "regular") {
+                        corResult.textContent =
+                            "This COR does not show regular status. If you are an " +
+                            "irregular student, switch to irregular and analyze again.";
+                        return;
+                    }
+                    if (!matched.length) {
+                        corResult.textContent =
+                            "We could not confidently match any course codes. " +
+                            "Try a clearer photo or PDF of your COR.";
+                        return;
+                    }
+                    analyzed = true;
+                    var courses = matched.map(function (m) {
+                        return {
+                            id: m.subject_id,
+                            code: m.code,
+                            name: m.name,
+                            confidence: m.confidence
+                        };
+                    });
+                    renderDetectedCourses(courses);
+                    if (window.ExamiQSignupFaculty && window.ExamiQSignupFaculty.setDetectedCourses) {
+                        window.ExamiQSignupFaculty.setDetectedCourses(courses);
+                    }
+                    if (!isIrregular) {
+                        renderDetectedYear(data.suggested_year_level || null);
+                        if (!data.suggested_year_level) {
+                            corResult.textContent =
+                                "Courses found, but no year level could be determined. " +
+                                "Try a clearer photo or PDF.";
+                            return;
+                        }
+                    }
+                    if (window.ExamiQSignupFaculty && window.ExamiQSignupFaculty.lock) {
+                        window.ExamiQSignupFaculty.lock();
+                    }
+                    var low = 0;
+                    matched.forEach(function (m) { if (m.confidence !== "high") low += 1; });
+                    corResult.textContent =
+                        "Found " + matched.length + " course" +
+                        (matched.length > 1 ? "s" : "") +
+                        " on your COR — pick a faculty for each below" +
+                        (data.unmatched && data.unmatched.length
+                            ? " (" + data.unmatched.length + " code(s) did not match)"
+                            : "") +
+                        (low ? ", " + low + " need a double-check." : ".");
+                    var facultyPicker = document.getElementById("faculty-picker-wrapper");
+                    if (facultyPicker) facultyPicker.style.display = "";
+                })
+                .catch(function (err) {
+                    corAnalyzeBtn.disabled = false;
+                    corResult.textContent =
+                        err && err.name === "AbortError"
+                            ? "Analysis is taking too long. Try again with a clearer file."
+                            : "The analyzer hit a snag. Try again with a clearer file.";
+                });
+        });
+    }
+
+    // Form validation: a COR file must be attached (server enforces the rest)
+    if (signupForm) {
+        signupForm.addEventListener("submit", function (e) {
+            var fileInput = document.getElementById("id_cor_upload");
+            if (!fileInput || !fileInput.files || !fileInput.files.length) {
+                e.preventDefault();
+                alert("Your Certificate of Registration is required for signup.");
+                return false;
+            }
+            if (!analyzed) {
+                e.preventDefault();
+                alert("Please click Analyze COR first, then submit.");
+                return false;
+            }
+        });
+    }
+})();
+</script>
 {% endblock %}
 
 {% block auth_footer %}

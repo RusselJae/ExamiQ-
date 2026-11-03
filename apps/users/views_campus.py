@@ -408,7 +408,32 @@ class CampusSectionListView(CampusAdminRequiredMixin, ListView):
         context["program_filter"] = self.request.GET.get("program", "")
         context["year_level_filter"] = self.request.GET.get("year_level", "")
         context["academic_year_filter"] = self.request.GET.get("academic_year", "")
+        context["faculty_by_section"] = self._faculty_by_section(
+            [section.pk for section in context["sections"]]
+        )
         return context
+
+    def _faculty_by_section(self, section_ids: list[int]) -> dict[int, list[str]]:
+        """Distinct teaching faculty names per program section."""
+        from apps.users.models import TeachingAssignment
+
+        if not section_ids:
+            return {}
+        rows = (
+            TeachingAssignment.objects.filter(program_section_id__in=section_ids)
+            .select_related("professor")
+            .order_by("professor__first_name", "professor__last_name")
+        )
+        by_section: dict[int, list[str]] = {}
+        seen: dict[int, set[int]] = {}
+        for row in rows:
+            names = by_section.setdefault(row.program_section_id, [])
+            known = seen.setdefault(row.program_section_id, set())
+            if row.professor_id in known:
+                continue
+            known.add(row.professor_id)
+            names.append(row.professor.get_full_name() or row.professor.email)
+        return by_section
 
 
 class CampusSectionCreateView(CampusAdminRequiredMixin, CreateView):

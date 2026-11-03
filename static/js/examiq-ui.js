@@ -500,6 +500,59 @@
                 if (window.innerWidth < 1024) closeSidebar();
             });
         });
+
+        /* My Courses live filter: match group code/title, hide empty buckets. */
+        sidebar.querySelectorAll("[data-sidebar-filter]").forEach(function (input) {
+            if (input.dataset.bound) return;
+            input.dataset.bound = "1";
+            input.addEventListener("input", function () {
+                var q = (input.value || "").trim().toLowerCase();
+                var section = input.closest(".sidebar-course-section");
+                if (!section) return;
+                section.querySelectorAll("[data-sidebar-group]").forEach(function (group) {
+                    var visible = 0;
+                    group.querySelectorAll("[data-sidebar-course]").forEach(function (item) {
+                        var text = (item.textContent || "").toLowerCase();
+                        var match = !q || text.indexOf(q) !== -1;
+                        item.style.display = match ? "" : "none";
+                        if (match) visible += 1;
+                    });
+                    group.style.display = visible ? "" : "none";
+                });
+            });
+        });
+
+        /* Collapsible sidebar course buckets (Pinned / This Semester / Earlier). */
+        sidebar.querySelectorAll("[data-sidebar-toggle]").forEach(function (btn) {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = "1";
+            btn.addEventListener("click", function () {
+                const group = btn.closest("[data-sidebar-group]");
+                const list = group ? group.querySelector("[data-sidebar-list]") : null;
+                if (!list) return;
+                const collapsed = list.classList.toggle("hidden");
+                btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+                try {
+                    sessionStorage.setItem(
+                        "examiq.sidebar-group." + group.dataset.sidebarGroup,
+                        collapsed ? "1" : "0"
+                    );
+                } catch (e) { /* ignore */ }
+            });
+        });
+        sidebar.querySelectorAll("[data-sidebar-group]").forEach(function (group) {
+            const key = group.dataset.sidebarGroup;
+            let stored = null;
+            try {
+                stored = sessionStorage.getItem("examiq.sidebar-group." + key);
+            } catch (e) { /* ignore */ }
+            if (stored === null) return;
+            const list = group.querySelector("[data-sidebar-list]");
+            const btn = group.querySelector("[data-sidebar-toggle]");
+            if (!list || !btn) return;
+            list.classList.toggle("hidden", stored === "1");
+            btn.setAttribute("aria-expanded", stored === "1" ? "false" : "true");
+        });
     }
 
     window.ExamiQUI = window.ExamiQUI || {};

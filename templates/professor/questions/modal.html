@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ modal_title|default:"Question" }} — EXAMIQ+{% endblock %}
+
+{% block content %}
+<div id="{{ modal_id|default:'question-modal-edit' }}" class="question-modal hidden" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id|default:'question-modal-edit' }}-heading" data-modal-mode="edit">
+    <div class="question-modal__backdrop" data-dismiss-content></div>
+    <div class="question-modal__panel">
+        <form method="post" id="{{ modal_id|default:'question-modal-edit' }}-form" class="question-modal__inner" action="">
+            {% csrf_token %}
+            <input type="hidden" name="subject_id" value="{{ subject_id|default:'' }}" data-modal-subject-input>
+            <input type="hidden" name="course_pk" value="{{ course_pk|default:'' }}" data-modal-course-pk>
+            <input type="hidden" name="action" value="save" data-modal-action-input>
+
+            <header class="question-modal__header">
+                <div class="question-modal__header-left">
+                    <button type="button" class="question-modal__close" data-dismiss-content aria-label="Close">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                            <path d="M18 6 6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                    <h2 id="{{ modal_id|default:'question-modal-edit' }}-heading" class="question-modal__title">{{ modal_title }}</h2>
+                </div>
+                <button type="submit" class="question-modal__action">{{ modal_action_label }}</button>
+            </header>
+
+            <div class="question-modal__body">
+                <div class="question-modal__main">
+                    <div class="question-modal__field">
+                        <label class="question-modal__label" for="question-modal-edit-concept-tag">Concept tag</label>
+                        <input type="text" id="question-modal-edit-concept-tag" name="concept_tag" class="question-modal__input" placeholder="e.g. Set theory" value="{{ question.concept_tag|default:'' }}">
+                    </div>
+
+                    <div class="question-modal__field">
+                        <label class="question-modal__label">Difficulty</label>
+                        <div class="question-modal__difficulty">
+                            {% for value, label in difficulty_choices %}
+                            <button type="button" class="question-modal__difficulty-pill{% if question.difficulty == value %} question-modal__difficulty-pill--active{% endif %}" data-difficulty="{{ value }}">{{ label }}</button>
+                            {% endfor %}
+                            <input type="hidden" name="difficulty" value="{{ question.difficulty|default:'easy' }}" data-modal-difficulty>
+                        </div>
+                    </div>
+
+                    <div class="question-modal__field">
+                        <label class="question-modal__label" for="question-modal-edit-stem">Question<span class="question-modal__required" aria-hidden="true">*</span></label>
+                        <textarea id="question-modal-edit-stem" name="stem" rows="4" required class="question-modal__textarea" placeholder="e.g. Identify the missing value in the pattern: 2, 5, 10, 17, __?" data-modal-stem-input>{{ question.stem|default:'' }}</textarea>
+                        <p class="question-modal__stem-hint">Use LaTeX for math expressions (e.g., $x^2 + y^2 = r^2$).</p>
+                    </div>
+
+                    <div class="question-modal__field">
+                        <label class="question-modal__label" for="question-modal-edit-topic">Topic</label>
+                        <select id="question-modal-edit-topic" name="topic" class="question-modal__input">
+                            <option value="">Select topic</option>
+                            {% for topic in topic_choices %}
+                            <option value="{{ topic.pk }}">{{ topic.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="question-modal__field">
+                        <label class="question-modal__label">Answer choices<span class="question-modal__required" aria-hidden="true">*</span></label>
+                        <div class="question-modal__choices-grid">
+                            {% for letter in "ABCD" %}
+                            <div class="question-modal__choice-row">
+                                <label class="question-modal__choice-label">
+                                    <input type="radio" name="correct_answer" value="{{ letter }}"{% if question.correct_answer == letter %} checked{% endif %}>
+                                    {{ letter }}.
+                                </label>
+                                <input type="text" name="choice_{{ letter }}" class="question-modal__choice-input" placeholder="Choice {{ letter }}">
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="question-modal__field">
+                        <label class="question-modal__label">Explanation</label>
+                        <textarea id="question-modal-edit-explanation" name="explanation" rows="3" class="question-modal__textarea" placeholder="Add an explanation…">{{ question.adaptive_explanation.why|default:'' }}</textarea>
+                    </div>
+                </div>
+
+                <div class="question-modal__sidebar">
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Course</span>
+                        <div class="question-modal__sidebar-value" data-sidebar-course>{{ question.subject.code|default:'GNED 03' }} — {{ question.subject.name|default:'Mathematics' }}</div>
+                        <select class="question-modal__sidebar-select" name="subject_id">
+                            <option value="">Select course</option>
+                            {% if subject_options %}
+                            {% for opt in subject_options %}
+                            <option value="{{ opt.subject.pk }}">{{ opt.label }}</option>
+                            {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Type</span>
+                        <select class="question-modal__sidebar-select" name="question_type">
+                            <option value="mcq">Multiple Choice</option>
+                            <option value="tf">True/False</option>
+                            <option value="short">Short Answer</option>
+                        </select>
+                    </div>
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Tags</span>
+                        <div class="question-modal__tags-input" data-sidebar-tags>
+                            <span class="question-modal__tag">Mathematics</span>
+                            <span class="question-modal__tag">tags…</span>
+                        </div>
+                        <input type="hidden" name="tags" value="" data-sidebar-tags-input>
+                    </div>
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Difficulty</span>
+                        <div class="question-modal__difficulty-sidebar">
+                            <label class="question-modal__difficulty-pill-label">
+                                <input type="radio" name="difficulty" value="easy"{% if question.difficulty == 'easy' %} checked{% endif %}>
+                                <span>Beginner</span>
+                            </label>
+                            <label class="question-modal__difficulty-pill-label">
+                                <input type="radio" name="difficulty" value="medium"{% if question.difficulty == 'medium' %} checked{% endif %}>
+                                <span>Intermediate</span>
+                            </label>
+                            <label class="question-modal__difficulty-pill-label">
+                                <input type="radio" name="difficulty" value="hard"{% if question.difficulty == 'hard' %} checked{% endif %}>
+                                <span>Advanced</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="question-modal__sidebar-section">
+                        <span class="question-modal__sidebar-title">Status</span>
+                        <select class="question-modal__sidebar-select" name="status">
+                            <option value="approved">Ready to publish</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                    <div class="question-modal__sidebar-section question-modal__sidebar-section--admin">
+                        <span class="question-modal__sidebar-title">Admin</span>
+                        <div class="question-modal__admin-toggle">
+                            <label class="question-modal__toggle">
+                                <input type="checkbox" name="is_approved" value="1"{% if question.is_approved %} checked{% endif %}>
+                                <span class="question-modal__toggle-slider"></span>
+                                Approved
+                            </label>
+                            <label class="question-modal__toggle">
+                                <input type="checkbox" name="is_archived" value="1"{% if question.is_archived %} checked{% endif %}>
+                                <span class="question-modal__toggle-slider"></span>
+                                Archived
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/question-modal.js' %}"></script>
+{% endblock %}

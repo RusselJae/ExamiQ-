@@ -4,21 +4,30 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0010_question_types_expected_answer'),
-        ('users', '0017_student_subject'),
+        ("questions", "0010_question_types_expected_answer"),
+        ("users", "0017_student_subject"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='assigned_sections',
-            field=models.ManyToManyField(blank=True, help_text='Program sections this faculty member handles.', related_name='assigned_faculty', to='users.programsection'),
+            model_name="user",
+            name="assigned_sections",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Program sections this faculty member handles.",
+                related_name="assigned_faculty",
+                to="users.programsection",
+            ),
         ),
         migrations.AddField(
-            model_name='user',
-            name='assigned_subjects',
-            field=models.ManyToManyField(blank=True, help_text='Course subjects this faculty member handles for chat and roster.', related_name='assigned_faculty', to='questions.subject'),
+            model_name="user",
+            name="assigned_subjects",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Course subjects this faculty member handles for chat and roster.",
+                related_name="assigned_faculty",
+                to="questions.subject",
+            ),
         ),
     ]

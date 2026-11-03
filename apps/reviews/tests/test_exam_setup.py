@@ -7,7 +7,9 @@ from apps.reviews.models import ExamSetup
 
 @pytest.mark.django_db
 class TestExamSetupViews:
-    def test_professor_exam_setup_redirects(self, client, professor, teaching_assignment):
+    def test_professor_exam_setup_redirects(
+        self, client, professor, teaching_assignment
+    ):
         course = teaching_assignment.course
         client.force_login(professor)
         url = reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk})
@@ -33,7 +35,12 @@ class TestExamSetupViews:
         topic.subject.save(update_fields=["code"])
 
         client.force_login(student)
-        from apps.questions.models import Question as QModel, QuestionChoice, Subject, Topic
+        from apps.questions.models import (
+            Question as QModel,
+            QuestionChoice,
+            Subject,
+            Topic,
+        )
 
         subjects = []
         for i in range(3):
@@ -52,8 +59,12 @@ class TestExamSetupViews:
                 stem=f"Timing Q {i}",
                 status=QModel.Status.APPROVED,
             )
-            QuestionChoice.objects.create(question=q, label="A", text="1", is_correct=True)
-            QuestionChoice.objects.create(question=q, label="B", text="2", is_correct=False)
+            QuestionChoice.objects.create(
+                question=q, label="A", text="1", is_correct=True
+            )
+            QuestionChoice.objects.create(
+                question=q, label="B", text="2", is_correct=False
+            )
             subjects.append(subj)
 
         response = client.post(
@@ -83,7 +94,12 @@ class TestExamSetupViews:
         topic.subject.save(update_fields=["code"])
 
         client.force_login(student)
-        from apps.questions.models import Question as QModel, QuestionChoice, Subject, Topic
+        from apps.questions.models import (
+            Question as QModel,
+            QuestionChoice,
+            Subject,
+            Topic,
+        )
 
         subjects = []
         for i in range(3):
@@ -102,8 +118,12 @@ class TestExamSetupViews:
                 stem=f"NoTimer Q {i}",
                 status=QModel.Status.APPROVED,
             )
-            QuestionChoice.objects.create(question=q, label="A", text="1", is_correct=True)
-            QuestionChoice.objects.create(question=q, label="B", text="2", is_correct=False)
+            QuestionChoice.objects.create(
+                question=q, label="A", text="1", is_correct=True
+            )
+            QuestionChoice.objects.create(
+                question=q, label="B", text="2", is_correct=False
+            )
             subjects.append(subj)
 
         response = client.post(

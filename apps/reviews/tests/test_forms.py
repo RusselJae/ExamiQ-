@@ -31,7 +31,9 @@ def _setup_data(student, *, difficulty=None, extra_subjects=None, year_subjects=
     return data
 
 
-def _make_subject_with_questions(bsed_program, year_level, code, *, count=3, difficulty=None):
+def _make_subject_with_questions(
+    bsed_program, year_level, code, *, count=3, difficulty=None
+):
     difficulty = difficulty or Question.Difficulty.EASY
     subject = Subject.objects.create(
         program=bsed_program,
@@ -50,7 +52,9 @@ def _make_subject_with_questions(bsed_program, year_level, code, *, count=3, dif
             status=Question.Status.APPROVED,
         )
         QuestionChoice.objects.create(question=q, label="A", text="ok", is_correct=True)
-        QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+        QuestionChoice.objects.create(
+            question=q, label="B", text="no", is_correct=False
+        )
     return subject
 
 
@@ -119,8 +123,12 @@ class TestReviewSetupForm:
                 stem=f"Extra {i}",
                 status=Question.Status.APPROVED,
             )
-            QuestionChoice.objects.create(question=q, label="A", text="ok", is_correct=True)
-            QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+            QuestionChoice.objects.create(
+                question=q, label="A", text="ok", is_correct=True
+            )
+            QuestionChoice.objects.create(
+                question=q, label="B", text="no", is_correct=False
+            )
 
         form = ReviewSetupForm(
             data=_setup_data(student),
@@ -265,8 +273,12 @@ class TestReviewSetupForm:
                 stem=f"Extra MCQ {i}",
                 status=Question.Status.APPROVED,
             )
-            QuestionChoice.objects.create(question=q, label="A", text="ok", is_correct=True)
-            QuestionChoice.objects.create(question=q, label="B", text="no", is_correct=False)
+            QuestionChoice.objects.create(
+                question=q, label="A", text="ok", is_correct=True
+            )
+            QuestionChoice.objects.create(
+                question=q, label="B", text="no", is_correct=False
+            )
         Question.objects.create(
             topic=topic,
             difficulty=Question.Difficulty.EASY,
@@ -283,7 +295,9 @@ class TestReviewSetupForm:
         assert form.is_valid(), form.errors
         queue = form.get_auto_target()["question_queue"]
         types = set(
-            Question.objects.filter(pk__in=queue).values_list("question_type", flat=True)
+            Question.objects.filter(pk__in=queue).values_list(
+                "question_type", flat=True
+            )
         )
         assert types == {Question.QuestionType.MCQ}
 
@@ -357,12 +371,12 @@ class TestSubjectsAvailableForStudent:
 
 @pytest.mark.django_db
 class TestMultiSubjectQueue:
-    def test_each_subject_gets_minimum_questions(self, student, bsed_program, year_level):
+    def test_each_subject_gets_minimum_questions(
+        self, student, bsed_program, year_level
+    ):
         make_bsed_student(student, bsed_program=bsed_program)
         subjects = [
-            _make_subject_with_questions(
-                bsed_program, year_level, f"CAP-{i}", count=15
-            )
+            _make_subject_with_questions(bsed_program, year_level, f"CAP-{i}", count=15)
             for i in range(3)
         ]
         target = build_multi_subject_exam_target(

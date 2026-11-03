@@ -32,7 +32,12 @@ class TestAIFactory:
         assert isinstance(get_error_classifier(), StubErrorClassifier)
         assert isinstance(get_curriculum_advisor(), StubCurriculumAdvisor)
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key", OPENAI_MODEL="gpt-4o-mini")
+    @override_settings(
+        AI_ENABLED=True,
+        LLM_PROVIDER="openai",
+        OPENAI_API_KEY="test-key",
+        OPENAI_MODEL="gpt-4o-mini",
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_returns_openai_providers_when_enabled(self, mock_chat):
         from apps.ai.providers.openai_provider import OpenAIDifficultyTagger
@@ -43,14 +48,18 @@ class TestAIFactory:
         assert tagger.tag("Solve for x", "easy") == "medium"
         mock_chat.assert_called()
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_openai_api_failure_falls_back(self, mock_chat):
         mock_chat.return_value = None
         tagger = get_difficulty_tagger()
         assert tagger.tag("Short question", "medium") in {"easy", "medium", "hard"}
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_question_generator_parses_json(self, mock_chat, topic):
         mock_chat.return_value = '[{"stem": "New Q?", "choices": [{"label":"A","text":"1","is_correct":true}]}]'
@@ -58,7 +67,9 @@ class TestAIFactory:
         assert len(results) == 1
         assert results[0]["stem"] == "New Q?"
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_openai_generator_raises_on_api_failure(self, mock_chat, topic):
         from apps.ai.exceptions import AIServiceUnavailableError
@@ -68,7 +79,9 @@ class TestAIFactory:
             get_question_generator().generate(topic, "easy", 2)
         assert exc_info.value.retryable is True
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="openai", OPENAI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.openai_provider._chat")
     def test_openai_generator_raises_on_invalid_json(self, mock_chat, topic):
         from apps.ai.exceptions import AIServiceUnavailableError
@@ -79,13 +92,17 @@ class TestAIFactory:
 
     @override_settings(AI_ENABLED=False)
     def test_spaced_repetition_uses_rule_based_scheduler(self):
-        assert isinstance(get_spaced_repetition_scheduler(), RuleBasedSpacedRepetitionScheduler)
+        assert isinstance(
+            get_spaced_repetition_scheduler(), RuleBasedSpacedRepetitionScheduler
+        )
 
     @override_settings(AI_ENABLED=False)
     def test_ai_provider_label_off_when_disabled(self):
         assert get_ai_provider_label() == "Off"
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key"
+    )
     def test_ai_provider_label_gemini(self):
         assert get_ai_provider_label() == "Gemini"
 
@@ -142,7 +159,9 @@ class TestAIFactory:
             assert get_ai_provider_label() == "Off"
             assert isinstance(get_question_generator(), StubQuestionGenerator)
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.gemini_provider.gemini_client.chat")
     def test_gemini_difficulty_tagger(self, mock_chat):
         from apps.ai.providers.gemini_provider import GeminiDifficultyTagger
@@ -152,7 +171,9 @@ class TestAIFactory:
         assert isinstance(tagger, GeminiDifficultyTagger)
         assert tagger.tag("Long complex question", "easy") == "hard"
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.gemini_provider.gemini_client.chat_with_fallback")
     def test_gemini_question_generator_parses_json(self, mock_chat, topic):
         from apps.ai.providers.gemini_client import ChatResult
@@ -165,11 +186,15 @@ class TestAIFactory:
         assert len(results) == 1
         assert results[0]["stem"] == "Gemini Q?"
 
-    @override_settings(AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key")
+    @override_settings(
+        AI_ENABLED=True, LLM_PROVIDER="gemini", GEMINI_API_KEY="test-key"
+    )
     @patch("apps.ai.providers.gemini_provider.gemini_client.chat_with_fallback")
     def test_gemini_question_generator_raises_on_api_failure(self, mock_chat, topic):
         from apps.ai.exceptions import AIServiceUnavailableError
 
-        mock_chat.side_effect = AIServiceUnavailableError("AI unavailable: API quota exceeded.")
+        mock_chat.side_effect = AIServiceUnavailableError(
+            "AI unavailable: API quota exceeded."
+        )
         with pytest.raises(AIServiceUnavailableError):
             get_question_generator().generate(topic, "easy", 2)

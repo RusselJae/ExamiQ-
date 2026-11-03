@@ -4,16 +4,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0014_question_adaptive_explanation_source'),
-        ('users', '0022_password_reset_login_fingerprint_middle_name'),
+        ("questions", "0014_question_adaptive_explanation_source"),
+        ("users", "0022_password_reset_login_fingerprint_middle_name"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='user',
-            name='assigned_subjects',
-            field=models.ManyToManyField(blank=True, help_text='Courses this faculty member handles for chat and roster.', related_name='assigned_faculty', to='questions.subject'),
+            model_name="user",
+            name="assigned_subjects",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Courses this faculty member handles for chat and roster.",
+                related_name="assigned_faculty",
+                to="questions.subject",
+            ),
         ),
     ]

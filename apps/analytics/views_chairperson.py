@@ -5,10 +5,7 @@ from django.views.generic import ListView, TemplateView
 
 from apps.analytics.confidence import confidence_accuracy_matrix
 from apps.analytics.models import MistakeRecord
-from apps.analytics.services import (
-    department_math_analytics,
-    program_performance_summary,
-)
+from apps.analytics.services import department_math_analytics
 from apps.core.filtering import (
     apply_sort,
     build_filter_fields,
@@ -43,13 +40,6 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
                 if dept_slugs
                 else programs.filter(managing_department=department)
             )
-        summaries = [
-            program_performance_summary(program, department=department)
-            for program in programs
-        ]
-        for summary in summaries:
-            summary["has_activity"] = summary["total_answers"] > 0
-        context["program_summaries"] = summaries
         context["management_stats"] = {
             "pending_count": User.objects.filter(
                 role=User.Role.PROFESSOR,

@@ -19,14 +19,18 @@ class TestTopicAnswerReview:
     def test_non_student_gets_forbidden(self, client, professor, topic):
         client.force_login(professor)
         response = client.get(
-            reverse("analytics_student:topic_answer_review", kwargs={"topic_id": topic.pk})
+            reverse(
+                "analytics_student:topic_answer_review", kwargs={"topic_id": topic.pk}
+            )
         )
         assert response.status_code == 403
 
     def test_student_redirects_to_mistakes(self, client, student, topic):
         client.force_login(student)
         response = client.get(
-            reverse("analytics_student:topic_answer_review", kwargs={"topic_id": topic.pk})
+            reverse(
+                "analytics_student:topic_answer_review", kwargs={"topic_id": topic.pk}
+            )
         )
         assert response.status_code == 302
         assert response.url == reverse("analytics_student:mistakes")
@@ -50,7 +54,9 @@ class TestTopicAnswerReview:
 
         client.force_login(student)
         response = client.get(
-            reverse("analytics_student:topic_answer_review", kwargs={"topic_id": topic.pk})
+            reverse(
+                "analytics_student:topic_answer_review", kwargs={"topic_id": topic.pk}
+            )
         )
         assert response.status_code == 302
         assert response.url == reverse("analytics_student:mistakes")

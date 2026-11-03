@@ -1,4 +1,10 @@
-<article class="concept-card">
+{% load examiq_tags %}
+<article class="concept-card concept-card--notebook"
+         data-code="{{ card.review.topic.subject.code|default:''|lower }} {{ card.review.topic.subject.name|default:''|lower }}"
+         data-name="{{ card.review.concept_name|lower }}"
+         data-status="{{ card.review.status }}"
+         data-year="{{ card.review.topic.subject.year_level_id|default:'' }}"
+         data-year-name="{{ card.review.topic.subject.year_level.name|default:'' }}">
     <div class="concept-card__main">
         <div class="concept-card__badges">
             <span class="concept-badge concept-badge--{{ card.badge_class }}">{{ card.badge }}</span>
@@ -12,17 +18,16 @@
         {% if card.subject_label %}
         <p class="concept-card__meta">{{ card.subject_label }}</p>
         {% endif %}
-        <p class="concept-card__blurb">
-            {% if card.review.status == 'resolved' and card.review.resolved_at %}
-            Resolved {{ card.review.resolved_at|date:"M j" }} · {{ card.progress_label }} on different questions
-            {% else %}
-            {{ card.miss_blurb }}
-            {% endif %}
-        </p>
-        <div class="concept-progress" aria-label="{{ card.progress_label }}">
-            <div class="concept-progress__track">
-                <span class="concept-progress__fill" style="width: {{ card.progress_pct }}%;"></span>
-            </div>
+        <p class="concept-card__blurb">{{ card.miss_blurb }}</p>
+        {% if card.review.same_wrong_answer_count >= 2 %}
+        <p class="concept-card__handnote" aria-label="Repeated mistake note">same wrong answer, twice!</p>
+        {% endif %}
+        <div class="concept-card__progress-row">
+            <span class="concept-progress-dots" role="img" aria-label="{{ card.progress_label }}">
+                <span class="concept-progress-dot{% if card.review.correct_streak >= 1 %} is-done{% endif %}"></span>
+                <span class="concept-progress-dot{% if card.review.correct_streak >= 2 %} is-done{% endif %}"></span>
+                <span class="concept-progress-dot{% if card.review.correct_streak >= 3 %} is-done{% endif %}"></span>
+            </span>
             <span class="concept-progress__label">{{ card.progress_label }}</span>
         </div>
     </div>

@@ -5,6 +5,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Students" subtitle=students_subtitle %}
 
+<div class="course-home-panel">
 <div class="bento-grid">
     {% include "components/filter_bar.html" %}
     <div class="span-full">
@@ -13,7 +14,7 @@
                 <thead>
                     <tr>
                         <th>Student</th>
-                        <th>Section</th>
+                        <th>Status</th>
                         <th class="text-center">Sessions</th>
                         <th class="text-center">Subjects</th>
                         <th class="text-center">Mistakes</th>
@@ -33,7 +34,13 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="text-examiq-slate whitespace-nowrap">{{ row.student.section.display_label|default:"—" }}</td>
+                        <td>
+                            {% if row.student.is_irregular %}
+                            <span class="student-status-pill student-status-pill--irregular">Irregular</span>
+                            {% else %}
+                            <span class="student-status-pill student-status-pill--regular">Regular</span>
+                            {% endif %}
+                        </td>
                         <td class="text-center text-examiq-slate">{{ row.sessions_completed }}</td>
                         <td class="text-center text-examiq-slate">{{ row.subjects_taken_count|default:row.courses_label }}</td>
                         <td class="text-center">
@@ -86,5 +93,6 @@
             </table>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}

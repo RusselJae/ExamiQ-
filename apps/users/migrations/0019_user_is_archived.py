@@ -4,15 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('users', '0018_faculty_assigned_sections_subjects'),
+        ("users", "0018_faculty_assigned_sections_subjects"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='user',
-            name='is_archived',
-            field=models.BooleanField(default=False, help_text='Archived students are hidden from faculty rosters and cannot log in.'),
+            model_name="user",
+            name="is_archived",
+            field=models.BooleanField(
+                default=False,
+                help_text="Archived students are hidden from faculty rosters and cannot log in.",
+            ),
         ),
     ]

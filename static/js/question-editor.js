@@ -59,7 +59,11 @@
     Editor.prototype.correctValue = function () {
         if (!this.correctSel) return "";
         var checked = qs(this.form, this.correctSel + ":checked");
-        return checked ? checked.value || "" : "";
+        if (!checked) return "";
+        // Checkbox wiring: the letter lives on the row's data-choice-value.
+        var row = checked.closest ? checked.closest("[data-choice-value]") : null;
+        if (row) return row.getAttribute("data-choice-value") || "";
+        return checked.value || "";
     };
 
     Editor.prototype.choices = function () {
@@ -70,18 +74,18 @@
     Editor.prototype.bindChoices = function () {
         var self = this;
         if (!self.correctSel) return;
-        qsa(this.form, "[data-choice-card]").forEach(function (card) {
-            var circle = qs(card, "[data-choice-radio]");
-            if (!circle) return;
+        // Current modal markup: each row carries the circle label itself.
+        var marks = qsa(this.form, "[data-choice-radio]");
+        if (!marks.length) return;
+        marks.forEach(function (circle) {
             circle.addEventListener("click", function (event) {
                 event.preventDefault();
-                // Pick exactly one correct answer across every card.
+                // Pick exactly one correct answer across every row.
                 qsa(self.form, self.correctSel).forEach(function (input) {
                     input.checked = false;
                 });
-                // The correct-input lives inside its own card, so scope the
-                // lookup there instead of parsing the selector for a name.
-                var target = qs(card, self.correctSel);
+                // The correct-input lives inside its own mark label.
+                var target = qs(circle, self.correctSel) || circle.querySelector("input[type='checkbox']");
                 if (target) {
                     target.checked = true;
                     target.dispatchEvent(new Event("change", { bubbles: true }));

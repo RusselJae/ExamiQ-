@@ -66,7 +66,9 @@ class SignupOTPVerifyView(View):
             messages.info(request, "Verification cancelled. You can sign in instead.")
             return redirect(reverse("account_login"))
 
-        code = "".join(ch for ch in (request.POST.get("code") or "") if ch.isdigit())[:6]
+        code = "".join(ch for ch in (request.POST.get("code") or "") if ch.isdigit())[
+            :6
+        ]
         try:
             verify_signup_otp(user, code)
         except SignupOTPError as exc:

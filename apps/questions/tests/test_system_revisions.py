@@ -66,9 +66,12 @@ def test_retake_allowed_after_threshold_while_action_plan_disabled(
             mode=ReviewSession.Mode.TIMED_EXAM,
             status=ReviewSession.Status.COMPLETED,
         )
-    assert completed_attempt_count(
-        student, course=course, subject=topic.subject, difficulty="easy"
-    ) == 3
+    assert (
+        completed_attempt_count(
+            student, course=course, subject=topic.subject, difficulty="easy"
+        )
+        == 3
+    )
     assert requires_action_plan(
         student, course=course, subject=topic.subject, difficulty="easy"
     )

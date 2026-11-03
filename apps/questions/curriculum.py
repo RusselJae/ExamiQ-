@@ -23,7 +23,9 @@ def get_subjects_for_program(
     strict_year: bool = True,
     semester: int | None = None,
 ):
-    qs = Subject.objects.select_related("program", "year_level").filter(program_id=program_id)
+    qs = Subject.objects.select_related("program", "year_level").filter(
+        program_id=program_id
+    )
     if exclude_placeholder:
         qs = qs.exclude(code__startswith="GEN-")
     if year_level_id and strict_year:
@@ -47,25 +49,33 @@ def subjects_for_teaching_assignment(
     )
 
 
-def get_subjects_for_professor(program_id: int | None, year_level_id: int | None = None):
+def get_subjects_for_professor(
+    program_id: int | None, year_level_id: int | None = None
+):
     """Professor subject list: filter by year when possible, else all catalog subjects."""
     qs = get_subjects_for_program(program_id, year_level_id, strict_year=True)
     if year_level_id and not qs.exists():
-        qs = get_subjects_for_program(program_id, exclude_placeholder=True, strict_year=False)
+        qs = get_subjects_for_program(
+            program_id, exclude_placeholder=True, strict_year=False
+        )
     return qs
 
 
 def get_topics_for_subject(subject_id: int | None):
     if not subject_id:
         return Topic.objects.none()
-    return Topic.objects.filter(subject_id=subject_id, parent__isnull=True).order_by("name")
+    return Topic.objects.filter(subject_id=subject_id, parent__isnull=True).order_by(
+        "name"
+    )
 
 
 def topics_for_program(program_id: int | None):
     if not program_id:
         return Topic.objects.none()
-    return Topic.objects.filter(subject__program_id=program_id).select_related("subject").order_by(
-        "subject__code", "name"
+    return (
+        Topic.objects.filter(subject__program_id=program_id)
+        .select_related("subject")
+        .order_by("subject__code", "name")
     )
 
 

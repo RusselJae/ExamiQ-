@@ -35,8 +35,10 @@ class TestMaterialsHubAndUpload:
         assert response.status_code == 200
         assert "Content Management" in content
         assert subject.code in content
-        assert "Select a course" in content
-        assert "materials-library__empty" in content
+        # Empty hub: explanatory panel + the professor's courses as cards.
+        assert "Pick a course to see its content" in content
+        assert "hub-course-card" in content
+        assert "Your courses" in content
 
     def test_hub_gated_until_subject_selected(
         self, client, professor, subject, bsed_program
@@ -49,7 +51,7 @@ class TestMaterialsHubAndUpload:
             subject=subject,
             created_by=professor,
             title="Hidden until subject",
-            original_name="hidden.txt",
+            original_name="hidden.pdf",
             material_type=LearningDocument.MaterialType.MODULE,
             status=LearningDocument.Status.READY,
         )
@@ -77,7 +79,7 @@ class TestMaterialsHubAndUpload:
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         upload = SimpleUploadedFile(
-            "hub-upload.txt", b"Hub upload body.", content_type="text/plain"
+            "hub-upload.pdf", b"Hub upload body.", content_type="application/pdf"
         )
         response = client.post(
             reverse(
@@ -88,7 +90,7 @@ class TestMaterialsHubAndUpload:
                 "title": "Hub notes",
                 "material_type": LearningDocument.MaterialType.MODULE,
                 "subject_id": subject.pk,
-                "original_name": "hub-notes.txt",
+                "original_name": "hub-notes.pdf",
                 "hub_return": "1",
                 "source_file": upload,
             },
@@ -97,7 +99,7 @@ class TestMaterialsHubAndUpload:
         assert f"subject={subject.pk}" in response.url
         doc = LearningDocument.objects.filter(course_id=course.pk).latest("created")
         assert doc.subject_id == subject.pk
-        assert doc.original_name == "hub-notes.txt"
+        assert doc.original_name == "hub-notes.pdf"
 
     def test_upload_accepts_subject_and_original_name(
         self, client, professor, subject, bsed_program
@@ -107,7 +109,9 @@ class TestMaterialsHubAndUpload:
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         upload = SimpleUploadedFile(
-            "raw-upload.txt", b"Module content for algebra.", content_type="text/plain"
+            "raw-upload.pdf",
+            b"Module content for algebra.",
+            content_type="application/pdf",
         )
         response = client.post(
             reverse(
@@ -118,14 +122,14 @@ class TestMaterialsHubAndUpload:
                 "title": "Algebra notes",
                 "material_type": LearningDocument.MaterialType.MODULE,
                 "subject_id": subject.pk,
-                "original_name": "algebra-notes.txt",
+                "original_name": "algebra-notes.pdf",
                 "source_file": upload,
             },
         )
         assert response.status_code == 302
         doc = LearningDocument.objects.filter(course_id=course.pk).latest("created")
         assert doc.subject_id == subject.pk
-        assert doc.original_name == "algebra-notes.txt"
+        assert doc.original_name == "algebra-notes.pdf"
         assert doc.title == "Algebra notes"
 
     def test_detail_updates_filename_and_subject(
@@ -321,8 +325,9 @@ class TestQuestionAdaptiveExplanationEdit:
         assert "Rewrite the expression" in step.content
         assert question.explanation_status == "faculty_approved"
 
-        from apps.questions.services import faculty_adaptive_feedback_json
         import json
+
+        from apps.questions.services import faculty_adaptive_feedback_json
 
         payload = json.loads(faculty_adaptive_feedback_json(question))
         assert "Rewrite the expression" in (payload.get("solution_steps") or [""])[0]
@@ -505,9 +510,11 @@ class TestQuestionAdaptiveExplanationEdit:
         assert "edit-steps-list" in content
         assert 'data-edit-difficulty="medium"' in content
 
-        # Cancel/Save live at the bottom of the readiness panel, and the back
-        # breadcrumb returns to the previous screen.
-        assert content.index("qe-ready__actions") < content.index("Save changes")
+        # Overlay header carries the primary Save; Cancel stays in the readiness
+        # panel and points back at the batch editor.
+        assert 'form="question-edit-form"' in content
+        assert "qe-ready__actions" in content
+        assert "data-editor-cancel" in content
         assert "data-cancel-url" in content
 
         # The old four-tab chrome is gone.

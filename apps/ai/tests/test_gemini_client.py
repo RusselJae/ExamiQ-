@@ -51,7 +51,9 @@ class TestGeminiClient:
     )
     @patch("apps.ai.providers.gemini_client._generate_with_model")
     @patch("apps.ai.providers.gemini_client.time.sleep")
-    def test_chat_with_fallback_tries_next_model_on_quota(self, mock_sleep, mock_generate, _mock_list):
+    def test_chat_with_fallback_tries_next_model_on_quota(
+        self, mock_sleep, mock_generate, _mock_list
+    ):
         mock_generate.side_effect = [
             Exception("429 You exceeded your current quota"),
             Exception("429 You exceeded your current quota"),
@@ -76,9 +78,17 @@ class TestGeminiClient:
         assert "gemini-2.5-pro" not in models
 
     @override_settings(GEMINI_API_KEY="test-key", GEMINI_MODEL="gemini-2.0-flash")
-    @patch("apps.ai.providers.gemini_client.list_available_models", return_value=["gemini-2.0-flash"])
-    @patch("apps.ai.providers.gemini_client._generate_with_model", side_effect=Exception("404 not found"))
-    def test_chat_with_fallback_skips_404_without_retry(self, mock_generate, _mock_list):
+    @patch(
+        "apps.ai.providers.gemini_client.list_available_models",
+        return_value=["gemini-2.0-flash"],
+    )
+    @patch(
+        "apps.ai.providers.gemini_client._generate_with_model",
+        side_effect=Exception("404 not found"),
+    )
+    def test_chat_with_fallback_skips_404_without_retry(
+        self, mock_generate, _mock_list
+    ):
         with pytest.raises(AIServiceUnavailableError) as exc_info:
             gemini_client.chat_with_fallback("prompt")
         assert mock_generate.call_count == 1
@@ -92,7 +102,9 @@ class TestGeminiClient:
     @patch("apps.ai.providers.gemini_client.list_available_models", return_value=[])
     @patch("apps.ai.providers.gemini_client._generate_with_model")
     @patch("apps.ai.providers.gemini_client.time.sleep")
-    def test_chat_with_fallback_retries_before_next_model(self, mock_sleep, mock_generate, _mock_list):
+    def test_chat_with_fallback_retries_before_next_model(
+        self, mock_sleep, mock_generate, _mock_list
+    ):
         mock_generate.side_effect = [
             Exception("503 service unavailable"),
             "ok",
@@ -109,9 +121,14 @@ class TestGeminiClient:
         GEMINI_FALLBACK_MODELS=[],
     )
     @patch("apps.ai.providers.gemini_client.list_available_models", return_value=[])
-    @patch("apps.ai.providers.gemini_client._generate_with_model", side_effect=Exception("429 quota exceeded"))
+    @patch(
+        "apps.ai.providers.gemini_client._generate_with_model",
+        side_effect=Exception("429 quota exceeded"),
+    )
     @patch("apps.ai.providers.gemini_client.time.sleep")
-    def test_chat_with_fallback_raises_when_all_fail(self, _mock_sleep, _mock_generate, _mock_list):
+    def test_chat_with_fallback_raises_when_all_fail(
+        self, _mock_sleep, _mock_generate, _mock_list
+    ):
         with pytest.raises(AIServiceUnavailableError) as exc_info:
             gemini_client.chat_with_fallback("prompt")
         assert "quota" in exc_info.value.message.lower()

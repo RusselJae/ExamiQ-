@@ -1,0 +1,101 @@
+{# Content modal — Add / Edit content dialogs matching screenshot design. #}
+{# Cream body, white rounded section panels, readonly For / course sidebar. #}
+{# Expected include vars: modal_id, modal_mode ("add"|"edit"), modal_title, modal_style, #}
+{# modal_action_label, form_action, subject_id, hub_return, return_to. #}
+{# Edit-mode optional prefill: doc_title, doc_description, doc_ext, doc_name, #}
+{# doc_meta, download_url, doc_subject, doc_status, auto_open, cancel_url. #}
+<div id="{{ modal_id }}" class="content-modal hidden" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id }}-heading" data-modal-mode="{{ modal_mode }}"{% if auto_open %} data-auto-open="1"{% endif %}{% if cancel_url %} data-cancel-url="{{ cancel_url }}"{% endif %}>
+    <div class="content-modal__backdrop" data-dismiss-content></div>
+    <div class="content-modal__panel">
+        <header class="content-modal__header">
+            <div class="content-modal__header-left">
+                <button type="button" class="content-modal__close" data-dismiss-content aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M18 6 6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+                <h2 id="{{ modal_id }}-heading" class="content-modal__title">{{ modal_title }}{% if modal_style %} — {{ modal_style }}{% endif %}</h2>
+            </div>
+            <button type="submit" class="content-modal__action" form="{{ modal_id }}-form">{{ modal_action_label }}</button>
+        </header>
+
+        <form method="post" enctype="multipart/form-data" id="{{ modal_id }}-form" class="content-modal__inner"{% if form_action %} action="{{ form_action }}"{% endif %}>
+            {% csrf_token %}
+            <input type="hidden" name="subject_id" value="{{ subject_id|default:'' }}" data-modal-subject-input>
+            {% if modal_mode == "add" %}
+            <input type="hidden" name="original_name" value="" data-modal-original-name>
+            {% if hub_return %}<input type="hidden" name="hub_return" value="1">{% endif %}
+            {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+            {% else %}
+            <input type="hidden" name="action" value="save" data-modal-action-input>
+            {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+            {% if hub_return %}<input type="hidden" name="hub_return" value="1">{% endif %}
+            {% endif %}
+
+            <div class="content-modal__body">
+                <div class="content-modal__main">
+                    <!-- Details -->
+                    <div class="content-modal__field content-modal__panel-block">
+                        <div class="content-modal__field-head">
+                            <h3 class="content-modal__subtitle">Details</h3>
+                        </div>
+                        <div class="content-modal__field">
+                            <label class="content-modal__label" for="{{ modal_id }}-title">Title<span class="content-modal__required" aria-hidden="true">*</span></label>
+                            <input type="text" id="{{ modal_id }}-title" name="title" maxlength="255" required autocomplete="off" class="content-modal__input" placeholder="e.g. Lesson 1 — Nature of Mathematics" data-modal-title-input{% if doc_title %} value="{{ doc_title }}"{% endif %}>
+                        </div>
+                        <div class="content-modal__field">
+                            <label class="content-modal__label" for="{{ modal_id }}-description">Description <span class="content-modal__optional">(optional)</span></label>
+                            <textarea id="{{ modal_id }}-description" name="description" rows="3" class="content-modal__textarea" placeholder="Short summary shown with the material…" data-modal-description>{{ doc_description|default:'' }}</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Attach / Attached file -->
+                    {% if modal_mode == "add" %}
+                    <div class="content-modal__field content-modal__panel-block">
+                        <span class="content-modal__label" id="{{ modal_id }}-attach-label">Attach</span>
+                        <div class="content-modal__dropzone" data-dropzone tabindex="0" role="button" aria-labelledby="{{ modal_id }}-attach-label">
+                            <span class="content-modal__dropzone-icon" aria-hidden="true">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 19V5m0 0-6 6m6-6 6 6"/>
+                                </svg>
+                            </span>
+                            <span class="content-modal__dropzone-title">Upload</span>
+                            <span class="content-modal__dropzone-hint">or drag files here</span>
+                            <span class="content-modal__dropzone-formats">PDF only</span>
+                            <input type="file" name="source_file" accept=".pdf,application/pdf" class="sr-only" data-modal-file>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="content-modal__field content-modal__panel-block">
+                        <span class="content-modal__label" id="{{ modal_id }}-attached-label">Attached file</span>
+                        <div class="content-modal__attached">
+                            <span class="content-modal__badge content-modal__badge--{{ doc_ext|lower|default:'docx' }}" data-attached-ext>{{ doc_ext|default:'DOCX' }}</span>
+                            <span class="content-modal__attached-info">
+                                <span class="content-modal__attached-name" data-attached-name>{{ doc_name|default:'Document' }}</span>
+                                <span class="content-modal__attached-meta" data-attached-meta>{{ doc_meta|default:'' }}</span>
+                            </span>
+                            <span class="content-modal__attached-actions">
+                                <a class="content-modal__attached-link" href="{{ download_url|default:'#' }}" data-attached-download download>
+                                    Download
+                                </a>
+                                <button type="button" class="content-modal__replace-btn" data-replace-file-trigger>Replace file</button>
+                            </span>
+                        </div>
+                        <input type="file" name="replace_file" accept=".pdf,application/pdf" class="sr-only" data-modal-replace aria-label="Choose replacement file">
+                        <p class="content-modal__replace-hint">Replacing a file keeps the title and re-processes the content for AI review.</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="content-modal__sidebar">
+                    <div class="content-modal__sidebar-section">
+                        <span class="content-modal__sidebar-title">For</span>
+                        <div class="content-modal__sidebar-field">
+                            <div class="content-modal__sidebar-value content-modal__sidebar-value--readonly" data-sidebar-course>{% if subject_options %}{% for opt in subject_options %}{% if opt.subject.pk == subject_id or opt.subject.pk == doc_subject %}{{ opt.label }}{% endif %}{% endfor %}{% else %}Current course{% endif %}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

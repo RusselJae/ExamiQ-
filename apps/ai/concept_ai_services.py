@@ -59,7 +59,9 @@ def generate_validated_concept_remediation(
         try:
             raw = chat_json(system, prompt, max_tokens)
         except Exception as exc:
-            logger.warning("Concept remediation attempt %s failed: %s", attempt + 1, exc)
+            logger.warning(
+                "Concept remediation attempt %s failed: %s", attempt + 1, exc
+            )
             raw = None
         validated = validate_concept_remediation(raw)
         if validated:

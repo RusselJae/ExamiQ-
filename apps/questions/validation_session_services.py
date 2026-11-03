@@ -81,19 +81,28 @@ def record_validation_outcome(
 
     question = item.question
     if outcome == QuestionValidationItem.Outcome.UNPUBLISH and faculty is not None:
-        reject_question(question, faculty, note=notes or "Unpublished during validation session.")
+        reject_question(
+            question, faculty, note=notes or "Unpublished during validation session."
+        )
     elif outcome == QuestionValidationItem.Outcome.OK and faculty is not None:
         if question.status != Question.Status.APPROVED:
             publish_question_as_faculty(question, faculty)
-        elif question.explanation_steps.exists() and question.explanation_status != "faculty_approved":
+        elif (
+            question.explanation_steps.exists()
+            and question.explanation_status != "faculty_approved"
+        ):
             from apps.questions.services import approve_question_explanations
 
             approve_question_explanations(question, faculty)
     return item
 
 
-def maybe_complete_session(session: QuestionValidationSession) -> QuestionValidationSession:
-    pending = session.items.filter(outcome=QuestionValidationItem.Outcome.PENDING).exists()
+def maybe_complete_session(
+    session: QuestionValidationSession,
+) -> QuestionValidationSession:
+    pending = session.items.filter(
+        outcome=QuestionValidationItem.Outcome.PENDING
+    ).exists()
     if not pending and session.status != QuestionValidationSession.Status.COMPLETED:
         session.status = QuestionValidationSession.Status.COMPLETED
         session.completed_at = timezone.now()

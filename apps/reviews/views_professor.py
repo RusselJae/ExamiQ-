@@ -49,7 +49,9 @@ class ExamSetupUpdateView(ProfessorCourseMixin, UpdateView):
         return response
 
     def get_success_url(self):
-        return reverse("analytics_professor:exam_setup", kwargs={"course_pk": self.course.pk})
+        return reverse(
+            "analytics_professor:exam_setup", kwargs={"course_pk": self.course.pk}
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -64,7 +66,9 @@ class ReviewWindowListView(ProfessorCourseMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = ReviewWindow.objects.filter(course=self.course).prefetch_related("topics")
+        queryset = ReviewWindow.objects.filter(course=self.course).prefetch_related(
+            "topics"
+        )
         queryset = apply_date_range(queryset, self.request, "created")
         return apply_sort(
             queryset,
@@ -84,7 +88,9 @@ class ReviewWindowListView(ProfessorCourseMixin, ListView):
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
         now = timezone.now()
-        context["upcoming_windows"] = [w for w in context["windows"] if w.opens_at > now]
+        context["upcoming_windows"] = [
+            w for w in context["windows"] if w.opens_at > now
+        ]
         context["active_windows"] = [w for w in context["windows"] if w.is_open]
         context["past_windows"] = [
             w for w in context["windows"] if w.closes_at < now or not w.is_active
@@ -109,7 +115,9 @@ class ReviewWindowCreateView(ProfessorCourseMixin, CreateView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse("analytics_professor:window_list", kwargs={"course_pk": self.course.pk})
+        return reverse(
+            "analytics_professor:window_list", kwargs={"course_pk": self.course.pk}
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -137,7 +145,9 @@ class ReviewWindowUpdateView(ProfessorCourseMixin, UpdateView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse("analytics_professor:window_list", kwargs={"course_pk": self.course.pk})
+        return reverse(
+            "analytics_professor:window_list", kwargs={"course_pk": self.course.pk}
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -161,7 +171,9 @@ class ReviewWindowDeleteView(ProfessorCourseMixin, DeleteView):
         return redirect(self.get_success_url())
 
     def get_success_url(self):
-        return reverse("analytics_professor:window_list", kwargs={"course_pk": self.course.pk})
+        return reverse(
+            "analytics_professor:window_list", kwargs={"course_pk": self.course.pk}
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

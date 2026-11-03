@@ -67,7 +67,14 @@ class TestSectionStudentArchive:
         assert auth_user is None
 
     def test_faculty_outside_assigned_section_gets_404(
-        self, client, professor, student, program_section, bsed_program, year_level, academic_year
+        self,
+        client,
+        professor,
+        student,
+        program_section,
+        bsed_program,
+        year_level,
+        academic_year,
     ):
         other_section = ProgramSection.objects.create(
             program=bsed_program,
@@ -125,13 +132,29 @@ class TestSectionStudentArchive:
         assert auth_user is not None
 
     def test_students_page_hides_archived_student(
-        self, client, professor, student, program_section, subject, topic, course
+        self,
+        client,
+        professor,
+        student,
+        program_section,
+        subject,
+        topic,
+        course,
+        academic_year,
     ):
         from apps.reviews.models import ReviewSession
         from apps.reviews.services import start_review_session
+        from apps.users.models import AcademicYear, StudentFacultyAssignment
 
         professor.assigned_sections.add(program_section)
         professor.assigned_subjects.add(subject)
+        year = AcademicYear.get_current() or academic_year
+        StudentFacultyAssignment.objects.create(
+            student=student,
+            faculty=professor,
+            subject=subject,
+            academic_year=year,
+        )
 
         session = start_review_session(
             student=student,
@@ -158,13 +181,29 @@ class TestSectionStudentArchive:
         assert "Restore" in archived_resp.content.decode()
 
     def test_students_page_shows_section_column(
-        self, client, professor, student, program_section, subject, topic, course
+        self,
+        client,
+        professor,
+        student,
+        program_section,
+        subject,
+        topic,
+        course,
+        academic_year,
     ):
         from apps.reviews.models import ReviewSession
         from apps.reviews.services import start_review_session
+        from apps.users.models import AcademicYear, StudentFacultyAssignment
 
         professor.assigned_sections.add(program_section)
         professor.assigned_subjects.add(subject)
+        year = AcademicYear.get_current() or academic_year
+        StudentFacultyAssignment.objects.create(
+            student=student,
+            faculty=professor,
+            subject=subject,
+            academic_year=year,
+        )
 
         session = start_review_session(
             student=student,

@@ -1,4 +1,5 @@
 """Production settings."""
+
 from .base import *  # noqa: F403
 
 DEBUG = False
@@ -13,7 +14,9 @@ SECURE_HSTS_PRELOAD = True
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")  # noqa: F405
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
 }
 
 # Public https origins only (not *.railway.internal). Set on the host, e.g.:

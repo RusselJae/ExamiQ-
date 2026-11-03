@@ -14,16 +14,18 @@ from apps.ai.normalize import (
 
 @pytest.mark.parametrize("label", ["B", "C", "D"])
 def test_reconcile_question_choices_sets_single_correct(label):
-    question = reconcile_question_choices({
-        "stem": "Test?",
-        "correct_label": label,
-        "choices": [
-            {"label": "A", "text": "one", "is_correct": True},
-            {"label": "B", "text": "two", "is_correct": False},
-            {"label": "C", "text": "three", "is_correct": False},
-            {"label": "D", "text": "four", "is_correct": False},
-        ],
-    })
+    question = reconcile_question_choices(
+        {
+            "stem": "Test?",
+            "correct_label": label,
+            "choices": [
+                {"label": "A", "text": "one", "is_correct": True},
+                {"label": "B", "text": "two", "is_correct": False},
+                {"label": "C", "text": "three", "is_correct": False},
+                {"label": "D", "text": "four", "is_correct": False},
+            ],
+        }
+    )
     correct = [c for c in question["choices"] if c["is_correct"]]
     assert len(correct) == 1
     assert correct[0]["label"] == label

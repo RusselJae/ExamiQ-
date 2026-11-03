@@ -9,6 +9,7 @@ from apps.ai.interfaces import (
     CalibrationAnalyzer,
     ConceptPracticeGenerator,
     ConceptRemediationGenerator,
+    CorSubjectAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -24,6 +25,7 @@ from apps.ai.stubs import (
     StubCalibrationAnalyzer,
     StubConceptPracticeGenerator,
     StubConceptRemediationGenerator,
+    StubCorSubjectAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
@@ -127,6 +129,26 @@ def get_question_validator() -> QuestionValidator:
     return StubQuestionValidator()
 
 
+def get_cor_subject_analyzer() -> CorSubjectAnalyzer:
+    """COR text → structured subject rows (stub parse when AI disabled)."""
+    if _ai_available():
+        try:
+            if settings.LLM_PROVIDER == "gemini":
+                from apps.ai.providers.gemini_provider import (
+                    GeminiCorSubjectAnalyzer,
+                )
+
+                return GeminiCorSubjectAnalyzer()
+            if settings.LLM_PROVIDER == "ollama":
+                return _ollama_import().OllamaCorSubjectAnalyzer()
+            from apps.ai.providers.openai_provider import OpenAICorSubjectAnalyzer
+
+            return OpenAICorSubjectAnalyzer()
+        except Exception as exc:
+            logger.warning("Falling back to stub CorSubjectAnalyzer: %s", exc)
+    return StubCorSubjectAnalyzer()
+
+
 def get_difficulty_tagger() -> DifficultyTagger:
     if _ai_available():
         try:
@@ -214,12 +236,16 @@ def get_adaptive_feedback_generator() -> AdaptiveFeedbackGenerator:
     if _ai_available():
         try:
             if settings.LLM_PROVIDER == "gemini":
-                from apps.ai.providers.gemini_provider import GeminiAdaptiveFeedbackGenerator
+                from apps.ai.providers.gemini_provider import (
+                    GeminiAdaptiveFeedbackGenerator,
+                )
 
                 return GeminiAdaptiveFeedbackGenerator()
             if settings.LLM_PROVIDER == "ollama":
                 return _ollama_import().OllamaAdaptiveFeedbackGenerator()
-            from apps.ai.providers.openai_provider import OpenAIAdaptiveFeedbackGenerator
+            from apps.ai.providers.openai_provider import (
+                OpenAIAdaptiveFeedbackGenerator,
+            )
 
             return OpenAIAdaptiveFeedbackGenerator()
         except Exception as exc:

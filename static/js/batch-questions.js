@@ -62,6 +62,10 @@
         } else if (config.difficultySelect && config.difficultySelect.value) {
             diffs.push(config.difficultySelect.value);
         }
+        // "AI decides" is exclusive — never mix it with band values.
+        if (diffs.indexOf("auto") !== -1) {
+            diffs = ["auto"];
+        }
         draft.settings.difficulties = diffs;
         draft.settings.difficulty = diffs[0] || "";
         draft.questionIndex = config.questionIndex;
@@ -82,6 +86,11 @@
                 : draft.settings.difficulty
                   ? [draft.settings.difficulty]
                   : [];
+        // "AI decides" is exclusive: legacy drafts could pair it with band
+        // values — sanitize so only the auto value survives.
+        if (wanted.indexOf("auto") !== -1) {
+            wanted = ["auto"];
+        }
         if (wanted.length && config.difficultySelect) {
             Array.prototype.forEach.call(config.difficultySelect.options, function (opt) {
                 opt.selected = wanted.indexOf(opt.value) !== -1;

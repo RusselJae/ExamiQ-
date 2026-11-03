@@ -118,10 +118,7 @@ class ConceptPracticeAttempt(models.Model):
         ordering = ["attempt_number", "created_at"]
 
     def __str__(self) -> str:
-        return (
-            f"Practice #{self.attempt_number} for "
-            f"{self.concept_review.concept_name}"
-        )
+        return f"Practice #{self.attempt_number} for {self.concept_review.concept_name}"
 
 
 class ErrorType(models.Model):
@@ -324,15 +321,15 @@ class FacultyConversation(models.Model):
                 name="analytics_facultyconversation_unique_pair",
             ),
             models.CheckConstraint(
-                condition=models.Q(participant_low_id__lt=models.F("participant_high_id")),
+                condition=models.Q(
+                    participant_low_id__lt=models.F("participant_high_id")
+                ),
                 name="analytics_facultyconversation_low_lt_high",
             ),
         ]
 
     def __str__(self) -> str:
-        return (
-            f"Faculty chat {self.participant_low_id}–{self.participant_high_id}"
-        )
+        return f"Faculty chat {self.participant_low_id}–{self.participant_high_id}"
 
     def other_participant(self, viewer: User) -> User:
         if viewer.pk == self.participant_low_id:

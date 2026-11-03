@@ -4,20 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('analytics', '0005_mistake_record_ai_feedback'),
+        ("analytics", "0005_mistake_record_ai_feedback"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='mistakerecord',
-            name='student_image',
-            field=models.ImageField(blank=True, null=True, upload_to='mistake_concerns/%Y/%m/'),
+            model_name="mistakerecord",
+            name="student_image",
+            field=models.ImageField(
+                blank=True, null=True, upload_to="mistake_concerns/%Y/%m/"
+            ),
         ),
         migrations.AddField(
-            model_name='mistakerecord',
-            name='student_note',
+            model_name="mistakerecord",
+            name="student_note",
             field=models.TextField(blank=True),
         ),
     ]

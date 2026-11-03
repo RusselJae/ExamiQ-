@@ -88,7 +88,9 @@ class TestCampusPortalAccess:
             approval_status=User.ApprovalStatus.PENDING,
         )
         client.force_login(campus_admin)
-        response = client.post(reverse("campus:approve_user", kwargs={"pk": pending.pk}))
+        response = client.post(
+            reverse("campus:approve_user", kwargs={"pk": pending.pk})
+        )
         assert response.status_code == 302
         pending.refresh_from_db()
         assert pending.is_active is True
@@ -110,4 +112,3 @@ class TestCampusPortalAccess:
         pending.refresh_from_db()
         assert pending.is_active is False
         assert pending.approval_status == User.ApprovalStatus.REJECTED
-

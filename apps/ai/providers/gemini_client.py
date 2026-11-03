@@ -60,9 +60,14 @@ def _cache_key() -> str:
 
 def _is_retriable(exc: Exception) -> bool:
     text = str(exc).lower()
-    if any(token in text for token in ("429", "quota", "resource exhausted", "rate limit")):
+    if any(
+        token in text for token in ("429", "quota", "resource exhausted", "rate limit")
+    ):
         return True
-    if any(token in text for token in ("500", "502", "503", "504", "overloaded", "unavailable")):
+    if any(
+        token in text
+        for token in ("500", "502", "503", "504", "overloaded", "unavailable")
+    ):
         return True
     return False
 
@@ -216,7 +221,9 @@ def chat_with_fallback(
 
     detail = str(last_error) if last_error else "unknown error"
     user_message = _user_facing_message(last_error)
-    raise AIServiceUnavailableError(user_message, detail=detail, retryable=_is_retriable(last_error))
+    raise AIServiceUnavailableError(
+        user_message, detail=detail, retryable=_is_retriable(last_error)
+    )
 
 
 def _user_facing_message(exc: Exception | None) -> str:
@@ -238,10 +245,17 @@ def _user_facing_message(exc: Exception | None) -> str:
     return "AI service is temporarily unavailable. Please try again later."
 
 
-def chat(prompt: str, *, system: str = "You are a concise educational analytics assistant.", max_output_tokens: int = 500) -> str | None:
+def chat(
+    prompt: str,
+    *,
+    system: str = "You are a concise educational analytics assistant.",
+    max_output_tokens: int = 500,
+) -> str | None:
     """Best-effort chat for non-critical features; returns None on failure."""
     try:
-        return chat_with_fallback(prompt, system=system, max_output_tokens=max_output_tokens).text
+        return chat_with_fallback(
+            prompt, system=system, max_output_tokens=max_output_tokens
+        ).text
     except AIServiceUnavailableError as exc:
         logger.warning("Gemini chat failed: %s", exc.detail or exc.message)
         return None

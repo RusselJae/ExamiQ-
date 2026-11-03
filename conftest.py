@@ -3,7 +3,14 @@ from django.contrib.auth import get_user_model
 
 from apps.questions.models import Question, QuestionChoice, Subject, Topic, YearLevel
 from apps.users.constants import PROGRAM_DEFINITIONS
-from apps.users.models import AcademicTerm, AcademicYear, Course, Department, Program, ProgramSection
+from apps.users.models import (
+    AcademicTerm,
+    AcademicYear,
+    Course,
+    Department,
+    Program,
+    ProgramSection,
+)
 
 User = get_user_model()
 
@@ -117,7 +124,9 @@ def academic_term(db, academic_year):
 
 
 @pytest.fixture
-def teaching_assignment(db, professor, program_section, subject, academic_term, chairperson):
+def teaching_assignment(
+    db, professor, program_section, subject, academic_term, chairperson
+):
     from apps.users.assignment_services import create_teaching_assignment
 
     assignment, _ = create_teaching_assignment(
@@ -164,6 +173,71 @@ def chairperson(db, department):
 
 
 @pytest.fixture
+def coordinator(db, department):
+    """Program coordinator scoped to the test department."""
+    return User.objects.create_user(
+        email="coordinator@test.edu",
+        password="testpass123",
+        role=User.Role.PROGRAM_COORDINATOR,
+        department=department,
+    )
+
+
+@pytest.fixture
+def bsed_section(db, bsed_program, year_level, academic_year):
+    """Cohort section that belongs to the BSEd Mathematics program."""
+    section, _ = ProgramSection.objects.get_or_create(
+        program=bsed_program,
+        year_level=year_level,
+        label="1M",
+        academic_year=academic_year,
+        defaults={"max_students": 40},
+    )
+    return section
+
+
+@pytest.fixture
+def bsed_student(db, bsed_program, year_level, bsed_section):
+    """Student eligible for exam practice (BSEd Mathematics program)."""
+    return User.objects.create_user(
+        email="bsed.student@test.edu",
+        password="testpass123",
+        role=User.Role.STUDENT,
+        department=bsed_program.managing_department,
+        home_degree_program=User.HomeDegreeProgram.BSED_MATH,
+        year_level=year_level,
+        section=bsed_section,
+    )
+
+
+@pytest.fixture
+def bsed_mcq_question(db, bsed_program, year_level):
+    """Approved MCQ question inside a BSEd Mathematics subject."""
+    subject = Subject.objects.create(
+        program=bsed_program,
+        code="BSED-MATH101",
+        name="College Algebra",
+        year_level=year_level,
+        semester=Subject.Semester.FIRST,
+    )
+    topic = Topic.objects.create(subject=subject, name="Quadratic Equations")
+    question = Question.objects.create(
+        topic=topic,
+        difficulty=Question.Difficulty.EASY,
+        question_type=Question.QuestionType.MCQ,
+        stem="Solve x^2 - 5x + 6 = 0.",
+        status=Question.Status.APPROVED,
+    )
+    correct = QuestionChoice.objects.create(
+        question=question, label="A", text="x = 2 or x = 3", is_correct=True
+    )
+    QuestionChoice.objects.create(
+        question=question, label="B", text="x = 1 or x = 6", is_correct=False
+    )
+    return question, correct
+
+
+@pytest.fixture
 def course(db, professor, program):
     return Course.objects.create(
         program=program,
@@ -185,7 +259,9 @@ def mcq_question(db, topic):
         stem="What is 2+2?",
         status=Question.Status.APPROVED,
     )
-    correct = QuestionChoice.objects.create(question=q, label="A", text="4", is_correct=True)
+    correct = QuestionChoice.objects.create(
+        question=q, label="A", text="4", is_correct=True
+    )
     QuestionChoice.objects.create(question=q, label="B", text="5", is_correct=False)
     return q, correct
 

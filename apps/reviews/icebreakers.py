@@ -43,7 +43,7 @@ ICEBREAKERS: list[IceBreaker] = [
         "description": (
             "State your name and a number's property (e.g., \"49, it's a perfect square\"). "
             "The next person must use that number — or pick a new one — to state a "
-            "different property (e.g., \"49, it's an odd number\")."
+            'different property (e.g., "49, it\'s an odd number").'
         ),
     },
 ]

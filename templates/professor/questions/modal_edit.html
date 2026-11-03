@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Edit question — EXAMIQ+{% endblock %}
+
+{% block content %}
+{% url 'analytics_professor:question_edit' course.pk question.pk as edit_action %}
+{% url 'analytics_professor:question_list' course.pk as list_url %}
+{% include "components/question_modal.html" with modal_id="question-modal-edit" modal_mode="edit" modal_title="Edit question" modal_action_label="Save changes" form_action=edit_action form=form choice_formset=choice_formset step_formset=step_formset difficulty_choices=difficulty_choices topic_choices=topic_choices course_pk=course.pk|default:"" subject_id=question.topic.subject_id|default:"" subject_options=subject_options question=question needs_revision=needs_revision regenerate_url=regenerate_url adaptive_explanation=adaptive_explanation course=course mistake_count=mistake_count distinct_student_mistake_count=distinct_student_mistake_count mistake_student_threshold=mistake_student_threshold auto_open=True cancel_url=cancel_url|default:list_url %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/question-editor.js' %}"></script>
+<script src="{% static 'js/question-regenerate.js' %}"></script>
+<script src="{% static 'js/question-modal.js' %}"></script>
+{% endblock %}

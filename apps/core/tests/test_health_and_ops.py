@@ -22,7 +22,9 @@ class TestHealthCheck:
 
 @pytest.mark.django_db
 class TestQuestionToggleActive:
-    def test_toggle_deactivates_and_reactivates(self, client, professor, teaching_assignment, mcq_question):
+    def test_toggle_deactivates_and_reactivates(
+        self, client, professor, teaching_assignment, mcq_question
+    ):
         question, _ = mcq_question
         course = teaching_assignment.course
         client.force_login(professor)
@@ -43,10 +45,14 @@ class TestQuestionToggleActive:
 
 @pytest.mark.django_db
 class TestAutoApproveQuestions:
-    def test_new_question_is_approved(self, client, professor, teaching_assignment, topic):
+    def test_new_question_is_approved(
+        self, client, professor, teaching_assignment, topic
+    ):
         course = teaching_assignment.course
         client.force_login(professor)
-        url = reverse("analytics_professor:question_create", kwargs={"course_pk": course.pk})
+        url = reverse(
+            "analytics_professor:question_create", kwargs={"course_pk": course.pk}
+        )
         response = client.post(
             url,
             {
@@ -69,7 +75,9 @@ class TestAutoApproveQuestions:
 
 @pytest.mark.django_db
 class TestSetupPreviewAPI:
-    def test_preview_returns_question_counts(self, client, student, topic, mcq_question, teaching_assignment):
+    def test_preview_returns_question_counts(
+        self, client, student, topic, mcq_question, teaching_assignment
+    ):
         client.force_login(student)
         url = reverse("reviews:setup_preview") + f"?topic={topic.pk}"
         response = client.get(url)
@@ -103,15 +111,15 @@ class TestAssignmentSectionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert len(data["groups"]) >= 1
-        section_ids = [
-            s["id"] for group in data["groups"] for s in group["sections"]
-        ]
+        section_ids = [s["id"] for group in data["groups"] for s in group["sections"]]
         assert program_section.pk in section_ids
 
 
 @pytest.mark.django_db
 class TestProfessorExamSetupUI:
-    def test_exam_setup_renders_card_layout(self, client, professor, teaching_assignment):
+    def test_exam_setup_renders_card_layout(
+        self, client, professor, teaching_assignment
+    ):
         course = teaching_assignment.course
         client.force_login(professor)
         url = reverse("analytics_professor:exam_setup", kwargs={"course_pk": course.pk})
@@ -124,7 +132,9 @@ class TestProfessorExamSetupUI:
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="Campus approve UI removed; audit still available via Django admin")
+@pytest.mark.skip(
+    reason="Campus approve UI removed; audit still available via Django admin"
+)
 class TestAuditLogging:
     def test_campus_approve_creates_audit_log(self, client, department):
         from django.core import mail
@@ -145,7 +155,9 @@ class TestAuditLogging:
         )
         mail.outbox.clear()
         client.force_login(admin)
-        response = client.post(reverse("campus:approve_user", kwargs={"pk": pending.pk}))
+        response = client.post(
+            reverse("campus:approve_user", kwargs={"pk": pending.pk})
+        )
         assert response.status_code == 302
         assert AuditLog.objects.filter(
             action=AuditLog.Action.USER_APPROVE,

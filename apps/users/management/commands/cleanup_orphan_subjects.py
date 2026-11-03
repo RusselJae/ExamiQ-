@@ -40,9 +40,7 @@ class Command(BaseCommand):
             topic__subject_id__in=keep_subject_ids
         )
         orphan_courses = Course.objects.filter(
-            Q(program__isnull=True)
-            | ~Q(program=bsed)
-            | ~Q(code__in=keep_codes)
+            Q(program__isnull=True) | ~Q(program=bsed) | ~Q(code__in=keep_codes)
         )
 
         counts = {

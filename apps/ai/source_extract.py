@@ -90,7 +90,9 @@ def extract_pages_from_upload(uploaded_file) -> list[dict]:
     return cleaned
 
 
-def chunk_pages(pages: list[dict], *, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[dict]:
+def chunk_pages(
+    pages: list[dict], *, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> list[dict]:
     """Split page texts into overlapping chunks with page ranges."""
     chunks: list[dict] = []
     order = 0
@@ -144,11 +146,7 @@ def _extract_docx(raw: bytes) -> str:
     except (KeyError, zipfile.BadZipFile) as exc:
         raise SourceMaterialError("Invalid DOCX file.") from exc
     root = ElementTree.fromstring(xml)
-    texts = [
-        node.text
-        for node in root.iter()
-        if node.tag.endswith("}t") and node.text
-    ]
+    texts = [node.text for node in root.iter() if node.tag.endswith("}t") and node.text]
     return " ".join(texts)
 
 

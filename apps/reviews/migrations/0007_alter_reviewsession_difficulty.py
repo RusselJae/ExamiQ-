@@ -4,15 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('reviews', '0006_reviewsession_planned_question_count'),
+        ("reviews", "0006_reviewsession_planned_question_count"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='reviewsession',
-            name='difficulty',
-            field=models.CharField(choices=[('easy', 'Beginner'), ('medium', 'Intermediate'), ('hard', 'Advanced')], max_length=10),
+            model_name="reviewsession",
+            name="difficulty",
+            field=models.CharField(
+                choices=[
+                    ("easy", "Beginner"),
+                    ("medium", "Intermediate"),
+                    ("hard", "Advanced"),
+                ],
+                max_length=10,
+            ),
         ),
     ]

@@ -4,102 +4,77 @@
 {% block title %}{{ review.concept_name }} - Concepts to Review{% endblock %}
 
 {% block content %}
-<div class="concept-flow"
-     id="concept-flow"
+<div class="review-overlay"
+     id="review-overlay"
      data-csrf="{{ csrf_token }}"
      data-try-it-url="{% url 'analytics_student:concept_review_try_it' review.pk %}"
      data-practice-url="{% url 'analytics_student:concept_review_practice' review.pk %}"
      data-step="{{ step }}">
-    <p class="concept-flow__breadcrumb">
-        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts">Concepts to Review</a>
-        <span aria-hidden="true"> / </span>
-        <span>{{ review.concept_name }}</span>
-    </p>
-    <h1 class="concept-flow__title">{{ review.concept_name }}</h1>
-
-    <ol class="concept-stepper" aria-label="Review steps">
-        <li class="concept-stepper__item{% if step == 'learn' %} is-current{% elif step == 'try_it' or step == 'practice' %} is-done{% endif %}">
-            <span class="concept-stepper__num">1</span>
-            <span class="concept-stepper__label">Learn</span>
-        </li>
-        <li class="concept-stepper__item{% if step == 'try_it' %} is-current{% elif step == 'practice' %} is-done{% endif %}">
-            <span class="concept-stepper__num">2</span>
-            <span class="concept-stepper__label">Try it</span>
-        </li>
-        <li class="concept-stepper__item{% if step == 'practice' %} is-current{% endif %}">
-            <span class="concept-stepper__num">3</span>
-            <span class="concept-stepper__label">Practice (no timer)</span>
-        </li>
-    </ol>
-
-    <div class="concept-flow__layout">
-        <div class="concept-flow__main">
-            {% if step == 'learn' %}
-            {% include "analytics/student/partials/learn_step.html" %}
-            {% elif step == 'try_it' %}
-            {% include "analytics/student/partials/try_it_step.html" %}
-            {% else %}
-            {% include "analytics/student/partials/practice_step.html" %}
-            {% endif %}
+    <header class="review-overlay__header">
+        <div class="review-overlay__inner">
+            <a class="review-overlay__close" href="{% url 'analytics_student:mistakes' %}?tab=concepts" aria-label="Close review">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                Close
+            </a>
+            <div class="review-overlay__heading">
+                <p class="review-overlay__eyebrow">Reviewing concept</p>
+                <h1 class="review-overlay__title">{{ review.concept_name }}</h1>
+            </div>
+            <p class="review-overlay__meta">No timer &middot; hints are free &middot; {{ review.correct_streak }} of {{ concept_correct_target|default:3 }} correct</p>
         </div>
-        <aside class="concept-flow__aside">
-            {% if step == 'learn' %}
-            <section class="concept-aside-card">
-                <h2 class="concept-aside-card__title">Your history here</h2>
-                <ul class="concept-aside-card__list">
-                    {% for line in history_lines %}
-                    <li>{% if line.date %}{{ line.date }}: {% endif %}{{ line.detail }}</li>
-                    {% empty %}
-                    <li>No prior misses recorded for this concept.</li>
-                    {% endfor %}
-                </ul>
-            </section>
-            {% elif step == 'try_it' %}
-            <section class="concept-aside-card">
-                <h2 class="concept-aside-card__title">Need a reminder?</h2>
-                <p class="concept-aside-card__body">
-                    {% if learn.explanation.key_rules.0 %}
-                    {{ learn.explanation.key_rules.0 }}
-                    {% else %}
-                    {{ learn.explanation.core_idea }}
-                    {% endif %}
-                </p>
-                <a class="btn-secondary btn-secondary-sm"
-                   href="{% url 'analytics_student:concept_review' review.pk %}?step=learn">
-                    Back to worked example
-                </a>
-            </section>
-            {% endif %}
-            <section class="concept-aside-card">
-                <h2 class="concept-aside-card__title">Progress</h2>
-                <p class="concept-aside-card__body" id="concept-progress-text">
-                    <span id="concept-progress-count">{{ review.correct_streak }}</span> of {{ concept_correct_target|default:3 }} correct on different questions
-                </p>
-                <div class="concept-progress" aria-hidden="true">
-                    <div class="concept-progress__track">
-                        <span class="concept-progress__fill"
-                              id="concept-progress-fill"
-                              data-target="{{ concept_correct_target|default:3 }}"
-                              style="width: {% widthratio review.correct_streak 3 100 %}%;"></span>
-                    </div>
-                </div>
-                <p class="concept-aside-card__note">Practice has no timer and allows hints.</p>
-                {% if step == 'practice' %}
-                <a class="btn-secondary btn-secondary-sm concept-progress__back"
-                   href="{% url 'analytics_student:concept_review' review.pk %}?step=try_it">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                    Back to Try it
-                </a>
-                {% elif step == 'try_it' %}
-                <a class="btn-secondary btn-secondary-sm concept-progress__back"
-                   href="{% url 'analytics_student:concept_review' review.pk %}?step=learn">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                    Back to Learn
-                </a>
-                {% endif %}
-            </section>
-        </aside>
+    </header>
+
+    <div class="review-overlay__segments">
+        <ol class="concept-segments" aria-label="Review steps">
+        <li class="concept-segments__item{% if step == 'learn' %} is-current{% else %} is-done{% endif %}">
+            <span class="concept-segments__bar" aria-hidden="true"></span>
+            <span class="concept-segments__label">{% if step != 'learn' %}<span aria-hidden="true">&#10003; </span>{% endif %}Learn</span>
+        </li>
+        <li class="concept-segments__item{% if step == 'try_it' %} is-current{% elif step == 'practice' %} is-done{% endif %}">
+            <span class="concept-segments__bar" aria-hidden="true"></span>
+            <span class="concept-segments__label">{% if step == 'practice' %}<span aria-hidden="true">&#10003; </span>{% endif %}Try it</span>
+        </li>
+        <li class="concept-segments__item{% if step == 'practice' %} is-current{% endif %}"{% if step == 'practice' %} aria-current="step"{% endif %}>
+            <span class="concept-segments__bar" aria-hidden="true"></span>
+            <span class="concept-segments__label">Practice</span>
+        </li>
+        </ol>
     </div>
+
+    <div class="review-overlay__body">
+    <div class="review-overlay__column">
+        {% if step == 'learn' %}
+        {% include "analytics/student/partials/learn_step.html" %}
+        {% elif step == 'try_it' %}
+        {% include "analytics/student/partials/try_it_step.html" %}
+        {% else %}
+        {% include "analytics/student/partials/practice_step.html" %}
+        {% endif %}
+    </div>
+    </div>
+
+    <footer class="review-overlay__footer">
+        <div class="review-overlay__inner review-overlay__footer-inner">
+        {% if step == 'learn' %}
+        <span></span>
+        <button type="submit" form="concept-learn-form" class="review-overlay__primary">Continue to Try it</button>
+        {% elif step == 'try_it' %}
+        <a class="review-overlay__back" href="{% url 'analytics_student:concept_review' review.pk %}?step=learn">&larr; Back to Learn</a>
+        <span class="review-overlay__foot-actions">
+            <button type="button" class="review-overlay__ghost" id="try-it-hint">Show hint</button>
+            <span class="review-overlay__hint-note" data-hint-note hidden>Pick an answer to continue</span>
+            <button type="button" class="review-overlay__primary" id="try-it-check" disabled>Check answer</button>
+        </span>
+        {% else %}
+        <a class="review-overlay__back" href="{% url 'analytics_student:concept_review' review.pk %}?step=try_it">&larr; Back to Try it</a>
+        <span class="review-overlay__foot-actions">
+            <button type="button" class="review-overlay__ghost" id="practice-hint">Show hint</button>
+            <span class="review-overlay__hint-note" data-hint-note hidden>Pick an answer to continue</span>
+            <button type="button" class="review-overlay__primary" id="practice-check" disabled>Check answer</button>
+        </span>
+        {% endif %}
+        </div>
+    </footer>
 </div>
 {% endblock %}
 

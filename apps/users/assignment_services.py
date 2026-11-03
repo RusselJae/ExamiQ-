@@ -50,6 +50,78 @@ def faculty_handles_student_subject(
     ) and subject_id in get_faculty_profile_subject_ids(professor)
 
 
+def students_visible_to_faculty(professor: User) -> set[int]:
+    """Student IDs this faculty member may see in analytics.
+
+    The single canonical scope for every faculty-facing count: students with a
+    StudentFacultyAssignment to this professor in the current academic year
+    (active, non-archived students only). Visibility follows the *current*
+    handled relationship — a student assigned mid-semester becomes visible,
+    including their earlier answers. Callers add their own session/status
+    filters on top.
+    """
+    from apps.users.models import StudentFacultyAssignment
+    from apps.users.section_services import get_current_academic_year
+
+    current_year = get_current_academic_year()
+    if not current_year:
+        return set()
+    return set(
+        StudentFacultyAssignment.objects.filter(
+            faculty=professor,
+            academic_year=current_year,
+            student__is_active=True,
+            student__is_archived=False,
+        ).values_list("student_id", flat=True)
+    )
+
+
+def handled_subject_ids(professor: User) -> set[int]:
+    """Subject PKs this professor handles.
+
+    TeachingAssignment rows win when present; otherwise fall back to the
+    faculty profile's selected subjects. Subjects with assigned students
+    (StudentFacultyAssignment) are always included, since visibility follows
+    handled students — e.g. a student who picked this faculty at signup.
+    """
+    from apps.users.models import StudentFacultyAssignment
+    from apps.users.section_services import get_current_academic_year
+
+    ta_ids = set(
+        TeachingAssignment.objects.filter(professor=professor).values_list(
+            "subject_id", flat=True
+        )
+    )
+    if ta_ids:
+        handled = set(ta_ids)
+    else:
+        handled = set(get_faculty_profile_subject_ids(professor))
+    year = get_current_academic_year()
+    if year is not None:
+        handled |= set(
+            StudentFacultyAssignment.objects.filter(
+                faculty=professor, academic_year=year
+            ).values_list("subject_id", flat=True)
+        )
+    return handled
+
+
+def handled_subjects_for_faculty(professor: User):
+    """Subjects this professor handles, ordered for display."""
+    from apps.questions.models import Subject
+
+    ids = handled_subject_ids(professor)
+    if not ids:
+        return Subject.objects.none()
+    qs = Subject.objects.filter(pk__in=ids).select_related("program", "year_level")
+    from apps.users.models import Program
+
+    program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
+    if program is not None:
+        qs = qs.filter(program=program)
+    return qs.order_by("year_level__order", "code")
+
+
 def professor_has_assignments(professor: User) -> bool:
     if professor.assigned_subjects.exists() or professor.assigned_sections.exists():
         return True
@@ -146,9 +218,7 @@ def professor_can_access_course(professor: User, course: Course) -> bool:
     return course.professor_id == professor.pk
 
 
-def get_or_create_catalog_course(
-    professor: User | None, subject: Subject
-) -> Course:
+def get_or_create_catalog_course(professor: User | None, subject: Subject) -> Course:
     """Ensure a shared catalog Course offering exists for subject tools."""
     from apps.users.section_services import get_current_academic_year
 
@@ -301,7 +371,22 @@ def create_teaching_assignment(
     term,
     assigned_by: User,
 ) -> tuple[TeachingAssignment, bool]:
-    """Create a teaching assignment and linked course offering."""
+    """Create a teaching assignment and linked course offering.
+
+    Assignments are one row per (professor, subject, term): if the professor
+    already holds this subject for the term (in any section), the existing
+    row is returned instead of creating a duplicate.
+    """
+    existing = (
+        TeachingAssignment.objects.filter(
+            professor=professor, subject=subject, term=term
+        )
+        .order_by("pk")
+        .first()
+    )
+    if existing is not None:
+        return existing, False
+
     validate_assignment_subject(program_section, subject, term)
 
     assignment, created = TeachingAssignment.objects.get_or_create(
@@ -364,6 +449,40 @@ def create_teaching_assignments(
         else:
             skipped_count += 1
     return {"created": created_count, "skipped": skipped_count}
+
+
+@transaction.atomic
+def reassign_teaching_assignment(
+    assignment: TeachingAssignment, *, professor: User
+) -> TeachingAssignment:
+    """Move a teaching assignment to a different professor.
+
+    Used when next year's (or this year's) teaching load changes hands.
+    Raises ValueError when the target professor already holds the identical
+    (section, subject, term) assignment. The linked course offering follows
+    the new professor only when it still points at the old one.
+    """
+    if professor.pk == assignment.professor_id:
+        return assignment
+    conflict = (
+        TeachingAssignment.objects.filter(
+            professor=professor,
+            subject=assignment.subject,
+            term=assignment.term,
+        )
+        .exclude(pk=assignment.pk)
+        .exists()
+    )
+    if conflict:
+        raise ValueError("That professor already handles this course.")
+    old_professor_id = assignment.professor_id
+    assignment.professor = professor
+    assignment.save(update_fields=["professor"])
+    course = assignment.course
+    if course is not None and course.professor_id == old_professor_id:
+        course.professor = professor
+        course.save(update_fields=["professor"])
+    return assignment
 
 
 def faculty_can_manage_section_student(
@@ -487,6 +606,78 @@ def annotate_users_with_section_labels(users) -> None:
             user.assigned_section_labels = []
 
 
+def annotate_users_with_course_labels(users) -> None:
+    """Attach ``assigned_course_labels`` list onto each user in ``users``.
+
+    Students show the courses they are currently taking: enrolled subjects
+    for irregular students, every curriculum subject of their year level for
+    regular students. Faculty show the subjects they handle.
+    """
+    professor_ids = [u.pk for u in users if u.role == User.Role.PROFESSOR]
+    by_prof: dict[int, list[str]] = {pk: [] for pk in professor_ids}
+    if professor_ids:
+        assignments = (
+            TeachingAssignment.objects.filter(professor_id__in=professor_ids)
+            .select_related("subject")
+            .order_by("professor_id", "subject__code")
+        )
+        seen: dict[int, set[str]] = {pk: set() for pk in professor_ids}
+        for assignment in assignments:
+            pid = assignment.professor_id
+            code = assignment.subject.code
+            if code in seen[pid]:
+                continue
+            seen[pid].add(code)
+            if len(by_prof[pid]) < 8:
+                by_prof[pid].append(code)
+
+    for user in users:
+        if user.role == User.Role.PROFESSOR:
+            user.assigned_course_labels = by_prof.get(user.pk, [])
+            continue
+        if user.role != User.Role.STUDENT:
+            user.assigned_course_labels = []
+            continue
+        subjects = _student_course_subjects(user)
+        user.assigned_course_labels = [s.code for s in subjects[:8]]
+
+
+def _student_course_subjects(user) -> list:
+    """Subjects making up a student's current course load."""
+    from apps.questions.models import Subject
+    from apps.users.models import IrregularSubjectEnrollment
+
+    if user.is_irregular:
+        year = None
+        try:
+            from apps.users.section_services import get_current_academic_year
+
+            year = get_current_academic_year()
+        except Exception:  # noqa: BLE001 - no-year configured is non-fatal
+            year = None
+        enrollments = IrregularSubjectEnrollment.objects.filter(
+            student=user, status="enrolled"
+        ).select_related("subject")
+        if year is not None:
+            enrollments = enrollments.filter(term__academic_year=year)
+        subjects = [e.subject for e in enrollments if e.subject_id is not None]
+        subjects = sorted(subjects, key=lambda s: s.code or "")
+        return [s for s in subjects if s.program_id]
+    if not user.year_level_id:
+        return []
+    program = None
+    try:
+        from apps.users.models import Program
+
+        program = Program.for_home_degree(user.home_degree_program)
+    except Exception:  # noqa: BLE001 - unknown mapping falls back to year-level
+        program = None
+    qs = Subject.objects.filter(year_level_id=user.year_level_id).order_by("code")
+    if program is not None:
+        qs = qs.filter(program=program)
+    return list(qs)
+
+
 def professor_can_view_student(professor: User, student: User) -> bool:
     """True when faculty may open a student's detail page.
 
@@ -505,6 +696,9 @@ def professor_can_view_student(professor: User, student: User) -> bool:
         status=ReviewSession.Status.COMPLETED,
     )
     if completed.filter(course__professor=professor).exists():
+        return True
+
+    if student.pk in students_visible_to_faculty(professor):
         return True
 
     if not faculty_has_chat_scope(professor):
@@ -538,6 +732,9 @@ def professor_can_view_session(professor: User, session) -> bool:
     student = session.student
     if not student or student.role != User.Role.STUDENT:
         return False
+
+    if student.pk in students_visible_to_faculty(professor):
+        return True
 
     section_ids = get_faculty_profile_section_ids(professor)
     subject_ids = get_faculty_profile_subject_ids(professor)

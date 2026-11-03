@@ -3,19 +3,13 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 
-
 from django.db.models import QuerySet
 
 from django.utils import timezone
 
 
-
 if TYPE_CHECKING:
-
     from apps.questions.models import Question, QuestionChoice
-
-
-
 
 
 def get_questions_for_session(
@@ -157,7 +151,9 @@ def get_adaptive_questions_for_session(
         ).values_list("question_id", flat=True)
     )
     seen_q_ids = set(
-        Answer.objects.filter(session__student=student).values_list("question_id", flat=True)
+        Answer.objects.filter(session__student=student).values_list(
+            "question_id", flat=True
+        )
     )
 
     pool: list[tuple] = []
@@ -291,9 +287,6 @@ def grade_answer(
     }
 
 
-
-
-
 def submit_question_for_review(question: "Question", user) -> "Question":
     """Keep a draft/pending copy owned by the faculty author (no chairperson)."""
     from apps.questions.models import Question
@@ -384,91 +377,58 @@ def approve_question_explanations(question: "Question", faculty) -> "Question":
     question.explanation_status = "faculty_approved"
     question.validated_by = question.validated_by or faculty
     question.validated_at = question.validated_at or timezone.now()
-    question.save(
-        update_fields=["explanation_status", "validated_by", "validated_at"]
-    )
+    question.save(update_fields=["explanation_status", "validated_by", "validated_at"])
     return question
 
 
-
-
-
-def create_question(question_data: dict, choices_data: list[dict], steps_data: list[dict]) -> "Question":
-
+def create_question(
+    question_data: dict, choices_data: list[dict], steps_data: list[dict]
+) -> "Question":
     """Create a question with choices and explanation steps."""
 
     from apps.questions.models import ExplanationStep, Question, QuestionChoice
 
-
-
     question = Question.objects.create(**question_data)
 
     for choice in choices_data:
-
         if choice.get("text"):
-
             QuestionChoice.objects.create(question=question, **choice)
 
     for step in steps_data:
-
         if step.get("content"):
-
             ExplanationStep.objects.create(question=question, **step)
 
     return question
 
 
-
-
-
 def update_question(
-
     question: "Question",
-
     question_data: dict,
-
     choices_data: list[dict],
-
     steps_data: list[dict],
-
 ) -> "Question":
-
     """Update a question and replace choices/steps."""
 
     from apps.questions.models import ExplanationStep, QuestionChoice
 
-
-
     for field, value in question_data.items():
-
         setattr(question, field, value)
 
     question.save()
 
-
-
     question.choices.all().delete()
 
     for choice in choices_data:
-
         if choice.get("text"):
-
             QuestionChoice.objects.create(question=question, **choice)
-
-
 
     question.explanation_steps.all().delete()
 
     for step in steps_data:
-
         if step.get("content"):
-
             ExplanationStep.objects.create(question=question, **step)
 
     return question
-
-
-
 
 
 def activate_question(question: "Question") -> "Question":
@@ -565,10 +525,9 @@ def exclusion_stems_for_topic(
     from apps.questions.models import ExcludedQuestion
 
     stems: list[str] = []
-    for stem in (
-        ExcludedQuestion.objects.filter(topic_id=topic_id)
-        .values_list("stem", flat=True)[:limit]
-    ):
+    for stem in ExcludedQuestion.objects.filter(topic_id=topic_id).values_list(
+        "stem", flat=True
+    )[:limit]:
         text = (stem or "").strip()
         if not text:
             continue
@@ -593,7 +552,9 @@ def find_duplicate_question(topic_id: int, stem: str, *, exclude_pk: int | None 
     return None
 
 
-def build_steps_from_post(steps_raw: str, concept_tag: str = "", solution_summary: str = "") -> list[dict]:
+def build_steps_from_post(
+    steps_raw: str, concept_tag: str = "", solution_summary: str = ""
+) -> list[dict]:
     """Parse explanation steps from JSON POST field or fallbacks."""
     import json
 
@@ -624,16 +585,20 @@ DIFFICULTY_LABELS_BY_CODE: dict[str, str] = {
 MIN_STEPS_FOR_GOOD_FIT = 2
 
 
-def generation_fit_meta(
-    variation: dict, requested_bands: list[str]
-) -> dict:
+def generation_fit_meta(variation: dict, requested_bands: list[str]) -> dict:
     """Describe how well one generated draft matches the requested difficulty mix.
 
     Powers the "Review generated questions" modal: a ``fit`` state, the
     ``flag`` chip ("Rounds on Beginner"), a reasoning note derived from the
     explanation steps, and whether a "Regenerate harder" retry makes sense.
+
+    ``"auto"`` in ``requested_bands`` means the model distributed difficulty
+    itself, so every concrete band counts as on-band.
     """
-    bands = [b for b in requested_bands if b in DIFFICULTY_ORDER] or ["easy"]
+    if "auto" in [str(b).strip().lower() for b in requested_bands]:
+        bands = list(DIFFICULTY_ORDER)
+    else:
+        bands = [b for b in requested_bands if b in DIFFICULTY_ORDER] or ["easy"]
     steps = variation.get("explanation_steps") or []
     step_count = len(steps)
     code = str(variation.get("difficulty") or bands[0]).strip().lower()
@@ -643,7 +608,9 @@ def generation_fit_meta(
     on_band = code in bands
     has_reasoning = step_count >= MIN_STEPS_FOR_GOOD_FIT
     hardest_requested = max(bands, key=DIFFICULTY_ORDER.index)
-    sits_above_mix = DIFFICULTY_ORDER.index(code) > DIFFICULTY_ORDER.index(hardest_requested)
+    sits_above_mix = DIFFICULTY_ORDER.index(code) > DIFFICULTY_ORDER.index(
+        hardest_requested
+    )
     own_label = DIFFICULTY_LABELS_BY_CODE.get(code, code)
 
     if has_reasoning and on_band:
@@ -673,9 +640,7 @@ def generation_fit_meta(
         "difficulty_label": own_label,
         "can_regenerate_harder": fit != "good" and not at_top_band,
         "next_difficulty": (
-            code
-            if at_top_band
-            else DIFFICULTY_ORDER[DIFFICULTY_ORDER.index(code) + 1]
+            code if at_top_band else DIFFICULTY_ORDER[DIFFICULTY_ORDER.index(code) + 1]
         ),
     }
 
@@ -743,7 +708,9 @@ def adaptive_explanation_has_content(data: dict | None) -> bool:
     """True when any curated adaptive-explanation field is non-empty."""
     if not isinstance(data, dict):
         return False
-    return any(str(data.get(key) or "").strip() for key in ADAPTIVE_EXPLANATION_FIELD_KEYS)
+    return any(
+        str(data.get(key) or "").strip() for key in ADAPTIVE_EXPLANATION_FIELD_KEYS
+    )
 
 
 def clean_adaptive_explanation(data: dict | None) -> dict:
@@ -759,7 +726,10 @@ def clean_adaptive_explanation(data: dict | None) -> dict:
 def adaptive_explanation_from_post(post) -> dict:
     """Build adaptive_explanation JSON from form POST fields."""
     return clean_adaptive_explanation(
-        {key: post.get(f"adaptive_{key}", "") for key in ADAPTIVE_EXPLANATION_FIELD_KEYS}
+        {
+            key: post.get(f"adaptive_{key}", "")
+            for key in ADAPTIVE_EXPLANATION_FIELD_KEYS
+        }
     )
 
 
@@ -771,9 +741,11 @@ def prefill_adaptive_explanation(question) -> dict:
 
     from apps.ai.normalize import parse_adaptive_feedback
 
-    for raw in question.mistake_records.exclude(ai_feedback="").order_by(
-        "-occurred_at"
-    ).values_list("ai_feedback", flat=True)[:10]:
+    for raw in (
+        question.mistake_records.exclude(ai_feedback="")
+        .order_by("-occurred_at")
+        .values_list("ai_feedback", flat=True)[:10]
+    ):
         parsed = parse_adaptive_feedback(raw)
         if not parsed:
             continue
@@ -828,4 +800,3 @@ def faculty_adaptive_feedback_json(question) -> str:
     if data.get("worked_example"):
         payload["worked_example"] = data["worked_example"]
     return json.dumps(payload, ensure_ascii=False)
-

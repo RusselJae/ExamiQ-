@@ -4,15 +4,22 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('questions', '0006_curriculum_hierarchy'),
+        ("questions", "0006_curriculum_hierarchy"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='question',
-            name='difficulty',
-            field=models.CharField(choices=[('easy', 'Beginner'), ('medium', 'Intermediate'), ('hard', 'Advanced')], default='medium', max_length=10),
+            model_name="question",
+            name="difficulty",
+            field=models.CharField(
+                choices=[
+                    ("easy", "Beginner"),
+                    ("medium", "Intermediate"),
+                    ("hard", "Advanced"),
+                ],
+                default="medium",
+                max_length=10,
+            ),
         ),
     ]

@@ -35,7 +35,9 @@ def concern_thread_for(record: MistakeRecord):
 
 
 def latest_concern_message(record: MistakeRecord) -> MistakeConcernMessage | None:
-    return record.concern_messages.order_by("-created_at").select_related("author").first()
+    return (
+        record.concern_messages.order_by("-created_at").select_related("author").first()
+    )
 
 
 def concern_needs_faculty_reply(record: MistakeRecord) -> bool:
@@ -221,7 +223,9 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
                 "body": record.student_note or "",
                 "image_url": image_url,
                 "image_name": "",
-                "created_at": record.occurred_at.isoformat() if record.occurred_at else "",
+                "created_at": record.occurred_at.isoformat()
+                if record.occurred_at
+                else "",
             }
         )
     if (record.faculty_note or "").strip():
@@ -236,7 +240,9 @@ def serialize_concern_thread(record: MistakeRecord) -> list[dict]:
                 "image_url": "",
                 "image_name": "",
                 "created_at": (
-                    record.faculty_noted_at.isoformat() if record.faculty_noted_at else ""
+                    record.faculty_noted_at.isoformat()
+                    if record.faculty_noted_at
+                    else ""
                 ),
             }
         )

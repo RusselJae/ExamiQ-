@@ -100,9 +100,7 @@ def build_session_summary(session: ReviewSession) -> dict:
         "pace_insight_title": pace_insight_title,
         "pace_insight_body": pace_insight_body,
         "estimated_confidence_subtext": (
-            "Based on your Guessing / Sure ratings."
-            if total
-            else "No answers yet."
+            "Based on your Guessing / Sure ratings." if total else "No answers yet."
         ),
         "calibration_gap": calibration_gap,
         "calibration_matrix": matrix,
@@ -122,9 +120,9 @@ def get_review_recommendations(student: User, limit: int = 5) -> list[dict]:
 
     program_topics = {
         t.pk: t
-        for t in Topic.objects.filter(subject__program__slug=student.home_degree_program).select_related(
-            "subject__program"
-        )
+        for t in Topic.objects.filter(
+            subject__program__slug=student.home_degree_program
+        ).select_related("subject__program")
     }
     if not program_topics:
         return []
@@ -215,13 +213,17 @@ def get_review_recommendations(student: User, limit: int = 5) -> list[dict]:
     }
 
     course = (
-        Course.objects.filter(program__slug=student.home_degree_program, is_archived=False)
+        Course.objects.filter(
+            program__slug=student.home_degree_program, is_archived=False
+        )
         .order_by("-academic_year", "term", "code")
         .first()
     )
 
     results = []
-    for tid, rec in sorted(recommendations.items(), key=lambda x: (-x[1]["score"], x[1]["suggested_date"])):
+    for tid, rec in sorted(
+        recommendations.items(), key=lambda x: (-x[1]["score"], x[1]["suggested_date"])
+    ):
         topic = program_topics.get(tid)
         if not topic:
             continue

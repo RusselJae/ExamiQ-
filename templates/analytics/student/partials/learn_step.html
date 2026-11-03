@@ -1,10 +1,10 @@
 {% with diagnosis=learn.diagnosis explanation=learn.explanation worked=learn.worked_example %}
 <section class="concept-learn">
     {% if diagnosis.what_went_wrong %}
-    <div class="concept-panel concept-panel--warn">
-        <h2 class="concept-panel__title">Why your answer did not work</h2>
+    <details class="concept-card concept-learn__details">
+        <summary class="concept-panel__title">Why your answer did not work</summary>
         <p>{{ diagnosis.what_went_wrong }}</p>
-    </div>
+    </details>
     {% endif %}
 
     <div class="concept-panel">
@@ -58,9 +58,19 @@
     <p class="concept-learn__check">{{ learn.check_yourself }}</p>
     {% endif %}
 
-    <form method="post" action="{% url 'analytics_student:concept_review_continue' review.pk %}">
+    <details class="concept-card concept-learn__details">
+        <summary class="concept-panel__title">Your history here</summary>
+        <ul class="concept-learn__history">
+            {% for line in history_lines %}
+            <li>{% if line.date %}{{ line.date }}: {% endif %}{{ line.detail }}</li>
+            {% empty %}
+            <li>No prior misses recorded for this concept.</li>
+            {% endfor %}
+        </ul>
+    </details>
+
+    <form method="post" action="{% url 'analytics_student:concept_review_continue' review.pk %}" id="concept-learn-form">
         {% csrf_token %}
-        <button type="submit" class="btn-primary concept-flow__cta">Continue to Try it</button>
     </form>
 </section>
 {% endwith %}

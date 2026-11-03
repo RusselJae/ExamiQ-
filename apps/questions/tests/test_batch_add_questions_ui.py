@@ -15,7 +15,7 @@ def ready_material(course, professor, subject):
         subject=subject,
         created_by=professor,
         title="GNED 03_Overview",
-        original_name="GNED 03_Overview.txt",
+        original_name="GNED 03_Overview.pdf",
         status=LearningDocument.Status.READY,
     )
 
@@ -69,10 +69,11 @@ class TestBatchAddQuestionsScreen:
         markup = re.sub(r"<script\b.*?</script>", "", content, flags=re.DOTALL)
         assert "Select at least one difficulty before generating." not in markup
 
-    def test_ai_decides_maps_to_all_three_bands(self):
-        """Selecting every band is what "AI decides" submits."""
+    def test_ai_decides_sends_auto_flag(self):
+        """AI decides submits a single "auto" difficulty, not all three bands."""
         from apps.ai.job_services import parse_job_difficulties, split_counts_across
 
+        assert parse_job_difficulties("auto") == ["auto"]
         difficulties = parse_job_difficulties("easy,medium,hard")
         assert len(difficulties) == 3
         assert sum(split_counts_across(6, len(difficulties))) == 6

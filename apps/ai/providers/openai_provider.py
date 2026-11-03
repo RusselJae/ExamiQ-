@@ -7,9 +7,14 @@ import re
 from django.conf import settings
 
 from apps.ai.exceptions import AIServiceUnavailableError
-from apps.ai.helpers import calibration_narrative_from_matrix, course_review_narrative
+from apps.ai.helpers import (
+    calibration_narrative_from_matrix,
+    course_review_narrative,
+    parse_cor_rows,
+)
 from apps.ai.prompts import (
     build_calibration_prompt,
+    build_cor_extraction_prompt,
     build_course_report_prompt,
     build_difficulty_tag_prompt,
     build_explanation_generation_prompt,
@@ -22,6 +27,7 @@ from apps.ai.interfaces import (
     CalibrationAnalyzer,
     ConceptPracticeGenerator,
     ConceptRemediationGenerator,
+    CorSubjectAnalyzer,
     CurriculumAdvisor,
     DifficultyTagger,
     ErrorClassifier,
@@ -31,6 +37,7 @@ from apps.ai.interfaces import (
 )
 from apps.ai.stubs import (
     StubCalibrationAnalyzer,
+    StubCorSubjectAnalyzer,
     StubCurriculumAdvisor,
     StubDifficultyTagger,
     StubErrorClassifier,
@@ -94,6 +101,17 @@ class OpenAICurriculumAdvisor(CurriculumAdvisor):
         fallback = course_review_narrative(summary)
         prompt = build_course_report_prompt(course, summary)
         return _chat(prompt) or fallback
+
+
+class OpenAICorSubjectAnalyzer(CorSubjectAnalyzer):
+    def structure_rows(self, text: str) -> list[dict[str, str]]:
+        if not (text or "").strip():
+            return []
+        system, prompt = build_cor_extraction_prompt(text)
+        raw = _chat(prompt, system=system, max_output_tokens=900, json_mode=True)
+        if not raw:
+            return StubCorSubjectAnalyzer().structure_rows(text)
+        return parse_cor_rows(raw)
 
 
 class OpenAIDifficultyTagger(DifficultyTagger):

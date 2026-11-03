@@ -370,7 +370,9 @@ def reconcile_question_choices(question: dict) -> dict:
             correct_text = (flagged[0].get("text") or "").strip()
             correct_label = _normalize_label(flagged[0].get("label", correct_label))
 
-    distractor_texts = [text for label, text in by_label.items() if label != correct_label]
+    distractor_texts = [
+        text for label, text in by_label.items() if label != correct_label
+    ]
     while len(distractor_texts) < 3:
         distractor_texts.append("")
 
@@ -382,11 +384,13 @@ def reconcile_question_choices(question: dict) -> dict:
         else:
             text = distractor_texts[distractor_index]
             distractor_index += 1
-        normalized_choices.append({
-            "label": label,
-            "text": text,
-            "is_correct": label == correct_label,
-        })
+        normalized_choices.append(
+            {
+                "label": label,
+                "text": text,
+                "is_correct": label == correct_label,
+            }
+        )
 
     question["correct_label"] = correct_label
     question["choices"] = normalized_choices
@@ -414,11 +418,13 @@ def randomize_choice_positions(question: dict, rng: random.Random) -> dict:
         else:
             text = pool[pool_index] if pool_index < len(pool) else ""
             pool_index += 1
-        new_choices.append({
-            "label": label,
-            "text": text,
-            "is_correct": label == new_correct,
-        })
+        new_choices.append(
+            {
+                "label": label,
+                "text": text,
+                "is_correct": label == new_correct,
+            }
+        )
 
     question["correct_label"] = new_correct
     question["choices"] = new_choices
@@ -443,11 +449,13 @@ def _move_correct_to_label(question: dict, target_label: str) -> dict:
         else:
             text = distractor_texts[distractor_index]
             distractor_index += 1
-        new_choices.append({
-            "label": label,
-            "text": text,
-            "is_correct": label == target_label,
-        })
+        new_choices.append(
+            {
+                "label": label,
+                "text": text,
+                "is_correct": label == target_label,
+            }
+        )
 
     question["correct_label"] = target_label
     question["choices"] = new_choices
@@ -563,7 +571,9 @@ def normalize_generated_questions(
         return []
 
     randomizer = rng or random.Random()
-    default_type = coerce_generate_question_type(question_type) if question_type else None
+    default_type = (
+        coerce_generate_question_type(question_type) if question_type else None
+    )
     result: list[dict] = []
     for raw in questions:
         payload = dict(raw)
@@ -773,7 +783,10 @@ def validate_concept_practice_question(raw: str | dict | None) -> dict | None:
             why_wrong = None
         else:
             error_tag = _coerce_text(opt.get("error_tag")) or "unspecified_error"
-            why_wrong = _coerce_text(opt.get("why_wrong")) or "This option reflects a common slip."
+            why_wrong = (
+                _coerce_text(opt.get("why_wrong"))
+                or "This option reflects a common slip."
+            )
         texts.append(text.casefold())
         options.append(
             {

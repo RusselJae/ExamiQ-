@@ -1,3 +1,30 @@
-{% comment %}
-Course sub-navigation was removed in favour of sidebar dropdowns.
-{% endcomment %}
+{# Course sub-navigation: Overview / Content / Questions as folder tabs. #}
+{# Optional: course, active_tab, draft_count, panel. #}
+{% with tab=active_tab|default:"" %}
+{% if panel %}
+<div class="course-tabs-panel">
+{% endif %}
+<nav class="course-tabs{% if panel %} course-tabs--panel{% endif %}" aria-label="Course sections">
+    <a href="{% url 'analytics_professor:course_detail' course.pk %}"
+       class="course-tab course-tab--overview{% if tab == 'overview' %} course-tab--active{% endif %}"
+       {% if tab == 'overview' %}aria-current="page"{% endif %}>
+        Overview
+    </a>
+    <a href="{% url 'analytics_professor:material_list' course.pk %}"
+       class="course-tab course-tab--content{% if tab == 'content' %} course-tab--active{% endif %}"
+       {% if tab == 'content' %}aria-current="page"{% endif %}>
+        Content
+    </a>
+    <a href="{% url 'analytics_professor:question_list' course.pk %}"
+       class="course-tab course-tab--questions{% if tab == 'questions' %} course-tab--active{% endif %}"
+       {% if tab == 'questions' %}aria-current="page"{% endif %}>
+        Questions
+        {% if draft_count %}
+        <span class="course-tab__badge">{{ draft_count }} draft{{ draft_count|pluralize }}</span>
+        {% endif %}
+    </a>
+</nav>
+{% if panel %}
+</div>
+{% endif %}
+{% endwith %}

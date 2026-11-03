@@ -41,7 +41,11 @@ class Command(BaseCommand):
         qs = ReviewSession.objects.filter(
             Q(ended_at__lt=cutoff)
             | (Q(ended_at__isnull=True) & Q(started_at__lt=cutoff))
-            | (Q(ended_at__isnull=True) & Q(started_at__isnull=True) & Q(created__lt=cutoff))
+            | (
+                Q(ended_at__isnull=True)
+                & Q(started_at__isnull=True)
+                & Q(created__lt=cutoff)
+            )
         )
         count = qs.count()
         if dry_run:

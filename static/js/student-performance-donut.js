@@ -29,7 +29,8 @@
         if (!donut) return "";
         var insight = donut.insight || "";
         var status = donut.calibration_status || "";
-        if (!insight && !status) return "";
+        var answered = parseInt(donut.student_count, 10) || 0;
+        if (!insight && !status && !answered) return "";
 
         var html = "";
         if (insight) {
@@ -48,14 +49,25 @@
                 link +
                 "</p>";
         }
+        var pills = "";
         if (status) {
-            html +=
-                '<p class="student-donut-legend__status">' +
+            pills +=
                 '<button type="button" class="student-donut-legend__status-label" data-status="' +
                 escapeHtml(status) +
                 '" data-calibration-open aria-haspopup="dialog">' +
                 escapeHtml(STATUS_LABELS[status] || status) +
-                "</button></p>";
+                "</button>";
+        }
+        if (answered) {
+            pills +=
+                '<span class="student-donut-legend__count" data-students-answered>' +
+                answered +
+                " student" +
+                (answered > 1 ? "s" : "") +
+                " answered</span>";
+        }
+        if (pills) {
+            html += '<p class="student-donut-legend__status">' + pills + "</p>";
         }
         return html;
     }

@@ -5,6 +5,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Campus Users" subtitle="Search, filter, and manage user accounts." %}
 
+<div class="coord-panel">
 <div class="bento-card bento-card-inner mb-4">
     <form method="get" class="flex flex-col sm:flex-row flex-wrap gap-3 items-end">
         <div class="flex-1 min-w-[12rem]">
@@ -157,4 +158,5 @@
     {% endif %}
 </div>
 {% endif %}
+</div>
 {% endblock %}

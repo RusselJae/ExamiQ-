@@ -33,12 +33,25 @@ TITLE = ParagraphStyle(
 SUBTITLE = ParagraphStyle(
     "Subtitle", parent=styles["Normal"], fontSize=10, spaceAfter=14, alignment=TA_CENTER
 )
-H1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=13, spaceBefore=14, spaceAfter=8)
-H2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=11, spaceBefore=10, spaceAfter=6)
-H3 = ParagraphStyle("H3", parent=styles["Heading3"], fontSize=10, spaceBefore=8, spaceAfter=4)
-BODY = ParagraphStyle("Body", parent=styles["Normal"], fontSize=9, leading=13, alignment=TA_LEFT)
+H1 = ParagraphStyle(
+    "H1", parent=styles["Heading1"], fontSize=13, spaceBefore=14, spaceAfter=8
+)
+H2 = ParagraphStyle(
+    "H2", parent=styles["Heading2"], fontSize=11, spaceBefore=10, spaceAfter=6
+)
+H3 = ParagraphStyle(
+    "H3", parent=styles["Heading3"], fontSize=10, spaceBefore=8, spaceAfter=4
+)
+BODY = ParagraphStyle(
+    "Body", parent=styles["Normal"], fontSize=9, leading=13, alignment=TA_LEFT
+)
 BULLET = ParagraphStyle(
-    "Bullet", parent=styles["Normal"], fontSize=9, leading=13, leftIndent=14, bulletIndent=0
+    "Bullet",
+    parent=styles["Normal"],
+    fontSize=9,
+    leading=13,
+    leftIndent=14,
+    bulletIndent=0,
 )
 QA_Q = ParagraphStyle(
     "QAQ",
@@ -62,7 +75,9 @@ CELL = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=8, leading=11)
 CELL_HDR = ParagraphStyle(
     "CellHdr", parent=styles["Normal"], fontSize=8, leading=11, textColor=colors.white
 )
-SMALL = ParagraphStyle("Small", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.grey)
+SMALL = ParagraphStyle(
+    "Small", parent=styles["Normal"], fontSize=8, leading=10, textColor=colors.grey
+)
 
 
 def esc(text: str) -> str:
@@ -227,15 +242,31 @@ def build_story():
         make_table(
             ["Module", "Purpose", "Primary Actors"],
             [
-                ("User Management", "Registration, login, profile, approval", "All roles"),
+                (
+                    "User Management",
+                    "Registration, login, profile, approval",
+                    "All roles",
+                ),
                 (
                     "Academic Content",
                     "Sections, assignments, topics, question bank",
                     "Campus admin, chairperson, faculty",
                 ),
-                ("Exam Module", "Timed review, grading, confidence, feedback", "Student, faculty"),
-                ("Summary Module", "Dashboards, session history, progress", "Student, faculty"),
-                ("Reports Module", "Analytics, interventions, research export", "Faculty, chairperson"),
+                (
+                    "Exam Module",
+                    "Timed review, grading, confidence, feedback",
+                    "Student, faculty",
+                ),
+                (
+                    "Summary Module",
+                    "Dashboards, session history, progress",
+                    "Student, faculty",
+                ),
+                (
+                    "Reports Module",
+                    "Analytics, interventions, research export",
+                    "Faculty, chairperson",
+                ),
             ],
             col_widths=[3.5 * cm, 7.5 * cm, 5.5 * cm],
         )
@@ -700,10 +731,26 @@ def build_story():
         make_table(
             ["Classification", "Condition", "Instructional Meaning"],
             [
-                ("Mastery", "High confidence + correct", "Student knows the material well."),
-                ("Misconception", "High confidence + wrong", "Confident but incorrect; priority intervention target."),
-                ("Lucky guess", "Low confidence + correct", "Correct by chance; knowledge may be fragile."),
-                ("Expected gap", "Low confidence + wrong", "Student aware of knowledge gap."),
+                (
+                    "Mastery",
+                    "High confidence + correct",
+                    "Student knows the material well.",
+                ),
+                (
+                    "Misconception",
+                    "High confidence + wrong",
+                    "Confident but incorrect; priority intervention target.",
+                ),
+                (
+                    "Lucky guess",
+                    "Low confidence + correct",
+                    "Correct by chance; knowledge may be fragile.",
+                ),
+                (
+                    "Expected gap",
+                    "Low confidence + wrong",
+                    "Student aware of knowledge gap.",
+                ),
                 ("Uncertain", "Medium confidence", "Ambiguous calibration signal."),
             ],
             col_widths=[3.0 * cm, 4.5 * cm, 8.0 * cm],
@@ -794,9 +841,15 @@ def build_story():
                 ("See my calibration results", "/student/review/<pk>/summary/"),
                 ("See my mistakes", "/student/mistakes/"),
                 ("See class performance", "/professor/courses/<pk>/"),
-                ("Export intervention list", "/professor/courses/<pk>/interventions/export/"),
+                (
+                    "Export intervention list",
+                    "/professor/courses/<pk>/interventions/export/",
+                ),
                 ("See department analytics", "/chairperson/dashboard/"),
-                ("Export thesis research data", "/chairperson/research/export/ (intended URL)"),
+                (
+                    "Export thesis research data",
+                    "/chairperson/research/export/ (intended URL)",
+                ),
             ],
             col_widths=[6.5 * cm, 11.0 * cm],
         )

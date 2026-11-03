@@ -120,7 +120,9 @@ class Question(TimeStampedModel):
         choices=QuestionType.choices,
         default=QuestionType.MCQ,
     )
-    stem = models.TextField(help_text="Question text. Supports LaTeX with $...$ delimiters.")
+    stem = models.TextField(
+        help_text="Question text. Supports LaTeX with $...$ delimiters."
+    )
     concept_tag = models.CharField(
         max_length=500,
         blank=True,

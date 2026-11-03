@@ -17,7 +17,9 @@ class NoStoreForAuthenticatedMiddleware:
         if user is not None and user.is_authenticated:
             content_type = response.get("Content-Type", "")
             if "text/html" in content_type or not content_type:
-                response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                response["Cache-Control"] = (
+                    "no-store, no-cache, must-revalidate, max-age=0"
+                )
                 response["Pragma"] = "no-cache"
                 response["Expires"] = "0"
         return response

@@ -122,7 +122,9 @@ def validate_text_answer_structure(
             if part.strip()
         ]
         if len(items) < 2:
-            errors.append("Enumeration needs at least two expected items (one per line).")
+            errors.append(
+                "Enumeration needs at least two expected items (one per line)."
+            )
 
     return {"is_valid": not errors, "errors": errors}
 
@@ -225,26 +227,33 @@ def validate_question_for_submit(
             "is_valid": True,
             "topic_relevant": True,
             "answer_correct": True,
-            "feedback": "Structural checks passed." if question_type == "numeric" else "",
+            "feedback": "Structural checks passed."
+            if question_type == "numeric"
+            else "",
             "suggested_concept_tag": "",
             "errors": structure["errors"],
         }
 
     from apps.ai.factory import get_question_validator
 
-    result = get_question_validator().validate(stem, choices, topic, difficulty, correct_label)
+    result = get_question_validator().validate(
+        stem, choices, topic, difficulty, correct_label
+    )
     result["errors"] = structure["errors"]
     if not result.get("topic_relevant", True) and topic is not None:
         subject = getattr(topic, "subject", None)
         code = getattr(subject, "code", "") if subject else ""
         name = getattr(subject, "name", "") if subject else "this subject"
-        if not (result.get("feedback") or "").strip() or code.lower() not in (
-            result.get("feedback") or ""
-        ).lower():
+        if (
+            not (result.get("feedback") or "").strip()
+            or code.lower() not in (result.get("feedback") or "").lower()
+        ):
             result["feedback"] = (
                 f"This question does not fit {code} — {name}. "
                 f"{(result.get('feedback') or '').strip()}".strip()
             )
     if not result.get("is_valid"):
-        result["errors"] = structure["errors"] + [result.get("feedback") or "AI validation failed."]
+        result["errors"] = structure["errors"] + [
+            result.get("feedback") or "AI validation failed."
+        ]
     return result

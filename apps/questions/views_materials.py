@@ -8,6 +8,7 @@ import mimetypes
 from urllib.parse import quote
 
 from django.contrib import messages
+from django.db.models import Count
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -22,13 +23,10 @@ from apps.ai.ingest import (
 from apps.ai.material_services import (
     SourceMaterialError,
     archive_document,
-    document_download_name,
-    document_editor_html,
-    document_plain_text,
-    document_text_is_rewritable,
-    documents_for_course,
-    documents_for_subject,
     delete_document,
+    document_download_name,
+    documents_for_courses,
+    documents_for_subject,
     ensure_download_file,
     ingest_course_material,
     replace_document_content,
@@ -74,6 +72,7 @@ from apps.questions.views_professor import (
 )
 from apps.users.assignment_services import (
     get_or_create_catalog_course,
+    get_professor_course_queryset,
     professor_can_access_subject,
 )
 from apps.users.models import User
@@ -103,6 +102,18 @@ def _bsed_subject_options(professor):
     return options
 
 
+def _course_document_counts(course_ids):
+    """One query for the file count of every catalog course (hub cards)."""
+    if not course_ids:
+        return {}
+    counts = (
+        LearningDocument.objects.filter(course_id__in=course_ids, is_archived=False)
+        .values("course_id")
+        .annotate(total=Count("id"))
+    )
+    return {row["course_id"]: row["total"] for row in counts}
+
+
 def _subjects_for_material_detail(course, professor, document):
     """Subjects for the material detail course dropdown.
 
@@ -117,9 +128,12 @@ def _subjects_for_material_detail(course, professor, document):
     by_id = {s.pk: s for s in subjects}
     for subject in section_subjects:
         by_id[subject.pk] = subject
-    if document.subject_id and document.subject_id not in by_id:
-        if document.subject is not None:
-            by_id[document.subject_id] = document.subject
+    if (
+        document.subject_id
+        and document.subject_id not in by_id
+        and document.subject is not None
+    ):
+        by_id[document.subject_id] = document.subject
     return sorted(
         by_id.values(),
         key=lambda s: (
@@ -274,6 +288,9 @@ class MaterialHubView(ProfessorRequiredMixin, View):
 
     def get(self, request):
         options = _bsed_subject_options(request.user)
+        doc_counts = _course_document_counts([opt["course"].pk for opt in options])
+        for opt in options:
+            opt["doc_count"] = doc_counts.get(opt["course"].pk, 0)
         subject_id = request.GET.get("subject", "")
         course_id = request.GET.get("course", "")
         include_archived = request.GET.get("archived") == "1"
@@ -351,13 +368,39 @@ class MaterialListView(ProfessorCourseMixin, View):
 
     template_name = "professor/materials/list.html"
 
+    def _section_scope(self):
+        """Sibling offerings of this subject code the professor still teaches.
+
+        Returns (offerings, labels): the offerings power the aggregated
+        document list, the section labels back every "Viewing" tab.
+        """
+        offerings = list(
+            get_professor_course_queryset(self.request.user).filter(
+                code=self.course.code
+            )
+        )
+        if not any(offering.pk == self.course.pk for offering in offerings):
+            offerings.append(self.course)
+        return offerings, []
+
     def get(self, request, course_pk):
         include_archived = request.GET.get("archived") == "1"
         subject = _subject_for_course(self.course)
         subjects = subjects_for_course_section(self.course, request.user)
-        documents = documents_for_course(
-            self.course.pk, include_archived=include_archived
+        offerings, _labels = self._section_scope()
+        scoped_offerings = offerings
+        documents = documents_for_courses(
+            [offering.pk for offering in scoped_offerings],
+            include_archived=include_archived,
         )
+        draft_count = 0
+        if subject is not None:
+            from apps.questions.models import Question
+
+            draft_count = Question.objects.filter(
+                topic__subject=subject,
+                status=Question.Status.DRAFT,
+            ).count()
         return render(
             request,
             self.template_name,
@@ -365,11 +408,16 @@ class MaterialListView(ProfessorCourseMixin, View):
                 "course": self.course,
                 "subject": subject,
                 "subjects": subjects,
-                "active_tab": "materials",
+                "subject_options": [
+                    {"subject": s, "label": f"{s.code} — {s.name}"}
+                    for s in _bsed_subjects_queryset()
+                ],
+                "active_tab": "content",
                 "documents": documents,
                 "include_archived": include_archived,
                 "ext_counts": _ext_counts(documents),
                 "library_count": documents.count(),
+                "draft_count": draft_count,
             },
         )
 
@@ -435,6 +483,10 @@ class MaterialUploadView(ProfessorCourseMixin, View):
             if hub_return and subject:
                 return _hub_redirect_after_upload(subject.pk, course_pk)
             return redirect("analytics_professor:material_list", course_pk=course_pk)
+        description = request.POST.get("description", "").strip()
+        if description:
+            doc.description = description
+            doc.save(update_fields=["description"])
         if doc.error_message:
             messages.warning(
                 request,
@@ -452,7 +504,7 @@ class MaterialUploadView(ProfessorCourseMixin, View):
 
 
 class MaterialDetailView(ProfessorCourseMixin, View):
-    template_name = "professor/materials/detail.html"
+    template_name = "professor/materials/modal.html"
 
     def get_document(self, course_pk, pk):
         return get_object_or_404(
@@ -474,32 +526,47 @@ class MaterialDetailView(ProfessorCourseMixin, View):
                 "analytics_professor:material_list",
                 kwargs={"course_pk": course_pk},
             )
+        size = None
+        pages = None
+        created_str = ""
+        if document.file:
+            try:
+                size = document.file.size
+            except (OSError, ValueError, TypeError):
+                size = None
+            pages = document.page_count
+            if document.created:
+                created_str = document.created.strftime("%b %d, %Y")
+        download_url = (
+            reverse(
+                "analytics_professor:material_download",
+                kwargs={"course_pk": course_pk, "pk": pk},
+            )
+            if document.file
+            else ""
+        )
         return render(
             request,
             self.template_name,
             {
                 "course": self.course,
-                "active_tab": "materials",
+                "active_tab": "content",
                 "document": document,
+                "from_hub": from_hub,
+                "back_url": back_url,
+                "download_url": download_url,
                 "subjects": _subjects_for_material_detail(
                     self.course, request.user, document
                 ),
-                "chunks_preview": document.chunks.order_by("order")[:5],
-                "document_text": document_plain_text(document),
-                "document_html": document_editor_html(document),
-                "text_is_rewritable": document_text_is_rewritable(document),
-                "is_pdf": document.is_pdf,
-                "office_enabled": office_is_editable(document),
-                "office_config_url": (
-                    reverse(
-                        "analytics_professor:material_office_config",
-                        kwargs={"course_pk": course_pk, "pk": pk},
-                    )
-                    if office_is_editable(document)
+                "attached_meta": (
+                    f"{(size or 0) / 1024:.1f} KB · {pages or 0} page{'s' if (pages or 0) > 1 else ''} · Uploaded {created_str}"
+                    if size or pages
                     else ""
                 ),
-                "back_url": back_url,
-                "from_hub": from_hub,
+                "subject_options": [
+                    {"subject": s, "label": f"{s.code} — {s.name}"}
+                    for s in _bsed_subjects_queryset()
+                ],
             },
         )
 
@@ -555,6 +622,8 @@ class MaterialDetailView(ProfessorCourseMixin, View):
             return redirect(
                 "analytics_professor:material_detail", course_pk=course_pk, pk=pk
             )
+        if action == "replace_file":
+            return self._replace_file(request, course_pk, pk, document)
         subject = _resolve_upload_subject(
             self.course, request.user, request.POST.get("subject_id", "")
         )
@@ -575,6 +644,10 @@ class MaterialDetailView(ProfessorCourseMixin, View):
             original_name=request.POST.get("original_name", document.original_name),
             subject=subject,
         )
+        description = request.POST.get("description")
+        if description is not None:
+            document.description = description.strip()
+            document.save(update_fields=["description"])
         # The editor lives inside this form: when the content changed, the
         # submitted HTML is saved too and the AI chunks are rebuilt.
         content_html = request.POST.get("content_html", "")
@@ -591,8 +664,72 @@ class MaterialDetailView(ProfessorCourseMixin, View):
                 )
         else:
             messages.success(request, "Material updated.")
+        return self._modal_redirect(request, course_pk, pk, subject_pk)
+
+    def _modal_redirect(self, request, course_pk, pk, subject_pk):
+        """Send Edit-modal posts back to where they were raised from."""
+        hub_return = request.POST.get("hub_return") == "1"
+        if hub_return and subject_pk:
+            return _hub_redirect_after_upload(subject_pk, course_pk)
+        return_target = request.POST.get("return_to", "")
+        if return_target == "hub":
+            return redirect("analytics_professor:materials_hub")
+        if return_target == "list":
+            return redirect("analytics_professor:material_list", course_pk=course_pk)
         return redirect(
             "analytics_professor:material_detail", course_pk=course_pk, pk=pk
+        )
+
+    def _replace_file(self, request, course_pk, pk, document):
+        """Swap the file behind an existing document (Edit modal action).
+
+        The old upload is archived and the replacement runs through the normal
+        ingest pipeline, so chunks/status stay consistent. If ingest fails the
+        original document is restored untouched.
+        """
+        subject_pk = document.subject_id
+        uploaded = request.FILES.get("replace_file") or request.FILES.get("source_file")
+        if uploaded is None:
+            messages.error(request, "Choose a file to replace the current upload.")
+            return self._modal_redirect(request, course_pk, pk, subject_pk)
+        if not is_allowed_upload(uploaded.name):
+            messages.error(request, _unsupported_upload_message(uploaded.name))
+            return self._modal_redirect(request, course_pk, pk, subject_pk)
+
+        pages, extraction_error = _extract_upload_pages(uploaded)
+        title = document.display_title
+        original_description = document.description
+
+        archive_document(document)
+        try:
+            new_doc = ingest_course_material(
+                uploaded_file=uploaded,
+                course_id=self.course.pk,
+                user=request.user,
+                title=title,
+                material_type=document.material_type,
+                subject=document.subject,
+                original_name="",
+                pages=pages,
+                extraction_error=extraction_error,
+            )
+        except SourceMaterialError as exc:
+            restore_document(document)
+            messages.error(request, str(exc))
+            return self._modal_redirect(request, course_pk, pk, subject_pk)
+        if original_description:
+            new_doc.description = original_description
+            new_doc.save(update_fields=["description"])
+        if new_doc.error_message:
+            messages.warning(
+                request,
+                f"File replaced with “{new_doc.display_title}”. Students can "
+                f"download the full file. {new_doc.error_message}",
+            )
+        else:
+            messages.success(request, "File replaced.")
+        return self._modal_redirect(
+            request, course_pk, pk, new_doc.subject_id or subject_pk
         )
 
 

@@ -57,7 +57,10 @@ class TestOllamaClient:
         OLLAMA_FALLBACK_MODELS=[],
     )
     @patch("apps.ai.providers.ollama_client.list_available_models", return_value=[])
-    @patch("apps.ai.providers.ollama_client._chat_with_model", side_effect=Exception("404 not found"))
+    @patch(
+        "apps.ai.providers.ollama_client._chat_with_model",
+        side_effect=Exception("404 not found"),
+    )
     def test_skips_retries_on_404(self, _mock_chat, _mock_list):
         with pytest.raises(AIServiceUnavailableError):
             ollama_client.chat_with_fallback("prompt")
@@ -134,7 +137,9 @@ class TestOllamaClient:
         side_effect=RuntimeError("HTTP 429: rate limit reached"),
     )
     @patch("apps.ai.providers.ollama_client.time.sleep")
-    def test_rate_limit_does_not_try_fallback_models(self, _mock_sleep, mock_chat, _mock_list):
+    def test_rate_limit_does_not_try_fallback_models(
+        self, _mock_sleep, mock_chat, _mock_list
+    ):
         with pytest.raises(AIServiceUnavailableError) as exc_info:
             ollama_client.chat_with_fallback("prompt")
         assert "rate limit" in exc_info.value.message.lower()

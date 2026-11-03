@@ -1,0 +1,28 @@
+{# Course banner for faculty course pages (Overview / Content / Questions / Level). #}
+{# Uses the existing system fonts; decorative chalk math is CSS-only, aria-hidden. #}
+{# Optional: course, subject, academic_label #}
+{% with banner_subject=subject %}
+<div class="course-banner">
+    <div class="course-banner__math" aria-hidden="true">
+        <span>x&#178; + y&#178; = r&#178;</span>
+        <span>a&#8319; + b&#8319; = c&#8319;</span>
+        <span>f(x) &#8594; &#8734;</span>
+    </div>
+    <div class="course-banner__inner">
+        <div class="course-banner__code-row">
+            <span class="course-banner__code-chip">{{ course.code }}</span>
+            {% if banner_subject %}
+            <span class="course-banner__year">{{ banner_subject.year_level.name }} · {{ banner_subject.get_semester_display }}</span>
+            {% elif academic_label %}
+            <span class="course-banner__year">{{ academic_label }}</span>
+            {% elif course.term and course.term != "Catalog" %}
+            <span class="course-banner__year">{{ course.term }} · {{ course.academic_year }}</span>
+            {% endif %}
+        </div>
+        <h1 class="course-banner__name">{{ course.name }}</h1>
+        {% if course.section and course.section != "Catalog" %}
+        <p class="course-banner__meta">Section {{ course.section }} · {{ course.academic_year }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endwith %}

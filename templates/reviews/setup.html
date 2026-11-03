@@ -8,7 +8,7 @@
 {% block main_class %}review-setup-page{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Start a timed exam" subtitle="Choose course subjects for your year (and optionally other years), then pick difficulty." %}
+{% include "components/page_header.html" with title="Start a timed exam" subtitle="Pick your subjects, set the timer, and rate how sure you are." %}
 
 {% if setup_eligibility and not setup_eligibility.eligible %}
 <div class="bento-card p-6 mb-4">
@@ -38,6 +38,7 @@
         <div class="student-setup-empty mb-2">{{ form.non_field_errors }}</div>
         {% endif %}
 
+        <div class="student-panel">
         <nav class="exam-setup-steps" data-exam-steps aria-label="Setup steps">
             <button type="button" class="exam-setup-steps__item is-active" data-goto-step="1" aria-current="step">
                 <span class="exam-setup-steps__num">1</span>
@@ -76,7 +77,7 @@
                             </li>
                             <li>
                                 <span class="exam-setup-how__num" aria-hidden="true">3</span>
-                                <span>Choose 5+ questions per subject (randomized), up to {{ max_total_questions }} total</span>
+                                <span>Choose how many questions per subject, up to 100 in total</span>
                             </li>
                         </ol>
                     </div>
@@ -165,6 +166,7 @@
                          data-code="{{ subject.code }}"
                          data-name="{{ subject.name }}"
                          data-search="{{ subject.code|lower }} {{ subject.name|lower }}">
+                        <span class="exam-subject-chip" aria-hidden="true">{{ subject.name|slice:":1"|upper }}</span>
                         <div class="exam-subject-card__text">
                             <span class="exam-subject-card__title" title="{{ subject.name }}">{{ subject.name }}</span>
                             <span class="exam-subject-card__subtitle">{{ subject.code }}</span>
@@ -192,6 +194,7 @@
                          data-name="{{ subject.name }}"
                          data-search="{{ subject.code|lower }} {{ subject.name|lower }}"
                          style="display: none;">
+                        <span class="exam-subject-chip" aria-hidden="true">{{ subject.name|slice:":1"|upper }}</span>
                         <div class="exam-subject-card__text">
                             <span class="exam-subject-card__title" title="{{ subject.name }}">{{ subject.name }}</span>
                             <span class="exam-subject-card__subtitle">{{ subject.code }} · {{ subject.year_level.name|default:"Other" }}</span>
@@ -225,6 +228,7 @@
             </div>
 
             <div class="exam-setup-card exam-setup-card--sidebar">
+                <h2 class="exam-setup-card__title">Exam settings</h2>
                 <div class="exam-setup-step" data-step-panel="2">
                     <div class="exam-sidebar-section">
                         <label class="exam-sidebar-heading" id="diff-label">DIFFICULTY</label>
@@ -342,8 +346,8 @@
                     </div>
                 </div>
 
-                <button type="submit" class="exam-cta-btn exam-cta-btn--desktop" id="start-exam-btn">
-                    Start exam →
+                <button type="submit" class="exam-cta-btn exam-cta-btn--desktop exam-cta-btn--big" id="start-exam-btn">
+                    Start exam <span aria-hidden="true">→</span>
                 </button>
             </div>
         </div>
@@ -359,6 +363,7 @@
                 <button type="button" class="exam-setup-sticky__next exam-cta-btn" data-setup-next>Next</button>
                 <button type="submit" class="exam-setup-sticky__start exam-cta-btn" data-setup-start hidden>Start exam →</button>
             </div>
+        </div>
         </div>
 </form>
 {% endif %}

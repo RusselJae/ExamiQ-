@@ -105,6 +105,11 @@ class LearningDocument(models.Model):
         related_name="learning_documents",
     )
     title = models.CharField(max_length=255, blank=True, default="")
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Optional short description shown with the material.",
+    )
     material_type = models.CharField(
         max_length=20,
         choices=MaterialType.choices,
@@ -186,6 +191,7 @@ class LearningDocument(models.Model):
     def is_editable_by_office(self) -> bool:
         """True when the file format is supported by ONLYOFFICE for editing."""
         from apps.ai.office_editor import is_editable
+
         return is_editable(self)
 
     @property

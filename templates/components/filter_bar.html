@@ -11,85 +11,54 @@
             {% endfor %}
             {% endif %}
 
+            {% advanced_filter_field_count filter_form_fields as advanced_field_count %}
             {% active_advanced_filter_count filter_form_fields as advanced_filter_count %}
+            {% active_filter_count filter_form_fields as active_count %}
 
-            <button type="button"
-                    class="filter-bar__toggle btn-secondary"
-                    data-filter-toggle
-                    aria-expanded="false">
-                Filters
-                <span class="filter-bar__badge{% if advanced_filter_count %} is-visible{% endif %}"
-                      data-filter-badge>
-                    {% if advanced_filter_count %}{{ advanced_filter_count }}{% endif %}
-                </span>
-            </button>
+            {% comment %} The first search field feeds the full-width field; the
+            Filter button docks inside its right edge and opens the popover. {% endcomment %}
+            {% for field in filter_form_fields %}
+                {% if field.type == "search" %}
+            <div class="filter-bar__search-row">
+                <div class="filter-bar__search-box">
+                    <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                    <input type="search"
+                           name="{{ field.name }}"
+                           value="{{ field.value }}"
+                           placeholder="{{ field.placeholder }}"
+                           aria-label="{{ field.label|default:'Search' }}"
+                           class="filter-bar__input filter-bar__input--search"
+                           {% if field.autofocus %}autofocus{% endif %}>
+                    {% if advanced_field_count %}
+                    {% include "components/filter_bar_picker.html" %}
+                    {% endif %}
+                </div>
+            </div>
+                {% else %}
+                {% if forloop.first and advanced_field_count %}
+            {# No search field: the Filter control stands alone. #}
+            <div class="filter-bar__search-row">
+                {% include "components/filter_bar_picker.html" with filter_bar_inline_picker=1 %}
+            </div>
+                {% endif %}
+                {% endif %}
+            {% endfor %}
 
-            <div class="filter-bar__grid">
+            {% if active_count %}
+            <div class="filter-bar__chips" data-filter-chips aria-label="Active filters">
                 {% for field in filter_form_fields %}
-                    {% if field.type == "search" %}
-                    <label class="filter-bar__field filter-bar__field--search">
-                        <span class="filter-bar__label">{{ field.label|default:"Search" }}</span>
-                        <input
-                            type="search"
-                            name="{{ field.name }}"
-                            value="{{ field.value }}"
-                            placeholder="{{ field.placeholder }}"
-                            class="filter-bar__input"
-                            {% if field.autofocus %}autofocus{% endif %}
-                        >
-                    </label>
-                    {% elif field.type == "select" or field.type == "sort" %}
-                    <label class="filter-bar__field filter-bar__field--advanced">
-                        <span class="filter-bar__label">{{ field.label }}</span>
-                        <select name="{{ field.name }}" class="filter-bar__select">
-                            {% if field.type == "select" %}
-                            <option value="">{{ field.all_label|default:"All" }}</option>
-                            {% endif %}
-                            {% for value, label in field.choices %}
-                            <option value="{{ value }}" {% if value == field.selected %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    {% elif field.type == "date" %}
-                    {% if field.name == "date_from" %}
-                    <div class="filter-bar__dates filter-bar__field--advanced">
-                    {% endif %}
-                    <label class="filter-bar__field">
-                        <span class="filter-bar__label">{{ field.label }}</span>
-                        <input
-                            type="date"
-                            name="{{ field.name }}"
-                            value="{{ field.value }}"
-                            class="filter-bar__input"
-                        >
-                    </label>
-                    {% if field.name == "date_to" %}
-                    </div>
-                    {% endif %}
+                    {% if field.active_display %}
+                    <button type="button"
+                            class="filter-bar__chip"
+                            data-filter-chip="{{ field.name }}"
+                            aria-label="Remove {{ field.label }} filter">
+                        <span>{{ field.label }}: {{ field.active_display }}</span>
+                        <span class="filter-bar__chip-x" aria-hidden="true">&times;</span>
+                    </button>
                     {% endif %}
                 {% endfor %}
             </div>
-
-            <div class="filter-bar__actions">
-                <button type="submit" class="btn-primary filter-bar__apply">Apply filters</button>
-                <a href="{{ request.path }}"
-                   class="filter-bar__reset{% if filter_has_active %} is-active{% endif %}"
-                   data-filter-reset>Reset</a>
-            </div>
+            {% endif %}
         </form>
-
-        <div class="filter-bar__chips" data-filter-chips aria-label="Active filters">
-            {% for field in filter_form_fields %}
-                {% if field.active_display %}
-                <button type="button"
-                        class="filter-bar__chip"
-                        data-filter-chip="{{ field.name }}"
-                        aria-label="Remove {{ field.label }} filter">
-                    <span>{{ field.label }}: {{ field.active_display }}</span>
-                    <span class="filter-bar__chip-x" aria-hidden="true">&times;</span>
-                </button>
-                {% endif %}
-            {% endfor %}
-        </div>
     </div>
 </div>

@@ -9,10 +9,20 @@
 (function () {
     "use strict";
 
+    function groupControl(group) {
+        if (group.tagName === "SELECT") return group;
+        return group.querySelector("select");
+    }
+
     function selectedParams(filters) {
         const params = {};
         filters.querySelectorAll("[data-donut-param]").forEach(function (group) {
             const name = group.getAttribute("data-donut-param");
+            const select = groupControl(group);
+            if (select) {
+                params[name] = select.value || "";
+                return;
+            }
             const active = group.querySelector(".overview-pill.is-selected");
             params[name] = active ? active.getAttribute("data-donut-value") || "" : "";
         });
@@ -20,6 +30,11 @@
     }
 
     function applyValue(group, value) {
+        const select = groupControl(group);
+        if (select) {
+            select.value = value || "";
+            return;
+        }
         group.querySelectorAll(".overview-pill").forEach(function (pill) {
             const on = (pill.getAttribute("data-donut-value") || "") === value;
             pill.classList.toggle("is-selected", on);
@@ -120,6 +135,13 @@
             const group = pill.closest("[data-donut-param]");
             if (!group) return;
             applyValue(group, pill.getAttribute("data-donut-value") || "");
+            const params = selectedParams(filters);
+            load(filters, params);
+        });
+
+        filters.addEventListener("change", function (event) {
+            const select = event.target.closest("select[data-donut-param]");
+            if (!select || !filters.contains(select)) return;
             const params = selectedParams(filters);
             load(filters, params);
         });

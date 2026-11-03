@@ -51,7 +51,9 @@ def run_mmdc(mmd: Path, png: Path, width: int) -> None:
     )
 
 
-def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def load_font(
+    size: int, bold: bool = False
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
         "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
         "C:/Windows/Fonts/segoeui.ttf",
@@ -152,9 +154,13 @@ def composite_diagram(
     body_font = load_font(11)
 
     title_w = draw.textlength(main_title, font=title_font)
-    draw.text(((CANVAS_W - title_w) / 2, 18), main_title, font=title_font, fill=(17, 24, 39))
+    draw.text(
+        ((CANVAS_W - title_w) / 2, 18), main_title, font=title_font, fill=(17, 24, 39)
+    )
     sub_w = draw.textlength(subtitle, font=subtitle_font)
-    draw.text(((CANVAS_W - sub_w) / 2, 52), subtitle, font=subtitle_font, fill=(75, 85, 99))
+    draw.text(
+        ((CANVAS_W - sub_w) / 2, 52), subtitle, font=subtitle_font, fill=(75, 85, 99)
+    )
 
     panels_top = TITLE_H
     left_x = MARGIN

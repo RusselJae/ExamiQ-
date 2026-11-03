@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Reassign teaching - Chairperson{% endblock %}
+
+{% block content %}
+<div class="overview-header mb-6">
+    <div class="overview-header__main">
+        <h1 class="overview-title">Reassign teaching</h1>
+        <p class="text-sm text-examiq-slate mt-1">
+            {{ assignment.subject.code }} — {{ assignment.subject.name }} ·
+            {{ assignment.program_section.display_label }} ·
+            {{ assignment.term }}
+        </p>
+    </div>
+</div>
+
+<div class="coord-panel">
+    <div class="bento-card p-6 max-w-xl">
+        <p class="text-sm text-examiq-slate mb-4">
+            Currently assigned to
+            <strong>{{ assignment.professor.get_full_name|default:assignment.professor.email }}</strong>.
+            Handled-student visibility follows the new professor from here on;
+            existing student assignments are unchanged.
+        </p>
+        <form method="post" action="{% url 'analytics_chairperson:assignment_reassign' assignment.pk %}">
+            {% csrf_token %}
+            <label class="assign-field__label" for="reassign-professor">Faculty</label>
+            <select id="reassign-professor" name="professor" class="assign-field__input" required>
+                <option value="">Select faculty…</option>
+                {% for professor in professors %}
+                <option value="{{ professor.pk }}" {% if professor.pk == assignment.professor_id %}selected{% endif %}>
+                    {{ professor.get_full_name|default:professor.email }}
+                </option>
+                {% endfor %}
+            </select>
+            <div class="flex gap-3 mt-5">
+                <button type="submit" class="btn-primary">Reassign</button>
+                <a href="{% url 'analytics_chairperson:assignments' %}" class="btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
