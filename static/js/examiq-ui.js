@@ -505,21 +505,43 @@
         sidebar.querySelectorAll("[data-sidebar-filter]").forEach(function (input) {
             if (input.dataset.bound) return;
             input.dataset.bound = "1";
-            input.addEventListener("input", function () {
+            var section = input.closest(".sidebar-course-section");
+            var clearBtn = section
+                ? section.querySelector("[data-sidebar-clear]")
+                : null;
+            function applyFilter() {
                 var q = (input.value || "").trim().toLowerCase();
-                var section = input.closest(".sidebar-course-section");
                 if (!section) return;
-                section.querySelectorAll("[data-sidebar-group]").forEach(function (group) {
-                    var visible = 0;
-                    group.querySelectorAll("[data-sidebar-course]").forEach(function (item) {
-                        var text = (item.textContent || "").toLowerCase();
-                        var match = !q || text.indexOf(q) !== -1;
-                        item.style.display = match ? "" : "none";
-                        if (match) visible += 1;
+                if (clearBtn) clearBtn.hidden = !input.value;
+                var groups = section.querySelectorAll("[data-sidebar-group]");
+                if (groups.length) {
+                    groups.forEach(function (group) {
+                        var visible = 0;
+                        group.querySelectorAll("[data-sidebar-course]").forEach(function (item) {
+                            var text = (item.textContent || "").toLowerCase();
+                            var match = !q || text.indexOf(q) !== -1;
+                            item.style.display = match ? "" : "none";
+                            if (match) visible += 1;
+                        });
+                        group.style.display = visible ? "" : "none";
                     });
-                    group.style.display = visible ? "" : "none";
+                    return;
+                }
+                section.querySelectorAll("[data-sidebar-list] [data-sidebar-course]").forEach(function (item) {
+                    var text = (item.textContent || "").toLowerCase();
+                    var match = !q || text.indexOf(q) !== -1;
+                    item.style.display = match ? "" : "none";
                 });
-            });
+            }
+            input.addEventListener("input", applyFilter);
+            if (clearBtn && !clearBtn.dataset.bound) {
+                clearBtn.dataset.bound = "1";
+                clearBtn.addEventListener("click", function () {
+                    input.value = "";
+                    applyFilter();
+                    input.focus();
+                });
+            }
         });
 
         /* Collapsible sidebar course buckets (Pinned / This Semester / Earlier). */

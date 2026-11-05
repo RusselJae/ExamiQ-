@@ -20,6 +20,16 @@
     }
 
     document.addEventListener("click", function (event) {
+        var assignOpener = event.target.closest("[data-open-assign-dialog]");
+        if (assignOpener) {
+            openDialog(document.getElementById("add-assign-dialog"));
+            return;
+        }
+        var assignCloser = event.target.closest("[data-close-assign-dialog]");
+        if (assignCloser) {
+            closeDialog(assignCloser.closest("dialog"));
+            return;
+        }
         var opener = event.target.closest("[data-reassign-open]");
         if (opener) {
             var kebab = opener.closest("details.account-kebab");

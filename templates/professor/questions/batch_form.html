@@ -278,6 +278,7 @@
                 </button>
                 {% if course %}
                 <a href="{% url 'analytics_professor:question_batch_edit' course.pk 0 %}{% if embed_mode %}?embed=1{% endif %}"
+                   id="edit-all-btn"
                    class="btn-secondary batch-toolbar-btn"
                    title="Edit drafts one by one, starting with the first">
                     Edit all
@@ -388,6 +389,7 @@
     const addQuestionInlineBtn = document.getElementById("add-question-inline-btn");
     const emptyAddManualBtn = document.getElementById("empty-add-manual-btn");
     const validateAllBtn = document.getElementById("validate-all-btn");
+    const editAllBtn = document.getElementById("edit-all-btn");
     const publishAllBtn = document.getElementById("publish-all-btn");
     const publishCountEl = document.getElementById("publish-validated-count");
     const deleteSelectedBtn = document.getElementById("delete-selected-btn");
@@ -636,6 +638,13 @@
             selectAllBox.indeterminate = picked > 0 && picked < n;
         }
         // Bulk actions stay disabled until they can do something useful.
+        // "Edit all" needs at least one draft question to open.
+        if (editAllBtn) {
+            const usable = n > 0;
+            editAllBtn.classList.toggle("is-disabled", !usable);
+            editAllBtn.setAttribute("aria-disabled", usable ? "false" : "true");
+            editAllBtn.tabIndex = usable ? 0 : -1;
+        }
         if (!subjectSelected) return;
         if (validateAllBtn) validateAllBtn.disabled = picked === 0;
         if (deleteSelectedBtn) deleteSelectedBtn.disabled = picked === 0;

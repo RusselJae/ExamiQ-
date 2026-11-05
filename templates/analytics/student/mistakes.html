@@ -4,7 +4,11 @@
 {% block title %}Mistakes - EXAMIQ+{% endblock %}
 
 {% block content %}
+{% if active_tab == 'concepts' %}
+{% include "components/page_header.html" with title="Concepts to Review" subtitle="Concepts you keep missing. Practice each one until you get 3 right." %}
+{% else %}
 {% include "components/page_header.html" with title="Mistake Log" subtitle="Concepts you keep missing. Practice each one until you get 3 right." %}
+{% endif %}
 
 {% if active_tab == 'concepts' %}
 <div class="student-panel">
@@ -26,22 +30,43 @@
     </div>
 
     {% if concept_cards %}
-    <div class="concept-filter-bar" data-concept-filter-bar>
-        <input type="search"
-               id="concept-card-search"
-               class="filter-bar__input"
-               placeholder="Search course or concept…"
-               aria-label="Search concepts"
-               autocomplete="off">
-        <select id="concept-card-status" class="filter-bar__select" aria-label="Filter by status">
-            <option value="">All statuses</option>
-            <option value="needs_review"{% if concept_status == 'needs_review' %} selected{% endif %}>Needs review</option>
-            <option value="practicing"{% if concept_status == 'practicing' %} selected{% endif %}>Practicing</option>
-            <option value="resolved"{% if concept_status == 'resolved' %} selected{% endif %}>Resolved</option>
-        </select>
-        <select id="concept-card-year" class="filter-bar__select" aria-label="Filter by year">
-            <option value="">All years</option>
-        </select>
+    <div class="filter-bar concept-filter-bar" data-concept-filter-bar>
+        <div class="filter-bar__search-row">
+            <div class="filter-bar__search-box">
+                <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                <input type="search"
+                       id="concept-card-search"
+                       class="filter-bar__input filter-bar__input--search"
+                       placeholder="Search course or concept…"
+                       aria-label="Search concepts"
+                       autocomplete="off">
+                <details class="filter-bar__picker" data-filter-picker>
+                    <summary class="filter-bar__toggle" aria-label="Open filters">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M7 12h10M11 18h2"/></svg>
+                        Filter
+                    </summary>
+                    <div class="filter-bar__panel" data-filter-panel>
+                        <div class="filter-bar__grid">
+                            <label class="filter-bar__field">
+                                <span class="filter-bar__label">Status</span>
+                                <select id="concept-card-status" class="filter-bar__select">
+                                    <option value="">All statuses</option>
+                                    <option value="needs_review"{% if concept_status == 'needs_review' %} selected{% endif %}>Needs review</option>
+                                    <option value="practicing"{% if concept_status == 'practicing' %} selected{% endif %}>Practicing</option>
+                                    <option value="resolved"{% if concept_status == 'resolved' %} selected{% endif %}>Resolved</option>
+                                </select>
+                            </label>
+                            <label class="filter-bar__field">
+                                <span class="filter-bar__label">Year</span>
+                                <select id="concept-card-year" class="filter-bar__select">
+                                    <option value="">All years</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
     </div>
     <div class="concept-review-layout">
         <div class="concept-card-list">

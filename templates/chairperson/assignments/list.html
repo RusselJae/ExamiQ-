@@ -4,83 +4,16 @@
 {% block title %}Faculty Courses - Chairperson{% endblock %}
 
 {% block content %}
-<div class="overview-header mb-6">
-    <div class="overview-header__main">
-        <h1 class="overview-title">Faculty Courses</h1>
-    </div>
-</div>
+{% include "components/page_header.html" with title="Faculty Courses" %}
 
 <div class="coord-panel">
-<div class="overview-kpi-grid mb-6">
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=assignment_stats.faculty label="Faculty" icon="users" variant="blue" %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=assignment_stats.sections label="Sections covered" icon="target" variant="teal" %}
-    </div>
+<div class="coord-panel__toolbar">
+    {% include "components/filter_bar.html" %}
+    <button type="button" class="btn-primary btn-primary-sm" data-open-assign-dialog>Assign faculty</button>
 </div>
 
-<div class="assign-panel assign-panel--new mb-6">
-    <div class="assign-panel__header assign-panel__header--row">
-        <div>
-            <h2 class="assign-panel__title">New assignment</h2>
-            <p class="assign-panel__subtitle">Select faculty and course — we cover every section of that course's year level.</p>
-        </div>
-        <span class="assign-term-pill" aria-label="Current term">{{ current_term_label }}</span>
-    </div>
-
-    <form
-        method="post"
-        action="{% url 'analytics_chairperson:assignment_create' %}"
-        id="assignment-form"
-        class="assign-form assign-new-form"
-    >
-        {% csrf_token %}
-
-        <div class="assign-new-form__fields">
-            <div class="assign-field">
-                <label class="assign-field__label" for="id_professor">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                    Faculty
-                </label>
-                {{ assignment_form.professor }}
-            </div>
-            <div class="assign-field">
-                <label class="assign-field__label" for="id_subject">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                    Course
-                </label>
-                {{ assignment_form.subject }}
-            </div>
-        </div>
-
-        <div class="assign-section-footer">
-            <button type="submit" class="btn-primary assign-section-footer__submit">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                Assign faculty
-            </button>
-        </div>
-
-        <div class="sr-only">
-            {{ assignment_form.term }}
-            {{ assignment_form.program_sections }}
-        </div>
-    </form>
-</div>
-
-<div class="assign-panel">
-    <div class="assign-panel__header assign-panel__header--row">
-        <div>
-            <h2 class="assign-panel__title">Current assignments</h2>
-        </div>
-    </div>
-
-    <div class="bento-grid mb-4">
-        {% include "components/filter_bar.html" %}
-    </div>
-
-    {% if assignments %}
-    <div class="coord-table-wrap">
+{% if assignments %}
+<div class="coord-table-wrap">
         <table class="data-table w-full min-w-[56rem] coord-table--singleline">
             <thead>
                 <tr>
@@ -162,11 +95,39 @@
     </div>
     {% else %}
     <div class="assign-empty">
-        <p>No teaching assignments{% if term_filter %} for this term{% endif %} yet.</p>
+        <p>No teaching assignments yet.</p>
     </div>
     {% endif %}
 </div>
-</div>
+
+<dialog class="coord-dialog" id="add-assign-dialog" aria-labelledby="add-assign-title">
+    <div class="coord-dialog__head">
+        <h2 class="coord-dialog__title" id="add-assign-title">Assign faculty</h2>
+        <button type="button" class="coord-dialog__close" data-close-assign-dialog aria-label="Close">✕</button>
+    </div>
+    <div class="coord-dialog__body">
+        <p class="text-sm text-examiq-slate">Select faculty and course — we cover every section of that course's year level ({{ current_term_label }}).</p>
+        <form method="post" action="{% url 'analytics_chairperson:assignment_create' %}" id="assignment-form" class="mt-4">
+            {% csrf_token %}
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-examiq-slate mb-1" for="id_professor">Faculty*</label>
+                {{ assignment_form.professor }}
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-examiq-slate mb-1" for="id_subject">Course*</label>
+                {{ assignment_form.subject }}
+            </div>
+            <div class="sr-only">
+                {{ assignment_form.term }}
+                {{ assignment_form.program_sections }}
+            </div>
+            <div class="coord-dialog__actions">
+                <button type="button" class="btn-secondary btn-primary-sm" data-close-assign-dialog>Cancel</button>
+                <button type="submit" class="btn-primary btn-primary-sm">Assign faculty</button>
+            </div>
+        </form>
+    </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}

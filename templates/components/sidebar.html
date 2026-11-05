@@ -37,33 +37,23 @@
                     <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <span class="sidebar-label">Session History</span>
                 </a>
-                <div class="sidebar-course-section-group" data-sidebar-group="action-plan">
-                    <button type="button" class="sidebar-course-sub-header" data-sidebar-toggle aria-expanded="true" aria-label="Toggle Action Plan">
-                        <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-                        <span class="sidebar-sub-section-title">Action Plan{% if sidebar_concept_count %} · {{ sidebar_concept_count }}{% endif %}</span>
-                        <span class="sidebar-sub-section-dropdown" aria-hidden="true">▾</span>
-                    </button>
-                    <ul class="sidebar-entity-list" data-sidebar-list aria-label="Action plan">
-                        <li data-sidebar-course="mistakes">
-                            <a class="sidebar-entity{% if request.resolver_match.url_name == 'mistakes' and request.GET.tab != 'concepts' %} sidebar-entity--active{% endif %}"
-                               href="{% url 'analytics_student:mistakes' %}?tab=all"
-                               title="All mistakes">
-                                <span class="sidebar-entity__text">
-                                    <span class="sidebar-entity__title">Mistakes</span>
-                                </span>
-                            </a>
-                        </li>
-                        <li data-sidebar-course="review">
-                            <a class="sidebar-entity{% if request.GET.tab == 'concepts' or request.resolver_match.url_name == 'concept_review' %} sidebar-entity--active{% endif %}"
-                               href="{% url 'analytics_student:mistakes' %}?tab=concepts"
-                               title="Concepts to Review">
-                                <span class="sidebar-entity__text">
-                                    <span class="sidebar-entity__title">Review</span>
-                                </span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                <a href="{% url 'analytics_student:mistakes' %}?tab=all" title="Mistakes"
+                   class="sidebar-link {% if request.resolver_match.url_name == 'mistakes' and request.GET.tab != 'concepts' %}sidebar-link-active{% endif %}"
+                   aria-label="Mistakes">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                    <span class="sidebar-label">Mistakes</span>
+                </a>
+
+                <p class="sidebar-section-label">Action Plan</p>
+                <a href="{% url 'analytics_student:mistakes' %}?tab=concepts" title="Review"
+                   class="sidebar-link {% if request.GET.tab == 'concepts' or request.resolver_match.url_name == 'concept_review' %}sidebar-link-active{% endif %}"
+                   aria-label="Review">
+                    <svg class="sidebar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <span class="sidebar-label">Review</span>
+                    {% if sidebar_concept_count %}
+                    <span class="sidebar-review-count" title="{{ sidebar_concept_count }} concept{{ sidebar_concept_count|pluralize }} to review">{{ sidebar_concept_count }}</span>
+                    {% endif %}
+                </a>
             {% elif user.role == "program_coordinator" or user.role == "campus_admin" %}
                 <p class="sidebar-section-label">Program management</p>
                 <a href="{% url 'campus:dashboard' %}" title="Dashboard"
@@ -171,11 +161,13 @@
                 {% if professor_course_groups %}
                 <div class="sidebar-course-section">
                     <div class="sidebar-course-header" role="button" aria-label="My courses">
-                        <span class="sidebar-course-title">Handled courses · {{ professor_courses|length }}</span>
+                        <span class="sidebar-course-title">Handled courses</span>
+                        <span class="sidebar-course-count" title="{{ professor_courses|length }} handled courses">{{ professor_courses|length }}</span>
                     </div>
                     <div class="sidebar-course-filter">
                         <svg class="sidebar-course-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
-                        <input type="search" class="sidebar-course-search" placeholder="Filter courses" aria-label="Filter courses" data-sidebar-filter>
+                        <input type="search" class="sidebar-course-search" placeholder="Search courses" aria-label="Filter courses" data-sidebar-filter>
+                        <button type="button" class="sidebar-course-clear" data-sidebar-clear hidden aria-label="Clear search">×</button>
                     </div>
 
                     <ul class="sidebar-entity-list" data-sidebar-list aria-label="My handled courses">
@@ -200,13 +192,13 @@
                     </ul>
 
                     <div class="sidebar-course-view-all">
-                        <a href="{% url 'analytics_professor:course_list' %}" class="sidebar-course-view-all__link" aria-label="View all courses">View all {{ professor_courses|length }} courses →</a>
+                        <a href="{% url 'analytics_professor:course_list' %}" class="sidebar-course-view-all__link" aria-label="View all courses">View all {{ professor_courses|length }} courses</a>
                     </div>
                 </div>
                 {% else %}
                 <div class="sidebar-course-section">
                     <p class="sidebar-section-label">My courses</p>
-                    <p class="text-xs text-examiq-slate px-1">No subjects assigned yet — ask your chairperson for a teaching assignment.</p>
+                    <p class="sidebar-empty-note">No subjects assigned yet — ask your chairperson for a teaching assignment.</p>
                 </div>
                 {% endif %}
             {% endif %}

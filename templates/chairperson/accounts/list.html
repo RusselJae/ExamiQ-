@@ -6,29 +6,13 @@
 {% block content %}
 {% include "components/page_header.html" with title="User Accounts" %}
 
+<div class="coord-panel">
 {% if pending_count %}
-<div class="campus-alert mb-6">
+<div class="campus-alert mb-4">
     <p><strong>{{ pending_count }}</strong> registration{{ pending_count|pluralize }} awaiting your approval.</p>
 </div>
 {% endif %}
-
-<div class="coord-panel">
 <div class="coord-panel__toolbar">
-    <button type="button" class="btn-primary btn-primary-sm" data-open-roster-dialog>Add account</button>
-</div>
-
-{% if roster_entries %}
-<div class="bento-card bento-card-inner mb-4">
-    <span class="coord-roster-title">Registered student numbers · waiting for signup</span>
-    <div class="coord-roster-list">
-        {% for entry in roster_entries %}
-        <span class="account-id-pill" title="Added {{ entry.created_at|date:'M j, Y' }}{% if entry.claimed_by %} — claimed by {{ entry.claimed_by.email }}{% endif %}">{{ entry.student_number }}</span>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-<div class="bento-card bento-card-inner mb-4">
     <form method="get" class="filter-bar" data-filter-bar role="search">
         <div class="filter-bar__search-row">
             <div class="filter-bar__search-box">
@@ -84,9 +68,21 @@
             </div>
         </div>
     </form>
+    <button type="button" class="btn-primary btn-primary-sm" data-open-roster-dialog>Add account</button>
 </div>
 
-<div class="bento-card bento-card-inner overflow-x-auto">
+{% if roster_entries %}
+<div class="mb-4">
+    <span class="coord-roster-title">Registered student numbers · waiting for signup</span>
+    <div class="coord-roster-list">
+        {% for entry in roster_entries %}
+        <span class="account-id-pill" title="Added {{ entry.created_at|date:'M j, Y' }}{% if entry.claimed_by %} — claimed by {{ entry.claimed_by.email }}{% endif %}">{{ entry.student_number }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="coord-table-wrap">
     <table class="data-table w-full">
         <thead>
             <tr>
@@ -231,7 +227,8 @@
         <p class="text-sm text-examiq-slate">
             Register the student number only. The account stays a number here
             until that student signs up and matches it — then their details
-            appear.
+            appear. Paste one or many numbers (comma, space, or line separated);
+            already-registered numbers are skipped.
         </p>
         <form method="post"
               action="{% url 'analytics_chairperson:account_add_student_number' %}"
@@ -245,6 +242,12 @@
                    maxlength="9"
                    placeholder="e.g. 202400001"
                    class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none">
+            <label class="block text-xs font-medium text-examiq-slate mb-1 mt-4" for="roster-student-numbers">Or paste many numbers (bulk)</label>
+            <textarea name="student_numbers"
+                      id="roster-student-numbers"
+                      rows="4"
+                      placeholder="202400001&#10;202400002, 202400003"
+                      class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none"></textarea>
             <div class="coord-dialog__actions">
                 <button type="button" class="btn-secondary btn-primary-sm" data-close-roster-dialog>Cancel</button>
                 <button type="submit" class="btn-primary btn-primary-sm">Add account</button>

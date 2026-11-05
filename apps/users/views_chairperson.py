@@ -149,12 +149,15 @@ class ChairpersonAddStudentNumberView(ChairpersonRequiredMixin, View):
     """
 
     def post(self, request):
-        raw = (request.POST.get("student_number") or "").strip()
+        bulk_raw = request.POST.get("student_numbers") or ""
+        single_raw = (request.POST.get("student_number") or "").strip()
+        if bulk_raw.strip():
+            combined = f"{single_raw}\n{bulk_raw}" if single_raw else bulk_raw
+            return self._handle_bulk(request, combined)
+        raw = single_raw
         digits = re.sub(r"\D", "", raw)
         if len(digits) != 9:
-            messages.error(
-                request, "Student number must be exactly 9 digits."
-            )
+            messages.error(request, "Student number must be exactly 9 digits.")
             return redirect_preserving_filters(
                 request, "analytics_chairperson:accounts"
             )
@@ -188,9 +191,66 @@ class ChairpersonAddStudentNumberView(ChairpersonRequiredMixin, View):
                 f"Student number {cleaned} is already waiting for its student "
                 "to sign up.",
             )
-        return redirect_preserving_filters(
-            request, "analytics_chairperson:accounts"
-        )
+        return redirect_preserving_filters(request, "analytics_chairperson:accounts")
+
+    def _handle_bulk(self, request, bulk_raw: str):
+        """Parse pasted numbers idempotently; report created/skipped/invalid."""
+        valid: list[str] = []
+        invalid = 0
+        for token in dict.fromkeys(t for t in re.split(r"[^0-9]+", bulk_raw) if t):
+            if re.fullmatch(r"\d{9}", token):
+                valid.append(token)
+            elif len(token) > 9 and len(token) % 9 == 0 and token.isdigit():
+                # Long digit run pasted without separators — slice into chunks.
+                for i in range(0, len(token), 9):
+                    chunk = token[i : i + 9]
+                    if chunk not in valid:
+                        valid.append(chunk)
+            else:
+                invalid += 1
+        if not valid and invalid:
+            messages.error(
+                request,
+                "No valid 9-digit student numbers found in the pasted text.",
+            )
+            return redirect_preserving_filters(
+                request, "analytics_chairperson:accounts"
+            )
+        created = 0
+        already_account = 0
+        already_waiting = 0
+        for number in valid:
+            if User.objects.filter(student_number=number).exists():
+                already_account += 1
+                continue
+            _, was_created = PendingStudentRegistration.objects.get_or_create(
+                student_number=number,
+                defaults={"created_by": request.user},
+            )
+            if was_created:
+                created += 1
+                log_audit_event(
+                    request.user,
+                    action="student_number_registered",
+                    metadata={"student_number": number},
+                )
+            else:
+                already_waiting += 1
+        parts = []
+        if created:
+            parts.append(f"{created} registered")
+        if already_waiting:
+            parts.append(f"{already_waiting} already waiting")
+        if already_account:
+            parts.append(f"{already_account} already an account")
+        if invalid:
+            parts.append(f"{invalid} invalid skipped")
+        summary = "; ".join(parts) if parts else "Nothing to add."
+        if created:
+            messages.success(request, f"Bulk add: {summary}.")
+        else:
+            messages.info(request, f"Bulk add: {summary}.")
+        return redirect_preserving_filters(request, "analytics_chairperson:accounts")
 
 
 class ChairpersonApproveUserView(ChairpersonRequiredMixin, View):

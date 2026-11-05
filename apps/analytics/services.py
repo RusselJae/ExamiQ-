@@ -784,22 +784,22 @@ def student_performance_donut(
     slices = [
         {
             "key": "guessing_correct",
-            "label": "Guessing & correct",
+            "label": "Guessing | Correct",
             "value": buckets["guessing_correct"],
         },
         {
             "key": "guessing_incorrect",
-            "label": "Guessing & incorrect",
+            "label": "Guessing | Incorrect",
             "value": buckets["guessing_incorrect"],
         },
         {
             "key": "sure_correct",
-            "label": "Sure & correct",
+            "label": "Sure | Correct",
             "value": buckets["sure_correct"],
         },
         {
             "key": "sure_incorrect",
-            "label": "Sure & incorrect",
+            "label": "Sure | Incorrect",
             "value": buckets["sure_incorrect"],
         },
     ]
@@ -1916,22 +1916,22 @@ def professor_confidence_donut(
     slices = [
         {
             "key": "guessing_correct",
-            "label": "Guessing & correct",
+            "label": "Guessing | Correct",
             "value": buckets["guessing_correct"],
         },
         {
             "key": "guessing_incorrect",
-            "label": "Guessing & incorrect",
+            "label": "Guessing | Incorrect",
             "value": buckets["guessing_incorrect"],
         },
         {
             "key": "sure_correct",
-            "label": "Sure & correct",
+            "label": "Sure | Correct",
             "value": buckets["sure_correct"],
         },
         {
             "key": "sure_incorrect",
-            "label": "Sure & incorrect",
+            "label": "Sure | Incorrect",
             "value": buckets["sure_incorrect"],
         },
     ]

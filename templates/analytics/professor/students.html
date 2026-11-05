@@ -53,33 +53,36 @@
                         <td class="text-center text-examiq-slate whitespace-nowrap">
                             {% if row.last_activity %}{{ row.last_activity|date:"M j, Y" }}{% else %}—{% endif %}
                         </td>
-                        <td class="text-right whitespace-nowrap">
-                            <a href="{% url 'analytics_professor:professor_student_detail' row.student.pk %}"
-                               class="btn-secondary btn-primary-sm">View</a>
-                            {% if row.can_manage and row.student.section %}
-                            {% if row.student.is_archived %}
-                            <span class="text-xs font-medium text-examiq-slate ml-2">Archived</span>
-                            <form method="post"
-                                  action="{% url 'analytics_professor:section_student_restore' row.student.section.pk row.student.pk %}"
-                                  class="inline ml-2"
-                                  data-confirm-message="Restore this student? They will appear on the roster and can log in again."
-                                  data-confirm-type="warning"
-                                  data-confirm-label="Restore">
-                                {% csrf_token %}
-                                <button type="submit" class="btn-secondary btn-primary-sm">Restore</button>
-                            </form>
-                            {% else %}
-                            <form method="post"
-                                  action="{% url 'analytics_professor:section_student_archive' row.student.section.pk row.student.pk %}"
-                                  class="inline ml-2"
-                                  data-confirm-message="Archive this student? They will be hidden from the roster and cannot log in."
-                                  data-confirm-type="warning"
-                                  data-confirm-label="Archive">
-                                {% csrf_token %}
-                                <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
-                            </form>
-                            {% endif %}
-                            {% endif %}
+                        <td class="whitespace-nowrap text-right">
+                            <details class="account-kebab">
+                                <summary aria-label="Actions for {{ row.student.get_full_name|default:row.student.email }}">⋮</summary>
+                                <div class="account-kebab__menu">
+                                    <a href="{% url 'analytics_professor:professor_student_detail' row.student.pk %}"
+                                       class="text-sm text-link">View</a>
+                                    {% if row.can_manage and row.student.section %}
+                                    {% if row.student.is_archived %}
+                                    <span class="text-xs font-medium text-examiq-slate">Archived</span>
+                                    <form method="post"
+                                          action="{% url 'analytics_professor:section_student_restore' row.student.section.pk row.student.pk %}"
+                                          data-confirm-message="Restore this student? They will appear on the roster and can log in again."
+                                          data-confirm-type="warning"
+                                          data-confirm-label="Restore">
+                                        {% csrf_token %}
+                                        <button type="submit" class="text-sm text-link">Restore</button>
+                                    </form>
+                                    {% else %}
+                                    <form method="post"
+                                          action="{% url 'analytics_professor:section_student_archive' row.student.section.pk row.student.pk %}"
+                                          data-confirm-message="Archive this student? They will be hidden from the roster and cannot log in."
+                                          data-confirm-type="warning"
+                                          data-confirm-label="Archive">
+                                        {% csrf_token %}
+                                        <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
+                                    </form>
+                                    {% endif %}
+                                    {% endif %}
+                                </div>
+                            </details>
                         </td>
                     </tr>
                     {% empty %}

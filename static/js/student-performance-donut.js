@@ -92,7 +92,10 @@
                     '<span class="student-donut-legend__label">' +
                     slice.label +
                     "</span>" +
-                    '<span class="student-donut-legend__value">' +
+                    // Count + share take the slice colour so each row reads as one unit.
+                    '<span class="student-donut-legend__value" style="color:' +
+                    color +
+                    '">' +
                     slice.value +
                     " (" +
                     slice.percent +
@@ -238,7 +241,7 @@
                 : String(total);
         var secondary = typeof pct === "number" ? "correct" : "answers";
         if (typeof pct === "number") {
-            secondary = "correct · " + total + " ans.";
+            secondary = "correct · " + total + " answers";
         }
         el.innerHTML =
             '<span class="student-donut-center__value">' +

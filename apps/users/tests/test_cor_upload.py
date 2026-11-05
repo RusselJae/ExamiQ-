@@ -300,6 +300,33 @@ class TestCoordinatorRoster:
             student_number="123"
         ).exists()
 
+    def test_bulk_paste_registers_many_and_skips_dupes(self, client):
+        coordinator = User.objects.create_user(
+            email="coordinator@test.edu",
+            password="testpass123",
+            role=User.Role.CHAIRPERSON,
+        )
+        PendingStudentRegistration.objects.create(student_number="202400002")
+        client.force_login(coordinator)
+        response = client.post(
+            reverse("analytics_chairperson:account_add_student_number"),
+            {"student_numbers": "202400001, 202400002\n202400003 bad"},
+        )
+        assert response.status_code == 302
+        assert PendingStudentRegistration.objects.filter(
+            student_number="202400001"
+        ).exists()
+        assert PendingStudentRegistration.objects.filter(
+            student_number="202400003"
+        ).exists()
+        # Dedupe: only one row for the repeated number.
+        assert (
+            PendingStudentRegistration.objects.filter(
+                student_number="202400002"
+            ).count()
+            == 1
+        )
+
     def test_signup_gate_blocks_unclaimed_number_from_second_student(self, client):
         """A claimed number cannot be reused by another signup."""
         from apps.users.forms import _has_pending_registration

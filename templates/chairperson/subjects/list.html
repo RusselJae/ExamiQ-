@@ -67,11 +67,11 @@
     </div>
 
     <div class="coord-table-wrap">
-        <table class="data-table w-full min-w-[56rem] coord-table--singleline">
+        <table class="data-table w-full min-w-[44rem] coord-table--singleline">
             <thead>
                 <tr>
                     <th>Code</th>
-                    <th>Course</th>
+                    <th class="coord-col-course">Course</th>
                     <th class="coord-col-faculty">Faculty</th>
                     <th>Students</th>
                     <th>Questions</th>
@@ -83,7 +83,7 @@
                 {% for subject in subjects %}
                 <tr>
                     <td><span class="course-chip">{{ subject.code }}</span></td>
-                    <td><span class="coord-cell-line" title="{{ subject.name }}">{{ subject.name }}</span></td>
+                    <td class="coord-col-course"><span class="coord-cell-line" title="{{ subject.name }}">{{ subject.name }}</span></td>
                     <td class="coord-col-faculty">
                         {% if subject.faculty_names %}
                         <span title="{{ subject.faculty_names|join:', ' }}">{{ subject.faculty_names|join:", " }}</span>
