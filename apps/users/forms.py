@@ -12,7 +12,6 @@ from allauth.account.forms import (
 )
 from allauth.account.utils import filter_users_by_email
 from django import forms
-from django.core.files.uploadedfile import UploadedFile as UploadFile
 from django.utils import timezone
 
 from apps.questions.models import Subject, YearLevel
@@ -31,8 +30,59 @@ from apps.users.section_services import (
 
 
 class SubjectCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
+    """Course checkbox list with the signup JS hooks baked into the markup."""
+
     def label_from_instance(self, obj):
         return f"{obj.code}: {obj.name}"
+
+    def create_option(
+        self, name, value, label, selected, index, subindex=None, attrs=None
+    ):
+        option = super().create_option(
+            name, value, label, selected, index, subindex=subindex, attrs=attrs
+        )
+        option["attrs"] = dict(option.get("attrs") or {})
+        option["attrs"]["class"] = "course-checkbox__input"
+        instance = getattr(value, "instance", None)
+        if instance is not None:
+            option["attrs"]["data-code"] = instance.code
+            option["attrs"]["data-name"] = instance.name
+            option["attrs"]["data-year"] = instance.year_level_id
+        return option
+
+    def render(self, name, value, attrs=None, renderer=None):
+        """Render label rows directly (no form-renderer template needed)."""
+        from django.utils.html import format_html
+        from django.utils.safestring import mark_safe
+
+        rows = []
+        for group in self.optgroups(name, value or [], attrs):
+            for option in group[1]:
+                option_attrs = option.get("attrs") or {}
+                checkbox = format_html(
+                    '<input type="checkbox" name="{}" value="{}" id="{}"'
+                    ' class="course-checkbox__input" data-code="{}"'
+                    ' data-name="{}" data-year="{}"{}>',
+                    name,
+                    option["value"],
+                    option_attrs.get("id", ""),
+                    option_attrs.get("data-code", ""),
+                    option_attrs.get("data-name", ""),
+                    option_attrs.get("data-year", ""),
+                    mark_safe(" checked") if option.get("selected") else "",
+                )
+                rows.append(
+                    format_html(
+                        '<label class="course-checkbox" for="{}">{}'
+                        '<span class="course-checkbox__label">{}</span></label>',
+                        option_attrs.get("id", ""),
+                        checkbox,
+                        option.get("label", ""),
+                    )
+                )
+        return format_html(
+            '<div class="course-checkbox-list">{}</div>', mark_safe("".join(rows))
+        )
 
 
 INPUT_CLASS = (
@@ -282,23 +332,6 @@ class ExamiQSignupForm(SignupForm):
         widget=forms.HiddenInput(),
         help_text="JSON map of subject id to selected faculty pk.",
     )
-    cor_detected = forms.CharField(
-        required=False,
-        widget=forms.HiddenInput(),
-        help_text="JSON of the subject rows detected from the uploaded COR.",
-    )
-    cor_upload = forms.FileField(
-        required=False,
-        label="Certificate of Registration",
-        help_text="Required for irregular students: upload your COR as a PDF or photo.",
-        widget=forms.ClearableFileInput(
-            attrs={
-                "class": "auth-field__input",
-                "id": "id_cor_upload",
-                "accept": ".pdf,.png,.jpg,.jpeg,.webp",
-            }
-        ),
-    )
 
     is_irregular = forms.BooleanField(
         required=False,
@@ -448,47 +481,37 @@ class ExamiQSignupForm(SignupForm):
                     "Your student number is not registered yet. Ask your program "
                     "coordinator to add it first, then sign up.",
                 )
-        cor_file = cleaned.get("cor_upload")
-        if isinstance(cor_file, UploadFile) and cor_file:
-            content_type = (cor_file.content_type or "").lower()
-            allowed = {
-                "application/pdf",
-                "image/png",
-                "image/jpeg",
-                "image/webp",
-            }
-            if cor_file.size > 8 * 1024 * 1024:
-                self.add_error(
-                    "cor_upload", "That file is larger than 8 MB. Compress it first."
-                )
-            elif content_type and content_type not in allowed:
-                self.add_error(
-                    "cor_upload", "Upload the COR as a PDF, PNG, JPG, or WebP."
-                )
+            elif student_number:
+                self._validate_registered_student_type(student_number, is_irregular)
         year_level = cleaned.get("year_level")
         courses = cleaned.get("courses")
-        if role == User.Role.STUDENT and is_irregular:
-            if not courses:
-                self.add_error("courses", "Select at least one course.")
-            if not cor_file:
-                self.add_error(
-                    "cor_upload",
-                    "Your COR is required for irregular registration.",
-                )
-        elif role == User.Role.STUDENT and not is_irregular:
-            if not year_level:
-                self.add_error(
-                    "year_level",
-                    "Analyze your COR first — your year level is detected from it.",
-                )
-            if not cor_file:
-                self.add_error(
-                    "cor_upload",
-                    "Your COR is required for registration.",
-                )
+        if role == User.Role.STUDENT and is_irregular and not courses:
+            self.add_error("courses", "Select at least one course.")
+        elif role == User.Role.STUDENT and not is_irregular and not year_level:
+            self.add_error("year_level", "Year level is required.")
         if role == User.Role.STUDENT:
             self._validate_faculty_selections(cleaned)
         return cleaned
+
+    def _validate_registered_student_type(self, student_number, is_irregular) -> None:
+        """The coordinator sets the student type when registering the number."""
+        from apps.users.models import PendingStudentRegistration
+
+        entry = (
+            PendingStudentRegistration.objects.filter(
+                student_number=student_number, claimed_by__isnull=True
+            )
+            .only("is_irregular")
+            .first()
+        )
+        if entry is None or entry.is_irregular == is_irregular:
+            return
+        registered = "Irregular" if entry.is_irregular else "Regular"
+        self.add_error(
+            "is_irregular",
+            f"Your program coordinator registered this student number as "
+            f"{registered}. Select {registered} as your student type to continue.",
+        )
 
     def _scope_subject_ids(self, cleaned) -> list[int]:
         """Subject pks the student must pick faculty for."""
@@ -625,34 +648,6 @@ class ExamiQSignupForm(SignupForm):
             entry.claimed_at = timezone.now()
             entry.save(update_fields=["claimed_by", "claimed_at"])
 
-    def _attach_cor_upload(self, user, request=None) -> None:
-        """Persist the required COR file for students.
-
-        Detection rows come from the analyze-time session bundle (server-side),
-        never from posted hidden fields.
-        """
-        from apps.users.cor_services import COR_SESSION_KEY
-        from apps.users.models import CorUpload
-
-        cor_file = self.cleaned_data.get("cor_upload")
-        if not cor_file:
-            return
-        detected = []
-        if request is not None:
-            bundle = request.session.get(COR_SESSION_KEY)
-            if isinstance(bundle, dict):
-                detected = bundle.get("rows", []) or []
-            request.session.pop(COR_SESSION_KEY, None)
-        if not detected:
-            detected = self.cleaned_data.get("cor_detected") or []
-        current_term = AcademicTerm.get_current()
-        CorUpload.objects.create(
-            student=user,
-            file=cor_file,
-            term=current_term,
-            detected_json=detected,
-        )
-
     def save(self, request):
         user = super().save(request)
         role = self.cleaned_data["role"]
@@ -679,7 +674,6 @@ class ExamiQSignupForm(SignupForm):
 
         self._claim_pending_registration(user)
         self._assign_subjects_and_faculty(user)
-        self._attach_cor_upload(user, request)
 
         from django.contrib import messages
 
@@ -1187,6 +1181,11 @@ class ProgramCoordinatorSubjectForm(forms.Form):
         choices=Subject.Semester.choices,
         coerce=int,
         label="Semester",
+    )
+    banner = forms.ImageField(
+        required=False,
+        label="Banner image",
+        help_text="Optional. Overrides the default course banner.",
     )
 
     def __init__(self, *args, coordinator: User, **kwargs):

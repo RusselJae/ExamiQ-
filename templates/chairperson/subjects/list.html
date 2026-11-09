@@ -136,7 +136,7 @@
     </div>
     <div class="coord-dialog__body">
         <p class="text-sm text-examiq-slate">Courses become available when assigning faculty to sections.</p>
-        <form method="post" class="mt-4" novalidate>
+        <form method="post" class="mt-4" novalidate enctype="multipart/form-data">
             {% csrf_token %}
             {{ form|crispy }}
             <div class="coord-dialog__actions">

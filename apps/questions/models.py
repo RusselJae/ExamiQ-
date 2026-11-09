@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
+from django.templatetags.static import static
 from model_utils.models import TimeStampedModel
 
 from apps.users.models import Program
@@ -26,6 +27,13 @@ class Subject(TimeStampedModel):
         SECOND = 2, "2nd Semester"
         MIDYEAR = 3, "Midyear"
 
+    # Default card banners, picked per subject so each course keeps its own.
+    BANNER_ASSETS = (
+        "assets/course_bg1.jpg",
+        "assets/course_bg2.jpg",
+        "assets/course_bg3.jpg",
+    )
+
     program = models.ForeignKey(
         Program,
         on_delete=models.CASCADE,
@@ -39,6 +47,11 @@ class Subject(TimeStampedModel):
     semester = models.PositiveSmallIntegerField(choices=Semester.choices)
     code = models.CharField(max_length=20)
     name = models.CharField(max_length=200)
+    banner = models.ImageField(
+        upload_to="course_banners/",
+        blank=True,
+        help_text="Optional course banner shown on the course cards.",
+    )
 
     class Meta:
         verbose_name = "Subject"
@@ -48,6 +61,14 @@ class Subject(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.code} – {self.name}"
+
+    @property
+    def banner_url(self) -> str:
+        """Uploaded banner when present, else a stable default per subject."""
+        if self.banner:
+            return self.banner.url
+        index = (self.pk or 0) % len(self.BANNER_ASSETS)
+        return static(self.BANNER_ASSETS[index])
 
 
 class Topic(TimeStampedModel):

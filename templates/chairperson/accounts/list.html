@@ -12,6 +12,68 @@
     <p><strong>{{ pending_count }}</strong> registration{{ pending_count|pluralize }} awaiting your approval.</p>
 </div>
 {% endif %}
+
+<div class="coord-tabs" role="tablist" aria-label="Account views">
+    <a href="?tab=accounts" role="tab"
+       class="coord-tab{% if accounts_tab == 'accounts' %} is-active{% endif %}"
+       aria-selected="{% if accounts_tab == 'accounts' %}true{% else %}false{% endif %}">Accounts</a>
+    <a href="?tab=numbers" role="tab"
+       class="coord-tab{% if accounts_tab == 'numbers' %} is-active{% endif %}"
+       aria-selected="{% if accounts_tab == 'numbers' %}true{% else %}false{% endif %}">Student numbers{% if roster_entries %} <span class="coord-tab__count">{{ roster_entries|length }}</span>{% endif %}</a>
+</div>
+
+{% if accounts_tab == 'numbers' %}
+<div class="coord-panel__toolbar">
+    <div class="filter-bar">
+        <div class="filter-bar__search-row">
+            <div class="filter-bar__search-box">
+                <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
+                <input type="search"
+                       id="roster-search"
+                       class="filter-bar__input filter-bar__input--search"
+                       placeholder="Search student number"
+                       aria-label="Search student numbers"
+                       autocomplete="off">
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn-primary btn-primary-sm" data-open-roster-dialog>Add account</button>
+</div>
+{% if roster_entries %}
+<div class="coord-roster-block">
+    <h2 class="coord-roster-heading">
+        Student numbers without an account yet
+        <span>· {{ roster_entries|length }}</span>
+    </h2>
+    <p class="coord-roster-note">Registered numbers stay here until the student signs up with that number.</p>
+    <div class="coord-table-wrap">
+        <table class="data-table w-full coord-table--singleline" id="roster-table">
+            <thead>
+                <tr>
+                    <th>Student number</th>
+                    <th>Type</th>
+                    <th>Added</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in roster_entries %}
+                <tr data-roster-number="{{ entry.student_number }}" data-roster-type="{% if entry.is_irregular %}irregular{% else %}regular{% endif %}">
+                    <td><span class="account-id-pill">{{ entry.student_number }}</span></td>
+                    <td>{% if entry.is_irregular %}<span class="profile-pill">Irregular</span>{% else %}<span class="profile-pill">Regular</span>{% endif %}</td>
+                    <td class="text-examiq-slate">{{ entry.created_at|date:"M j, Y" }}</td>
+                    <td><span class="profile-pill">Waiting for signup</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p id="roster-empty-filter" class="hidden text-center text-sm text-examiq-slate py-6">No student numbers match your search.</p>
+    </div>
+</div>
+{% else %}
+{% include "components/empty_state.html" with compact=True title="No waiting numbers" body="Use Add account to register a student number first; it disappears here once the student signs up." %}
+{% endif %}
+{% else %}
 <div class="coord-panel__toolbar">
     <form method="get" class="filter-bar" data-filter-bar role="search">
         <div class="filter-bar__search-row">
@@ -68,19 +130,7 @@
             </div>
         </div>
     </form>
-    <button type="button" class="btn-primary btn-primary-sm" data-open-roster-dialog>Add account</button>
 </div>
-
-{% if roster_entries %}
-<div class="mb-4">
-    <span class="coord-roster-title">Registered student numbers · waiting for signup</span>
-    <div class="coord-roster-list">
-        {% for entry in roster_entries %}
-        <span class="account-id-pill" title="Added {{ entry.created_at|date:'M j, Y' }}{% if entry.claimed_by %} — claimed by {{ entry.claimed_by.email }}{% endif %}">{{ entry.student_number }}</span>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
 
 <div class="coord-table-wrap">
     <table class="data-table w-full">
@@ -217,6 +267,8 @@
 </div>
 {% endif %}
 </div>
+{% endif %}
+</div>
 
 <dialog class="coord-dialog" id="add-roster-dialog" aria-labelledby="add-roster-title">
     <div class="coord-dialog__head">
@@ -224,16 +276,21 @@
         <button type="button" class="coord-dialog__close" data-close-roster-dialog aria-label="Close">✕</button>
     </div>
     <div class="coord-dialog__body">
-        <p class="text-sm text-examiq-slate">
-            Register the student number only. The account stays a number here
-            until that student signs up and matches it — then their details
-            appear. Paste one or many numbers (comma, space, or line separated);
-            already-registered numbers are skipped.
-        </p>
         <form method="post"
               action="{% url 'analytics_chairperson:account_add_student_number' %}"
               class="mt-4">
             {% csrf_token %}
+            <fieldset class="roster-type">
+                <legend class="roster-type__legend">Student type</legend>
+                <label class="roster-type__option">
+                    <input type="radio" name="student_type" value="regular" checked>
+                    <span>Regular</span>
+                </label>
+                <label class="roster-type__option">
+                    <input type="radio" name="student_type" value="irregular">
+                    <span>Irregular</span>
+                </label>
+            </fieldset>
             <label class="block text-xs font-medium text-examiq-slate mb-1" for="roster-student-number">Student number (9 digits)</label>
             <input type="text"
                    name="student_number"
@@ -260,4 +317,5 @@
 {% block extra_js %}
 <script src="{% static 'js/course-dialog.js' %}"></script>
 <script src="{% static 'js/account-courses-dialog.js' %}"></script>
+<script src="{% static 'js/account-numbers-filter.js' %}"></script>
 {% endblock %}

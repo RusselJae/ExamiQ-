@@ -127,22 +127,7 @@ class ExamiQSignupView(ClearPendingLoginCodeMixin, allauth_views.SignupView):
         return context
 
     def form_valid(self, form):
-        """Enforce the COR gate against the analyze-time session bundle."""
-        from apps.users.cor_services import verify_cor_submission
-
-        cleaned = form.cleaned_data
-        error = verify_cor_submission(
-            self.request,
-            cleaned.get("cor_upload"),
-            is_irregular=bool(cleaned.get("is_irregular")),
-            year_level_id=cleaned.get("year_level").pk
-            if cleaned.get("year_level") is not None
-            else None,
-            course_ids=[c.pk for c in (cleaned.get("courses") or [])],
-        )
-        if error:
-            form.add_error("cor_upload", error)
-            return self.form_invalid(form)
+        """Signup no longer requires a COR upload: nothing to verify here."""
         return super().form_valid(form)
 
 

@@ -64,7 +64,9 @@ class ProgramCoordinatorSubjectListView(ProgramCoordinatorRequiredMixin, ListVie
 
     def post(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
-        form = ProgramCoordinatorSubjectForm(request.POST, coordinator=request.user)
+        form = ProgramCoordinatorSubjectForm(
+            request.POST, request.FILES, coordinator=request.user
+        )
         if not form.is_valid():
             return render(request, self.template_name, self.get_context_data(form=form))
 
@@ -74,6 +76,7 @@ class ProgramCoordinatorSubjectListView(ProgramCoordinatorRequiredMixin, ListVie
             name=form.cleaned_data["name"],
             year_level=form.cleaned_data["year_level"],
             semester=form.cleaned_data["semester"],
+            banner=form.cleaned_data.get("banner"),
         )
         messages.success(
             request,

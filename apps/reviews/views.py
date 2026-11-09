@@ -234,6 +234,24 @@ class ReviewSetupView(StudentRequiredMixin, View):
         if form.is_bound:
             raw = form.data.getlist("extra_subjects")
             selected_extra_ids = {int(pk) for pk in raw if str(pk).isdigit()}
+        else:
+            selected_extra_ids = {
+                int(pk) for pk in (form.fields["extra_subjects"].initial or [])
+            }
+
+        # Which year-level subjects start checked (all by default, one when the
+        # page was opened from a recommendation's "Start" link).
+        if form.is_bound:
+            selected_year_ids = {
+                int(pk)
+                for pk in form.data.getlist("year_subjects")
+                if str(pk).isdigit()
+            }
+        else:
+            selected_year_ids = {
+                int(pk) for pk in (form.fields["year_subjects"].initial or [])
+            }
+
         show_extra_subjects = bool(selected_extra_ids) or bool(
             getattr(form, "errors", None) and form.errors.get("extra_subjects")
         )
@@ -252,13 +270,15 @@ class ReviewSetupView(StudentRequiredMixin, View):
             else form.fields["difficulty"].initial or "easy"
         ) or "easy"
 
-        subject_count = len(year_subjects) + len(selected_extra_ids)
+        subject_count = len(selected_year_ids) + len(selected_extra_ids)
         estimate_questions = min(
             MAX_TOTAL_QUESTIONS,
             max(subject_count, 1) * questions_per_subject,
         )
         # Prefill/lock timer when faculty configured all currently selected subjects.
-        preview_subjects = list(year_subjects)
+        preview_subjects = [
+            subject for subject in year_subjects if subject.pk in selected_year_ids
+        ]
         if form.is_bound:
             preview_subjects = []
             raw_year = form.data.getlist("year_subjects")
@@ -268,8 +288,6 @@ class ReviewSetupView(StudentRequiredMixin, View):
             }
             by_id = {s.pk: s for s in year_subjects + other_subjects}
             preview_subjects = [by_id[pk] for pk in selected_pks if pk in by_id]
-        elif not form.is_bound and year_subjects:
-            preview_subjects = list(year_subjects)
 
         locked_seconds = instructor_locked_seconds_for_subjects(preview_subjects)
         timer_locked = locked_seconds is not None
@@ -290,6 +308,7 @@ class ReviewSetupView(StudentRequiredMixin, View):
             "year_subjects": year_subjects,
             "other_subjects": other_subjects,
             "total_subjects_count": len(year_subjects) + len(other_subjects),
+            "selected_year_ids": selected_year_ids,
             "selected_extra_ids": selected_extra_ids,
             "show_extra_subjects": show_extra_subjects,
             "selected_question_types": selected_question_types,
@@ -306,7 +325,22 @@ class ReviewSetupView(StudentRequiredMixin, View):
         }
 
     def get(self, request):
-        form = ReviewSetupForm(student=request.user)
+        preselected_subject = None
+        raw_subject = (request.GET.get("subject") or "").strip()
+        if raw_subject.isdigit():
+            subject_id = int(raw_subject)
+            preselected_subject = (
+                subjects_available_for_student(request.user)
+                .filter(pk=subject_id)
+                .first()
+                or other_subjects_available_for_student(request.user)
+                .filter(pk=subject_id)
+                .first()
+            )
+        form = ReviewSetupForm(
+            student=request.user,
+            preselected_subject=preselected_subject,
+        )
         return render(request, self.template_name, self._setup_context(form))
 
     def post(self, request):

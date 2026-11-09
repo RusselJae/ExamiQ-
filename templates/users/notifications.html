@@ -8,6 +8,7 @@
 {% block content %}
 {% include "components/page_header.html" with title="Notifications" subtitle="Account and workflow updates." %}
 
+<div class="coord-panel notifications-panel">
 <div class="notifications-desktop-filters">
     {% include "components/filter_bar.html" %}
 </div>
@@ -93,6 +94,7 @@
     <p class="notifications-empty__body">No notifications yet.</p>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block extra_js %}

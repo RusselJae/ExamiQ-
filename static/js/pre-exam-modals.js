@@ -1,10 +1,8 @@
 /**
- * Pre-exam wizard on the review setup page (goal → confirm).
+ * Pre-exam wizard on the review setup page (confirm → start).
  */
 (function () {
     "use strict";
-
-    const GOAL_SKIP_KEY = "examiq-pre-exam-goal-skip";
 
     function showStep(id) {
         document.querySelectorAll(".pre-exam-modal").forEach(function (el) {
@@ -35,11 +33,8 @@
         if (!form || form.dataset.preExamBound) return;
         form.dataset.preExamBound = "1";
 
-        const goalInput = form.querySelector("#id_session_goal");
-        const goalContinue = document.getElementById("pre-exam-goal-continue");
         const readyStart = document.getElementById("pre-exam-ready-start");
         const readyCancel = document.getElementById("pre-exam-ready-cancel");
-        const skipGoalCheckbox = document.getElementById("pre-exam-skip-goal");
 
         function submitForm() {
             hideAll();
@@ -48,41 +43,8 @@
         }
 
         function startPreExamWizard() {
-            let skipGoal = false;
-            try {
-                skipGoal = localStorage.getItem(GOAL_SKIP_KEY) === "1";
-            } catch (e) {
-                skipGoal = false;
-            }
-            if (skipGoal) {
-                showStep("pre-exam-step-ready");
-            } else {
-                showStep("pre-exam-step-goal");
-            }
-        }
-
-        document.querySelectorAll('input[name="pre_exam_goal"]').forEach(function (radio) {
-            radio.addEventListener("change", function () {
-                if (goalInput) {
-                    goalInput.value = radio.value;
-                }
-                if (goalContinue) {
-                    goalContinue.disabled = false;
-                }
-            });
-        });
-
-        if (goalContinue) {
-            goalContinue.addEventListener("click", function () {
-                if (skipGoalCheckbox && skipGoalCheckbox.checked) {
-                    try {
-                        localStorage.setItem(GOAL_SKIP_KEY, "1");
-                    } catch (e) {
-                        /* ignore */
-                    }
-                }
-                showStep("pre-exam-step-ready");
-            });
+            // The goal step was removed; go straight to the start confirmation.
+            showStep("pre-exam-step-ready");
         }
 
         if (readyCancel) {

@@ -59,6 +59,17 @@
 
         var state = { expanded: null, picks: {}, locked: false, detectedMeta: {} };
 
+        /* The course list and the faculty picker share one panel; hide the
+           panel while neither block is visible. */
+        function syncSelectionPanel() {
+            var panel = document.getElementById("selection-panel");
+            if (!panel) return;
+            var coursesEl = document.getElementById("irregular-courses-wrapper");
+            var coursesVisible = !!coursesEl && coursesEl.style.display !== "none";
+            var pickerVisible = wrapper.style.display !== "none";
+            panel.style.display = coursesVisible || pickerVisible ? "" : "none";
+        }
+
         // External entry points (COR analyzer bulk set / file reset).
         window.ExamiQSignupFaculty = {
             lock: function () {
@@ -203,7 +214,7 @@
                 var card = document.createElement("div");
                 card.className = "faculty-card";
 
-                if (picked) {
+                if (picked && state.expanded !== pk) {
                     // Confirmed row: green check, code + name, faculty · section, Change.
                     done += 1;
                     shown += 1;
@@ -262,6 +273,7 @@
                                 '" data-subject="' +
                                 esc(pk) +
                                 '"' +
+                                (String(opt.faculty_pk) === pickedPk ? " checked" : "") +
                                 (full ? " disabled" : "") +
                                 ">" +
                                 '<span class="faculty-card__radio" aria-hidden="true"></span>' +
@@ -381,6 +393,7 @@
             // checkbox ticks keep the scope editable until then.
             lockCourseSelection(state.locked && shown > 0);
             syncHidden();
+            syncSelectionPanel();
         }
 
         document.querySelectorAll(".course-checkbox__input").forEach(function (cb) {

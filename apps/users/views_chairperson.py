@@ -135,8 +135,11 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
             .filter(approval_status=User.ApprovalStatus.PENDING)
             .count()
         )
-        context["roster_entries"] = PendingStudentRegistration.objects.order_by(
-            "-created_at"
+        context["roster_entries"] = PendingStudentRegistration.objects.filter(
+            claimed_by__isnull=True
+        ).order_by("-created_at")
+        context["accounts_tab"] = (
+            "numbers" if self.request.GET.get("tab") == "numbers" else "accounts"
         )
         return context
 
@@ -162,6 +165,7 @@ class ChairpersonAddStudentNumberView(ChairpersonRequiredMixin, View):
                 request, "analytics_chairperson:accounts"
             )
         cleaned = _clean_digits(digits, "Student number", 9)
+        is_irregular = request.POST.get("student_type") == "irregular"
         if User.objects.filter(student_number=cleaned).exists():
             messages.error(
                 request,
@@ -170,9 +174,9 @@ class ChairpersonAddStudentNumberView(ChairpersonRequiredMixin, View):
             return redirect_preserving_filters(
                 request, "analytics_chairperson:accounts"
             )
-        entry, created = PendingStudentRegistration.objects.get_or_create(
+        _entry, created = PendingStudentRegistration.objects.get_or_create(
             student_number=cleaned,
-            defaults={"created_by": request.user},
+            defaults={"created_by": request.user, "is_irregular": is_irregular},
         )
         if created:
             messages.success(
@@ -219,13 +223,17 @@ class ChairpersonAddStudentNumberView(ChairpersonRequiredMixin, View):
         created = 0
         already_account = 0
         already_waiting = 0
+        is_irregular = request.POST.get("student_type") == "irregular"
         for number in valid:
             if User.objects.filter(student_number=number).exists():
                 already_account += 1
                 continue
             _, was_created = PendingStudentRegistration.objects.get_or_create(
                 student_number=number,
-                defaults={"created_by": request.user},
+                defaults={
+                    "created_by": request.user,
+                    "is_irregular": is_irregular,
+                },
             )
             if was_created:
                 created += 1
@@ -379,7 +387,9 @@ class ChairpersonSubjectListView(ChairpersonRequiredMixin, ListView):
 
     def post(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
-        form = ProgramCoordinatorSubjectForm(request.POST, coordinator=request.user)
+        form = ProgramCoordinatorSubjectForm(
+            request.POST, request.FILES, coordinator=request.user
+        )
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
 
@@ -389,6 +399,7 @@ class ChairpersonSubjectListView(ChairpersonRequiredMixin, ListView):
             name=form.cleaned_data["name"],
             year_level=form.cleaned_data["year_level"],
             semester=form.cleaned_data["semester"],
+            banner=form.cleaned_data.get("banner"),
         )
         messages.success(
             request,

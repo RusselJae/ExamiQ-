@@ -4,15 +4,15 @@
 {% block title %}Student Dashboard - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Your Performance" subtitle="Track confidence and mistakes across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
+{% include "components/page_header.html" with title="Your Dashboard" subtitle="Track confidence and mistakes across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
 
 <div class="student-panel">
 <div class="bento-grid mb-6">
-    <div class="span-9">
+    <div class="span-full">
         <div class="bento-card p-6 overview-trends-card h-full student-confidence-card" data-confidence-card>
             <div class="overview-trends-card__intro student-confidence-card__intro">
                 <div class="student-confidence-card__title-row">
-                    <h2 class="overview-trends-card__title" id="student-trends-title">Confidence performance</h2>
+                    <h2 class="overview-trends-card__title" id="student-trends-title">Exam Performance</h2>
                     <button type="button"
                             class="student-confidence-card__info"
                             data-confidence-info-toggle
@@ -34,9 +34,6 @@
                         </ul>
                     </div>
                 </div>
-                <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-trends-scope">
-                    {{ dashboard_trends.donut.scope_line }}
-                </p>
                 <div class="overview-trends-filters student-confidence-card__filters"
                      data-donut-filters
                      data-donut-canvas="studentTrendsChart"
@@ -68,16 +65,49 @@
         </div>
     </div>
 
-    <div class="span-3">
-        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col study-plan-card">
+    <div class="span-full">
+        <div class="bento-card bento-card-inner">
             {% include "components/section_header.html" with label="Study plan" title="Recommended Reviews" %}
             {% if recommendations %}
-            <div class="bento-card-scroll flex-1">
-                <ul class="list-none m-0 p-0">
-                    {% for rec in recommendations %}
-                    {% include "components/topic_row.html" with name=rec.topic_name reason=rec.reason topic_pk=rec.topic.pk subject_pk=rec.topic.subject_id %}
-                    {% endfor %}
-                </ul>
+            <div class="data-table-wrap">
+                <table class="data-table w-full recommend-table">
+                    <thead>
+                        <tr>
+                            <th>Course</th>
+                            <th>Topic</th>
+                            <th>Reason</th>
+                            <th>Priority</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in recommendations %}
+                        <tr>
+                            <td class="whitespace-nowrap">
+                                {% if rec.topic.subject %}
+                                <span class="course-chip">{{ rec.topic.subject.code }}</span>
+                                {% else %}
+                                <span class="text-examiq-slate">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-medium">{{ rec.topic_name }}</td>
+                            <td class="text-examiq-slate">{{ rec.reason }}</td>
+                            <td class="whitespace-nowrap">
+                                <span class="profile-pill">{{ rec.priority|capfirst }}{% if rec.is_due %} · Due{% endif %}</span>
+                            </td>
+                            <td class="whitespace-nowrap text-right">
+                                {% if rec.topic.subject_id %}
+                                <a href="{% url 'reviews:setup' %}?subject={{ rec.topic.subject_id }}"
+                                   class="btn-outline btn-outline-sm">Start</a>
+                                {% else %}
+                                <a href="{% url 'reviews:setup' %}?topic={{ rec.topic.pk }}"
+                                   class="btn-outline btn-outline-sm">Start</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
             {% else %}
             {% include "components/empty_state.html" with compact=True title="No recommendations yet" body="Complete more reviews to get personalized topic suggestions." %}

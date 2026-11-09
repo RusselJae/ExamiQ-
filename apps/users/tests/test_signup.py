@@ -108,69 +108,17 @@ def _student_data(signup_year_level, **extra):
     return data
 
 
-def _signup_post(
-    client,
-    signup_year_level,
-    data,
-    *,
-    cor_type="regular",
-    bundle_year_id=None,
-    bundle_subject_ids=None,
-):
-    """POST signup with a COR file plus a matching analyze-time session bundle.
-
-    Mirrors the real flow (upload → analyze → submit): the bundle is what the
-    server verified, keyed off the uploaded file's name and size.
-    """
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
-    from apps.users.cor_services import COR_SESSION_KEY
+def _signup_post(client, signup_year_level, data, *, irregular=False):
+    """POST the signup form the way the page now does (no COR upload)."""
+    from apps.users.models import PendingStudentRegistration
 
     data = dict(data)
-    if "cor_upload" not in data:
-        data["cor_upload"] = SimpleUploadedFile(
-            "cor.pdf", b"%PDF-1.4 fake-cor-bytes", content_type="application/pdf"
+    number = data.get("student_number")
+    if number:
+        PendingStudentRegistration.objects.get_or_create(
+            student_number=number,
+            defaults={"is_irregular": bool(irregular)},
         )
-    uploaded = data["cor_upload"]
-    try:
-        size = uploaded.size
-    except Exception:  # noqa: BLE001
-        size = 0
-    try:
-        year_id = int(data.get("year_level", signup_year_level.pk))
-    except (TypeError, ValueError):
-        year_id = signup_year_level.pk
-    courses = data.get("courses", [])
-    if isinstance(courses, str):
-        courses = [courses]
-    subject_ids = []
-    for course in courses or []:
-        try:
-            subject_ids.append(int(course))
-        except (TypeError, ValueError):
-            pass
-    session = client.session
-    posted_subject_ids = subject_ids
-    if bundle_subject_ids is not None:
-        posted_subject_ids = list(bundle_subject_ids)
-    elif not posted_subject_ids:
-        from apps.questions.models import Subject as _Subject
-
-        real = list(
-            _Subject.objects.filter(year_level_id=year_id).values_list("pk", flat=True)[
-                :3
-            ]
-        )
-        posted_subject_ids = real or [-1]
-    session[COR_SESSION_KEY] = {
-        "name": getattr(uploaded, "name", ""),
-        "size": size,
-        "cor_type": cor_type,
-        "year_level_id": bundle_year_id if bundle_year_id is not None else year_id,
-        "subject_ids": posted_subject_ids,
-        "rows": [],
-    }
-    session.save()
     return client.post(reverse("account_signup"), data)
 
 
@@ -367,17 +315,10 @@ class TestSignupFacultySelection:
         data["is_irregular"] = "1"
         data["courses"] = [str(subject.pk)]
         data["faculty_selections"] = _json.dumps({str(subject.pk): professor.pk})
-        data["cor_upload"] = _cor_file()
-        data["cor_detected"] = _json.dumps(
-            [{"code": subject.code, "title": subject.name}]
-        )
-        response = _signup_post(client, signup_year_level, data)
+        response = _signup_post(client, signup_year_level, data, irregular=True)
         assert response.status_code == 302
         user = User.objects.get(email="irreg@test.edu")
         assert user.is_irregular is True
-        from apps.users.models import CorUpload
-
-        assert CorUpload.objects.filter(student=user).exists()
         entry = PendingStudentRegistration.objects.get(
             student_number=user.student_number
         )
@@ -455,77 +396,34 @@ class TestSignupRoles:
         assert "not registered yet" in content.lower()
         assert not User.objects.filter(email="unrostered@test.edu").exists()
 
-    def test_regular_signup_requires_regular_word_on_cor(
+    def test_signup_rejects_student_type_mismatch_with_roster(
         self, client, bsed_program, signup_year_level
     ):
-        """An irregular COR cannot slip through the regular signup path."""
+        """The coordinator's Regular/Irregular choice is authoritative."""
+        from apps.users.models import PendingStudentRegistration
+
+        PendingStudentRegistration.objects.create(
+            student_number="123456789", is_irregular=True
+        )
+        response = client.post(
+            reverse("account_signup"),
+            _student_data(signup_year_level, email="typemismatch@test.edu"),
+        )
+        assert response.status_code == 200
+        assert (
+            "registered this student number as Irregular" in response.content.decode()
+        )
+        assert not User.objects.filter(email="typemismatch@test.edu").exists()
+
+    def test_signup_requires_no_cor_upload(
+        self, client, bsed_program, signup_year_level
+    ):
+        """COR upload was removed from signup."""
         response = _signup_post(
-            client,
-            signup_year_level,
-            _student_data(signup_year_level, email="fakereg@test.edu"),
-            cor_type="unknown",
+            client, signup_year_level, _student_data(signup_year_level)
         )
-        assert response.status_code == 200
-        assert "does not show regular status" in response.content.decode()
-        assert not User.objects.filter(email="fakereg@test.edu").exists()
-
-    def test_signup_rejects_year_level_mismatch_with_cor(
-        self, client, bsed_program, signup_year_level
-    ):
-        """Posted year must equal the year the COR analysis detected."""
-        from apps.questions.models import YearLevel
-
-        other_year = YearLevel.objects.create(order=9, name="9th Year")
-        data = _student_data(signup_year_level, email="wrongyear@test.edu")
-        data["year_level"] = other_year.pk
-        response = _signup_post(
-            client, signup_year_level, data, bundle_year_id=signup_year_level.pk
-        )
-        assert response.status_code == 200
-        assert "year level" in response.content.decode().lower()
-        assert not User.objects.filter(email="wrongyear@test.edu").exists()
-
-    def test_irregular_signup_rejects_course_not_on_cor(
-        self, client, bsed_program, signup_year_level
-    ):
-        """Irregular courses must come from the analyzed COR, not thin air."""
-        import json as _json
-
-        from apps.questions.models import Subject, YearLevel
-
-        other_year = YearLevel.objects.create(order=9, name="9th Year")
-        other_subject = Subject.objects.create(
-            program=bsed_program,
-            code="OFF9-1",
-            name="Off-scope Subject",
-            year_level=other_year,
-            semester=Subject.Semester.FIRST,
-        )
-        data = _student_data(signup_year_level, email="offscope@test.edu")
-        data["is_irregular"] = "1"
-        data["courses"] = [str(other_subject.pk)]
-        data["faculty_selections"] = _json.dumps({})
-        response = _signup_post(
-            client, signup_year_level, data, bundle_subject_ids=[-999]
-        )
-        assert response.status_code == 200
-        assert "not on your COR" in response.content.decode()
-        assert not User.objects.filter(email="offscope@test.edu").exists()
-
-    def test_signup_without_analysis_is_rejected(
-        self, client, bsed_program, signup_year_level
-    ):
-        """Skipping Analyze COR (no session bundle) fails closed."""
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        data = _student_data(signup_year_level)
-        data["cor_upload"] = SimpleUploadedFile(
-            "cor.pdf", b"%PDF-1.4 fake-cor-bytes", content_type="application/pdf"
-        )
-        response = client.post(reverse("account_signup"), data)
-        assert response.status_code == 200
-        assert "analyze your cor first" in response.content.decode().lower()
-        assert not User.objects.filter(email="newstudent@test.edu").exists()
+        assert response.status_code == 302
+        assert User.objects.filter(email="newstudent@test.edu").exists()
 
     def test_student_signup_accepts_optional_middle_name_and_suffix(
         self, client, bsed_program, signup_year_level

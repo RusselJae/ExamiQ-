@@ -554,6 +554,10 @@ class PendingStudentRegistration(models.Model):
     """
 
     student_number = models.CharField(max_length=9, unique=True)
+    is_irregular = models.BooleanField(
+        default=False,
+        help_text="Student type set by the coordinator when registering the number.",
+    )
     claimed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

@@ -1,10 +1,20 @@
 """Program coordinator access and management tests."""
 
+from io import BytesIO
+
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from PIL import Image
 
 from apps.questions.models import Subject
 from apps.users.models import Department, Program, User
+
+
+def _png_upload(name: str = "banner.png") -> SimpleUploadedFile:
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8), (20, 65, 46)).save(buffer, format="PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
 
 
 @pytest.fixture
@@ -89,6 +99,54 @@ class TestProgramCoordinator:
         response = client.get(reverse("coordinator:subject_list"))
 
         assert response.status_code == 403
+
+    def test_subject_banner_defaults_to_a_course_asset(
+        self, client, coordinator, department, year_level
+    ):
+        program = Program.objects.create(
+            slug="coordinator-banner-default-program",
+            name="Coordinator Banner Program",
+            managing_department=department,
+        )
+        subject = Subject.objects.create(
+            program=program,
+            year_level=year_level,
+            semester=Subject.Semester.FIRST,
+            code="MATH300",
+            name="Default Banner Course",
+        )
+
+        assert subject.banner_url.startswith("/static/assets/course_bg")
+        assert subject.banner_url.endswith(".jpg")
+
+    def test_add_subject_with_banner_stores_upload(
+        self, client, coordinator, department, year_level, settings, tmp_path
+    ):
+        settings.MEDIA_ROOT = tmp_path
+        program = Program.objects.create(
+            slug="coordinator-banner-upload-program",
+            name="Coordinator Banner Upload Program",
+            managing_department=department,
+        )
+        client.force_login(coordinator)
+
+        response = client.post(
+            reverse("coordinator:subject_list"),
+            {
+                "code": "MATH301",
+                "name": "Custom Banner Course",
+                "year_level": year_level.pk,
+                "semester": 1,
+                "banner": _png_upload(),
+            },
+        )
+
+        assert response.status_code == 302
+        subject = Subject.objects.get(program=program, code="MATH301")
+        assert subject.banner
+        assert subject.banner_url == subject.banner.url
+        assert subject.banner_url.startswith(settings.MEDIA_URL)
+        assert subject.banner_url.endswith("banner.png")
 
     def test_subject_catalog_has_edit_and_delete_actions(
         self, client, coordinator, department, year_level

@@ -29,27 +29,6 @@
                 <input type="search" id="nav-course-search" name="q" class="nav-search" placeholder="Search this course" autocomplete="off" value="{{ request.GET.q|default:'' }}">
             </form>
             {% endif %}
-            {# Desktop search field #}
-            <div class="nav-search-wrap relative max-w-[14rem] nav-search-desktop">
-                <label class="sr-only" for="nav-search">Search</label>
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-examiq-slate" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/>
-                </svg>
-                <input type="search" id="nav-search" class="nav-search" placeholder="Search…" autocomplete="off">
-                <div id="nav-search-results" class="nav-search-results hidden" role="listbox"></div>
-            </div>
-
-            {# Search icon — mobile / tablet only #}
-            <button type="button"
-                    class="relative hover:text-examiq-navy lg:hidden nav-icon-btn"
-                    data-nav-search-toggle
-                    aria-label="Open search"
-                    aria-expanded="false"
-                    aria-controls="nav-search-floating">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/>
-                </svg>
-            </button>
 
             {% if show_ai_tutor_modal %}
             <button type="button" class="relative hover:text-examiq-navy nav-icon-btn" data-open-ai-tutor aria-label="AI Tutor">
@@ -156,15 +135,6 @@
                     <a href="{% url 'account_logout' %}" class="profile-dropdown-logout" role="menuitem">Sign out</a>
                 </div>
             </div>
-        </div>
-
-        <div id="nav-search-floating" class="nav-search-floating hidden">
-            <input type="search"
-                   id="nav-search-mobile"
-                   class="nav-search nav-search--mobile"
-                   placeholder="Search…"
-                   autocomplete="off">
-            <div id="nav-search-results-mobile" class="nav-search-results hidden" role="listbox"></div>
         </div>
     </div>
 </header>

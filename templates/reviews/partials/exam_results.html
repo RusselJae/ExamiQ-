@@ -16,7 +16,6 @@
 
     <div class="exam-results-actions">
         <a href="{% url 'reviews:summary' session.pk %}?open_tutor=1" class="btn-primary exam-results-actions__primary">AI Tutor</a>
-        <a href="{% url 'analytics_student:mistakes' %}" class="btn-secondary exam-results-actions__secondary">Review mistakes</a>
         <a href="{{ setup_retake_url }}" class="btn-secondary exam-results-actions__secondary">Retake exam</a>
     </div>
 </div>

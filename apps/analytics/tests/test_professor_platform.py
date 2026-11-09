@@ -947,9 +947,7 @@ class TestProfessorMistakeTrend:
 
 @pytest.mark.django_db
 class TestProfessorOverviewUX:
-    def test_overview_includes_dates_and_course_stats(
-        self, client, professor, bsed_program
-    ):
+    def test_overview_includes_course_stats(self, client, professor, bsed_program):
         Course.objects.create(
             program=bsed_program,
             code="OV101",
@@ -960,7 +958,8 @@ class TestProfessorOverviewUX:
         response = client.get(reverse("analytics_professor:overview"))
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Week of" in content
+        # The date / week chips were removed from the dashboard header.
+        assert "Week of" not in content
         # The "Over time" line charts were replaced by a "Recent activity"
         # table listing each student's latest completed exam.
         assert "studentsOverTimeChart" not in content

@@ -6,7 +6,9 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("users", "0024_alter_teachingassignment_assigned_by_alter_user_role_and_more"),
-        ("questions", "__latest__"),
+        # Pinned (was "__latest__") so later questions migrations do not
+        # retroactively reorder this already-applied migration.
+        ("questions", "0015_excludedquestion"),
     ]
 
     operations = [

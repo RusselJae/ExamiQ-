@@ -299,6 +299,7 @@ def create_curriculum_subject(
     name: str,
     year_level,
     semester: int,
+    banner=None,
 ) -> Subject:
     """Create a coordinator-managed curriculum subject and its catalog shell."""
     from apps.questions.models import Topic
@@ -309,6 +310,7 @@ def create_curriculum_subject(
         name=name.strip(),
         year_level=year_level,
         semester=semester,
+        banner=banner or "",
     )
     Topic.objects.create(subject=subject, name=subject.name, parent=None)
     get_or_create_catalog_course(None, subject)

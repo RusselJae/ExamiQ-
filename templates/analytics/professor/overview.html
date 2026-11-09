@@ -7,17 +7,6 @@
 {% include "components/page_header.html" with title="Dashboard" show_live=True %}
 
 <div class="course-home-panel">
-<div class="overview-meta mb-6">
-    <span class="overview-meta__item">
-        <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        {{ overview.as_of|date:"l, F j, Y" }}
-    </span>
-    <span class="overview-meta__item">
-        <svg class="overview-meta__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        Week of {{ overview.week_start|date:"M j" }} – {{ overview.week_end|date:"M j, Y" }}
-    </span>
-</div>
-
     <div class="overview-kpi-grid mb-8">
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course" icon="book" variant="teal" %}</div>
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}</div>
@@ -47,7 +36,7 @@
 <div class="bento-card bento-card-inner p-6 mb-8 student-confidence-card" data-confidence-card>
     <div class="overview-trends-card__intro student-confidence-card__intro">
         <div class="student-confidence-card__title-row">
-            <h2 class="overview-trends-card__title" id="overview-donut-title">Confidence performance</h2>
+            <h2 class="overview-trends-card__title" id="overview-donut-title">Exam Performance</h2>
             <button type="button"
                     class="student-confidence-card__info"
                     data-confidence-info-toggle
@@ -70,9 +59,6 @@
                 </ul>
             </div>
         </div>
-        <p class="overview-trends-card__subtitle student-confidence-card__scope" id="overview-donut-scope">
-            {{ overview_donut.scope_line }}
-        </p>
         <div class="overview-trends-filters student-confidence-card__filters"
              data-donut-filters
              data-donut-canvas="overviewDonutChart"

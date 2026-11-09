@@ -69,6 +69,11 @@
         data-year="{{ card.subject.year_level_id }}"
         data-semester="{{ card.subject.semester }}"
     >
+        <span class="subject-banner-card__banner"
+              style="background-image:url('{{ card.subject.banner_url }}')"
+              aria-hidden="true">
+            <span class="subject-banner-card__initial">{{ card.subject.name|slice:":1"|upper }}</span>
+        </span>
         <span class="subject-banner-card__code">{{ card.subject.code }}</span>
         <div class="subject-banner-card__body">
             <p class="subject-banner-card__name" title="{{ card.subject.name }}">{{ card.subject.name }}</p>
@@ -99,6 +104,11 @@
         data-year="{{ card.subject.year_level_id }}"
         data-semester="{{ card.subject.semester }}"
     >
+        <span class="subject-banner-card__banner"
+              style="background-image:url('{{ card.subject.banner_url }}')"
+              aria-hidden="true">
+            <span class="subject-banner-card__initial">{{ card.subject.name|slice:":1"|upper }}</span>
+        </span>
         <span class="subject-banner-card__code">{{ card.subject.code }}</span>
         <div class="subject-banner-card__body">
             <p class="subject-banner-card__name" title="{{ card.subject.name }}">{{ card.subject.name }}</p>

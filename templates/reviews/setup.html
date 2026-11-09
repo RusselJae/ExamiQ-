@@ -147,20 +147,20 @@
 
                 <div class="exam-subject-select-bar">
                     <label class="exam-subject-select-all" for="header-select-all">
-                        <input type="checkbox" id="header-select-all" class="sr-only" checked>
-                        <span class="exam-checkbox-box is-checked" id="header-checkbox-box" aria-hidden="true">
+                        <input type="checkbox" id="header-select-all" class="sr-only"{% if selected_year_ids|length == year_subjects|length %} checked{% endif %}>
+                        <span class="exam-checkbox-box{% if selected_year_ids|length == year_subjects|length %} is-checked{% endif %}" id="header-checkbox-box" aria-hidden="true">
                             <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
                         </span>
                         <span>Select all</span>
                     </label>
                     <span class="exam-subject-selected-count">
-                        <span data-selected-count>{{ year_subjects|length }}</span> selected
+                        <span data-selected-count>{{ selected_year_ids|length }}</span> selected
                     </span>
                 </div>
 
                 <div class="exam-subject-cards" id="subjects-table-body">
                     {% for subject in year_subjects %}
-                    <div class="exam-subject-card is-selected"
+                    <div class="exam-subject-card{% if subject.pk in selected_year_ids %} is-selected{% endif %}"
                          data-subject-row
                          data-category="year"
                          data-code="{{ subject.code }}"
@@ -178,8 +178,8 @@
                                    class="sr-only"
                                    data-subject-checkbox
                                    data-year-subject
-                                   checked>
-                            <span class="exam-checkbox-box is-checked" aria-hidden="true">
+                                   {% if subject.pk in selected_year_ids %}checked{% endif %}>
+                            <span class="exam-checkbox-box{% if subject.pk in selected_year_ids %} is-checked{% endif %}" aria-hidden="true">
                                 <svg class="exam-check-icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
                             </span>
                         </label>
@@ -333,7 +333,7 @@
 
                 <div class="exam-summary-box exam-setup-summary exam-setup-summary--desktop" aria-live="polite">
                     <div class="exam-summary-stat">
-                        <span class="exam-summary-num" data-summary-subjects>{{ year_subjects|length }}</span>
+                        <span class="exam-summary-num" data-summary-subjects>{{ selected_year_ids|length }}</span>
                         <span class="exam-summary-lbl">Subjects</span>
                     </div>
                     <div class="exam-summary-stat">
@@ -354,7 +354,7 @@
 
         <div class="exam-setup-sticky" data-setup-sticky>
             <div class="exam-setup-sticky__summary" aria-live="polite">
-                <span><strong data-summary-subjects>{{ year_subjects|length }}</strong> subjects</span>
+                <span><strong data-summary-subjects>{{ selected_year_ids|length }}</strong> subjects</span>
                 <span><strong data-summary-questions>{{ estimate_questions }}</strong> questions</span>
                 <span><strong data-summary-minutes>~{{ estimate_minutes }} min</strong></span>
             </div>

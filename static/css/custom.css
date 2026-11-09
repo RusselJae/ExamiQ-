@@ -4910,6 +4910,17 @@ body {
 }
 
 /* Notifications page */
+.notifications-panel .filter-bar-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+}
+
+.notifications-panel .filter-bar-container {
+    margin-bottom: 0.75rem;
+}
+
 .notifications-toolbar,
 .notifications-filters-panel {
     display: none;
@@ -9022,27 +9033,28 @@ html.examiq-chat-open .focus-exit-fab {
 
 @media (max-width: 639px) {
     .filter-bar__panel {
-        gap: 0.75rem;
+        gap: 0.6rem;
+        padding: 0.75rem;
     }
 
     .filter-bar__panel .filter-bar__actions {
         flex-direction: column;
         align-items: stretch;
-        gap: 0.75rem;
+        gap: 0.6rem;
     }
 
     .filter-bar__apply {
         width: 100%;
-        height: 44px;
-        min-height: 44px;
+        height: 2.5rem;
+        min-height: 2.5rem;
         justify-content: center;
     }
 
     .filter-bar__reset {
         display: inline-flex;
         flex: 0 0 auto;
-        height: 44px;
-        min-height: 44px;
+        height: 2.5rem;
+        min-height: 2.5rem;
         justify-content: center;
         border: 1px solid rgba(15, 23, 42, 0.14);
         border-radius: var(--radius-control);
@@ -9052,14 +9064,58 @@ html.examiq-chat-open .focus-exit-fab {
     .filter-bar__select,
     .filter-bar--compact .filter-bar__input,
     .filter-bar--compact .filter-bar__select {
-        height: 44px;
-        min-height: 44px;
-        font-size: 1rem;
-        padding: 0.65rem 0.75rem;
+        height: 2.5rem;
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        padding: 0.5rem 0.65rem;
     }
 
+    /* Slightly shorter search field with room for the Filter control. */
     .filter-bar__input--search {
-        padding-left: 2.35rem;
+        height: 2.5rem;
+        min-height: 2.5rem;
+        padding: 0.45rem 6.75rem 0.45rem 2.35rem;
+    }
+
+    .filter-bar__toggle {
+        height: 2rem;
+        padding: 0 0.55rem;
+        font-size: 0.8125rem;
+        gap: 0.3rem;
+    }
+
+    /* Anchor the popover to the search field so it spans the card instead of
+       hanging off the viewport edge. */
+    .filter-bar__search-box > .filter-bar__picker {
+        position: static;
+        top: auto;
+        right: auto;
+        translate: none;
+        transform: none;
+    }
+
+    .filter-bar__search-box > .filter-bar__picker > .filter-bar__toggle {
+        position: absolute;
+        right: 0.3rem;
+        top: 50%;
+        transform: translateY(-50%);
+        margin: 0;
+        z-index: 2;
+    }
+
+    .filter-bar__search-box .filter-bar__panel {
+        left: 0;
+        right: 0;
+        top: calc(100% + 0.4rem);
+        width: auto;
+        max-width: none;
+        max-height: calc(100dvh - 6rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .filter-bar__grid {
+        gap: 0.5rem;
     }
 
     .filter-bar__chips {
@@ -9226,10 +9282,12 @@ html.examiq-chat-open .focus-exit-fab {
 .overview-kpi-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem;
-    border: none;
-    background: transparent;
-    overflow: visible;
+    gap: 0;
+    width: 100%;
+    border: 1px solid rgba(15, 23, 42, 0.10);
+    border-radius: var(--radius-card, 16px);
+    background: #fff;
+    overflow: hidden;
 }
 
 @media (min-width: 640px) {
@@ -9240,7 +9298,35 @@ html.examiq-chat-open .focus-exit-fab {
 
 .overview-kpi-grid__item {
     min-width: 0;
+    max-width: none;
     border: none;
+}
+
+/* One shared divider between the cells instead of two card borders. */
+.overview-kpi-grid__item + .overview-kpi-grid__item {
+    border-left: 1px solid rgba(15, 23, 42, 0.10);
+}
+
+@media (max-width: 639px) {
+    .overview-kpi-grid__item + .overview-kpi-grid__item {
+        border-left: none;
+        border-top: 1px solid rgba(15, 23, 42, 0.10);
+    }
+}
+
+/* Cells are flush: no per-card frame, background or radius. */
+.overview-kpi-grid .overview-stat-card,
+.course-home-panel .overview-kpi-grid .overview-stat-card {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    height: 100%;
+}
+
+/* The older per-item cap no longer applies — the grid spans the panel. */
+.course-home-panel .overview-kpi-grid__item {
+    max-width: none;
 }
 
 .overview-year-levels__title {
@@ -19754,7 +19840,7 @@ a.materials-library__name:hover {
 .student-confidence-card__title-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
     flex-wrap: wrap;
 }
 .student-confidence-card__info {
@@ -19770,6 +19856,9 @@ a.materials-library__name:hover {
     color: #64748b;
     cursor: pointer;
     border-radius: 999px;
+    /* Negative block margins keep the 44px hit area from pushing the title
+       row taller, so the glyph centers on the title text. */
+    margin: -0.6rem 0;
 }
 .student-confidence-card__info:hover {
     background: var(--color-primary-soft);
@@ -19807,15 +19896,15 @@ a.materials-library__name:hover {
 /* Range / section filters that sit above a donut chart. */
 .student-confidence-card__filters {
     flex-wrap: wrap;
-    margin-top: 0.75rem;
-    margin-bottom: 0.35rem;
+    margin-top: 0.9rem;
+    margin-bottom: 0;
 }
 .student-donut-wrap {
     position: relative;
-    width: 100%;
-    max-width: 22rem;
-    height: min(22rem, 58vw);
-    margin: 0.75rem auto 0.25rem;
+    width: min(100%, 260px);
+    aspect-ratio: 1 / 1;
+    height: auto;
+    margin: 0 auto;
 }
 
 /* Chart.js sets an explicit pixel width on the canvas — keep it inside the
@@ -19829,16 +19918,16 @@ a.materials-library__name:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2.5rem;
+    gap: 2rem;
     width: 100%;
+    margin-top: 0.9rem;
 }
 .student-donut-layout .student-donut-wrap {
-    flex: 0 1 22rem;
+    flex: 0 0 auto;
     min-width: 0;
-    margin: 0.75rem 0 0.25rem;
 }
 .student-donut-layout .student-donut-legend {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
     align-content: center;
 }
@@ -19851,7 +19940,7 @@ a.materials-library__name:hover {
     justify-content: center;
     pointer-events: none;
     text-align: center;
-    padding: 2.5rem;
+    padding: 0 18%;
 }
 .student-donut-center__value {
     font-size: 1.5rem;
@@ -19867,46 +19956,54 @@ a.materials-library__name:hover {
 }
 .student-donut-legend {
     display: grid;
-    gap: 0.5rem;
-    width: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 1.25rem;
+    width: 100%;
     max-width: 100%;
 }
 .student-donut-legend__item {
-    display: grid;
-    grid-template-columns: 0.75rem minmax(0, 1fr) auto;
-    gap: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 0.2rem 0.5rem;
     font-size: 0.875rem;
     color: var(--color-navy, #0f172a);
 }
 .student-donut-legend__label {
+    flex: 0 0 auto;
     min-width: 0;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
 }
 .student-donut-legend__swatch {
+    flex: 0 0 auto;
     width: 0.75rem;
     height: 0.75rem;
     border-radius: 999px;
 }
 .student-donut-legend__value {
+    margin-left: auto;
     color: var(--color-slate, #64748b);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 /* Insight + calibration status, pinned under the legend entries. */
 .student-donut-legend__insight {
-    margin: 0.4rem 0 0;
-    padding-top: 0.55rem;
+    grid-column: 1 / -1;
+    margin: 0.9rem 0 0;
+    padding-top: 0.75rem;
     border-top: 1px solid #e2e8f0;
     font-size: 0.8125rem;
     line-height: 1.45;
     color: #475569;
+    overflow-wrap: anywhere;
 }
 .student-donut-legend__status {
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.4rem;
-    margin: 0.35rem 0 0;
+    margin: 0.6rem 0 0;
 }
 .student-donut-legend__status-label {
     display: inline-block;
@@ -20175,22 +20272,61 @@ a.materials-library__name:hover {
         font-size: 0.875rem;
         line-height: 1.45;
     }
-    .student-donut-wrap {
-        height: min(18rem, 70vw);
-        max-width: 100%;
-    }
+    /* Phones: stack the donut above a full-width legend. */
     .student-donut-layout {
-        gap: 0.85rem;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+    /* Range pills stay on one line: stack the filters full width and let the
+       four pills share it evenly. */
+    .student-confidence-card__filters {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+    .student-confidence-card__filters .overview-trends-filter {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+    .student-confidence-card__filters .overview-pill-group {
+        display: flex;
+        flex-wrap: nowrap;
+        width: 100%;
+        justify-content: space-between;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .student-confidence-card__filters .overview-pill-group::-webkit-scrollbar {
+        display: none;
+    }
+    .student-confidence-card__filters .overview-pill {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 0.35rem 0.3rem;
+        font-size: 0.75rem;
+        text-align: center;
     }
     .student-donut-layout .student-donut-wrap {
-        flex: 1 1 auto;
+        flex: 0 0 auto;
+        width: min(100%, 260px);
     }
     .student-donut-layout .student-donut-legend {
-        flex: 0 1 6.5rem;
-        min-width: 6.5rem;
+        flex: 1 1 auto;
+        width: 100%;
+        grid-template-columns: minmax(0, 1fr);
     }
-    .student-donut-layout .student-donut-legend__insight {
-        font-size: 0.75rem;
+    .student-donut-legend__item {
+        display: grid;
+        grid-template-columns: 0.75rem minmax(0, 1fr) auto;
+    }
+    .student-donut-legend__label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .student-donut-legend__value {
+        margin-left: 0;
     }
     .calibration-modal-card {
         padding: 1.15rem 1.15rem 1rem;
@@ -20216,32 +20352,24 @@ a.materials-library__name:hover {
     .calibration-modal-calc__item {
         font-size: 0.8125rem;
     }
-    /* Narrow screens: drop the value under the label so the text keeps room. */
-    .student-donut-layout .student-donut-legend__item {
-        grid-template-columns: 0.65rem minmax(0, 1fr);
-        font-size: 0.8125rem;
-        row-gap: 0.1rem;
-    }
-    .student-donut-layout .student-donut-legend__swatch {
-        grid-row: 1 / span 2;
-    }
-    .student-donut-layout .student-donut-legend__value {
-        grid-column: 2;
-        grid-row: 2;
-    }
-    /* The donut is narrower on phones, so its centre readout shrinks too. */
-    .student-donut-center {
-        padding: 1.25rem;
-    }
-    .student-donut-center__value {
-        font-size: 1.25rem;
-    }
-    .student-donut-center__label {
-        font-size: 0.625rem;
+    /* Room for the floating action buttons under the chart + insight. */
+    .student-confidence-card {
+        padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
     }
     .app-content {
         padding-left: 0.875rem;
         padding-right: 0.875rem;
+    }
+}
+
+/* Very narrow phones: keep the four range pills on one line. */
+@media (max-width: 400px) {
+    .student-confidence-card__filters .overview-pill-group {
+        gap: 0.2rem;
+        padding: 0.15rem;
+    }
+    .student-confidence-card__filters .overview-pill {
+        padding: 0.35rem 0.2rem;
     }
 }
 
@@ -23987,7 +24115,7 @@ body.review-open {
 }
 
 .course-home-panel .overview-kpi-grid__item {
-    max-width: 18rem;
+    max-width: none;
 }
 
 /* Inner content keeps clear of the rounded corners. */
@@ -24096,21 +24224,99 @@ body.review-open {
     margin-top: 1.25rem;
 }
 
-/* Coordinator accounts: student-number roster chips + title. */
-.coord-roster-title {
-    display: block;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-slate, #475569);
-    margin-bottom: 0.5rem;
+/* Coordinator accounts: table of numbers with no account yet. */
+.coord-tabs {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+    margin-bottom: 1rem;
 }
 
-.coord-roster-list {
+.coord-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.9rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-slate, #475569);
+    text-decoration: none;
+}
+
+.coord-tab:hover {
+    color: var(--color-navy, #0f172a);
+}
+
+.coord-tab.is-active {
+    border-bottom-color: var(--color-primary, #1a5632);
+    color: var(--color-primary, #1a5632);
+}
+
+.coord-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: rgba(20, 83, 45, 0.10);
+    color: var(--color-primary, #1a5632);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+}
+
+/* Add-account dialog: regular / irregular student type. */
+.roster-type {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 0;
+    margin: 0 0 1rem;
+    border: none;
+}
+
+.roster-type__legend {
+    float: left;
+    padding: 0;
+    margin-right: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-slate, #475569);
+}
+
+.roster-type__option {
+    display: inline-flex;
+    align-items: center;
     gap: 0.4rem;
+    font-size: 0.875rem;
+    color: var(--color-navy, #0f172a);
+    cursor: pointer;
+}
+
+.roster-type__option input {
+    accent-color: var(--color-primary, #1a5632);
+}
+
+.coord-roster-heading {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--color-navy, #0f172a);
+    margin: 0 0 0.25rem;
+}
+
+.coord-roster-heading span {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-slate, #475569);
+}
+
+.coord-roster-note {
+    font-size: 0.75rem;
+    color: var(--color-slate, #475569);
+    margin: 0 0 0.75rem;
 }
 
 /* Coordinator accounts rows: ID pill, course chips, kebab action menu. */
@@ -24340,28 +24546,219 @@ body.review-open {
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
 }
 
-.subject-banner-card::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 0.55rem;
+/* Course card accent: each variant paints the code chip instead of a spine. */
+.subject-banner-card--0 { --card-accent: #5b3df5; }
+.subject-banner-card--1 { --card-accent: #2b6cb0; }
+.subject-banner-card--2 { --card-accent: #c2703d; }
+.subject-banner-card--3 { --card-accent: #0f766e; }
+.subject-banner-card--4 { --card-accent: #15803d; }
+.subject-banner-card--5 { --card-accent: #7c3aed; }
+
+/* Course banner: short full-bleed strip carrying the course initial. */
+.subject-banner-card__banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 3.25rem;
+    margin: -1rem -1.1rem 0.75rem -1.6rem;
+    padding: 0 0.85rem;
+    background-color: #e8efe9;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    border-bottom: 1px solid var(--border-cream);
 }
 
-.subject-banner-card--0::before { background: #5b3df5; }
-.subject-banner-card--1::before { background: #2b6cb0; }
-.subject-banner-card--2::before { background: #c2703d; }
-.subject-banner-card--3::before { background: #0f766e; }
-.subject-banner-card--4::before { background: #15803d; }
-.subject-banner-card--5::before { background: #7c3aed; }
+.subject-banner-card__initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--card-accent, #14532D);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+}
+
+/* Signup course checkbox list (rendered by SubjectCheckboxSelectMultiple). */
+.course-checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3125rem;
+    width: 100%;
+}
+
+/* ── Signup: one panel holding course + faculty selection ── */
+.auth-page .auth-selection-panel {
+    border: 1px solid rgba(58, 122, 48, 0.18);
+    border-radius: var(--radius-card, 16px);
+    background: #fff;
+    padding: 0.85rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.auth-page .auth-selection-panel > .auth-form-row {
+    margin: 0;
+    min-width: 0;
+}
+
+.auth-page .auth-selection-panel .auth-field {
+    min-width: 0;
+}
+
+/* Course list must never spill past the card. */
+.auth-page .course-checkboxes {
+    min-width: 0;
+    max-width: 100%;
+    max-height: 15.5rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.auth-page .course-checkbox {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.auth-page .course-checkbox__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.auth-page .auth-selection-panel > .auth-form-row + .auth-form-row {
+    margin-top: 0.65rem;
+}
+
+/* Tighter field/button rhythm on the signup card. */
+.auth-page .auth-page__card--signup .auth-form {
+    gap: 0.65rem;
+}
+
+.auth-page .auth-page__card--signup .auth-form-row {
+    gap: 0.5rem;
+}
+
+.auth-page .auth-page__card--signup .auth-field__label {
+    margin-bottom: 0.15rem;
+}
+
+.auth-page .auth-page__card--signup .auth-btn-submit {
+    margin-top: 0.15rem;
+}
+
+/* Course search above the checkbox list. */
+.course-search {
+    position: relative;
+    margin-bottom: 0.45rem;
+    min-width: 0;
+}
+
+.course-search__icon {
+    position: absolute;
+    left: 0.7rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.95rem;
+    height: 0.95rem;
+    color: var(--color-slate, #64748b);
+    pointer-events: none;
+}
+
+.auth-page .course-search__input {
+    padding-left: 2rem !important;
+    padding-right: 2.4rem !important;
+}
+
+.course-search__empty {
+    margin: 0.35rem 0 0;
+    font-size: 0.75rem;
+    color: var(--color-slate, #64748b);
+}
+
+/* Year-level filter: funnel button inside the search field. */
+.course-filter {
+    position: absolute;
+    right: 0.3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+}
+
+.course-filter__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 8px;
+    color: var(--color-slate, #64748b);
+    cursor: pointer;
+    list-style: none;
+}
+
+.course-filter__toggle::-webkit-details-marker {
+    display: none;
+}
+
+.course-filter__toggle:hover,
+.course-filter[open] .course-filter__toggle {
+    background: rgba(58, 122, 48, 0.08);
+    color: var(--color-primary, #1a5632);
+}
+
+.course-filter__toggle svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.course-filter__panel {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    min-width: 10rem;
+    padding: 0.35rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+    display: grid;
+    gap: 0.15rem;
+}
+
+.course-filter__option {
+    padding: 0.4rem 0.55rem;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    text-align: left;
+    font: inherit;
+    font-size: 0.8125rem;
+    color: var(--color-navy, #0f172a);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.course-filter__option:hover {
+    background: #f8fafc;
+}
+
+.course-filter__option.is-active {
+    background: rgba(58, 122, 48, 0.1);
+    color: var(--color-primary, #1a5632);
+    font-weight: 700;
+}
 
 .subject-banner-card__code {
     display: inline-block;
     align-self: flex-start;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    color: var(--color-navy);
+    background: var(--card-accent, #14532D);
+    border: 1px solid transparent;
+    color: #fff;
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -24995,11 +25392,11 @@ Questions page section wrappers (companion rules for the card styles). */
     align-items: baseline;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.6rem 0.85rem;
+    padding: 0.5rem 0.7rem;
     border: 1px solid #e5ddc8;
     border-radius: 10px;
     background: #f3f7f0;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.35rem;
 }
 
 .faculty-picker__hint {
@@ -25019,12 +25416,12 @@ Questions page section wrappers (companion rules for the card styles). */
 .faculty-card {
     display: flex;
     align-items: flex-start;
-    gap: 0.7rem;
-    padding: 0.7rem 0.8rem;
+    gap: 0.55rem;
+    padding: 0.55rem 0.7rem;
     border: 1px solid #e5ddc8;
     border-radius: 12px;
     background: #fffdf6;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.35rem;
 }
 
 .faculty-card.is-done {

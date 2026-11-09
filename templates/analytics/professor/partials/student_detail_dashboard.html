@@ -33,7 +33,7 @@
 <div class="bento-card bento-card-inner p-6 mb-8 student-confidence-card" data-confidence-card>
     <div class="overview-trends-card__intro student-confidence-card__intro">
         <div class="student-confidence-card__title-row">
-            <h2 class="overview-trends-card__title" id="student-detail-donut-title">Confidence performance</h2>
+            <h2 class="overview-trends-card__title" id="student-detail-donut-title">Exam Performance</h2>
             <button type="button"
                     class="student-confidence-card__info"
                     data-confidence-info-toggle
@@ -55,9 +55,6 @@
                 </ul>
             </div>
         </div>
-        <p class="overview-trends-card__subtitle student-confidence-card__scope" id="student-detail-donut-scope">
-            {{ summary.dashboard_trends.donut.scope_line }}
-        </p>
         {% if donut_period and donut_data_url %}
         <div class="overview-trends-filters student-confidence-card__filters"
              data-donut-filters

@@ -188,7 +188,9 @@ class TestReviewSetupPage:
         assert "up to 100 in total" in content
         assert "Numeric Answer" not in content
         assert "exam-setup-summary" in content
-        assert "pre-exam-step-goal" in content
+        # The goal step was removed; the wizard opens on the start confirmation.
+        assert "pre-exam-step-goal" not in content
+        assert "pre-exam-step-ready" in content
         assert "pre-exam-step-warmup" not in content
         assert "review_window" not in content
         assert "Open review windows" not in content

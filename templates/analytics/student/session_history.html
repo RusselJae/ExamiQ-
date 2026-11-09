@@ -7,24 +7,6 @@
 {% include "components/page_header.html" with title="Session History" subtitle="Every practice session: how you felt and how you scored." %}
 
 <div class="student-panel">
-<div class="session-history-kpis">
-    <div class="session-history-kpi">
-        <p class="session-history-kpi__label">Sessions</p>
-        <p class="session-history-kpi__value">{{ history_session_count }}</p>
-        <p class="session-history-kpi__sub">Since {{ request.user.date_joined|date:"M d" }}</p>
-    </div>
-    <div class="session-history-kpi">
-        <p class="session-history-kpi__label">Average score</p>
-        <p class="session-history-kpi__value">{{ history_avg_accuracy }}%</p>
-        <p class="session-history-kpi__sub">Across all sessions</p>
-    </div>
-    <div class="session-history-kpi">
-        <p class="session-history-kpi__label">Needs review</p>
-        <p class="session-history-kpi__value">{{ history_needs_review }}</p>
-        <p class="session-history-kpi__sub">Open in Action Plan</p>
-    </div>
-</div>
-
 <div class="bento-grid">
     <div class="span-full">
         <div class="filter-bar-card">

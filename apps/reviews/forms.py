@@ -154,6 +154,15 @@ class ReviewSetupForm(forms.Form):
         if not other_qs.exists():
             self.fields["extra_subjects"].disabled = True
 
+        # Deep link (?subject=<pk>): preselect exactly that course.
+        if preselected_subject is not None and not self.is_bound:
+            pk = preselected_subject.pk
+            if year_qs.filter(pk=pk).exists():
+                self.fields["year_subjects"].initial = [pk]
+            elif other_qs.filter(pk=pk).exists():
+                self.fields["year_subjects"].initial = []
+                self.fields["extra_subjects"].initial = [pk]
+
         # Student Start Exam is Multiple Choice only.
         self.fields["question_type"].choices = list(
             Question.AUTHORABLE_QUESTION_TYPE_CHOICES
