@@ -117,9 +117,11 @@
                 if (!filenameEl) return;
                 if (file) {
                     filenameEl.textContent = file.name;
+                    filenameEl.title = file.name;
                     filenameEl.classList.remove("hidden");
                 } else {
                     filenameEl.textContent = "";
+                    filenameEl.removeAttribute("title");
                     filenameEl.classList.add("hidden");
                 }
             }

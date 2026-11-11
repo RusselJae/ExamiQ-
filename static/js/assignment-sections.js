@@ -4,7 +4,9 @@
     const form = document.getElementById("assignment-form");
     if (!form) return;
 
+    const MAX_SECTIONS = 2;
     const sectionsApi = form.dataset.sectionsApi;
+    const professorSelect = document.getElementById("id_professor");
     const subjectSelect = document.getElementById("id_subject");
     const termSelect = document.getElementById("id_term");
     const hiddenContainer = document.getElementById("id_program_sections");
@@ -42,9 +44,10 @@
 
     function updateCount() {
         const count = selectedCount();
-        const label = count === 1 ? "1 section selected" : count + " sections selected";
+        let label = count === 1 ? "1 section selected" : count + " sections selected";
+        if (count > MAX_SECTIONS) label = "Choose at most 2 sections";
         if (countEl) countEl.textContent = label;
-        if (submitBtn) submitBtn.disabled = count === 0;
+        if (submitBtn) submitBtn.disabled = count === 0 || count > MAX_SECTIONS;
     }
 
     function normalize(text) {
@@ -136,7 +139,9 @@
                 checkbox.className = "assign-section-row__checkbox";
                 checkbox.value = String(section.id);
                 checkbox.checked = isSelected(section.id);
-                checkbox.disabled = section.already_assigned;
+                checkbox.disabled =
+                    section.already_assigned ||
+                    (!isSelected(section.id) && selectedCount() >= MAX_SECTIONS);
 
                 const text = document.createElement("span");
                 text.className = "assign-section-row__text";
@@ -162,8 +167,7 @@
 
                 checkbox.addEventListener("change", function () {
                     setSelected(section.id, checkbox.checked);
-                    updateCount();
-                    syncSelectAllState();
+                    renderGroups();
                 });
 
                 row.appendChild(label);
@@ -212,6 +216,9 @@
         if (termId) {
             url += "&term=" + encodeURIComponent(termId);
         }
+        if (professorSelect && professorSelect.value) {
+            url += "&professor=" + encodeURIComponent(professorSelect.value);
+        }
 
         try {
             const resp = await fetch(url);
@@ -247,6 +254,9 @@
     subjectSelect.addEventListener("change", loadSections);
     if (termSelect) {
         termSelect.addEventListener("change", loadSections);
+    }
+    if (professorSelect) {
+        professorSelect.addEventListener("change", loadSections);
     }
 
     hiddenContainer.addEventListener("change", function () {

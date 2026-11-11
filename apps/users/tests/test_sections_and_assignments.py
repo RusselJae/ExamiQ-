@@ -230,21 +230,14 @@ class TestTeachingAssignments:
         assert response.status_code == 302
         assert professor.teaching_assignments.count() == 1
 
-    def test_chairperson_can_create_assignment_without_sections(
+    def test_chairperson_must_pick_at_least_one_section(
         self, client, chairperson, professor, program_section, subject, program
     ):
-        """Sections are hidden: the course is assigned once, no picker needed."""
+        """Sections are required: a faculty member handles named cohorts."""
         chairperson.department = program.managing_department
         chairperson.save(update_fields=["department"])
         professor.department = program.managing_department
         professor.save(update_fields=["department"])
-        ProgramSection.objects.create(
-            program=program,
-            year_level=program_section.year_level,
-            label="2-B",
-            academic_year=program_section.academic_year,
-            is_active=True,
-        )
         term = AcademicTerm.objects.create(
             academic_year=program_section.academic_year,
             name="1st Sem",
@@ -260,11 +253,11 @@ class TestTeachingAssignments:
             },
         )
         assert response.status_code == 302
-        assignments = professor.teaching_assignments.filter(subject=subject)
-        assert assignments.count() == 1
-        row = assignments.get()
-        assert row.program_section.year_level_id == subject.year_level_id
-        assert row.program_section.is_active
+        from django.contrib.messages import get_messages
+
+        texts = [str(m) for m in get_messages(response.wsgi_request)]
+        assert any("Select at least one section." in text for text in texts)
+        assert not professor.teaching_assignments.filter(subject=subject).exists()
 
     def test_sections_api_filters_by_subject_year_level(
         self,
@@ -308,7 +301,7 @@ class TestTeachingAssignments:
     def test_year_mismatch_sections_are_ignored(
         self, client, chairperson, professor, program_section, subject, program
     ):
-        """Posted sections are ignored: the form assigns the course once."""
+        """A section from another year level is rejected, not silently used."""
         chairperson.department = program.managing_department
         chairperson.save(update_fields=["department"])
         professor.department = program.managing_department
@@ -329,8 +322,6 @@ class TestTeachingAssignments:
             is_current=True,
         )
         client.force_login(chairperson)
-        # Stale/wrong sections in the POST no longer matter; the course is
-        # assigned once on its own year level's representative section.
         response = client.post(
             reverse("analytics_chairperson:assignment_create"),
             {
@@ -339,16 +330,15 @@ class TestTeachingAssignments:
                 "subject": subject.pk,
                 "term": term.pk,
             },
-            follow=True,
         )
-        assert response.status_code == 200
-        assignments = professor.teaching_assignments.filter(subject=subject)
-        assert assignments.count() == 1
-        assert (
-            assignments.first().program_section.year_level_id == subject.year_level_id
-        )
+        assert response.status_code == 302
+        from django.contrib.messages import get_messages
 
-    def test_chairperson_assigns_course_once_not_per_section(
+        texts = [str(m) for m in get_messages(response.wsgi_request)]
+        assert any("Subject year level must match" in text for text in texts)
+        assert not professor.teaching_assignments.filter(subject=subject).exists()
+
+    def test_chairperson_assigns_course_per_selected_section(
         self,
         client,
         chairperson,
@@ -358,7 +348,7 @@ class TestTeachingAssignments:
         program,
         year_level,
     ):
-        """One course assignment covers every section; no per-section rows."""
+        """Two selected sections create two rows (the two-section cap)."""
         chairperson.department = program.managing_department
         chairperson.save(update_fields=["department"])
         professor.department = program.managing_department
@@ -386,12 +376,10 @@ class TestTeachingAssignments:
             },
         )
         assert response.status_code == 302
-        assert professor.teaching_assignments.filter(subject=subject).count() == 1
-        assignment = professor.teaching_assignments.get(subject=subject)
-        assert assignment.program_section.year_level_id == subject.year_level_id
+        assert professor.teaching_assignments.filter(subject=subject).count() == 2
         from apps.reviews.models import ExamSetup
 
-        assert ExamSetup.objects.filter(course__professor=professor).count() == 1
+        assert ExamSetup.objects.filter(course__professor=professor).count() == 2
 
     def test_chairperson_can_assign_cross_semester_subject(
         self, client, chairperson, professor, program_section, program, year_level
@@ -467,6 +455,94 @@ class TestHandledVisibilityScope:
         )
         assert students_visible_to_faculty(professor) == {student.pk}
 
+    def test_students_with_completed_exams_stay_visible_without_assignment(
+        self,
+        professor,
+        student,
+        subject,
+        topic,
+        academic_year,
+        bsed_program,
+        academic_term,
+        program_section,
+    ):
+        """Section-enrolled students who sat exams stay visible (no SFA row).
+
+        Regression: before sections were removed from the flow, visibility
+        followed section enrollment + completed exams on handled subjects.
+        Students who answered exams then vanished, even though the faculty
+        still handles the course.
+        """
+        from apps.reviews.models import ReviewSession
+        from apps.users.assignment_services import (
+            create_teaching_assignment,
+            handled_subject_ids,
+            students_visible_to_faculty,
+        )
+        from apps.users.models import ProgramSection
+
+        subject.program = bsed_program
+        subject.save(update_fields=["program_id"])
+        topic.subject = subject
+        topic.save(update_fields=["subject"])
+        section, _ = ProgramSection.objects.get_or_create(
+            program=subject.program,
+            year_level=subject.year_level,
+            label="1M",
+            academic_year=academic_year,
+            defaults={"max_students": 40},
+        )
+        student.section = section
+        student.save(update_fields=["section"])
+        create_teaching_assignment(
+            professor=professor,
+            program_section=section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
+        assert subject.pk in handled_subject_ids(professor)
+
+        ReviewSession.objects.create(
+            student=student,
+            topic=topic,
+            difficulty="easy",
+            status=ReviewSession.Status.COMPLETED,
+        )
+        assert students_visible_to_faculty(professor) == {student.pk}
+
+    def test_session_without_section_or_assignment_stays_hidden(
+        self, professor, subject, topic, academic_term, program_section
+    ):
+        """A completed exam alone is not enough without section enrollment."""
+        from apps.reviews.models import ReviewSession
+        from apps.users.assignment_services import (
+            create_teaching_assignment,
+            students_visible_to_faculty,
+        )
+        from apps.users.models import User
+
+        create_teaching_assignment(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
+        outsider = User.objects.create_user(
+            email="sectionless@test.edu",
+            password="testpass123",
+            role=User.Role.STUDENT,
+        )
+        ReviewSession.objects.create(
+            student=outsider,
+            topic=topic,
+            difficulty="easy",
+            status=ReviewSession.Status.COMPLETED,
+        )
+        visible = students_visible_to_faculty(professor)
+        assert outsider.pk not in visible
+
     def test_handled_subject_ids_prefer_teaching_assignments(
         self, professor, teaching_assignment, subject
     ):
@@ -523,7 +599,10 @@ class TestHandledVisibilityScope:
         assert "TEST-201" not in {c["subject"].code for c in other_cards}
         content = response.content.decode()
         assert "Subjects you handle" in content
-        assert "Other subjects" in content
+        # Unhandled subjects are hidden from the faculty grid (still reachable
+        # by direct URL); only handled courses render as cards.
+        assert "Other subjects" not in content
+        assert "TEST-202" not in content
 
 
 @pytest.mark.django_db
@@ -651,7 +730,7 @@ class TestTeachingAssignmentReassign:
 
 @pytest.mark.django_db
 class TestTeachingAssignmentUniqueness:
-    """One row per faculty + course + term, enforced at the database level."""
+    """One row per faculty + course + term + section, enforced in the DB."""
 
     def _other_section(self, program_section):
         from apps.users.models import ProgramSection
@@ -664,7 +743,7 @@ class TestTeachingAssignmentUniqueness:
             is_active=True,
         )
 
-    def test_second_row_for_same_course_is_rejected(
+    def test_duplicate_row_for_same_section_is_rejected(
         self, professor, program_section, subject, academic_term
     ):
         from django.db import IntegrityError, transaction
@@ -681,19 +760,39 @@ class TestTeachingAssignmentUniqueness:
         with transaction.atomic(), pytest.raises(IntegrityError):
             TeachingAssignment.objects.create(
                 professor=professor,
-                program_section=self._other_section(program_section),
+                program_section=program_section,
                 subject=subject,
                 term=academic_term,
                 assigned_by=professor,
             )
+
+    def test_different_sections_create_separate_rows(
+        self, professor, program_section, subject, academic_term
+    ):
+        from apps.users.models import TeachingAssignment
+
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=self._other_section(program_section),
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
         assert (
             TeachingAssignment.objects.filter(
                 professor=professor, subject=subject, term=academic_term
             ).count()
-            == 1
+            == 2
         )
 
-    def test_create_service_returns_existing_row_instead_of_duplicate(
+    def test_create_service_returns_existing_row_for_same_section(
         self, professor, program_section, subject, academic_term, chairperson
     ):
         from apps.users.assignment_services import create_teaching_assignment
@@ -708,7 +807,7 @@ class TestTeachingAssignmentUniqueness:
         )
         second, created_second = create_teaching_assignment(
             professor=professor,
-            program_section=self._other_section(program_section),
+            program_section=program_section,
             subject=subject,
             term=academic_term,
             assigned_by=chairperson,
@@ -721,6 +820,197 @@ class TestTeachingAssignmentUniqueness:
                 professor=professor, subject=subject, term=academic_term
             ).count()
             == 1
+        )
+
+    def test_create_service_blocks_a_third_section(
+        self, professor, program_section, subject, academic_term, chairperson
+    ):
+        from apps.users.assignment_services import create_teaching_assignment
+        from apps.users.models import ProgramSection, TeachingAssignment
+
+        create_teaching_assignment(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=chairperson,
+        )
+        create_teaching_assignment(
+            professor=professor,
+            program_section=self._other_section(program_section),
+            subject=subject,
+            term=academic_term,
+            assigned_by=chairperson,
+        )
+        other = ProgramSection.objects.create(
+            program=program_section.program,
+            year_level=program_section.year_level,
+            label="8Y",
+            academic_year=program_section.academic_year,
+            is_active=True,
+        )
+        with pytest.raises(ValueError, match="at most 2 sections"):
+            create_teaching_assignment(
+                professor=professor,
+                program_section=other,
+                subject=subject,
+                term=academic_term,
+                assigned_by=chairperson,
+            )
+        assert (
+            TeachingAssignment.objects.filter(
+                professor=professor, subject=subject, term=academic_term
+            ).count()
+            == 2
+        )
+
+
+@pytest.mark.django_db
+class TestTwoFacultyPerSubjectTerm:
+    """At most two faculty may handle the same subject in one term."""
+
+    def _other_professor(self, email="second.prof@test.edu"):
+        from apps.users.models import User
+
+        return User.objects.create_user(
+            email=email,
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+        )
+
+    def _other_section(self, program_section, label="9Z"):
+        from apps.users.models import ProgramSection
+
+        return ProgramSection.objects.create(
+            program=program_section.program,
+            year_level=program_section.year_level,
+            label=label,
+            academic_year=program_section.academic_year,
+            is_active=True,
+        )
+
+    def test_third_faculty_assignment_is_rejected_with_message(
+        self, professor, program_section, subject, academic_term, chairperson
+    ):
+        from apps.users.assignment_services import create_teaching_assignments
+
+        second = self._other_professor()
+        third = self._other_professor("third.prof@test.edu")
+        sections = [
+            program_section,
+            self._other_section(program_section, label="9Z"),
+            self._other_section(program_section, label="8Y"),
+        ]
+        for prof, section in zip((professor, second), sections):
+            result = create_teaching_assignments(
+                professor=prof,
+                program_sections=[section],
+                subject=subject,
+                term=academic_term,
+                assigned_by=chairperson,
+            )
+            assert result["created"] == 1
+
+        with pytest.raises(ValueError, match="at most 2|Only up to 2"):
+            create_teaching_assignments(
+                professor=third,
+                program_sections=[sections[2]],
+                subject=subject,
+                term=academic_term,
+                assigned_by=chairperson,
+            )
+
+    def test_reassign_into_full_subject_is_rejected(
+        self, professor, program_section, subject, academic_term, chairperson
+    ):
+        from apps.users.assignment_services import reassign_teaching_assignment
+        from apps.users.models import TeachingAssignment
+
+        second = self._other_professor()
+        for prof, section in (
+            (professor, program_section),
+            (second, self._other_section(program_section, label="9Z")),
+        ):
+            TeachingAssignment.objects.create(
+                professor=prof,
+                program_section=section,
+                subject=subject,
+                term=academic_term,
+                assigned_by=chairperson,
+            )
+        # Legacy third row created directly (the service would have blocked it).
+        roving = TeachingAssignment.objects.create(
+            professor=self._other_professor("roving.prof@test.edu"),
+            program_section=self._other_section(program_section, label="8Y"),
+            subject=subject,
+            term=academic_term,
+            assigned_by=chairperson,
+        )
+        with pytest.raises(ValueError, match="at most 2|Only up to 2"):
+            reassign_teaching_assignment(
+                roving,
+                professor=self._other_professor("third.prof@test.edu"),
+            )
+        assert (
+            TeachingAssignment.objects.filter(
+                subject=subject, term=academic_term
+            ).count()
+            == 3
+        )
+
+    def test_assign_view_shows_friendly_error_instead_of_500(
+        self, client, chairperson, professor, program_section, subject, program
+    ):
+        from apps.users.models import AcademicTerm, TeachingAssignment
+
+        dept = program.managing_department
+        chairperson.department = dept
+        chairperson.save(update_fields=["department"])
+        professor.department = dept
+        professor.save(update_fields=["department"])
+        second = self._other_professor()
+        second.department = dept
+        second.save(update_fields=["department"])
+        term = AcademicTerm.objects.create(
+            academic_year=program_section.academic_year,
+            name="1st Sem",
+            is_current=True,
+        )
+        for prof, section in (
+            (professor, program_section),
+            (second, self._other_section(program_section, label="9Z")),
+        ):
+            TeachingAssignment.objects.create(
+                professor=prof,
+                program_section=section,
+                subject=subject,
+                term=term,
+                assigned_by=chairperson,
+            )
+        third = self._other_professor("third.prof@test.edu")
+        third.department = dept
+        third.save(update_fields=["department"])
+        client.force_login(chairperson)
+        response = client.post(
+            reverse("analytics_chairperson:assignment_create"),
+            {
+                "professor": third.pk,
+                "subject": subject.pk,
+                "term": term.pk,
+                "program_sections": [program_section.pk],
+            },
+        )
+        assert response.status_code == 302
+        from django.contrib.messages import get_messages
+
+        texts = [str(m) for m in get_messages(response.wsgi_request)]
+        assert any("Only up to 2 faculty members" in text for text in texts)
+        assert (
+            TeachingAssignment.objects.filter(subject=subject, term=term)
+            .values("professor_id")
+            .distinct()
+            .count()
+            == 2
         )
 
 

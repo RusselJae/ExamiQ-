@@ -53,6 +53,11 @@
                 <span class="exam-setup-steps__label">Review</span>
             </button>
         </nav>
+        <div class="exam-setup-progress" data-exam-progress aria-hidden="true">
+            <span class="exam-setup-progress__seg is-active" data-progress-seg="1"></span>
+            <span class="exam-setup-progress__seg" data-progress-seg="2"></span>
+            <span class="exam-setup-progress__seg" data-progress-seg="3"></span>
+        </div>
 
         <div class="exam-setup-how" data-how-accordion>
             <button type="button" class="exam-setup-how__toggle" data-how-toggle aria-expanded="false">
@@ -106,28 +111,16 @@
             <div class="exam-setup-card exam-setup-card--table exam-setup-step" data-step-panel="1">
                 <h2 class="sr-only">Courses for your year</h2>
                 <div class="exam-table-toolbar">
-                    <div class="exam-tabs exam-tabs--segmented" role="tablist" aria-label="Subject filter tabs">
+                    <div class="exam-tabs exam-tabs--segmented" role="tablist" aria-label="Subjects by year level">
+                        {% for year_tab in year_tabs %}
                         <button type="button"
-                                class="exam-tab is-active"
-                                data-tab="year"
+                                class="exam-tab{% if year_tab.id == active_year_id %} is-active{% endif %}"
+                                data-year-tab="{{ year_tab.id }}"
                                 role="tab"
-                                aria-selected="true">
-                            Your year · {{ year_subjects|length }}
+                                aria-selected="{% if year_tab.id == active_year_id %}true{% else %}false{% endif %}">
+                            {{ year_tab.name }} · {{ year_tab.count }}
                         </button>
-                        <button type="button"
-                                class="exam-tab"
-                                data-tab="other"
-                                role="tab"
-                                aria-selected="false">
-                            Other years · {{ other_subjects|length }}
-                        </button>
-                        <button type="button"
-                                class="exam-tab"
-                                data-tab="all"
-                                role="tab"
-                                aria-selected="false">
-                            All · {{ total_subjects_count }}
-                        </button>
+                        {% endfor %}
                     </div>
 
                     <div class="exam-search-box">
@@ -163,6 +156,7 @@
                     <div class="exam-subject-card{% if subject.pk in selected_year_ids %} is-selected{% endif %}"
                          data-subject-row
                          data-category="year"
+                         data-year="{{ subject.year_level_id }}"
                          data-code="{{ subject.code }}"
                          data-name="{{ subject.name }}"
                          data-search="{{ subject.code|lower }} {{ subject.name|lower }}">
@@ -190,6 +184,7 @@
                     <div class="exam-subject-card{% if subject.pk in selected_extra_ids %} is-selected{% endif %}"
                          data-subject-row
                          data-category="other"
+                         data-year="{{ subject.year_level_id }}"
                          data-code="{{ subject.code }}"
                          data-name="{{ subject.name }}"
                          data-search="{{ subject.code|lower }} {{ subject.name|lower }}"
@@ -376,6 +371,6 @@
 {% block extra_js %}
 {% if setup_eligibility.eligible and not no_exams_available %}
 <script src="{% static 'js/pre-exam-modals.js' %}"></script>
-<script src="{% static 'js/review-setup-ui.js' %}"></script>
+<script src="{% static 'js/review-setup-ui.js' %}?v=20261112d"></script>
 {% endif %}
 {% endblock %}

@@ -1347,7 +1347,12 @@ def build_difficulty_tag_prompt(stem: str) -> tuple[str, str]:
 COR_EXTRACTION_SYSTEM = (
     "You are a registrar assistant that reads plain text extracted from a "
     "student's Certificate of Registration. Return valid JSON only. "
-    "No markdown fences. Never invent course codes that are not in the text."
+    "No markdown fences. Never invent course codes that are not in the text. "
+    "A COR table can contain both a long schedule code (for example "
+    "BSEM10019) and a short curriculum course code (for example BSEM 32 or "
+    "GNED 12). The schedule code is NOT the course code: never return it as "
+    '"code". Use the Course Code column, or match by the course description '
+    "when the course-code cell is unreadable."
 )
 
 
@@ -1355,8 +1360,13 @@ def build_cor_extraction_prompt(text: str) -> tuple[str, str]:
     system = COR_EXTRACTION_SYSTEM
     user = (
         "From the text below, list every enrolled course row in the order "
-        "they appear. OCR noise is possible: keep the code as printed unless "
-        "it is an obvious OCR misread (l/I confusion), then fix it.\n"
+        "they appear. The table may have separate Sched Code and Course Code "
+        "columns. Ignore the Sched Code column (values like BSEM10018) and "
+        "use the short Course Code column instead (values like BSEM 32, "
+        "GNED 12). If the Course Code is unreadable, leave it out and rely on "
+        "the course description. OCR noise is possible: keep the course code "
+        "as printed unless it is an obvious OCR misread (l/I confusion), then "
+        "fix it.\n"
         'Return {"rows": [{"code": "BSEM 21", "title": "History of Mathematics"}]}\n\n'
         "Text:\n"
         f"{text[:8000]}"

@@ -177,6 +177,9 @@
         const yearSelect = root.querySelector("#id_year_level");
         const sectionSelect = root.querySelector("#id_section");
         if (!yearSelect || !sectionSelect) return;
+        /* Signup ships its own year → section map (sections-by-year); the
+           server-rendered options are authoritative there. */
+        if (document.getElementById("sections-by-year")) return;
 
         const programSelect = root.querySelector("#id_home_degree_program");
         const program =

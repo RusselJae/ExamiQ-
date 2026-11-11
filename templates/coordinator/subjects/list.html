@@ -109,6 +109,8 @@
                                 <form method="post" action="{% url 'coordinator:subject_delete' subject.pk %}"
                                       data-confirm-message="Remove {{ subject.code }} and its topics and questions?"
                                       data-confirm-type="warning"
+                                      data-confirm-title="Remove course"
+                                      data-confirm-icon="remove"
                                       data-confirm-label="Remove">
                                     {% csrf_token %}
                                     <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove</button>

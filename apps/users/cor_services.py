@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 MAX_COR_CHARS = 12000
 ALLOWED_EXTENSIONS = (".pdf", ".png", ".jpg", ".jpeg", ".webp")
 
+#: Long schedule/section codes printed beside the real curriculum code
+#: (e.g. ``BSEM10019``). These never match the subject catalog.
+SCHEDULE_CODE_RE = re.compile(r"^BSEM1\d{4,}$")
+
 
 class CorAnalysisError(ValueError):
     """Raised when the uploaded COR cannot be read at all."""
@@ -27,6 +31,11 @@ class CorAnalysisError(ValueError):
 def normalize_code(code: str) -> str:
     """Uppercase, strip punctuation, collapse whitespace: ``GE 3`` → ``GE3``."""
     return re.sub(r"[^A-Z0-9]", "", (code or "").upper())
+
+
+def is_schedule_code(code: str) -> bool:
+    """True for COR schedule codes like ``BSEM10018`` (not course codes)."""
+    return bool(SCHEDULE_CODE_RE.fullmatch(normalize_code(code)))
 
 
 def classify_cor_type(text: str) -> str:
@@ -69,17 +78,57 @@ def suggest_year_level(matched: list[dict]) -> dict | None:
     return {"id": year.pk, "name": year.name}
 
 
-def _ocr_image(raw: bytes) -> str:
+def _ocr_image(raw: bytes, mime_type: str = "") -> str:
+    """Read a COR photo with Tesseract, then fall back to the vision model.
+
+    Tesseract is optional; many hosted environments do not ship the binary.
+    The AI fallback keeps photo uploads usable without a system package.
+    """
+    text = _tesseract_image_text(raw)
+    if len(text) >= 40:
+        return text
+
+    from apps.ai.vision import extract_text_from_image
+
+    vision_text = extract_text_from_image(raw, mime_type or "image/jpeg")
+    if vision_text:
+        return vision_text
+    return text
+
+
+def _tesseract_image_text(raw: bytes) -> str:
     try:
         import pytesseract
-        from PIL import Image
+        from PIL import Image, ImageOps
     except ImportError as exc:  # pragma: no cover - optional dependency
         logger.info("OCR unavailable for COR image: %s", exc)
         return ""
     try:
         image = Image.open(_bytes_io(raw))
+        image = ImageOps.exif_transpose(image)
         gray = image.convert("L")
-        return (pytesseract.image_to_string(gray) or "").strip()
+        # Small phone crops OCR poorly; upscale and normalize contrast.
+        if gray.width < 1600:
+            ratio = 1600 / max(gray.width, 1)
+            gray = gray.resize(
+                (int(gray.width * ratio), int(gray.height * ratio)),
+                Image.LANCZOS,
+            )
+        gray = ImageOps.autocontrast(gray)
+        best = ""
+        # psm 6 treats the page as a uniform block (best for tables); psm 3
+        # is a useful fallback for sparse layouts.
+        for psm in (6, 3):
+            try:
+                candidate = (
+                    pytesseract.image_to_string(gray, config=f"--psm {psm}") or ""
+                ).strip()
+            except Exception as exc:  # noqa: BLE001 - try the next mode
+                logger.info("Tesseract psm %s failed: %s", psm, exc)
+                continue
+            if len(candidate) > len(best):
+                best = candidate
+        return best
     except Exception as exc:  # noqa: BLE001 - OCR failure must not 500
         logger.warning("COR image OCR failed: %s", exc)
         return ""
@@ -129,7 +178,7 @@ def extract_cor_text(uploaded_file) -> str:
             pages = []
         text = " ".join(p["text"] for p in pages).strip()
         if len(text) < 40:
-            text = _ocr_image(raw)
+            text = _ocr_image(raw, "application/pdf")
         if not text:
             raise CorAnalysisError(
                 "Could not read that COR. Try a clearer photo or a text PDF."
@@ -137,7 +186,8 @@ def extract_cor_text(uploaded_file) -> str:
         return text[:MAX_COR_CHARS]
 
     if name.endswith(ALLOWED_EXTENSIONS[1:]):
-        text = _ocr_image(raw)
+        mime_type = getattr(uploaded_file, "content_type", "") or ""
+        text = _ocr_image(raw, mime_type)
         if not text:
             raise CorAnalysisError(
                 "Could not read that photo. Retake it with better light and no glare."
@@ -193,7 +243,8 @@ def match_cor_rows(rows: list[dict[str, str]]) -> dict:
         title = (row.get("title") or "").strip()
         if not code:
             continue
-        norm = normalize_code(code)
+        schedule_code = is_schedule_code(code)
+        norm = "" if schedule_code else normalize_code(code)
         subject = None
         confidence = "low"
         if norm and by_normalized.get(norm):
@@ -298,6 +349,11 @@ def verify_cor_submission(
         return (
             "Your COR does not show regular status. If you are an irregular "
             "student, sign up as irregular instead."
+        )
+    if is_irregular and bundle.get("cor_type") == "regular":
+        return (
+            "Your COR shows a regular status. If you are a regular student, "
+            "switch to regular and pick your year level and section instead."
         )
     if not is_irregular:
         if year_level_id in (None, ""):

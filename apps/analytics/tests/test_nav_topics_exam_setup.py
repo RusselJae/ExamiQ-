@@ -45,8 +45,16 @@ class TestCourseTopicScope:
         assert "History Intro" not in names
 
     def test_course_open_lands_on_topics(
-        self, client, professor, bsed_program, year_level
+        self,
+        client,
+        professor,
+        bsed_program,
+        year_level,
+        program_section,
+        academic_term,
     ):
+        from apps.users.models import TeachingAssignment
+
         subject = Subject.objects.create(
             program=bsed_program,
             code="OPEN-1",
@@ -54,13 +62,21 @@ class TestCourseTopicScope:
             year_level=year_level,
             semester=1,
         )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
+        )
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:course_list"))
         assert response.status_code == 200
         content = response.content.decode()
         assert "OPEN-1" in content
         assert "Course" in content
-        assert "Other subjects" in content
+        # Unhandled subjects are hidden from the faculty grid.
+        assert "Other subjects" not in content
         assert "question" in content
         assert "Saved Questions" not in content or "Open" in content
         course = get_or_create_catalog_course(professor, subject)
@@ -111,9 +127,10 @@ class TestCourseTopicScope:
         )
         assert questions.status_code == 200
 
-    def test_professor_can_remove_catalog_subject(
+    def test_professor_cannot_remove_catalog_subject(
         self, client, professor, bsed_program, year_level
     ):
+        """Faculty self-serve subject removal is retired."""
         from apps.users.assignment_services import create_catalog_subject
 
         subject, _course = create_catalog_subject(
@@ -124,17 +141,14 @@ class TestCourseTopicScope:
             professor=professor,
         )
         client.force_login(professor)
-        list_response = client.get(reverse("analytics_professor:course_list"))
-        assert "Remove" in list_response.content.decode()
         response = client.post(
             reverse(
                 "analytics_professor:course_subject_remove",
                 kwargs={"subject_pk": subject.pk},
             )
         )
-        assert response.status_code == 302
-        assert not Subject.objects.filter(pk=subject.pk).exists()
-        assert response.url == reverse("analytics_professor:course_list")
+        assert response.status_code == 403
+        assert Subject.objects.filter(pk=subject.pk).exists()
 
     def test_catalog_questions_accessible_without_profile_subject_assignment(
         self, client, professor, bsed_program, year_level, academic_year, subject

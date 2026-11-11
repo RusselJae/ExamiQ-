@@ -116,6 +116,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Maximum size for a faculty-uploaded PDF (content library / replacement).
+MATERIAL_UPLOAD_MAX_MB = env.int("MATERIAL_UPLOAD_MAX_MB", default=25)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

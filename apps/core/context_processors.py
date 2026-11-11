@@ -54,9 +54,7 @@ def _professor_course_groups(user, courses: list) -> list[dict]:
         .values("course_id")
         .annotate(students=Count("student_id", distinct=True))
     )
-    students_by_course = {
-        row["course_id"]: row["students"] for row in student_rows
-    }
+    students_by_course = {row["course_id"]: row["students"] for row in student_rows}
 
     from apps.questions.models import Question
 
@@ -69,9 +67,7 @@ def _professor_course_groups(user, courses: list) -> list[dict]:
         .annotate(drafts=Count("id"))
     )
     drafts_by_subject = {
-        (row["topic__subject__program_id"], row["topic__subject__code"]): row[
-            "drafts"
-        ]
+        (row["topic__subject__program_id"], row["topic__subject__code"]): row["drafts"]
         for row in draft_rows
     }
 
@@ -119,12 +115,21 @@ def _professor_course_groups(user, courses: list) -> list[dict]:
         """
         term = (group["term"] or "").strip().lower()
         normalized = term.replace("semester", "sem").replace("  ", " ").strip()
-        current_name = (current.name or "").strip().lower().replace(
-            "semester", "sem"
-        ).replace("  ", " ").strip()
-        return bool(normalized) and normalized == current_name and (
-            (group["academic_year"] or "").strip()
-            == (current.academic_year.label or "").strip()
+        current_name = (
+            (current.name or "")
+            .strip()
+            .lower()
+            .replace("semester", "sem")
+            .replace("  ", " ")
+            .strip()
+        )
+        return (
+            bool(normalized)
+            and normalized == current_name
+            and (
+                (group["academic_year"] or "").strip()
+                == (current.academic_year.label or "").strip()
+            )
         )
 
     current = None
@@ -165,9 +170,12 @@ def _professor_course_groups(user, courses: list) -> list[dict]:
 
 def navigation_context(request):
     """Provide role sidebar entity lists and active entity context."""
+    from django.conf import settings
+
     from apps.core.breadcrumbs import build_nav_breadcrumbs
 
     context = {
+        "max_pdf_upload_mb": settings.MATERIAL_UPLOAD_MAX_MB,
         "professor_courses": [],
         "student_subjects": [],
         "coordinator_sections": [],

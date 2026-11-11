@@ -95,6 +95,38 @@ class TestChairpersonAccounts:
         client.force_login(professor)
         assert client.get(reverse("analytics_chairperson:accounts")).status_code == 403
 
+    def test_archived_accounts_hidden_by_default(
+        self, client, chairperson, chair_department
+    ):
+        faculty = User.objects.create_user(
+            email="archived-faculty@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+            department=chair_department,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=True,
+        )
+        client.force_login(chairperson)
+        assert (
+            "archived-faculty@test.edu"
+            in client.get(reverse("analytics_chairperson:accounts")).content.decode()
+        )
+
+        faculty.is_archived = True
+        faculty.is_active = False
+        faculty.save(update_fields=["is_archived", "is_active"])
+
+        default_page = client.get(
+            reverse("analytics_chairperson:accounts")
+        ).content.decode()
+        assert "archived-faculty@test.edu" not in default_page
+
+        archived_page = client.get(
+            reverse("analytics_chairperson:accounts"), {"active": "archived"}
+        ).content.decode()
+        assert "archived-faculty@test.edu" in archived_page
+        assert "Restore" in archived_page
+
     def test_active_users_listed_as_approved_with_toggle(
         self, client, chairperson, chair_department
     ):
@@ -145,12 +177,14 @@ class TestChairpersonAccounts:
             year_level=program_section.year_level,
         )
         client.force_login(chairperson)
-        content = client.get(reverse("analytics_chairperson:accounts")).content.decode()
+        content = client.get(
+            reverse("analytics_chairperson:accounts"), {"tab": "students"}
+        ).content.decode()
         assert "chair-student@test.edu" in content
         assert "Deactivate" in content
         assert "Archive" in content
         assert "Courses" in content
-        assert program_section.display_label not in content
+        assert program_section.display_label in content
 
         response = client.post(
             reverse("analytics_chairperson:account_toggle_active", args=[student.pk])
@@ -168,7 +202,8 @@ class TestChairpersonAccounts:
         assert student.is_active is False
 
         archived_page = client.get(
-            reverse("analytics_chairperson:accounts"), {"active": "archived"}
+            reverse("analytics_chairperson:accounts"),
+            {"active": "archived", "tab": "students"},
         )
         assert "chair-student@test.edu" in archived_page.content.decode()
         assert "Archived" in archived_page.content.decode()
@@ -180,6 +215,51 @@ class TestChairpersonAccounts:
         student.refresh_from_db()
         assert student.is_archived is False
         assert student.is_active is True
+
+    def test_accounts_split_faculty_and_students_tabs(
+        self, client, chairperson, chair_department
+    ):
+        from apps.users.models import Department
+
+        edu, _ = Department.objects.get_or_create(name="College of Education")
+        chairperson.department = edu
+        chairperson.save(update_fields=["department"])
+        User.objects.create_user(
+            email="tab-faculty@test.edu",
+            password="testpass123",
+            role=User.Role.PROFESSOR,
+            department=edu,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=True,
+        )
+        User.objects.create_user(
+            email="tab-student@test.edu",
+            password="testpass123",
+            role=User.Role.STUDENT,
+            department=edu,
+            home_degree_program=User.HomeDegreeProgram.BSED_MATH,
+            approval_status=User.ApprovalStatus.APPROVED,
+            is_active=True,
+        )
+        client.force_login(chairperson)
+        faculty_page = client.get(
+            reverse("analytics_chairperson:accounts"), {"tab": "faculty"}
+        ).content.decode()
+        assert "tab-faculty@test.edu" in faculty_page
+        assert "tab-student@test.edu" not in faculty_page
+        assert "Add account" not in faculty_page
+
+        students_page = client.get(
+            reverse("analytics_chairperson:accounts"), {"tab": "students"}
+        ).content.decode()
+        assert "tab-student@test.edu" in students_page
+        assert "tab-faculty@test.edu" not in students_page
+        assert "Add account" in students_page
+
+        numbers_page = client.get(
+            reverse("analytics_chairperson:accounts"), {"tab": "numbers"}
+        ).content.decode()
+        assert "Add account" not in numbers_page
 
     def test_accounts_list_shows_faculty_course_codes(
         self,
@@ -253,9 +333,7 @@ class TestChairpersonSubjects:
 
         response = client.get(reverse("analytics_chairperson:subjects"))
         assert response.status_code == 200
-        row = next(
-            s for s in response.context["subjects"] if s.pk == subject.pk
-        )
+        row = next(s for s in response.context["subjects"] if s.pk == subject.pk)
         assert row.faculty_count == 0
         assert row.student_count == 0
         assert row.question_count == 0

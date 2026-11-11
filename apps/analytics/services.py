@@ -1676,6 +1676,16 @@ def professor_latest_student_sessions(professor: User, limit: int = 60) -> list[
     if not assigned_student_ids:
         return []
 
+    # Exam-touched students stay visible even without an assignment row.
+    from apps.users.assignment_services import (
+        students_with_exams_on_handled_subjects as _session_visible,
+    )
+
+    assigned_student_ids |= _session_visible(professor)
+
+    if not assigned_student_ids:
+        return []
+
     from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
 
     # Per (session, subject) answer slices — matching how the confidence donut
@@ -1718,9 +1728,7 @@ def professor_latest_student_sessions(professor: User, limit: int = 60) -> list[
 
     if subject_code_map:
         subject_code_map = dict(
-            Subject.objects.filter(id__in=subject_code_map).values_list(
-                "id", "code"
-            )
+            Subject.objects.filter(id__in=subject_code_map).values_list("id", "code")
         )
 
     correct_subq = (
@@ -1851,14 +1859,27 @@ def professor_confidence_donut(
 
     section_id = _resolve_program_section(section)
     if section_id:
-        answers = answers.filter(session__student__section_id=section_id)
+        from apps.users.models import IrregularSubjectEnrollment
+
+        irregular_ids = set(
+            IrregularSubjectEnrollment.objects.filter(
+                section_id=section_id,
+                student_id__in=visible_ids,
+                status=IrregularSubjectEnrollment.Status.ENROLLED,
+            ).values_list("student_id", flat=True)
+        )
+        answers = answers.filter(
+            Q(session__student__section_id=section_id)
+            | Q(session__student_id__in=irregular_ids)
+        )
 
     subject_id = None
     if str(subject or "").strip().isdigit():
         candidate = int(subject)
         handled_subject_ids = set(
-            Answer.objects.filter(session__student_id__in=visible_ids)
-            .values_list("question__topic__subject_id", flat=True)
+            Answer.objects.filter(session__student_id__in=visible_ids).values_list(
+                "question__topic__subject_id", flat=True
+            )
         )
         if candidate in handled_subject_ids:
             subject_id = candidate
@@ -2012,18 +2033,25 @@ def professor_donut_sections(professor: User) -> list[dict]:
     """Cohort sections represented among the professor's handled students.
 
     Powers the donut's section filter. Each entry carries ``pk`` and
-    ``label`` (the section display label).
+    ``label`` (the section display label). Irregular students contribute the
+    sections of the subjects they enrolled in.
     """
     from apps.users.assignment_services import students_visible_to_faculty
-    from apps.users.models import ProgramSection
+    from apps.users.models import IrregularSubjectEnrollment, ProgramSection
 
     visible_ids = students_visible_to_faculty(professor)
     if not visible_ids:
         return []
-    section_ids = (
+    section_ids = set(
         User.objects.filter(pk__in=visible_ids, section_id__isnull=False)
         .values_list("section_id", flat=True)
         .distinct()
+    )
+    section_ids |= set(
+        IrregularSubjectEnrollment.objects.filter(
+            student_id__in=visible_ids,
+            status=IrregularSubjectEnrollment.Status.ENROLLED,
+        ).values_list("section_id", flat=True)
     )
     sections = ProgramSection.objects.filter(pk__in=section_ids).order_by(
         "year_level__order", "label"
@@ -2673,6 +2701,16 @@ def get_professor_students_with_exams(
             faculty=professor, academic_year=current_year
         ).values_list("student_id", flat=True)
     )
+
+    if not assigned_student_ids:
+        return []
+
+    # Exam-touched students stay visible even without an assignment row.
+    from apps.users.assignment_services import (
+        students_with_exams_on_handled_subjects as _session_visible,
+    )
+
+    assigned_student_ids |= _session_visible(professor)
 
     if not assigned_student_ids:
         return []

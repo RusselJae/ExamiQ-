@@ -12,55 +12,84 @@
     <button type="button" class="btn-primary btn-primary-sm" data-open-assign-dialog>Assign faculty</button>
 </div>
 
-{% if assignments %}
-<div class="coord-table-wrap">
-        <table class="data-table w-full min-w-[56rem] coord-table--singleline">
-            <thead>
-                <tr>
-                    <th>Faculty</th>
-                    <th>Course</th>
-                    <th>Students</th>
-                    <th class="text-right">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for assignment in assignments %}
-                <tr>
-                    <td>
-                        <div class="flex items-center gap-3 min-w-0">
-                            <span class="assign-avatar" aria-hidden="true">{{ assignment.professor.initials }}</span>
-                            <span class="coord-cell-line" title="{{ assignment.professor.get_full_name|default:assignment.professor.email }}">{{ assignment.professor.get_full_name|default:assignment.professor.email }}</span>
+<div class="faculty-course-summary">
+    <span><strong>{{ assignment_stats.faculty }}</strong> faculty with load</span>
+    <span><strong>{{ assignment_stats.total }}</strong> course-section assignment{{ assignment_stats.total|pluralize }}</span>
+    <span><strong>{{ assignment_stats.sections }}</strong> section{{ assignment_stats.sections|pluralize }} covered</span>
+</div>
+
+{% if faculty_rows %}
+<div class="coord-table-wrap coord-table-wrap--actions">
+    <table class="data-table w-full faculty-courses-table">
+        <thead>
+            <tr>
+                <th class="faculty-courses-table__expander" aria-label="Expand"></th>
+                <th>Faculty</th>
+                <th class="text-center">Courses</th>
+                <th class="text-center">Sections</th>
+                <th class="text-right">Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in faculty_rows %}
+            <tr class="faculty-courses-row" data-faculty-toggle="faculty-detail-{{ row.professor.pk }}" tabindex="0" role="button" aria-expanded="false">
+                <td class="faculty-courses-table__expander">
+                    <span class="faculty-courses-chevron" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </span>
+                </td>
+                <td>
+                    <div class="flex items-center gap-3 min-w-0">
+                        {% include "components/student_avatar.html" with user=row.professor size="sm" %}
+                        <div class="min-w-0">
+                            <div class="font-medium truncate">{{ row.professor.get_full_name|default:row.professor.email }}</div>
+                            <div class="text-xs text-examiq-slate break-all">{{ row.professor.email }}</div>
                         </div>
-                    </td>
-                    <td>
-                        <span class="course-chip">{{ assignment.subject.code }}</span>
-                        <span class="coord-cell-line" title="{{ assignment.subject.name }}">{{ assignment.subject.name }}</span>
-                    </td>
-                    <td>
-                        {% with handled=handled_student_counts|get_item:assignment.pk|default:0 max=assignment.program_section.max_students|default:40 %}
-                        <div class="assign-capacity" title="{{ handled }} of {{ max }} seats assigned">
-                            <span class="assign-capacity__text">{{ handled }} / {{ max }} students</span>
-                            <span class="assign-capacity__track" aria-hidden="true">
-                                <span class="assign-capacity__fill" style="width: {% widthratio handled max 100 %}%"></span>
-                            </span>
-                        </div>
-                        {% endwith %}
-                    </td>
-                    <td class="whitespace-nowrap text-right">
-                        <details class="account-kebab">
-                            <summary aria-label="Actions for {{ assignment.subject.code }}">⋮</summary>
-                            <div class="account-kebab__menu">
-                                <button type="button" class="text-sm text-link" data-reassign-open="reassign-dialog-{{ assignment.pk }}">Reassign</button>
-                                <form method="post"
-                                      action="{% url 'analytics_chairperson:assignment_delete' assignment.pk %}"
-                                      data-confirm-message="Remove this teaching assignment?"
-                                      data-confirm-type="warning"
-                                      data-confirm-label="Remove">
-                                    {% csrf_token %}
-                                    <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove</button>
-                                </form>
+                    </div>
+                </td>
+                <td class="text-center">
+                    {% if row.course_count %}<span class="faculty-load-count">{{ row.course_count }}</span>{% else %}<span class="faculty-load-empty">—</span>{% endif %}
+                </td>
+                <td class="text-center">
+                    {% if row.section_count %}<span class="faculty-load-count">{{ row.section_count }}</span>{% else %}<span class="faculty-load-empty">—</span>{% endif %}
+                </td>
+                <td class="text-right">
+                    <span class="faculty-courses-hint">{% if row.assignments %}View load{% endif %}</span>
+                </td>
+            </tr>
+            <tr class="faculty-courses-detail hidden" id="faculty-detail-{{ row.professor.pk }}">
+                <td colspan="5">
+                    <div class="faculty-course-list">
+                        {% if row.assignments %}
+                        {% for assignment in row.assignments %}
+                        <div class="faculty-course-item">
+                            <div class="faculty-course-item__main">
+                                <span class="course-chip">{{ assignment.subject.code }}</span>
+                                <div class="faculty-course-item__copy">
+                                    <span class="faculty-course-item__name">{{ assignment.subject.name }}</span>
+                                    <span class="faculty-course-item__meta">{{ assignment.term }}</span>
+                                </div>
+                                <span class="faculty-section-pill">{{ assignment.program_section.display_label }}</span>
                             </div>
-                        </details>
+                            <div class="faculty-course-item__actions">
+                                <details class="account-kebab">
+                                    <summary aria-label="Actions for {{ assignment.subject.code }} {{ assignment.program_section.display_label }}">⋮</summary>
+                                    <div class="account-kebab__menu">
+                                        <button type="button" class="text-sm text-link" data-reassign-open="reassign-dialog-{{ assignment.pk }}">Reassign</button>
+                                        <form method="post"
+                                              action="{% url 'analytics_chairperson:assignment_delete' assignment.pk %}"
+                                              data-confirm-message="Remove {{ assignment.subject.code }} from {{ row.professor.get_full_name|default:row.professor.email }}'s load for {{ assignment.program_section.display_label }}?"
+                                              data-confirm-title="Remove assignment"
+                                              data-confirm-label="Remove"
+                                              data-confirm-icon="remove"
+                                              data-confirm-type="error">
+                                            {% csrf_token %}
+                                            <button type="submit" class="text-sm text-examiq-coral hover:underline">Remove</button>
+                                        </form>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
                         <dialog id="reassign-dialog-{{ assignment.pk }}" class="coord-dialog" aria-labelledby="reassign-title-{{ assignment.pk }}">
                             <div class="coord-dialog__head">
                                 <h2 class="coord-dialog__title" id="reassign-title-{{ assignment.pk }}">Reassign {{ assignment.subject.code }}</h2>
@@ -68,7 +97,8 @@
                             </div>
                             <div class="coord-dialog__body">
                                 <p class="text-sm text-examiq-slate">
-                                    Currently {{ assignment.professor.get_full_name|default:assignment.professor.email }}.
+                                    Currently {{ assignment.professor.get_full_name|default:assignment.professor.email }}
+                                    for {{ assignment.program_section.display_label }} ({{ assignment.term }}).
                                     Handled students stay assigned; visibility follows the new faculty.
                                 </p>
                                 <form method="post" action="{% url 'analytics_chairperson:assignment_reassign' assignment.pk %}" class="mt-4">
@@ -87,17 +117,35 @@
                                 </form>
                             </div>
                         </dialog>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="assign-empty">
-        <p>No teaching assignments yet.</p>
-    </div>
+                        {% endfor %}
+                        {% else %}
+                        <p class="faculty-course-empty" aria-hidden="true"></p>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination-bar">
+    {% if page_obj.has_previous %}
+    <a href="{% querystring page=page_obj.previous_page_number %}" class="text-link text-sm">Previous</a>
     {% endif %}
+    <span class="pagination-bar__info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="{% querystring page=page_obj.next_page_number %}" class="text-link text-sm">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="assign-empty">
+    <p>No faculty accounts match your search.</p>
+</div>
+{% endif %}
 </div>
 
 <dialog class="coord-dialog" id="add-assign-dialog" aria-labelledby="add-assign-title">
@@ -106,8 +154,12 @@
         <button type="button" class="coord-dialog__close" data-close-assign-dialog aria-label="Close">✕</button>
     </div>
     <div class="coord-dialog__body">
-        <p class="text-sm text-examiq-slate">Select faculty and course — we cover every section of that course's year level ({{ current_term_label }}).</p>
-        <form method="post" action="{% url 'analytics_chairperson:assignment_create' %}" id="assignment-form" class="mt-4">
+        <p class="text-sm text-examiq-slate">Select faculty, course, and up to two sections of that course.</p>
+        {% if assignment_form.errors %}
+        <div class="campus-alert mb-3" role="alert">{{ assignment_form.errors.as_text }}</div>
+        {% endif %}
+        <form method="post" action="{% url 'analytics_chairperson:assignment_create' %}" id="assignment-form" class="mt-4"
+              data-sections-api="{% url 'analytics_chairperson:assignment_sections_api' %}">
             {% csrf_token %}
             <div class="mb-4">
                 <label class="block text-xs font-medium text-examiq-slate mb-1" for="id_professor">Faculty*</label>
@@ -117,14 +169,28 @@
                 <label class="block text-xs font-medium text-examiq-slate mb-1" for="id_subject">Course*</label>
                 {{ assignment_form.subject }}
             </div>
-            <div class="sr-only">
-                {{ assignment_form.term }}
-                {{ assignment_form.program_sections }}
+
+            <div class="assign-section-panel" id="assign-section-panel">
+                <div class="assign-section-panel__toolbar">
+                    <label class="assign-section-search" for="assign-section-search">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <input type="search" id="assign-section-search" class="assign-section-search__input" placeholder="Search sections..." autocomplete="off">
+                    </label>
+                </div>
+                <div id="assign-section-groups" class="assign-section-groups" role="group" aria-label="Program sections">
+                    <p class="assign-section-empty" id="assign-section-placeholder">Select a course to load sections.</p>
+                </div>
+                <div class="assign-section-hidden" aria-hidden="true">
+                    {{ assignment_form.program_sections }}
+                </div>
             </div>
-            <div class="coord-dialog__actions">
-                <button type="button" class="btn-secondary btn-primary-sm" data-close-assign-dialog>Cancel</button>
-                <button type="submit" class="btn-primary btn-primary-sm">Assign faculty</button>
+
+            <div class="assign-section-footer">
+                <p class="assign-section-footer__count" id="assign-section-count" aria-live="polite">0 sections selected</p>
+                <button type="submit" class="btn-primary btn-primary-sm" id="assign-section-submit" disabled>Assign faculty</button>
             </div>
+
+            <div class="sr-only">{{ assignment_form.term }}</div>
         </form>
     </div>
 </dialog>
@@ -132,4 +198,6 @@
 
 {% block extra_js %}
 <script src="{% static 'js/assignment-reassign.js' %}"></script>
+<script src="{% static 'js/assignment-sections.js' %}?v=20261111"></script>
+<script src="{% static 'js/faculty-courses.js' %}?v=20261112"></script>
 {% endblock %}

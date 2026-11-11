@@ -186,6 +186,8 @@
                                       action="{% url 'analytics_professor:material_detail' doc.course_id doc.pk %}"
                                       data-confirm-message="Delete this material permanently? This cannot be undone."
                                       data-confirm-type="danger"
+                                      data-confirm-title="Delete material"
+                                      data-confirm-icon="remove"
                                       data-confirm-label="Delete">
                                     {% csrf_token %}
                                     {% if hub_subject_pk %}

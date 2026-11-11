@@ -64,10 +64,15 @@
             const dropzone = modal.querySelector("[data-dropzone]");
             const originalNameInput = modal.querySelector("[data-modal-original-name]");
             const titleInput = modal.querySelector("[data-modal-title-input]");
+            const removeBtn = modal.querySelector("[data-dropzone-remove]");
 
             if (dropzone) {
-                dropzone.addEventListener("click", () => fileInput.click());
+                dropzone.addEventListener("click", (event) => {
+                    if (event.target.closest("[data-dropzone-remove]")) return;
+                    fileInput.click();
+                });
                 dropzone.addEventListener("keydown", (event) => {
+                    if (event.target.closest("[data-dropzone-remove]")) return;
                     if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         fileInput.click();
@@ -95,24 +100,64 @@
             fileInput.addEventListener("change", () => {
                 reflectSelectedFile(fileInput, originalNameInput, titleInput);
             });
+            if (removeBtn) {
+                removeBtn.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    try {
+                        fileInput.value = "";
+                    } catch (e) { /* ignore */ }
+                    resetSelectedFile(modal);
+                });
+            }
         }
 
-        // Edit mode: replacement file. Submitting with the replacement swaps
-        // the upload immediately (the view archives + re-ingests).
+        // Edit mode: removal opens the replacement upload UI.
         if (replaceInput) {
             const actionInput = modal.querySelector("[data-modal-action-input]");
-            const extEl = modal.querySelector("[data-attached-ext]");
-            const nameEl = modal.querySelector("[data-attached-name]");
-            const metaEl = modal.querySelector("[data-attached-meta]");
-            const replaceTrigger = modal.querySelector("[data-replace-file-trigger]");
+            const attachedCard = modal.querySelector("[data-attached-card]");
+            const replaceDropzone = modal.querySelector("[data-replace-dropzone]");
+            const removeBtn = modal.querySelector("[data-attached-remove]");
+            const replaceHint = modal.querySelector("[data-replace-hint]");
 
-            if (replaceTrigger) {
-                replaceTrigger.addEventListener("click", () => replaceInput.click());
+            if (removeBtn) {
+                removeBtn.addEventListener("click", () => {
+                    if (attachedCard) attachedCard.classList.add("hidden");
+                    if (replaceDropzone) replaceDropzone.classList.remove("hidden");
+                    if (replaceHint) {
+                        replaceHint.textContent =
+                            "Choose a new PDF to replace the removed file. The title stays the same.";
+                    }
+                    replaceInput.click();
+                });
+            }
+            if (replaceDropzone) {
+                replaceDropzone.addEventListener("click", () => replaceInput.click());
+                replaceDropzone.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        replaceInput.click();
+                    }
+                });
             }
             replaceInput.addEventListener("change", () => {
                 if (!replaceInput.files || !replaceInput.files.length) return;
                 const file = replaceInput.files[0];
+                const maxMb = parseFloat(replaceInput.dataset.maxSizeMb || "0");
+                if (maxMb && file.size > maxMb * 1024 * 1024) {
+                    if (replaceHint) {
+                        replaceHint.textContent =
+                            `That PDF is larger than ${maxMb} MB. Compress it first.`;
+                        replaceHint.classList.add("content-modal__helper--error");
+                    }
+                    try {
+                        replaceInput.value = "";
+                    } catch (e) { /* ignore */ }
+                    return;
+                }
                 const ext = (file.name.split(".").pop() || "FILE").toUpperCase();
+                const extEl = modal.querySelector("[data-attached-ext]");
+                const nameEl = modal.querySelector("[data-attached-name]");
+                const metaEl = modal.querySelector("[data-attached-meta]");
                 if (extEl) {
                     extEl.textContent = ext.slice(0, 8);
                     extEl.className = `content-modal__badge content-modal__badge--${ext.toLowerCase()}`;
@@ -122,24 +167,80 @@
                     metaEl.textContent =
                         "Selected — saving will replace the current file";
                 }
+                if (attachedCard) attachedCard.classList.remove("hidden");
+                if (replaceDropzone) replaceDropzone.classList.add("hidden");
                 if (actionInput) actionInput.value = "replace_file";
                 if (form) form.requestSubmit();
             });
         }
     }
 
+    function resetSelectedFile(modal) {
+        const empty = modal.querySelector("[data-dropzone-empty]");
+        const attached = modal.querySelector("[data-dropzone-attached]");
+        const dropzone = modal.querySelector("[data-dropzone]");
+        const helperEl = modal.querySelector("[data-modal-file-helper]");
+        const nameEl = modal.querySelector("[data-dropzone-filename]");
+        const metaEl = modal.querySelector("[data-dropzone-filemeta]");
+        const originalNameInput = modal.querySelector("[data-modal-original-name]");
+        if (empty) empty.classList.remove("hidden");
+        if (attached) attached.classList.add("hidden");
+        if (dropzone) dropzone.classList.remove("has-file");
+        if (nameEl) nameEl.textContent = "";
+        if (metaEl) metaEl.textContent = "";
+        if (originalNameInput) originalNameInput.value = "";
+        if (helperEl) {
+            helperEl.classList.remove("content-modal__helper--error");
+            helperEl.textContent = "Choose a PDF that matches this course subject.";
+        }
+    }
+
     function reflectSelectedFile(fileInput, originalNameInput, titleInput) {
-        if (!fileInput.files || !fileInput.files.length) return;
+        if (!fileInput.files || !fileInput.files.length) {
+            resetSelectedFile(fileInput.closest(".content-modal"));
+            return;
+        }
         const file = fileInput.files[0];
+        const modal = fileInput.closest(".content-modal");
+        const maxMb = parseFloat(fileInput.dataset.maxSizeMb || "0");
+        const helperEl = modal ? modal.querySelector("[data-modal-file-helper]") : null;
+        if (maxMb && file.size > maxMb * 1024 * 1024) {
+            try {
+                fileInput.value = "";
+            } catch (e) { /* ignore */ }
+            resetSelectedFile(modal);
+            if (helperEl) {
+                helperEl.classList.add("content-modal__helper--error");
+                helperEl.textContent =
+                    `That PDF is larger than ${maxMb} MB. Compress it and try again.`;
+            }
+            return;
+        }
         if (originalNameInput) originalNameInput.value = file.name;
         if (titleInput && !titleInput.value.trim()) {
             titleInput.value = file.name.replace(/\.[^.]+$/, "");
         }
-        const nameEl = fileInput
-            .closest(".content-modal")
-            ?.querySelector("[data-dropzone-filename]");
+        const empty = modal ? modal.querySelector("[data-dropzone-empty]") : null;
+        const attached = modal ? modal.querySelector("[data-dropzone-attached]") : null;
+        const nameEl = modal ? modal.querySelector("[data-dropzone-filename]") : null;
+        const metaEl = modal ? modal.querySelector("[data-dropzone-filemeta]") : null;
+        if (empty) empty.classList.add("hidden");
+        if (attached) attached.classList.remove("hidden");
         if (nameEl) {
-            nameEl.textContent = `${file.name} · ${formatBytes(file.size)}`;
+            nameEl.textContent = file.name;
+            nameEl.title = file.name;
+        }
+        if (metaEl) {
+            metaEl.textContent = `${formatBytes(file.size) || "PDF"} · Ready to upload`;
+        }
+        const dropzone = modal ? modal.querySelector("[data-dropzone]") : null;
+        if (dropzone) dropzone.classList.add("has-file");
+        // A fresh pick clears a previous server-side mismatch message; the
+        // file is validated again on submit.
+        if (helperEl) {
+            helperEl.classList.remove("content-modal__helper--error");
+            helperEl.textContent =
+                "Choose a PDF that matches this course subject.";
         }
     }
 
@@ -156,7 +257,6 @@
         const nameEl = modal.querySelector("[data-attached-name]");
         const metaEl = modal.querySelector("[data-attached-meta]");
         const extEl = modal.querySelector("[data-attached-ext]");
-        const downloadEl = modal.querySelector("[data-attached-download]");
         const subjectHidden = modal.querySelector("[data-modal-subject-input]");
         const subjectLabel = modal.querySelector("[data-sidebar-course]");
 
@@ -185,9 +285,6 @@
             const ext = trigger.dataset.docExt.toUpperCase();
             extEl.textContent = ext.slice(0, 8);
             extEl.className = `content-modal__badge content-modal__badge--${ext.toLowerCase()}`;
-        }
-        if (downloadEl && trigger.dataset.downloadUrl) {
-            downloadEl.href = trigger.dataset.downloadUrl;
         }
         if (trigger.dataset.docSubject) {
             if (subjectHidden) subjectHidden.value = trigger.dataset.docSubject;

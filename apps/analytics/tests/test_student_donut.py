@@ -738,7 +738,9 @@ def test_professor_overview_renders_donut_filters(
     assert "donut_period=all" in content
     assert 'id="donut-subject-picker"' in content
     assert 'data-donut-param="donut_subject"' in content
-    assert "All sections" not in content
+    assert 'id="donut-section-picker"' in content
+    assert 'data-donut-param="donut_section"' in content
+    assert "All sections" in content
 
 
 @pytest.mark.django_db

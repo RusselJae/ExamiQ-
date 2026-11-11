@@ -109,8 +109,12 @@ def _student_data(signup_year_level, **extra):
 
 
 def _signup_post(client, signup_year_level, data, *, irregular=False):
-    """POST the signup form the way the page now does (no COR upload)."""
-    from apps.users.models import PendingStudentRegistration
+    """POST the signup form; regular students auto-pick a section."""
+    from apps.users.models import (
+        PendingStudentRegistration,
+        ProgramSection,
+    )
+    from apps.users.section_services import get_current_academic_year
 
     data = dict(data)
     number = data.get("student_number")
@@ -119,6 +123,23 @@ def _signup_post(client, signup_year_level, data, *, irregular=False):
             student_number=number,
             defaults={"is_irregular": bool(irregular)},
         )
+    if not irregular and not data.get("section") and data.get("year_level"):
+        year = get_current_academic_year()
+        section = ProgramSection.objects.filter(
+            program__slug=User.HomeDegreeProgram.BSED_MATH,
+            year_level_id=data["year_level"],
+            academic_year=year,
+            is_active=True,
+        ).first()
+        if section is None:
+            section = ProgramSection.objects.create(
+                program=Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH),
+                year_level_id=data["year_level"],
+                label="1M",
+                academic_year=year,
+                max_students=40,
+            )
+        data["section"] = section.pk
     return client.post(reverse("account_signup"), data)
 
 
@@ -271,31 +292,50 @@ class TestSignupFacultySelection:
 
         subject = faculty_setup["subject"]
         professor = faculty_setup["professor"]
+        data = self._regular_data(signup_year_level, subject, professor)
+        data["section"] = faculty_setup["section"].pk
         response = _signup_post(
             client,
             signup_year_level,
-            self._regular_data(signup_year_level, subject, professor),
+            data,
         )
         assert response.status_code == 302
         user = User.objects.get(email="newstudent@test.edu")
+        assert user.section_id == faculty_setup["section"].pk
         assignment = StudentFacultyAssignment.objects.filter(
             student=user, subject=subject
         ).first()
         assert assignment is not None
         assert assignment.faculty_id == professor.pk
 
-    def test_signup_requires_faculty_pick_when_available(
+    def test_regular_signup_auto_assigns_section_faculty_without_pick(
         self, client, bsed_program, signup_year_level, faculty_setup
     ):
         from apps.users.models import StudentFacultyAssignment
 
-        response = _signup_post(
-            client, signup_year_level, _student_data(signup_year_level)
-        )
+        data = _student_data(signup_year_level)
+        data["section"] = faculty_setup["section"].pk
+        response = _signup_post(client, signup_year_level, data, irregular=False)
+        assert response.status_code == 302
+        user = User.objects.get(email="newstudent@test.edu")
+        assert user.section_id == faculty_setup["section"].pk
+        assignment = StudentFacultyAssignment.objects.filter(
+            student=user, subject=faculty_setup["subject"]
+        ).first()
+        assert assignment is not None
+        assert assignment.faculty_id == faculty_setup["professor"].pk
+
+    def test_irregular_signup_requires_cor_upload(
+        self, client, bsed_program, signup_year_level, faculty_setup
+    ):
+        subject = faculty_setup["subject"]
+        data = _student_data(signup_year_level, email="irreg.nocor@test.edu")
+        data["is_irregular"] = "1"
+        data["courses"] = [str(subject.pk)]
+        response = _signup_post(client, signup_year_level, data, irregular=True)
         assert response.status_code == 200
-        assert "Choose a faculty member" in response.content.decode()
-        assert not User.objects.filter(email="newstudent@test.edu").exists()
-        assert not StudentFacultyAssignment.objects.exists()
+        assert "COR is required for irregular registration" in response.content.decode()
+        assert not User.objects.filter(email="irreg.nocor@test.edu").exists()
 
     def test_irregular_signup_links_enrollment_to_faculty_section(
         self, client, bsed_program, signup_year_level, faculty_setup
@@ -314,8 +354,15 @@ class TestSignupFacultySelection:
         data = _student_data(signup_year_level, email="irreg@test.edu")
         data["is_irregular"] = "1"
         data["courses"] = [str(subject.pk)]
+        data["cor_upload"] = _cor_file()
         data["faculty_selections"] = _json.dumps({str(subject.pk): professor.pk})
-        response = _signup_post(client, signup_year_level, data, irregular=True)
+        from unittest.mock import patch
+
+        with patch(
+            "apps.users.cor_services.verify_cor_submission",
+            return_value=None,
+        ):
+            response = _signup_post(client, signup_year_level, data, irregular=True)
         assert response.status_code == 302
         user = User.objects.get(email="irreg@test.edu")
         assert user.is_irregular is True
@@ -830,7 +877,8 @@ class TestAuthTemplates:
         assert "auth-password-strength--compact" in content
         assert "Employee ID" not in content
         assert "id_year_level" in content
-        assert "id_section" not in content  # Section field removed
+        assert "id_section" in content  # Regular students pick a section
+        assert "Certificate of Registration" in content
         assert "Faculty signup PIN" not in content
         assert "Subjects (choose at least 3)" not in content
         assert "Program" not in content or "home_degree_program" not in content

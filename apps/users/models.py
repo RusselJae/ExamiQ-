@@ -674,8 +674,8 @@ class TeachingAssignment(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["professor", "subject", "term"],
-                name="unique_teaching_load_per_course",
+                fields=["professor", "subject", "term", "program_section"],
+                name="unique_teaching_load_per_course_section",
             ),
         ]
 

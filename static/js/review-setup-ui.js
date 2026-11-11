@@ -6,14 +6,14 @@
 (function () {
     "use strict";
 
-    var currentTab = "year";
+    var currentTab = "";
 
     function getForm() {
         return document.getElementById("review-setup-form");
     }
 
     function selectTab(tab) {
-        var tabButtons = document.querySelectorAll("[data-tab]");
+        var tabButtons = document.querySelectorAll("[data-year-tab]");
         if (!tab) {
             filterRows();
             return;
@@ -21,7 +21,7 @@
         if (tab !== currentTab) {
             currentTab = tab;
             tabButtons.forEach(function (b) {
-                var active = b.getAttribute("data-tab") === tab;
+                var active = b.getAttribute("data-year-tab") === tab;
                 b.classList.toggle("is-active", active);
                 b.setAttribute("aria-selected", active ? "true" : "false");
             });
@@ -30,10 +30,12 @@
     }
 
     function initTabs() {
-        var tabButtons = document.querySelectorAll("[data-tab]");
+        var tabButtons = document.querySelectorAll("[data-year-tab]");
+        var active = document.querySelector("[data-year-tab].is-active");
+        currentTab = active ? active.getAttribute("data-year-tab") : "";
         tabButtons.forEach(function (btn) {
             btn.addEventListener("click", function () {
-                selectTab(btn.getAttribute("data-tab"));
+                selectTab(btn.getAttribute("data-year-tab"));
             });
         });
     }
@@ -65,17 +67,10 @@
         var visibleCount = 0;
 
         rows.forEach(function (row) {
-            var category = row.getAttribute("data-category");
+            var yearId = row.getAttribute("data-year") || "";
             var searchTerms = (row.getAttribute("data-search") || "").toLowerCase();
 
-            var matchesTab = false;
-            if (currentTab === "all") {
-                matchesTab = true;
-            } else if (currentTab === "year" && category === "year") {
-                matchesTab = true;
-            } else if (currentTab === "other" && category === "other") {
-                matchesTab = true;
-            }
+            var matchesTab = !currentTab || yearId === currentTab;
 
             var matchesSearch = !query || searchTerms.indexOf(query) !== -1;
 
@@ -404,6 +399,11 @@
                 if (active) btn.setAttribute("aria-current", "step");
                 else btn.removeAttribute("aria-current");
                 btn.classList.toggle("is-complete", n < step);
+            });
+            form.querySelectorAll("[data-progress-seg]").forEach(function (seg) {
+                var n = parseInt(seg.getAttribute("data-progress-seg"), 10);
+                seg.classList.toggle("is-complete", n < step);
+                seg.classList.toggle("is-active", n === step);
             });
             if (backBtn) backBtn.hidden = step === 1;
             if (nextBtn) nextBtn.hidden = step === 3;

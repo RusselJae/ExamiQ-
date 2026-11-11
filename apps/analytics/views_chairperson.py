@@ -49,6 +49,9 @@ class ChairpersonDashboardView(ChairpersonRequiredMixin, TemplateView):
             "faculty_count": User.objects.filter(
                 role=User.Role.PROFESSOR,
                 **({"department": department} if department else {}),
+                is_active=True,
+                is_archived=False,
+                approval_status=User.ApprovalStatus.APPROVED,
             ).count(),
             "course_count": Subject.objects.filter(program__in=programs).count(),
             "section_count": ProgramSection.objects.filter(

@@ -11,7 +11,8 @@
 <h2 class="auth-page__heading">Create your student account</h2>
 <p class="auth-page__subheading">Join EXAMIQ+ and start reviewing smarter.</p>
 
-<form method="post" action="{% url 'account_signup' %}" enctype="multipart/form-data" class="auth-form" novalidate id="signup-form">
+<form method="post" action="{% url 'account_signup' %}" enctype="multipart/form-data" class="auth-form" novalidate id="signup-form"
+      data-cor-analyze-url="{% url 'users:cor_analyze' %}">
     {% csrf_token %}
     {% for field in form.hidden_fields %}{{ field }}{% endfor %}
     {% if form.non_field_errors %}
@@ -51,6 +52,7 @@
             <input type="hidden" name="{{ form.is_irregular.html_name }}"
                    id="{{ form.is_irregular.id_for_label }}"
                    value="{% if form.is_irregular.value == "1" or form.is_irregular.value == True %}1{% else %}0{% endif %}">
+            {% if form.is_irregular.errors %}<p class="auth-field__error">{{ form.is_irregular.errors.0 }}</p>{% endif %}
         </div>
     </div>
 
@@ -64,53 +66,78 @@
     </div>
     {% include "components/auth_field.html" with field=form.student_number %}
 
-    <!-- Regular student: year level -->
+    <!-- Regular student: year level + section -->
     <div class="auth-form-row auth-form-row--full" id="regular-fields"
          style="{% if form.is_irregular.value %}display: none;{% endif %}">
-        <div class="auth-field{% if form.year_level.errors %} auth-field--error{% endif %}">
-            <label class="auth-field__label" for="{{ form.year_level.id_for_label }}">{{ form.year_level.label }}</label>
-            {{ form.year_level }}
-            {% if form.year_level.errors %}<p class="auth-field__error">{{ form.year_level.errors.0 }}</p>{% endif %}
+        <div class="auth-form-row auth-form-row--2">
+            <div class="auth-field{% if form.year_level.errors %} auth-field--error{% endif %}">
+                <label class="auth-field__label" for="{{ form.year_level.id_for_label }}">{{ form.year_level.label }}</label>
+                {{ form.year_level }}
+                {% if form.year_level.errors %}<p class="auth-field__error">{{ form.year_level.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="auth-field{% if form.section.errors %} auth-field--error{% endif %}">
+                <label class="auth-field__label" for="{{ form.section.id_for_label }}">{{ form.section.label }}</label>
+                {{ form.section }}
+                <p class="auth-field__hint" id="section-hint">Pick your year level first to see its sections.</p>
+                {% if form.section.errors %}<p class="auth-field__error">{{ form.section.errors.0 }}</p>{% endif %}
+            </div>
         </div>
     </div>
 
-    <!-- Course + faculty selection panel -->
-    <div class="auth-selection-panel" id="selection-panel" style="display: none;">
-    <!-- Irregular student: pick the courses being taken -->
+    <!-- Irregular student: COR upload drives course detection + type check -->
+    <div class="auth-form-row auth-form-row--full" id="cor-upload-wrapper"
+         style="{% if not form.is_irregular.value %}display: none;{% endif %}">
+        <div class="auth-field{% if form.cor_upload.errors %} auth-field--error{% endif %}">
+            <span class="auth-field__label">Certificate of Registration <span class="auth-field__required">Required</span></span>
+            <div class="cor-upload-zone" id="cor-upload-zone">
+                {{ form.cor_upload }}
+                <div class="cor-upload-zone__empty" id="cor-upload-empty">
+                    <label class="cor-upload-zone__drop" for="{{ form.cor_upload.id_for_label }}">
+                        <span class="cor-upload-zone__icon" aria-hidden="true">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+                        </span>
+                        <span class="cor-upload-zone__title">Drag and drop your COR here</span>
+                        <span class="cor-upload-zone__or">or</span>
+                        <span class="cor-upload-zone__browse">Browse files</span>
+                        <span class="cor-upload-zone__formats">PDF&nbsp;&nbsp;&nbsp;PNG&nbsp;&nbsp;&nbsp;JPG&nbsp;&nbsp;&nbsp;&nbsp;Up to 8 MB</span>
+                    </label>
+                </div>
+                <div class="cor-upload-zone__file hidden" id="cor-upload-file">
+                    <div class="cor-upload-zone__chip">
+                        <span class="cor-upload-zone__ext" id="cor-file-ext">PDF</span>
+                        <span class="cor-upload-zone__meta">
+                            <span class="cor-upload-zone__name" id="cor-file-name">COR_2026-2027.pdf</span>
+                            <span class="cor-upload-zone__status" id="cor-file-status">Ready to analyze</span>
+                        </span>
+                        <button type="button" class="cor-upload-zone__clear" id="cor-file-clear" aria-label="Remove file">✕</button>
+                    </div>
+                    <button type="button" class="cor-upload-zone__analyze" id="cor-analyze-btn">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+                        Analyze COR
+                    </button>
+                    <button type="button" class="cor-upload-zone__switch" id="cor-switch-file">Choose a different file</button>
+                    <p class="cor-upload-zone__result" id="cor-analyze-result" role="status" aria-live="polite"></p>
+                    <p class="cor-upload-zone__note">ⓘ&nbsp;&nbsp;We read your COR to find your courses and confirm your student type. You review everything before anything saves.</p>
+                </div>
+            </div>
+            {% if form.cor_upload.errors %}<p class="auth-field__error">{{ form.cor_upload.errors.0 }}</p>{% endif %}
+        </div>
+    </div>
+
+    <!-- Irregular student: detected courses (read-only, from COR) -->
     <div class="auth-form-row auth-form-row--full irregular-fields" id="irregular-courses-wrapper"
          style="{% if not form.is_irregular.value %}display: none;{% endif %}">
         <div class="auth-field{% if form.courses.errors %} auth-field--error{% endif %} irregular-field">
             <span class="auth-field__label">{{ form.courses.label }}</span>
-            <div class="course-search">
-                <svg class="course-search__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
-                <input type="search"
-                       id="course-search"
-                       class="auth-field__input course-search__input"
-                       placeholder="Search course or code"
-                       aria-label="Search courses"
-                       autocomplete="off">
-                <details class="course-filter" id="course-filter">
-                    <summary class="course-filter__toggle" title="Filter by year level" aria-label="Filter courses by year level">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M7 12h10M11 18h2"/></svg>
-                    </summary>
-                    <div class="course-filter__panel">
-                        <button type="button" class="course-filter__option is-active" data-year="">All year levels</button>
-                        {% for year_level in year_levels %}
-                        <button type="button" class="course-filter__option" data-year="{{ year_level.pk }}">{{ year_level.name }}</button>
-                        {% endfor %}
-                    </div>
-                </details>
+            <div id="detected-courses-store"></div>
+            <div id="detected-courses-list" class="detected-courses">
+                <p class="detected-courses__empty">Upload and analyze your COR first — your courses will appear here.</p>
             </div>
-            <div id="course-picker" class="course-picker course-checkboxes">
-                {{ form.courses }}
-            </div>
-            <p class="course-search__empty hidden" id="course-search-empty">No courses match your search.</p>
-            {% if form.is_irregular.errors %}<p class="auth-field__error">{{ form.is_irregular.errors.0 }}</p>{% endif %}
             {% if form.courses.errors %}<p class="auth-field__error">{{ form.courses.errors.0 }}</p>{% endif %}
         </div>
     </div>
 
-    <!-- Faculty picker (per selected subject, both student types) -->
+    <!-- Faculty picker (per selected subject) -->
     <div class="auth-form-row auth-form-row--full" id="faculty-picker-wrapper" style="display: none;">
         <div class="auth-field{% if form.faculty_selections.errors %} auth-field--error{% endif %}">
             <span class="auth-field__label">Choose your faculty</span>
@@ -118,11 +145,11 @@
             {% if form.faculty_selections.errors %}<p class="auth-field__error">{{ form.faculty_selections.errors.0 }}</p>{% endif %}
         </div>
     </div>
-    </div>
     {{ form.faculty_selections }}
     {{ faculty_options|json_script:"faculty-options-data" }}
     {{ subject_year_map|json_script:"subject-year-map" }}
     {{ subject_meta|json_script:"subject-meta-data" }}
+    {{ sections_by_year|json_script:"sections-by-year" }}
 
     <div class="auth-form-row auth-form-row--2">
         <label class="auth-field{% if form.phone_number.errors %} auth-field--error{% endif %}" for="id_phone_display">
@@ -151,99 +178,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/signup-faculty.js' %}"></script>
-<script>
-(function () {
-    "use strict";
-
-    var regularBtn = document.querySelector('.student-type-switch__btn[data-type="regular"]');
-    var irregularBtn = document.querySelector('.student-type-switch__btn[data-type="irregular"]');
-    var regularInput = document.getElementById("{{ form.is_irregular.id_for_label }}-regular");
-    var irregularInput = document.getElementById("{{ form.is_irregular.id_for_label }}-irregular");
-    var hiddenInput = document.getElementById("{{ form.is_irregular.id_for_label }}");
-    var regularFields = document.getElementById("regular-fields");
-    var irregularFields = document.getElementById("irregular-courses-wrapper");
-    var yearLevel = document.getElementById("id_year_level");
-
-    function setStudentType(isIrregular) {
-        if (irregularInput) irregularInput.checked = isIrregular;
-        if (regularInput) regularInput.checked = !isIrregular;
-        if (hiddenInput) hiddenInput.value = isIrregular ? "1" : "0";
-        if (regularBtn) {
-            regularBtn.classList.toggle("student-type-switch__btn--active", !isIrregular);
-            regularBtn.setAttribute("aria-pressed", String(!isIrregular));
-        }
-        if (irregularBtn) {
-            irregularBtn.classList.toggle("student-type-switch__btn--active", isIrregular);
-            irregularBtn.setAttribute("aria-pressed", String(isIrregular));
-        }
-
-        if (regularFields) {
-            regularFields.style.display = isIrregular ? "none" : "";
-        }
-        if (irregularFields) {
-            irregularFields.style.display = isIrregular ? "" : "none";
-        }
-        if (yearLevel) {
-            if (isIrregular) {
-                yearLevel.removeAttribute("required");
-            } else {
-                yearLevel.setAttribute("required", "required");
-            }
-        }
-    }
-
-    if (regularBtn && irregularBtn) {
-        regularBtn.addEventListener("click", function () { setStudentType(false); });
-        irregularBtn.addEventListener("click", function () { setStudentType(true); });
-    }
-
-    // Course search + year filter: both narrow the visible checkbox rows.
-    var courseSearch = document.getElementById("course-search");
-    var coursePicker = document.getElementById("course-picker");
-    var courseSearchEmpty = document.getElementById("course-search-empty");
-    var courseFilter = document.getElementById("course-filter");
-    var courseYear = "";
-
-    function applyCourseFilter() {
-        if (!coursePicker) return;
-        var q = ((courseSearch && courseSearch.value) || "").trim().toLowerCase();
-        var visible = 0;
-        coursePicker.querySelectorAll(".course-checkbox").forEach(function (row) {
-            var input = row.querySelector(".course-checkbox__input");
-            var code = input ? input.getAttribute("data-code") || "" : "";
-            var name = input ? input.getAttribute("data-name") || "" : "";
-            var year = input ? input.getAttribute("data-year") || "" : "";
-            var matchesText = !q || (code + " " + name).toLowerCase().indexOf(q) !== -1;
-            var matchesYear = !courseYear || year === courseYear;
-            var show = matchesText && matchesYear;
-            row.style.display = show ? "" : "none";
-            if (show) visible += 1;
-        });
-        if (courseSearchEmpty) {
-            courseSearchEmpty.classList.toggle("hidden", visible > 0);
-        }
-    }
-
-    if (courseSearch) {
-        courseSearch.addEventListener("input", applyCourseFilter);
-    }
-
-    if (courseFilter) {
-        courseFilter.querySelectorAll("[data-year]").forEach(function (btn) {
-            btn.addEventListener("click", function () {
-                courseYear = btn.getAttribute("data-year") || "";
-                courseFilter.querySelectorAll("[data-year]").forEach(function (other) {
-                    other.classList.toggle("is-active", other === btn);
-                });
-                if (courseSearch) courseSearch.focus();
-                applyCourseFilter();
-                courseFilter.removeAttribute("open");
-            });
-        });
-    }
-})();
-</script>
+<script src="{% static 'js/signup-faculty.js' %}?v=20261111d"></script>
+<script src="{% static 'js/signup-form.js' %}?v=20261111h"></script>
 {% endblock %}
 
 {% block auth_footer %}

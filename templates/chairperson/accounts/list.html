@@ -14,9 +14,12 @@
 {% endif %}
 
 <div class="coord-tabs" role="tablist" aria-label="Account views">
-    <a href="?tab=accounts" role="tab"
-       class="coord-tab{% if accounts_tab == 'accounts' %} is-active{% endif %}"
-       aria-selected="{% if accounts_tab == 'accounts' %}true{% else %}false{% endif %}">Accounts</a>
+    <a href="?tab=faculty" role="tab"
+       class="coord-tab{% if accounts_tab == 'faculty' %} is-active{% endif %}"
+       aria-selected="{% if accounts_tab == 'faculty' %}true{% else %}false{% endif %}">Faculty</a>
+    <a href="?tab=students" role="tab"
+       class="coord-tab{% if accounts_tab == 'students' %} is-active{% endif %}"
+       aria-selected="{% if accounts_tab == 'students' %}true{% else %}false{% endif %}">Students</a>
     <a href="?tab=numbers" role="tab"
        class="coord-tab{% if accounts_tab == 'numbers' %} is-active{% endif %}"
        aria-selected="{% if accounts_tab == 'numbers' %}true{% else %}false{% endif %}">Student numbers{% if roster_entries %} <span class="coord-tab__count">{{ roster_entries|length }}</span>{% endif %}</a>
@@ -37,7 +40,6 @@
             </div>
         </div>
     </div>
-    <button type="button" class="btn-primary btn-primary-sm" data-open-roster-dialog>Add account</button>
 </div>
 {% if roster_entries %}
 <div class="coord-roster-block">
@@ -71,11 +73,12 @@
     </div>
 </div>
 {% else %}
-{% include "components/empty_state.html" with compact=True title="No waiting numbers" body="Use Add account to register a student number first; it disappears here once the student signs up." %}
+{% include "components/empty_state.html" with compact=True title="No waiting numbers" body="Add a student account from the Students tab to register a number first; it disappears here once the student signs up." %}
 {% endif %}
 {% else %}
 <div class="coord-panel__toolbar">
     <form method="get" class="filter-bar" data-filter-bar role="search">
+        <input type="hidden" name="tab" value="{{ accounts_tab }}">
         <div class="filter-bar__search-row">
             <div class="filter-bar__search-box">
                 <svg class="filter-bar__search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"/></svg>
@@ -93,15 +96,6 @@
                     </summary>
                     <div class="filter-bar__panel" data-filter-panel>
                         <div class="filter-bar__grid">
-                            <label class="filter-bar__field">
-                                <span class="filter-bar__label">Role</span>
-                                <select name="role" id="role" class="filter-bar__select">
-                                    <option value="">All roles</option>
-                                    {% for value, label in role_choices %}
-                                    <option value="{{ value }}" {% if role_filter == value %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </label>
                             <label class="filter-bar__field">
                                 <span class="filter-bar__label">Account</span>
                                 <select name="active" id="active" class="filter-bar__select">
@@ -122,7 +116,7 @@
                             </label>
                         </div>
                         <div class="filter-bar__actions">
-                            <a href="{% url 'analytics_chairperson:accounts' %}" class="filter-bar__reset">Reset</a>
+                            <a href="?tab={{ accounts_tab }}" class="filter-bar__reset">Reset</a>
                             <button type="submit" class="btn-primary btn-primary-sm filter-bar__apply">Apply filters</button>
                         </div>
                     </div>
@@ -130,14 +124,17 @@
             </div>
         </div>
     </form>
+    {% if accounts_tab == 'students' %}
+    <button type="button" class="btn-primary btn-primary-sm" data-open-roster-dialog>Add account</button>
+    {% endif %}
 </div>
 
-<div class="coord-table-wrap">
+<div class="coord-table-wrap coord-table-wrap--actions">
     <table class="data-table w-full">
         <thead>
             <tr>
                 <th>Name</th>
-                <th>Role</th>
+                <th>{% if accounts_tab == 'faculty' %}Sections{% else %}Section{% endif %}</th>
                 <th>Courses</th>
                 <th>Status</th>
                 <th class="text-right">Actions</th>
@@ -152,14 +149,23 @@
                         <div class="min-w-0">
                             <div class="font-medium truncate" title="{{ managed_user.get_full_name|default:"—" }}">{{ managed_user.get_full_name|default:"—" }}</div>
                             <div class="text-xs text-examiq-slate break-all">{{ managed_user.email }}</div>
+                            <div class="text-xs text-examiq-slate">{{ managed_user.get_role_display }}{% if managed_user.employee_id %} · {{ managed_user.employee_id }}{% elif managed_user.student_number %} · {{ managed_user.student_number }}{% endif %}</div>
                         </div>
                     </div>
                 </td>
-                <td class="whitespace-nowrap">
-                    <div class="account-role">
-                        <span>{{ managed_user.get_role_display }}</span>
-                        <span class="account-id-pill">{{ managed_user.employee_id|default:managed_user.student_number|default:"—" }}</span>
+                <td>
+                    {% if managed_user.assigned_section_labels %}
+                    <div class="account-course-chips">
+                        {% for label in managed_user.assigned_section_labels|slice:":3" %}
+                        <span class="course-chip course-chip--section">{{ label }}</span>
+                        {% endfor %}
+                        {% if managed_user.assigned_section_labels|length > 3 %}
+                        <span class="course-chip course-chip--more" title="{{ managed_user.assigned_section_labels|join:', ' }}">+{{ managed_user.assigned_section_labels|length|add:"-3" }}</span>
+                        {% endif %}
                     </div>
+                    {% else %}
+                    <span class="text-sm text-examiq-slate">—</span>
+                    {% endif %}
                 </td>
                 <td>
                     {% if managed_user.assigned_course_labels %}
@@ -217,7 +223,12 @@
                         <summary aria-label="Actions for {{ managed_user.email }}">⋮</summary>
                         <div class="account-kebab__menu">
                             {% if managed_user.is_archived %}
-                            <form method="post" action="{% url 'analytics_chairperson:account_restore' managed_user.pk %}">
+                            <form method="post" action="{% url 'analytics_chairperson:account_restore' managed_user.pk %}"
+                                  data-confirm-message="Restore {{ managed_user.get_full_name|default:managed_user.email }}'s account?"
+                                  data-confirm-title="Restore account"
+                                  data-confirm-label="Restore"
+                                  data-confirm-icon="restore"
+                                  data-confirm-type="info">
                                 {% csrf_token %}
                                 <button type="submit" class="text-sm text-link">Restore</button>
                             </form>
@@ -226,18 +237,33 @@
                                 {% csrf_token %}
                                 <button type="submit" class="text-sm text-link">Accept</button>
                             </form>
-                            <form method="post" action="{% url 'analytics_chairperson:account_reject' managed_user.pk %}">
+                            <form method="post" action="{% url 'analytics_chairperson:account_reject' managed_user.pk %}"
+                                  data-confirm-message="Reject {{ managed_user.get_full_name|default:managed_user.email }}'s registration?"
+                                  data-confirm-title="Reject registration"
+                                  data-confirm-label="Reject"
+                                  data-confirm-icon="reject"
+                                  data-confirm-type="error">
                                 {% csrf_token %}
                                 <button type="submit" class="text-sm text-examiq-coral hover:underline">Reject</button>
                             </form>
                             {% elif managed_user.approval_status != "rejected" %}
-                            <form method="post" action="{% url 'analytics_chairperson:account_toggle_active' managed_user.pk %}">
+                            <form method="post" action="{% url 'analytics_chairperson:account_toggle_active' managed_user.pk %}"
+                                  data-confirm-message="{% if managed_user.is_active %}Deactivate {{ managed_user.get_full_name|default:managed_user.email }}? They will no longer be able to sign in.{% else %}Activate {{ managed_user.get_full_name|default:managed_user.email }}?{% endif %}"
+                                  data-confirm-title="{% if managed_user.is_active %}Deactivate account{% else %}Activate account{% endif %}"
+                                  data-confirm-label="{% if managed_user.is_active %}Deactivate{% else %}Activate{% endif %}"
+                                  data-confirm-icon="{% if managed_user.is_active %}deactivate{% else %}activate{% endif %}"
+                                  data-confirm-type="warning">
                                 {% csrf_token %}
                                 <button type="submit" class="text-sm text-link">
                                     {% if managed_user.is_active %}Deactivate{% else %}Activate{% endif %}
                                 </button>
                             </form>
-                            <form method="post" action="{% url 'analytics_chairperson:account_archive' managed_user.pk %}">
+                            <form method="post" action="{% url 'analytics_chairperson:account_archive' managed_user.pk %}"
+                                  data-confirm-message="Archive {{ managed_user.get_full_name|default:managed_user.email }}? Archived accounts are hidden from the table."
+                                  data-confirm-title="Archive account"
+                                  data-confirm-label="Archive"
+                                  data-confirm-icon="archive"
+                                  data-confirm-type="error">
                                 {% csrf_token %}
                                 <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
                             </form>
@@ -248,7 +274,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="5" class="text-center text-sm text-examiq-slate py-8">No user accounts match your filters.</td>
+                <td colspan="5" class="text-center text-sm text-examiq-slate py-8">No {{ accounts_tab_label|lower }} accounts match your filters.</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -266,13 +292,12 @@
     {% endif %}
 </div>
 {% endif %}
-</div>
 {% endif %}
 </div>
 
 <dialog class="coord-dialog" id="add-roster-dialog" aria-labelledby="add-roster-title">
     <div class="coord-dialog__head">
-        <h2 class="coord-dialog__title" id="add-roster-title">Add account</h2>
+        <h2 class="coord-dialog__title" id="add-roster-title">Add student account</h2>
         <button type="button" class="coord-dialog__close" data-close-roster-dialog aria-label="Close">✕</button>
     </div>
     <div class="coord-dialog__body">
@@ -280,6 +305,7 @@
               action="{% url 'analytics_chairperson:account_add_student_number' %}"
               class="mt-4">
             {% csrf_token %}
+            <p class="text-sm text-examiq-slate mb-3">Register the student number first. The student completes the account when they sign up.</p>
             <fieldset class="roster-type">
                 <legend class="roster-type__legend">Student type</legend>
                 <label class="roster-type__option">
@@ -307,7 +333,7 @@
                       class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-examiq-navy focus:border-examiq-green outline-none"></textarea>
             <div class="coord-dialog__actions">
                 <button type="button" class="btn-secondary btn-primary-sm" data-close-roster-dialog>Cancel</button>
-                <button type="submit" class="btn-primary btn-primary-sm">Add account</button>
+                <button type="submit" class="btn-primary btn-primary-sm">Add student number</button>
             </div>
         </form>
     </div>

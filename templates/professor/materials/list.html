@@ -24,7 +24,7 @@
 </div>
 
 {# Add content modal — posts to the upload endpoint, then returns to the list. #}
-{% include "components/content_modal.html" with modal_id="content-modal-add" modal_mode="add" modal_title="Add content" modal_action_label="Upload" subject_id=subject.pk|default:"" form_action=add_content_url subject_options=subject_options %}
+{% include "components/content_modal.html" with modal_id="content-modal-add" modal_mode="add" modal_title="Add content" modal_action_label="Upload" subject_id=subject.pk|default:"" form_action=add_content_url subject_options=subject_options auto_open=content_modal_auto_open content_upload_error=content_upload_error %}
 
 {# Edit content modal — populated from the library Edit buttons. #}
 {% include "components/content_modal.html" with modal_id="content-modal-edit" modal_mode="edit" modal_title="Edit content" modal_action_label="Save" return_to="list" subject_options=subject_options %}
@@ -41,6 +41,6 @@
 
 {% block extra_js %}
 <script src="{% static 'js/materials-library.js' %}"></script>
-<script src="{% static 'js/content-modal.js' %}"></script>
+<script src="{% static 'js/content-modal.js' %}?v=20261112d"></script>
 <script src="{% static 'js/question-modal.js' %}"></script>
 {% endblock %}

@@ -12,6 +12,8 @@
     <form id="materials-doc-archive" method="post" class="hidden"
           data-confirm-message="Delete this material permanently? This cannot be undone."
           data-confirm-type="danger"
+          data-confirm-title="Delete material"
+          data-confirm-icon="remove"
           data-confirm-label="Delete">
         {% csrf_token %}
         {% if from_hub %}

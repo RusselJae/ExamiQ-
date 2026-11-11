@@ -54,35 +54,52 @@
                     <div class="content-modal__field content-modal__panel-block">
                         <span class="content-modal__label" id="{{ modal_id }}-attach-label">Attach</span>
                         <div class="content-modal__dropzone" data-dropzone tabindex="0" role="button" aria-labelledby="{{ modal_id }}-attach-label">
-                            <span class="content-modal__dropzone-icon" aria-hidden="true">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 19V5m0 0-6 6m6-6 6 6"/>
-                                </svg>
-                            </span>
-                            <span class="content-modal__dropzone-title">Upload</span>
-                            <span class="content-modal__dropzone-hint">or drag files here</span>
-                            <span class="content-modal__dropzone-formats">PDF only</span>
-                            <input type="file" name="source_file" accept=".pdf,application/pdf" class="sr-only" data-modal-file>
+                            <div class="content-modal__dropzone-empty" data-dropzone-empty>
+                                <span class="content-modal__dropzone-icon" aria-hidden="true">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 19V5m0 0l-6 6m6-6 6 6"/>
+                                    </svg>
+                                </span>
+                                <span class="content-modal__dropzone-title">Upload</span>
+                                <span class="content-modal__dropzone-hint">or drag files here</span>
+                                <span class="content-modal__dropzone-formats">PDF only · up to {{ max_pdf_upload_mb }} MB</span>
+                            </div>
+                            <div class="content-modal__attached content-modal__attached--pending hidden" data-dropzone-attached>
+                                <span class="content-modal__badge content-modal__badge--pdf">PDF</span>
+                                <span class="content-modal__attached-info">
+                                    <span class="content-modal__attached-name" data-dropzone-filename></span>
+                                    <span class="content-modal__attached-meta" data-dropzone-filemeta></span>
+                                </span>
+                                <button type="button" class="content-modal__attached-remove" data-dropzone-remove>Remove</button>
+                            </div>
+                            <input type="file" name="source_file" accept=".pdf,application/pdf" class="sr-only" data-modal-file data-max-size-mb="{{ max_pdf_upload_mb }}">
                         </div>
+                        <p class="content-modal__helper{% if content_upload_error %} content-modal__helper--error{% endif %}" data-modal-file-helper>{% if content_upload_error %}{{ content_upload_error }}{% else %}Choose a PDF that matches this course subject.{% endif %}</p>
                     </div>
                     {% else %}
                     <div class="content-modal__field content-modal__panel-block">
                         <span class="content-modal__label" id="{{ modal_id }}-attached-label">Attached file</span>
-                        <div class="content-modal__attached">
+                        <div class="content-modal__attached" data-attached-card>
                             <span class="content-modal__badge content-modal__badge--{{ doc_ext|lower|default:'docx' }}" data-attached-ext>{{ doc_ext|default:'DOCX' }}</span>
                             <span class="content-modal__attached-info">
                                 <span class="content-modal__attached-name" data-attached-name>{{ doc_name|default:'Document' }}</span>
                                 <span class="content-modal__attached-meta" data-attached-meta>{{ doc_meta|default:'' }}</span>
                             </span>
                             <span class="content-modal__attached-actions">
-                                <a class="content-modal__attached-link" href="{{ download_url|default:'#' }}" data-attached-download download>
-                                    Download
-                                </a>
-                                <button type="button" class="content-modal__replace-btn" data-replace-file-trigger>Replace file</button>
+                                <button type="button" class="content-modal__attached-remove" data-attached-remove>Remove</button>
                             </span>
                         </div>
-                        <input type="file" name="replace_file" accept=".pdf,application/pdf" class="sr-only" data-modal-replace aria-label="Choose replacement file">
-                        <p class="content-modal__replace-hint">Replacing a file keeps the title and re-processes the content for AI review.</p>
+                        <div class="content-modal__dropzone content-modal__dropzone--replace hidden" data-replace-dropzone tabindex="0" role="button" aria-label="Choose a replacement PDF">
+                            <span class="content-modal__dropzone-icon" aria-hidden="true">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 19V5m0 0l-6 6m6-6 6 6"/>
+                                </svg>
+                            </span>
+                            <span class="content-modal__dropzone-title">Upload a replacement</span>
+                            <span class="content-modal__dropzone-hint">PDF only · up to {{ max_pdf_upload_mb }} MB</span>
+                        </div>
+                        <input type="file" name="replace_file" accept=".pdf,application/pdf" class="sr-only" data-modal-replace data-max-size-mb="{{ max_pdf_upload_mb }}" aria-label="Choose replacement file">
+                        <p class="content-modal__replace-hint" data-replace-hint>Removing the current file lets you choose a new one. The replacement keeps the title and re-processes the content for AI review.</p>
                     </div>
                     {% endif %}
                 </div>

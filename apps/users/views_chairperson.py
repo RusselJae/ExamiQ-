@@ -15,6 +15,7 @@ from apps.core.mixins import ChairpersonRequiredMixin
 from apps.questions.models import Subject, YearLevel
 from apps.users.assignment_services import (
     annotate_users_with_course_labels,
+    annotate_users_with_section_labels,
     archive_user,
     create_curriculum_subject,
     delete_curriculum_subject,
@@ -84,9 +85,13 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
             "section__program",
             "section__year_level",
         )
-        role = self.request.GET.get("role", "")
-        if role in {User.Role.STUDENT, User.Role.PROFESSOR}:
-            qs = qs.filter(role=role)
+        tab = self.request.GET.get("tab", "faculty")
+        if tab == "students":
+            qs = qs.filter(role=User.Role.STUDENT)
+        elif tab == "numbers":
+            return qs.none()
+        else:
+            qs = qs.filter(role=User.Role.PROFESSOR)
         active = self.request.GET.get("active", "")
         if active == "active":
             qs = qs.filter(
@@ -100,6 +105,10 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
             )
         elif active == "archived":
             qs = qs.filter(is_archived=True)
+        else:
+            # Archived accounts stay out of the table by default; the
+            # "Archived" account filter above reveals them for restore.
+            qs = qs.filter(is_archived=False)
         status = self.request.GET.get("status", "")
         if status in {
             User.ApprovalStatus.PENDING,
@@ -121,14 +130,10 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         annotate_users_with_course_labels(context["users"])
-        context["role_filter"] = self.request.GET.get("role", "")
+        annotate_users_with_section_labels(context["users"])
         context["active_filter"] = self.request.GET.get("active", "")
         context["status_filter"] = self.request.GET.get("status", "")
         context["search_query"] = self.request.GET.get("q", "")
-        context["role_choices"] = [
-            (User.Role.STUDENT, "Student"),
-            (User.Role.PROFESSOR, "Faculty"),
-        ]
         context["status_choices"] = User.ApprovalStatus.choices
         context["pending_count"] = (
             _managed_faculty(self.request.user)
@@ -138,9 +143,15 @@ class ChairpersonAccountListView(ChairpersonRequiredMixin, ListView):
         context["roster_entries"] = PendingStudentRegistration.objects.filter(
             claimed_by__isnull=True
         ).order_by("-created_at")
-        context["accounts_tab"] = (
-            "numbers" if self.request.GET.get("tab") == "numbers" else "accounts"
-        )
+        tab = self.request.GET.get("tab", "faculty")
+        if tab not in {"faculty", "students", "numbers"}:
+            tab = "faculty"
+        context["accounts_tab"] = tab
+        context["accounts_tab_label"] = {
+            "faculty": "Faculty",
+            "students": "Students",
+            "numbers": "Student numbers",
+        }[tab]
         return context
 
 

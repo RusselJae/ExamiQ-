@@ -39,6 +39,129 @@ def _make_ready_doc(
 
 
 @pytest.mark.django_db
+class TestBatchUploadVisibility:
+    """Batch-generated source files stay out of the faculty Content library."""
+
+    def test_batch_uploads_hidden_from_library_but_visible_to_picker(
+        self, professor, subject
+    ):
+        from apps.ai.material_services import (
+            documents_for_course,
+            documents_for_courses,
+            documents_for_subject,
+            ready_documents_for_course,
+        )
+
+        course = get_or_create_catalog_course(professor, subject)
+        batch_doc = _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Batch-only source",
+            filename="batch-only.pdf",
+        )
+        batch_doc.origin = "batch_upload"
+        batch_doc.save(update_fields=["origin"])
+        library_doc = _make_ready_doc(
+            course=course,
+            subject=subject,
+            user=professor,
+            title="Library material",
+            filename="library.pdf",
+        )
+
+        course_ids = [d.pk for d in documents_for_course(course.pk)]
+        assert library_doc.pk in course_ids
+        assert batch_doc.pk not in course_ids
+        assert batch_doc.pk not in {d.pk for d in documents_for_courses([course.pk])}
+        assert batch_doc.pk not in {d.pk for d in documents_for_subject(subject)}
+        # The batch question picker (and AI generation) still sees both.
+        picker_ids = {d.pk for d in ready_documents_for_course(course.pk)}
+        assert {batch_doc.pk, library_doc.pk} <= picker_ids
+
+    def test_detect_topics_endpoint_marks_upload_as_batch_source(
+        self, client, professor, subject
+    ):
+        from apps.ai.models import LearningDocument
+
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        with (
+            patch(
+                "apps.ai.ingest.ingest_learning_upload",
+                wraps=ingest_learning_upload,
+            ) as real_ingest,
+            patch(
+                "apps.ai.retrieval.sample_material_for_detection",
+                return_value="some module text",
+            ),
+            patch(
+                "apps.ai.topic_detect.detect_topics_from_material",
+                return_value={"topics": []},
+            ),
+        ):
+            response = client.post(
+                reverse(
+                    "analytics_professor:question_ai_detect_topics",
+                    kwargs={"course_pk": course.pk},
+                ),
+                {
+                    "source_file": SimpleUploadedFile(
+                        "batch-source.pdf", b"%PDF-1.4 fake", "application/pdf"
+                    )
+                },
+            )
+        assert response.status_code == 200
+        assert real_ingest.called
+        doc = LearningDocument.objects.get(pk=response.json()["document_id"])
+        assert doc.origin == "batch_upload"
+        from apps.ai.material_services import documents_for_course
+
+        assert doc.pk not in {d.pk for d in documents_for_course(course.pk)}
+
+    def test_mismatched_upload_reopens_modal_with_inline_error(
+        self, client, professor, subject, bsed_program
+    ):
+        subject.program = bsed_program
+        subject.save(update_fields=["program_id"])
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        with (
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                return_value={"related": False, "reason": "Not about this subject."},
+            ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=[{"text": "unrelated"}],
+            ),
+        ):
+            response = client.post(
+                reverse(
+                    "analytics_professor:material_upload",
+                    kwargs={"course_pk": course.pk},
+                ),
+                {
+                    "subject_id": subject.pk,
+                    "source_file": SimpleUploadedFile(
+                        "off-topic.pdf", b"%PDF-1.4 fake", "application/pdf"
+                    ),
+                },
+                follow=True,
+            )
+        assert response.status_code == 200
+        redirect_url, status = response.redirect_chain[0]
+        assert status == 302
+        assert "add_content=1" in redirect_url
+        assert "upload_error=" in redirect_url
+        assert LearningDocument.objects.filter(course_id=course.pk).count() == 0
+        content = response.content.decode()
+        assert 'data-auto-open="1"' in content
+        assert "Not about this subject." in content
+        assert "data-modal-file-helper" in content
+
+
+@pytest.mark.django_db
 class TestFacultyMaterialsUI:
     def test_detail_course_dropdown_lists_bsed_subject(
         self, client, professor, subject
@@ -367,6 +490,24 @@ class TestMaterialUploadRelevanceGate:
             {"subject_id": subject.pk, **payload},
             follow=True,
         )
+
+    def test_upload_over_size_limit_is_rejected(
+        self, client, professor, subject, settings
+    ):
+        from apps.ai.models import LearningDocument
+
+        settings.MATERIAL_UPLOAD_MAX_MB = 1
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        big = SimpleUploadedFile(
+            "too-big.pdf",
+            b"x" * (1024 * 1024 + 25),
+            content_type="application/pdf",
+        )
+        response = self._post(client, course, subject, {"source_file": big})
+        assert response.status_code == 200
+        assert "larger than 1 MB" in response.content.decode()
+        assert not LearningDocument.objects.filter(course_id=course.pk).exists()
 
     def test_unrelated_upload_is_blocked_and_creates_nothing(
         self, client, professor, subject

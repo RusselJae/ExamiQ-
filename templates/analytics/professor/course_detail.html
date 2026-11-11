@@ -9,6 +9,30 @@
 <div class="course-home-panel course-home-panel--tabbed">
     {% include "components/chalk_banner.html" with course=course %}
 
+    {% if show_viewing_bar %}
+    <div class="viewing-bar" aria-label="Course sections">
+        <span class="viewing-bar__label">Viewing</span>
+        <div class="viewing-bar__tabs" role="tablist" aria-label="Sections">
+            <a href="?" role="tab"
+               class="viewing-bar__chip{% if not selected_section %} viewing-bar__chip--active{% endif %}"
+               aria-selected="{% if not selected_section %}true{% else %}false{% endif %}">
+                <span class="viewing-bar__dot" aria-hidden="true"></span>
+                All sections
+                <span class="viewing-bar__count">{{ section_total_students }}</span>
+            </a>
+            {% for option in section_options %}
+            <a href="?section={{ option.label|urlencode }}" role="tab"
+               class="viewing-bar__chip{% if option.active %} viewing-bar__chip--active{% endif %}"
+               aria-selected="{% if option.active %}true{% else %}false{% endif %}">
+                <span class="viewing-bar__dot" aria-hidden="true"></span>
+                {{ option.label }}
+                <span class="viewing-bar__count">{{ option.count }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="course-home-grid--two">
         <div class="course-home-stack">
             <section class="course-home-card" aria-labelledby="course-home-content-heading">

@@ -38,7 +38,11 @@
                     <form method="post"
                           action="{% url 'analytics_professor:topic_delete' course.pk topic.pk %}"
                           class="inline"
-                          data-confirm-message="Delete this topic?">
+                          data-confirm-message="Delete this topic?"
+                          data-confirm-title="Delete topic"
+                          data-confirm-icon="remove"
+                          data-confirm-type="danger"
+                          data-confirm-label="Delete">
                         {% csrf_token %}
                         <button type="submit" class="text-link text-sm font-medium text-red-600 hover:text-red-700">Delete</button>
                     </form>

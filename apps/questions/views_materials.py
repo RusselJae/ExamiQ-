@@ -7,6 +7,7 @@ import logging
 import mimetypes
 from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count
 from django.http import FileResponse, Http404, JsonResponse
@@ -108,6 +109,7 @@ def _course_document_counts(course_ids):
         return {}
     counts = (
         LearningDocument.objects.filter(course_id__in=course_ids, is_archived=False)
+        .exclude(origin="batch_upload")
         .values("course_id")
         .annotate(total=Count("id"))
     )
@@ -220,10 +222,12 @@ def _ext_counts(documents) -> list[tuple[str, int]]:
     return sorted(counts.items())
 
 
-def _hub_redirect_after_upload(subject_id: int | None, course_pk: int):
+def _hub_redirect_after_upload(
+    subject_id: int | None, course_pk: int, params: str = ""
+):
     if subject_id:
         return redirect(
-            f"{reverse('analytics_professor:materials_hub')}?subject={subject_id}"
+            f"{reverse('analytics_professor:materials_hub')}?subject={subject_id}{params}"
         )
     return redirect("analytics_professor:material_list", course_pk=course_pk)
 
@@ -242,6 +246,15 @@ def _unsupported_upload_message(name: str) -> str:
         suffix.upper().lstrip(".") for suffix in allowed_upload_suffixes()
     )
     return f"{name or 'That file'} is not a supported format. Upload one of: {allowed}."
+
+
+def _upload_too_large(uploaded) -> str:
+    """Return a message when a upload exceeds the configured PDF size limit."""
+    max_mb = getattr(settings, "MATERIAL_UPLOAD_MAX_MB", 25)
+    limit = max_mb * 1024 * 1024
+    if uploaded is not None and uploaded.size > limit:
+        return f"That PDF is larger than {max_mb} MB. Compress it and try again."
+    return ""
 
 
 def _relevance_sample(pages: list[dict]) -> str:
@@ -359,6 +372,8 @@ class MaterialHubView(ProfessorRequiredMixin, View):
                     if course
                     else ""
                 ),
+                "content_modal_auto_open": request.GET.get("add_content") == "1",
+                "content_upload_error": request.GET.get("upload_error", ""),
             },
         )
 
@@ -418,6 +433,8 @@ class MaterialListView(ProfessorCourseMixin, View):
                 "ext_counts": _ext_counts(documents),
                 "library_count": documents.count(),
                 "draft_count": draft_count,
+                "content_modal_auto_open": request.GET.get("add_content") == "1",
+                "content_upload_error": request.GET.get("upload_error", ""),
             },
         )
 
@@ -439,11 +456,19 @@ class MaterialUploadView(ProfessorCourseMixin, View):
         )
         subject = _resolve_upload_subject(self.course, request.user, subject_id)
 
-        def _reject(message):
+        def _reject(message, reopen_add=True):
             messages.error(request, message)
+            params = ""
+            if reopen_add:
+                # Reopen the Add dialog on landing so the message also shows
+                # as helper text under the upload field.
+                params = "?add_content=1&upload_error=" + quote(message)
             if hub_return and subject:
-                return _hub_redirect_after_upload(subject.pk, course_pk)
-            return redirect("analytics_professor:material_list", course_pk=course_pk)
+                return _hub_redirect_after_upload(subject.pk, course_pk, params)
+            base = reverse(
+                "analytics_professor:material_list", kwargs={"course_pk": course_pk}
+            )
+            return redirect(base + params)
 
         if subject is None:
             requested = _requested_subject(subject_id)
@@ -459,6 +484,9 @@ class MaterialUploadView(ProfessorCourseMixin, View):
         # Reject unsupported formats before spending time on extraction.
         if not is_allowed_upload(uploaded.name):
             return _reject(_unsupported_upload_message(uploaded.name))
+        size_error = _upload_too_large(uploaded)
+        if size_error:
+            return _reject(size_error)
 
         # Extract once, then gate on subject relevance before creating anything.
         pages, extraction_error = _extract_upload_pages(uploaded)
@@ -694,6 +722,10 @@ class MaterialDetailView(ProfessorCourseMixin, View):
             return self._modal_redirect(request, course_pk, pk, subject_pk)
         if not is_allowed_upload(uploaded.name):
             messages.error(request, _unsupported_upload_message(uploaded.name))
+            return self._modal_redirect(request, course_pk, pk, subject_pk)
+        size_error = _upload_too_large(uploaded)
+        if size_error:
+            messages.error(request, size_error)
             return self._modal_redirect(request, course_pk, pk, subject_pk)
 
         pages, extraction_error = _extract_upload_pages(uploaded)

@@ -74,6 +74,15 @@
                 </select>
             </div>
             {% endif %}
+            <div class="overview-trends-filter" id="donut-section-filter">
+                <span class="overview-trends-filter__label" id="overview-donut-section-label">Section</span>
+                <select id="donut-section-picker" class="course-subjects-toolbar__select" data-donut-param="donut_section" aria-labelledby="overview-donut-section-label">
+                    <option value=""{% if not donut_section %} selected{% endif %}>All sections</option>
+                    {% for section in donut_section_options %}
+                    <option value="{{ section.pk }}"{% if donut_section|stringformat:"s" == section.pk|stringformat:"s" %} selected{% endif %}>{{ section.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="overview-trends-filter">
                 <span class="overview-trends-filter__label" id="overview-donut-range-label">Range</span>
                 <div class="overview-pill-group" role="group" aria-labelledby="overview-donut-range-label" data-donut-param="donut_period">
@@ -181,8 +190,11 @@
 
 {% block extra_js %}
 {{ overview_donut|json_script:"overview-donut-data" }}
+{{ donut_section_map|json_script:"donut-section-map" }}
+{{ donut_sections|json_script:"donut-all-sections" }}
 <script src="{% static 'js/student-performance-donut.js' %}"></script>
 <script src="{% static 'js/donut-filters.js' %}"></script>
+<script src="{% static 'js/professor-donut-sections.js' %}?v=20261111b"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
 <script>
 (function () {

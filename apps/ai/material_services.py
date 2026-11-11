@@ -30,18 +30,22 @@ def _pdf_library_only(queryset):
     )
 
 
-def documents_for_course(course_id: int, *, include_archived: bool = False):
+def documents_for_course(course_id: int, *, include_archived: bool = False,
+                           include_batch_uploads: bool = False):
     qs = _pdf_library_only(
         LearningDocument.objects.filter(course_id=course_id)
         .select_related("subject", "created_by")
         .order_by("-created")
     )
+    if not include_batch_uploads:
+        qs = qs.exclude(origin="batch_upload")
     if not include_archived:
         qs = qs.filter(is_archived=False)
     return qs
 
 
-def documents_for_courses(course_ids, *, include_archived: bool = False):
+def documents_for_courses(course_ids, *, include_archived: bool = False,
+                          include_batch_uploads: bool = False):
     """PDF library across several course offerings (newest first)."""
     if not course_ids:
         return LearningDocument.objects.none()
@@ -50,15 +54,23 @@ def documents_for_courses(course_ids, *, include_archived: bool = False):
         .select_related("subject", "created_by")
         .order_by("-created")
     )
+    if not include_batch_uploads:
+        qs = qs.exclude(origin="batch_upload")
     if not include_archived:
         qs = qs.filter(is_archived=False)
     return qs
 
 
 def ready_documents_for_course(course_id: int):
-    """Ready materials for a course, de-duplicated by display title (newest first)."""
+    """Ready materials for a course, de-duplicated by display title (newest first).
+
+    Includes batch-uploaded source files: the batch question form needs every
+    usable source, while Content lists hide them.
+    """
     docs = list(
-        documents_for_course(course_id).filter(status=LearningDocument.Status.READY)
+        documents_for_course(course_id, include_batch_uploads=True).filter(
+            status=LearningDocument.Status.READY
+        )
     )
     seen: set[str] = set()
     unique: list[LearningDocument] = []
@@ -400,7 +412,8 @@ def delete_document(document: LearningDocument) -> LearningDocument:
     return document
 
 
-def documents_for_subject(subject, *, include_archived: bool = False):
+def documents_for_subject(subject, *, include_archived: bool = False,
+                            include_batch_uploads: bool = False):
     """Materials linked to a subject (by subject FK or catalog course)."""
     from apps.reviews.exam_setup_services import course_for_subject
 
@@ -414,6 +427,8 @@ def documents_for_subject(subject, *, include_archived: bool = False):
         .distinct()
         .order_by("-created")
     )
+    if not include_batch_uploads:
+        qs = qs.exclude(origin="batch_upload")
     if not include_archived:
         qs = qs.filter(is_archived=False)
     return qs

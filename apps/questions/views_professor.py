@@ -1534,6 +1534,14 @@ class QuestionAIDetectTopicsView(ProfessorCourseMixin, View):
                 {"error": "Upload a module file to detect topics."},
                 status=400,
             )
+        from django.conf import settings
+
+        max_mb = getattr(settings, "MATERIAL_UPLOAD_MAX_MB", 25)
+        if uploaded.size > max_mb * 1024 * 1024:
+            return JsonResponse(
+                {"error": f"That PDF is larger than {max_mb} MB. Compress it first."},
+                status=400,
+            )
         try:
             document = ingest_learning_upload(
                 uploaded_file=uploaded,
@@ -1542,6 +1550,11 @@ class QuestionAIDetectTopicsView(ProfessorCourseMixin, View):
             )
         except SourceMaterialError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
+        # Source-only upload: usable as batch generation material, but hidden
+        # from the faculty Content library and student downloads.
+        if document.origin != "batch_upload":
+            document.origin = "batch_upload"
+            document.save(update_fields=["origin", "updated"])
 
         source_material = sample_material_for_detection(document)
         if not source_material:

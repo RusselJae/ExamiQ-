@@ -124,10 +124,43 @@ class ExamiQSignupView(ClearPendingLoginCodeMixin, allauth_views.SignupView):
             str(s.pk): {"code": s.code, "name": s.name} for s in subjects
         }
         context["faculty_options"] = subject_faculty_options([s.pk for s in subjects])
+        from apps.users.models import ProgramSection
+        from apps.users.section_services import get_current_academic_year
+
+        current_year = get_current_academic_year()
+        sections = (
+            ProgramSection.objects.filter(
+                program__slug=_User.HomeDegreeProgram.BSED_MATH,
+                academic_year=current_year,
+                is_active=True,
+            )
+            .select_related("year_level")
+            .order_by("year_level__order", "label")
+        )
+        sections_by_year: dict[str, list[dict]] = {}
+        for section in sections:
+            sections_by_year.setdefault(str(section.year_level_id), []).append(
+                {"id": section.pk, "label": section.display_label}
+            )
+        context["sections_by_year"] = sections_by_year
         return context
 
     def form_valid(self, form):
-        """Signup no longer requires a COR upload: nothing to verify here."""
+        """Analyze-gate irregular signups; regular signups need no COR."""
+        cleaned = form.cleaned_data
+        if cleaned.get("is_irregular"):
+            from apps.users.cor_services import verify_cor_submission
+
+            error = verify_cor_submission(
+                self.request,
+                cleaned.get("cor_upload"),
+                is_irregular=True,
+                year_level_id=None,
+                course_ids=[c.pk for c in (cleaned.get("courses") or [])],
+            )
+            if error:
+                form.add_error("cor_upload", error)
+                return self.form_invalid(form)
         return super().form_valid(form)
 
 

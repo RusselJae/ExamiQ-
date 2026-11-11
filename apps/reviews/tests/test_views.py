@@ -244,7 +244,7 @@ class TestReviewSetupPrefill:
         assert subject.code in content
         assert "Add subjects from other years" not in content
         assert "OTH-101" in content
-        assert 'data-tab="other"' in content
+        assert f'data-year-tab="{other_year.pk}"' in content
         year_subjects = response.context["year_subjects"]
         assert all(s.year_level_id == student.year_level_id for s in year_subjects)
         other_subjects = response.context["other_subjects"]

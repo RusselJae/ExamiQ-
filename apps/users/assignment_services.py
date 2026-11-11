@@ -1,10 +1,17 @@
 """Chairperson teaching assignment services."""
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 
 from apps.questions.models import Subject
 from apps.reviews.exam_setup_services import get_or_create_exam_setup
 from apps.users.models import Course, ProgramSection, TeachingAssignment, User
+
+#: At most this many distinct faculty may handle the same subject in one term.
+MAX_FACULTY_PER_SUBJECT_TERM = 2
+
+#: At most this many sections of one course a single faculty member may handle.
+MAX_SECTIONS_PER_FACULTY_COURSE = 2
 
 
 def get_assigned_subject_ids(professor: User) -> set[int]:
@@ -50,15 +57,50 @@ def faculty_handles_student_subject(
     ) and subject_id in get_faculty_profile_subject_ids(professor)
 
 
+def faculty_handled_section_ids(professor: User) -> set[int]:
+    """ProgramSection PKs covered by this professor's teaching assignments."""
+    return set(
+        TeachingAssignment.objects.filter(professor=professor).values_list(
+            "program_section_id", flat=True
+        )
+    )
+
+
+def students_with_exams_on_handled_subjects(professor: User) -> set[int]:
+    """Active, non-archived students with completed exams on handled subjects.
+
+    Restores the pre-section-removal visibility path: students enrolled in a
+    section the professor handles (via teaching assignments) who sat a
+    completed exam touching one of the handled subjects. Lets learners who
+    answered exams before an explicit handled link existed stay visible.
+    """
+    from apps.reviews.models import ReviewSession
+
+    handled_ids = handled_subject_ids(professor)
+    section_ids = faculty_handled_section_ids(professor)
+    if not handled_ids or not section_ids:
+        return set()
+    return set(
+        ReviewSession.objects.filter(
+            status=ReviewSession.Status.COMPLETED,
+            student__is_active=True,
+            student__is_archived=False,
+            student__section_id__in=section_ids,
+        )
+        .filter(Q(topic__subject_id__in=handled_ids) | Q(subjects__in=handled_ids))
+        .values_list("student_id", flat=True)
+        .distinct()
+    )
+
+
 def students_visible_to_faculty(professor: User) -> set[int]:
     """Student IDs this faculty member may see in analytics.
 
     The single canonical scope for every faculty-facing count: students with a
     StudentFacultyAssignment to this professor in the current academic year
-    (active, non-archived students only). Visibility follows the *current*
-    handled relationship — a student assigned mid-semester becomes visible,
-    including their earlier answers. Callers add their own session/status
-    filters on top.
+    (active, non-archived students only), plus section-enrolled students with
+    completed exams on handled subjects (the pre-section-removal visibility
+    path). Callers add their own session/status filters on top.
     """
     from apps.users.models import StudentFacultyAssignment
     from apps.users.section_services import get_current_academic_year
@@ -66,7 +108,7 @@ def students_visible_to_faculty(professor: User) -> set[int]:
     current_year = get_current_academic_year()
     if not current_year:
         return set()
-    return set(
+    assigned_ids = set(
         StudentFacultyAssignment.objects.filter(
             faculty=professor,
             academic_year=current_year,
@@ -74,6 +116,7 @@ def students_visible_to_faculty(professor: User) -> set[int]:
             student__is_archived=False,
         ).values_list("student_id", flat=True)
     )
+    return assigned_ids | students_with_exams_on_handled_subjects(professor)
 
 
 def handled_subject_ids(professor: User) -> set[int]:
@@ -364,7 +407,46 @@ def validate_assignment_subject(
         raise ValueError("Subject year level must match the section's year level.")
 
 
-@transaction.atomic
+def _assert_faculty_slot_available(subject, term, professor: User) -> None:
+    """Cap distinct faculty per subject+term so the form shows an error.
+
+    Raises ValueError (surfaced as a form message by the callers) when two
+    other faculty already handle this subject for the term.
+    """
+    holder_ids = set(
+        TeachingAssignment.objects.filter(subject=subject, term=term)
+        .exclude(professor=professor)
+        .values_list("professor_id", flat=True)
+    )
+    if len(holder_ids) >= MAX_FACULTY_PER_SUBJECT_TERM:
+        raise ValueError(
+            f"Only up to {MAX_FACULTY_PER_SUBJECT_TERM} faculty members can "
+            f"handle {subject.code} for this term."
+        )
+
+
+def _assert_section_slot_available(
+    professor: User, subject, term, program_section
+) -> None:
+    """Cap a faculty member at two sections of the same course per term.
+
+    Raises ValueError (surfaced as a form message by the callers) when the
+    professor already handles two *other* sections of this subject.
+    """
+    held_ids = set(
+        TeachingAssignment.objects.filter(
+            professor=professor, subject=subject, term=term
+        )
+        .exclude(program_section=program_section)
+        .values_list("program_section_id", flat=True)
+    )
+    if len(held_ids) >= MAX_SECTIONS_PER_FACULTY_COURSE:
+        raise ValueError(
+            f"Faculty can handle at most {MAX_SECTIONS_PER_FACULTY_COURSE} "
+            f"sections of {subject.code} per term."
+        )
+
+
 def create_teaching_assignment(
     *,
     professor: User,
@@ -375,20 +457,21 @@ def create_teaching_assignment(
 ) -> tuple[TeachingAssignment, bool]:
     """Create a teaching assignment and linked course offering.
 
-    Assignments are one row per (professor, subject, term): if the professor
-    already holds this subject for the term (in any section), the existing
-    row is returned instead of creating a duplicate.
+    Assignments are one row per (professor, subject, term, section). A faculty
+    member may hold at most two sections of the same course in a term; the
+    same section returns the existing row instead of creating a duplicate.
     """
-    existing = (
-        TeachingAssignment.objects.filter(
-            professor=professor, subject=subject, term=term
-        )
-        .order_by("pk")
-        .first()
-    )
+    existing = TeachingAssignment.objects.filter(
+        professor=professor,
+        subject=subject,
+        term=term,
+        program_section=program_section,
+    ).first()
     if existing is not None:
         return existing, False
 
+    _assert_faculty_slot_available(subject, term, professor)
+    _assert_section_slot_available(professor, subject, term, program_section)
     validate_assignment_subject(program_section, subject, term)
 
     assignment, created = TeachingAssignment.objects.get_or_create(
@@ -466,17 +549,25 @@ def reassign_teaching_assignment(
     """
     if professor.pk == assignment.professor_id:
         return assignment
+    _assert_faculty_slot_available(assignment.subject, assignment.term, professor)
+    _assert_section_slot_available(
+        professor,
+        assignment.subject,
+        assignment.term,
+        assignment.program_section,
+    )
     conflict = (
         TeachingAssignment.objects.filter(
             professor=professor,
             subject=assignment.subject,
             term=assignment.term,
+            program_section=assignment.program_section,
         )
         .exclude(pk=assignment.pk)
         .exists()
     )
     if conflict:
-        raise ValueError("That professor already handles this course.")
+        raise ValueError("That professor already handles this course section.")
     old_professor_id = assignment.professor_id
     assignment.professor = professor
     assignment.save(update_fields=["professor"])

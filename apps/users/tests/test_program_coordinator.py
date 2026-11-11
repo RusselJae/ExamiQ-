@@ -118,6 +118,7 @@ class TestProgramCoordinator:
 
         assert subject.banner_url.startswith("/static/assets/course_bg")
         assert subject.banner_url.endswith(".jpg")
+        assert subject.banner_position in Subject.BANNER_POSITIONS
 
     def test_add_subject_with_banner_stores_upload(
         self, client, coordinator, department, year_level, settings, tmp_path

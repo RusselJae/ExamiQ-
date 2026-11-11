@@ -72,14 +72,29 @@ class TestSectionAndSubjectAnalytics:
         assert client_summary["total_answers"] == 1
 
     def test_courses_list_shows_catalog_grid(
-        self, client, professor, bsed_program, year_level
+        self,
+        client,
+        professor,
+        bsed_program,
+        year_level,
+        program_section,
+        academic_term,
     ):
-        Subject.objects.create(
+        from apps.users.models import TeachingAssignment
+
+        subject = Subject.objects.create(
             program=bsed_program,
             code="CAT-1",
             name="Catalog One",
             year_level=year_level,
             semester=1,
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=academic_term,
+            assigned_by=professor,
         )
         client.force_login(professor)
         response = client.get(reverse("analytics_professor:course_list"))
@@ -88,9 +103,9 @@ class TestSectionAndSubjectAnalytics:
         assert "CAT-1" in content
         assert "Clone to 2nd Sem" not in content
         assert "Course" in content
-        # Card grid with client-side search + filter panel.
+        # Handled courses render as a card grid with client-side search.
         assert "subject-banner-card" in content
-        assert 'data-filter-bar' in content
+        assert "data-filter-bar" in content
         assert "Filter" in content
 
     def test_section_nav_links_to_section_detail(

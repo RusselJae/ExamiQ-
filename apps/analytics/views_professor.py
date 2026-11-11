@@ -111,6 +111,14 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
         context["donut_sections"] = professor_donut_sections(self.request.user)
         context["donut_section"] = context["overview_donut"]["section"]
         context["donut_subject"] = context["overview_donut"]["subject"]
+        context["donut_section_map"] = self._section_map()
+        selected_subject = context["donut_subject"]
+        if selected_subject:
+            context["donut_section_options"] = context["donut_section_map"].get(
+                str(selected_subject), []
+            )
+        else:
+            context["donut_section_options"] = context["donut_sections"]
         context["latest_student_sessions"] = professor_latest_student_sessions(
             self.request.user
         )
@@ -118,6 +126,31 @@ class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
             self.request.user
         )
         return context
+
+    def _section_map(self) -> dict[str, list[dict]]:
+        """Sections handled per course, for the dashboard section filter."""
+        from apps.users.models import TeachingAssignment
+
+        rows = (
+            TeachingAssignment.objects.filter(professor=self.request.user)
+            .select_related("program_section", "program_section__year_level")
+            .order_by("program_section__year_level__order", "program_section__label")
+        )
+        by_subject: dict[str, list[dict]] = {}
+        seen: dict[str, set[int]] = {}
+        for row in rows:
+            section = row.program_section
+            if section is None:
+                continue
+            key = str(row.subject_id)
+            seen.setdefault(key, set())
+            if section.pk in seen[key]:
+                continue
+            seen[key].add(section.pk)
+            by_subject.setdefault(key, []).append(
+                {"pk": section.pk, "label": section.display_label}
+            )
+        return by_subject
 
 
 class ProfessorDonutDataView(ProfessorRequiredMixin, View):
@@ -571,9 +604,7 @@ class CourseDetailView(ProfessorCourseMixin, DetailView):
             .values("course__section")
             .annotate(students=Count("student_id", distinct=True))
         )
-        return {
-            (row["course__section"] or "").strip(): row["students"] for row in rows
-        }
+        return {(row["course__section"] or "").strip(): row["students"] for row in rows}
 
     def get_course_home_stats(self) -> dict:
         """Content + question counts powering the course home cards."""

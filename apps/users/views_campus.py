@@ -202,6 +202,10 @@ class CampusUserListView(CampusAdminRequiredMixin, ListView):
             )
         elif active == "archived":
             qs = qs.filter(is_archived=True)
+        else:
+            # Archived accounts stay out of the table by default; the
+            # "Archived" account filter above reveals them for restore.
+            qs = qs.filter(is_archived=False)
         status = self.request.GET.get("status", "")
         if status in {
             User.ApprovalStatus.PENDING,

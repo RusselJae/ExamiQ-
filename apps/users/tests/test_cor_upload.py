@@ -10,6 +10,7 @@ from apps.users.cor_services import (
     extract_cor_text,
     match_cor_rows,
     normalize_code,
+    verify_cor_submission,
 )
 from apps.users.models import (
     AcademicTerm,
@@ -96,6 +97,16 @@ class TestCorMatching:
         assert result["matched"] == []
         assert result["unmatched"] == [{"code": "XXX 99", "title": "Unknown Course"}]
 
+    def test_schedule_codes_fall_back_to_the_course_title(self, catalog_program):
+        """BSEM100xx is a schedule code, never the curriculum course code."""
+        program, year_level, _year = catalog_program
+        subject = _make_subject(program, year_level, "BSEM 32", "Number Theory")
+        rows = [{"code": "BSEM10019", "title": "Number Theory"}]
+        result = match_cor_rows(rows)
+        assert [m["subject_id"] for m in result["matched"]] == [subject.id]
+        assert result["matched"][0]["code"] == "BSEM 32"
+        assert result["unmatched"] == []
+
     def test_match_does_not_reuse_one_subject_twice(self, catalog_program):
         program, year_level, _year = catalog_program
         subject = _make_subject(
@@ -122,6 +133,20 @@ class TestCorExtraction:
         file = SimpleUploadedFile("cor.png", b"", content_type="image/png")
         with pytest.raises(CorAnalysisError):
             extract_cor_text(file)
+
+    def test_image_ocr_falls_back_to_vision_when_tesseract_is_missing(
+        self, monkeypatch
+    ):
+        from apps.users import cor_services
+
+        monkeypatch.setattr(cor_services, "_tesseract_image_text", lambda _raw: "")
+        monkeypatch.setattr(
+            "apps.ai.vision.extract_text_from_image",
+            lambda _raw, _mime: "BSEM 32 - Number Theory",
+        )
+        assert cor_services._ocr_image(b"fake-image", "image/jpeg") == (
+            "BSEM 32 - Number Theory"
+        )
 
     def test_pdf_extraction_reads_text_layer(self):
         """A text-layer PDF path is exercised via monkeypatched pages."""
@@ -343,3 +368,45 @@ class TestCoordinatorRoster:
         entry.claimed_by = first
         entry.save()
         assert _has_pending_registration("202409999") is False
+
+
+class _DummyRequest:
+    def __init__(self, session):
+        self.session = session
+
+
+@pytest.mark.django_db
+class TestCorSubmissionGate:
+    def _bundle(self, cor_type, subject_ids):
+        return {
+            "name": "cor.png",
+            "size": 8,
+            "cor_type": cor_type,
+            "year_level_id": None,
+            "subject_ids": subject_ids,
+            "rows": [],
+        }
+
+    def test_irregular_signup_rejects_a_regular_cor(self):
+        uploaded = SimpleUploadedFile("cor.png", b"12345678", content_type="image/png")
+        request = _DummyRequest({"cor_verified": self._bundle("regular", [1])})
+        error = verify_cor_submission(
+            request,
+            uploaded,
+            is_irregular=True,
+            year_level_id=None,
+            course_ids=[1],
+        )
+        assert "regular status" in error
+
+    def test_irregular_signup_accepts_an_irregular_cor(self):
+        uploaded = SimpleUploadedFile("cor.png", b"12345678", content_type="image/png")
+        request = _DummyRequest({"cor_verified": self._bundle("irregular", [1])})
+        error = verify_cor_submission(
+            request,
+            uploaded,
+            is_irregular=True,
+            year_level_id=None,
+            course_ids=[1],
+        )
+        assert error is None

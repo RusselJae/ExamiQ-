@@ -33,6 +33,9 @@ class Subject(TimeStampedModel):
         "assets/course_bg2.jpg",
         "assets/course_bg3.jpg",
     )
+    #: Focus point for each default banner so the busy chalk art sits away
+    #: from the text block. Matches the order of ``BANNER_ASSETS``.
+    BANNER_POSITIONS = ("center", "62% 52%", "38% 48%")
 
     program = models.ForeignKey(
         Program,
@@ -69,6 +72,14 @@ class Subject(TimeStampedModel):
             return self.banner.url
         index = (self.pk or 0) % len(self.BANNER_ASSETS)
         return static(self.BANNER_ASSETS[index])
+
+    @property
+    def banner_position(self) -> str:
+        """CSS object-position focus point for the card background."""
+        if self.banner:
+            return "center"
+        index = (self.pk or 0) % len(self.BANNER_POSITIONS)
+        return self.BANNER_POSITIONS[index]
 
 
 class Topic(TimeStampedModel):

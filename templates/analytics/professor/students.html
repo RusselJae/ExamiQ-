@@ -14,6 +14,7 @@
                 <thead>
                     <tr>
                         <th>Student</th>
+                        <th>Section</th>
                         <th>Status</th>
                         <th class="text-center">Sessions</th>
                         <th class="text-center">Subjects</th>
@@ -33,6 +34,9 @@
                                     <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
                                 </div>
                             </div>
+                        </td>
+                        <td class="whitespace-nowrap text-examiq-slate">
+                            {% if row.student.section %}{{ row.student.section.display_label }}{% else %}—{% endif %}
                         </td>
                         <td>
                             {% if row.student.is_irregular %}
@@ -66,6 +70,8 @@
                                           action="{% url 'analytics_professor:section_student_restore' row.student.section.pk row.student.pk %}"
                                           data-confirm-message="Restore this student? They will appear on the roster and can log in again."
                                           data-confirm-type="warning"
+                                          data-confirm-title="Restore student"
+                                          data-confirm-icon="restore"
                                           data-confirm-label="Restore">
                                         {% csrf_token %}
                                         <button type="submit" class="text-sm text-link">Restore</button>
@@ -75,6 +81,8 @@
                                           action="{% url 'analytics_professor:section_student_archive' row.student.section.pk row.student.pk %}"
                                           data-confirm-message="Archive this student? They will be hidden from the roster and cannot log in."
                                           data-confirm-type="warning"
+                                          data-confirm-title="Archive student"
+                                          data-confirm-icon="archive"
                                           data-confirm-label="Archive">
                                         {% csrf_token %}
                                         <button type="submit" class="text-sm text-examiq-coral hover:underline">Archive</button>
@@ -87,7 +95,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-examiq-slate py-8">
+                        <td colspan="8" class="text-center text-examiq-slate py-8">
                             {% if filter_has_active %}No students match your filters.{% else %}No students have completed an exam in your courses yet.{% endif %}
                         </td>
                     </tr>

@@ -139,6 +139,15 @@ class LearningDocument(models.Model):
         default=Status.PENDING,
     )
     is_archived = models.BooleanField(default=False)
+    origin = models.CharField(
+        max_length=20,
+        default="library",
+        help_text=(
+            "library: uploaded through Content (visible in the library); "
+            "batch_upload: uploaded from the batch question form only as "
+            "generation source material (hidden from Content lists)."
+        ),
+    )
     page_count = models.PositiveIntegerField(default=0)
     chunk_count = models.PositiveIntegerField(default=0)
     error_message = models.TextField(blank=True, default="")

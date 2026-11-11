@@ -1,18 +1,16 @@
 """Chairperson teaching assignment views."""
 
 from django.contrib import messages
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views import View
-from django.views.generic import FormView, ListView
+from django.views.generic import FormView, TemplateView
 
 from apps.core.audit import log_audit_event
 from apps.core.filtering import (
     STANDARD_DATE_SORT_FILTER_SPECS,
-    apply_date_range,
-    apply_sort,
     build_filter_fields,
     get_filter_param,
     has_active_filters,
@@ -30,10 +28,8 @@ from apps.users.forms import TeachingAssignmentForm
 from apps.users.models import AcademicTerm, ProgramSection, TeachingAssignment, User
 
 
-class ChairpersonAssignmentListView(AcademicManagerRequiredMixin, ListView):
+class ChairpersonAssignmentListView(AcademicManagerRequiredMixin, TemplateView):
     template_name = "chairperson/assignments/list.html"
-    context_object_name = "assignments"
-    paginate_by = 25
 
     def _base_queryset(self):
         qs = TeachingAssignment.objects.select_related(
@@ -44,43 +40,78 @@ class ChairpersonAssignmentListView(AcademicManagerRequiredMixin, ListView):
             "subject",
             "term__academic_year",
         ).order_by(
-            "-term__academic_year__label", "term__name", "program_section__label"
+            "-term__academic_year__label",
+            "term__name",
+            "subject__code",
+            "program_section__label",
         )
         dept_id = self.request.user.department_id
         if dept_id:
             qs = qs.filter(program_section__program__managing_department_id=dept_id)
         return qs
 
-    def get_queryset(self):
-        qs = self._base_queryset()
-        qs = apply_date_range(qs, self.request, "created_at")
-        search = get_filter_param(self.request, "q")
-        if search:
-            qs = qs.filter(
-                Q(professor__email__icontains=search)
-                | Q(professor__first_name__icontains=search)
-                | Q(professor__last_name__icontains=search)
-            )
-        qs = apply_sort(
-            qs,
-            self.request,
-            newest_field="-created_at",
-            oldest_field="created_at",
-        )
-        term_filter = get_filter_param(self.request, "term")
-        if term_filter == "1st":
-            qs = qs.filter(term__name__icontains="1st")
-        elif term_filter == "2nd":
-            qs = qs.filter(term__name__icontains="2nd")
-        return qs
+    def _term_filter(self) -> str:
+        return get_filter_param(self.request, "term")
 
     def get_context_data(self, **kwargs):
+        from collections import defaultdict
+
+        from django.core.paginator import Paginator
+
         context = super().get_context_data(**kwargs)
-        base_qs = self._base_queryset()
+        dept_id = self.request.user.department_id
+        faculty_qs = User.objects.filter(
+            role=User.Role.PROFESSOR, is_archived=False
+        ).select_related("department")
+        if dept_id:
+            faculty_qs = faculty_qs.filter(department_id=dept_id)
+        search = get_filter_param(self.request, "q").strip()
+        if search:
+            faculty_qs = faculty_qs.filter(
+                Q(email__icontains=search)
+                | Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(employee_id__icontains=search)
+            )
+        faculty_qs = faculty_qs.order_by("first_name", "last_name", "email")
+
+        term_filter = self._term_filter()
+        assignments_qs = self._base_queryset()
+        if term_filter == "1st":
+            assignments_qs = assignments_qs.filter(term__name__icontains="1st")
+        elif term_filter == "2nd":
+            assignments_qs = assignments_qs.filter(term__name__icontains="2nd")
+
+        by_professor: dict[int, list] = defaultdict(list)
+        for assignment in assignments_qs:
+            by_professor[assignment.professor_id].append(assignment)
+
+        rows = []
+        for professor in faculty_qs:
+            rows.append(
+                {
+                    "professor": professor,
+                    "assignments": by_professor.get(professor.pk, []),
+                    "course_count": len(
+                        {a.subject_id for a in by_professor.get(professor.pk, [])}
+                    ),
+                    "section_count": len(
+                        {
+                            a.program_section_id
+                            for a in by_professor.get(professor.pk, [])
+                        }
+                    ),
+                }
+            )
+
+        paginator = Paginator(rows, 25)
+        page_obj = paginator.get_page(self.request.GET.get("page"))
+        context["faculty_rows"] = page_obj.object_list
+        context["page_obj"] = page_obj
         context["assignment_form"] = TeachingAssignmentForm(
             chairperson=self.request.user
         )
-        context["term_filter"] = get_filter_param(self.request, "term")
+        context["term_filter"] = term_filter
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -106,7 +137,6 @@ class ChairpersonAssignmentListView(AcademicManagerRequiredMixin, ListView):
             self.request, ["term", "date_from", "date_to", "sort"]
         )
         context["filter_bar_compact"] = True
-        term_filter = context["term_filter"]
         context["filter_preserve_params"] = (
             [("term", term_filter)] if term_filter else []
         )
@@ -115,61 +145,22 @@ class ChairpersonAssignmentListView(AcademicManagerRequiredMixin, ListView):
             str(current_term) if current_term else "Current term"
         )
         context["assignment_stats"] = {
-            "total": base_qs.count(),
-            "faculty": base_qs.values("professor_id").distinct().count(),
-            "sections": base_qs.values("program_section_id").distinct().count(),
+            "total": assignments_qs.count(),
+            "faculty": len({a.professor_id for a in assignments_qs}),
+            "sections": len({a.program_section_id for a in assignments_qs}),
         }
         context["term_tabs"] = [
             {"key": "", "label": "All"},
             {"key": "1st", "label": "1st Sem"},
             {"key": "2nd", "label": "2nd Sem"},
         ]
-        page_assignments = list(context["assignments"])
-        context["reassign_professors"] = (
-            User.objects.filter(role=User.Role.PROFESSOR, is_active=True)
-            .order_by("email")
-            .only("id", "email", "first_name", "last_name")
-        )
-        dept_id = self.request.user.department_id
+        reassign_professors = User.objects.filter(
+            role=User.Role.PROFESSOR, is_active=True
+        ).order_by("email")
         if dept_id:
-            context["reassign_professors"] = context["reassign_professors"].filter(
-                department_id=dept_id
-            )
-        context["handled_student_counts"] = self._handled_student_counts(
-            page_assignments
-        )
+            reassign_professors = reassign_professors.filter(department_id=dept_id)
+        context["reassign_professors"] = reassign_professors
         return context
-
-    def _handled_student_counts(self, assignments) -> dict[int, int]:
-        """Assigned-student count per assignment row on this page."""
-        from collections import defaultdict
-
-        from apps.users.models import StudentFacultyAssignment
-
-        pairs = {
-            (a.professor_id, a.subject_id)
-            for a in assignments
-            if a.professor_id and a.subject_id
-        }
-        if not pairs:
-            return {}
-        counts: dict[int, int] = defaultdict(int)
-        rows = (
-            StudentFacultyAssignment.objects.filter(
-                faculty_id__in={professor_id for professor_id, _ in pairs},
-                subject_id__in={subject_id for _, subject_id in pairs},
-            )
-            .values("faculty_id", "subject_id")
-            .annotate(total=Count("student_id", distinct=True))
-        )
-        key_to_total = {
-            (row["faculty_id"], row["subject_id"]): row["total"] for row in rows
-        }
-        for assignment in assignments:
-            key = (assignment.professor_id, assignment.subject_id)
-            if key in key_to_total:
-                counts[assignment.pk] = key_to_total[key]
-        return dict(counts)
 
 
 class ChairpersonAssignmentCreateView(AcademicManagerRequiredMixin, FormView):
@@ -457,11 +448,16 @@ class ChairpersonAssignmentSectionsAPIView(AcademicManagerRequiredMixin, View):
             .select_related("year_level")
             .order_by("year_level__order", "label")
         )
-        assigned_ids = set(
-            TeachingAssignment.objects.filter(subject=subject, term=term).values_list(
-                "program_section_id", flat=True
+        assigned_ids = set()
+        professor_id = request.GET.get("professor", "")
+        if professor_id.isdigit():
+            assigned_ids = set(
+                TeachingAssignment.objects.filter(
+                    subject=subject,
+                    term=term,
+                    professor_id=int(professor_id),
+                ).values_list("program_section_id", flat=True)
             )
-        )
 
         groups: dict[str, dict] = {}
         for section in sections:

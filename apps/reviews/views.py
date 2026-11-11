@@ -301,12 +301,54 @@ class ReviewSetupView(StudentRequiredMixin, View):
                 1, (estimate_questions * estimate_seconds + 59) // 60
             )
 
+        year_tabs_by_id: dict[int, dict] = {}
+        for subject in year_subjects + other_subjects:
+            year = subject.year_level
+            if year is None:
+                continue
+            row = year_tabs_by_id.setdefault(
+                year.pk,
+                {
+                    "id": year.pk,
+                    "name": year.name,
+                    "order": year.order,
+                    "count": 0,
+                },
+            )
+            row["count"] += 1
+        # Always offer the four curriculum years; empty years still get a tab.
+        from apps.questions.models import YearLevel
+
+        for year in YearLevel.objects.filter(order__in=(1, 2, 3, 4)):
+            year_tabs_by_id.setdefault(
+                year.pk,
+                {
+                    "id": year.pk,
+                    "name": year.name,
+                    "order": year.order,
+                    "count": 0,
+                },
+            )
+        year_tabs = sorted(
+            year_tabs_by_id.values(), key=lambda row: (row["order"], row["name"])
+        )
+        student_year_id = self.request.user.year_level_id
+        known_year_ids = {row["id"] for row in year_tabs}
+        if student_year_id in known_year_ids:
+            active_year_id = student_year_id
+        elif year_tabs:
+            active_year_id = year_tabs[0]["id"]
+        else:
+            active_year_id = ""
+
         return {
             "form": form,
             "setup_eligibility": eligibility,
             "no_exams_available": no_exams,
             "year_subjects": year_subjects,
             "other_subjects": other_subjects,
+            "year_tabs": year_tabs,
+            "active_year_id": active_year_id,
             "total_subjects_count": len(year_subjects) + len(other_subjects),
             "selected_year_ids": selected_year_ids,
             "selected_extra_ids": selected_extra_ids,

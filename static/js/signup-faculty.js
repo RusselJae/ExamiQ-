@@ -50,6 +50,7 @@
             '#signup-form input[name="is_irregular"][value="1"]'
         );
         var yearSelect = document.getElementById("id_year_level");
+        var sectionSelect = document.getElementById("id_section");
         var coursePicker = document.getElementById("course-picker");
         var filterInputs = [
             document.getElementById("course-search"),
@@ -81,6 +82,9 @@
                 state.picks = {};
                 state.expanded = null;
                 state.detectedMeta = {};
+                render();
+            },
+            refresh: function () {
                 render();
             },
             setDetectedCourses: function (list) {
@@ -123,31 +127,48 @@
 
         function scopeSubjectIds() {
             var isIrregular = irregularInput && irregularInput.checked;
-            if (isIrregular) {
-                var ids = [];
-                document
-                    .querySelectorAll('#detected-courses-store input[name="courses"]')
-                    .forEach(function (input) {
-                        if (input.value) ids.push(String(input.value));
-                    });
-                if (!ids.length) {
-                    document
-                        .querySelectorAll(".course-checkbox__input")
-                        .forEach(function (cb) {
-                            if (cb.checked) ids.push(String(cb.value));
-                        });
-                }
-                return ids;
+            if (!isIrregular) {
+                // Regular students are placed by section; no faculty picker.
+                return [];
             }
-            var year = yearSelect ? String(yearSelect.value || "") : "";
-            if (!year) return [];
-            return Object.keys(yearBySubject).filter(function (pk) {
-                return String(yearBySubject[pk]) === year;
-            });
+            var ids = [];
+            document
+                .querySelectorAll('#detected-courses-store input[name="courses"]')
+                .forEach(function (input) {
+                    if (input.value) ids.push(String(input.value));
+                });
+            if (!ids.length) {
+                document
+                    .querySelectorAll(".course-checkbox__input")
+                    .forEach(function (cb) {
+                        if (cb.checked) ids.push(String(cb.value));
+                    });
+            }
+            return ids;
         }
 
         function getOptions(pk) {
-            return optionsBySubject[pk] || optionsBySubject[Number(pk)] || [];
+            var options = optionsBySubject[pk] || optionsBySubject[Number(pk)] || [];
+            var isIrregular = irregularInput && irregularInput.checked;
+            if (isIrregular) {
+                return options;
+            }
+            var sectionId = sectionSelect ? String(sectionSelect.value || "") : "";
+            if (!sectionId) {
+                return options;
+            }
+            return options.filter(function (opt) {
+                return String(opt.section_id || "") === sectionId;
+            });
+        }
+
+        /* A faculty member may handle two sections of one course, so the
+           radio value carries both ids: "facultyPk:sectionPk". */
+        function optionValue(opt) {
+            return (
+                String(opt.faculty_pk) +
+                (opt.section_id ? ":" + String(opt.section_id) : "")
+            );
         }
 
         function syncHidden() {
@@ -171,16 +192,15 @@
         }
 
         function slotsText(opt) {
-            var cap = opt.capacity || 0;
             var enrolled = opt.enrolled || 0;
-            if (cap > 0 && enrolled >= cap) return "Full - " + cap + "/" + cap;
-            if (cap > 0) return enrolled + "/" + cap + " slots";
-            return enrolled + " student" + (enrolled === 1 ? "" : "s");
+            if (enrolled > 0) {
+                return enrolled + " student" + (enrolled === 1 ? "" : "s");
+            }
+            return "No students yet";
         }
 
         function isFull(opt) {
-            var cap = opt.capacity || 0;
-            return cap > 0 && (opt.enrolled || 0) >= cap;
+            return false;
         }
 
         function render() {
@@ -208,7 +228,7 @@
                 var pickedPk = state.picks[pk] != null ? String(state.picks[pk]) : null;
                 var picked = null;
                 options.forEach(function (o) {
-                    if (String(o.faculty_pk) === pickedPk) picked = o;
+                    if (optionValue(o) === pickedPk) picked = o;
                 });
 
                 var card = document.createElement("div");
@@ -257,7 +277,8 @@
                     var optsHtml = options
                         .map(function (opt) {
                             var full = isFull(opt);
-                            var oid = "faculty-" + pk + "-" + opt.faculty_pk;
+                            var oid = "faculty-" + pk + "-" + opt.faculty_pk + "-" + (opt.section_id || 0);
+                            var ovalue = optionValue(opt);
                             return (
                                 '<label class="faculty-card__option' +
                                 (full ? " is-full" : "") +
@@ -269,11 +290,11 @@
                                 '" name="faculty_for_' +
                                 esc(pk) +
                                 '" value="' +
-                                esc(String(opt.faculty_pk)) +
+                                esc(ovalue) +
                                 '" data-subject="' +
                                 esc(pk) +
                                 '"' +
-                                (String(opt.faculty_pk) === pickedPk ? " checked" : "") +
+                                (ovalue === pickedPk ? " checked" : "") +
                                 (full ? " disabled" : "") +
                                 ">" +
                                 '<span class="faculty-card__radio" aria-hidden="true"></span>' +
@@ -406,7 +427,7 @@
             yearSelect.addEventListener("change", function () {
                 state.picks = {};
                 state.expanded = null;
-                state.locked = true;
+                state.locked = false;
                 render();
             });
         }

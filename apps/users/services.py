@@ -94,13 +94,17 @@ def _current_academic_year():
     return AcademicYear.get_current()
 
 
-def subject_faculty_options(subject_ids: list[int]) -> dict[int, list[dict]]:
+def subject_faculty_options(
+    subject_ids: list[int], *, section_id: int | None = None
+) -> dict[int, list[dict]]:
     """Faculty teaching each subject this academic year, with teaching load.
 
     Each option carries the faculty pk, display name, section label, current
     enrolled-student count, and section capacity ("load" shown in the signup
     picker, e.g. "12/40 slots"). Only faculty with a TeachingAssignment for
-    the subject in the current academic year are listed.
+    the subject in the current academic year are listed. When ``section_id``
+    is given (regular students who picked a cohort section), only faculty
+    handling that section are returned.
     """
     from django.db.models import Count
 
@@ -118,23 +122,27 @@ def subject_faculty_options(subject_ids: list[int]) -> dict[int, list[dict]]:
     )
     if current_year is not None:
         assignments = assignments.filter(term__academic_year=current_year)
+    if section_id:
+        assignments = assignments.filter(program_section_id=section_id)
 
-    by_pair: dict[tuple[int, int], dict] = {}
+    by_triple: dict[tuple[int, int, int], dict] = {}
     for row in assignments:
-        key = (row.subject_id, row.professor_id)
-        entry = by_pair.get(key)
+        key = (row.subject_id, row.professor_id, row.program_section_id)
+        entry = by_triple.get(key)
         if entry is None:
             name = row.professor.get_full_name() or row.professor.email
             entry = {
                 "faculty_pk": row.professor_id,
                 "name": name,
+                "section_id": row.program_section_id,
                 "section_label": (row.program_section.display_label or "").strip(),
                 "enrolled": 0,
-                "capacity": 0,
+                "capacity": row.program_section.max_students or 0,
             }
-            by_pair[key] = entry
+            by_triple[key] = entry
             options[row.subject_id].append(entry)
-        entry["capacity"] += row.program_section.max_students or 0
+        else:
+            entry["capacity"] += row.program_section.max_students or 0
 
     if current_year is not None:
         counts = (
@@ -145,9 +153,9 @@ def subject_faculty_options(subject_ids: list[int]) -> dict[int, list[dict]]:
             .annotate(total=Count("student_id", distinct=True))
         )
         for row in counts:
-            entry = by_pair.get((row["subject_id"], row["faculty_id"]))
-            if entry is not None:
-                entry["enrolled"] = row["total"]
+            for entry in options.get(row["subject_id"], []):
+                if entry["faculty_pk"] == row["faculty_id"]:
+                    entry["enrolled"] = row["total"]
 
     # Fallback: subjects with no teaching assignment still show every
     # program faculty member so the signup picker never renders an empty
@@ -157,7 +165,7 @@ def subject_faculty_options(subject_ids: list[int]) -> dict[int, list[dict]]:
     from apps.users.models import User as _User
 
     missing_ids = [pk for pk in subject_ids if not options.get(pk)]
-    if missing_ids:
+    if missing_ids and not section_id:
         program_ids = list(
             Subject.objects.filter(pk__in=missing_ids).values_list(
                 "program_id", flat=True
@@ -173,14 +181,15 @@ def subject_faculty_options(subject_ids: list[int]) -> dict[int, list[dict]]:
             .order_by("first_name", "last_name")
         )
         if not fallback_faculty.exists():
-            fallback_faculty = _User.objects.filter(
-                role=_User.Role.PROFESSOR
-            ).order_by("first_name", "last_name")
+            fallback_faculty = _User.objects.filter(role=_User.Role.PROFESSOR).order_by(
+                "first_name", "last_name"
+            )
         for pk in missing_ids:
             options[pk] = [
                 {
                     "faculty_pk": fac.pk,
                     "name": fac.get_full_name() or fac.email,
+                    "section_id": None,
                     "section_label": "",
                     "enrolled": 0,
                     "capacity": 0,
@@ -272,9 +281,7 @@ def attach_subject_stats(subjects: list) -> None:
         by_id[row["topic__subject_id"]].question_count = row["total"]
 
     material_rows = (
-        LearningDocument.objects.filter(
-            subject_id__in=subject_ids, is_archived=False
-        )
+        LearningDocument.objects.filter(subject_id__in=subject_ids, is_archived=False)
         .values("subject_id")
         .annotate(total=Count("id"))
     )

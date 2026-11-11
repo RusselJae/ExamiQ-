@@ -91,6 +91,12 @@ class TestStudentSignUp:
     def _locmem_email(self, settings):
         settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+    @pytest.fixture(autouse=True)
+    def _register_signup_number(self, db):
+        from apps.users.models import PendingStudentRegistration
+
+        PendingStudentRegistration.objects.get_or_create(student_number="123456789")
+
     def test_signup_creates_inactive_account_pending_verification(
         self, client, year_level, bsed_section
     ):

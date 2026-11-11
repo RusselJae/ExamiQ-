@@ -120,7 +120,20 @@
     const CONFIRM_TYPES = {
         warning: "confirm-dialog-card--warning",
         error: "confirm-dialog-card--error",
+        danger: "confirm-dialog-card--error",
         info: "confirm-dialog-card--info",
+    };
+
+    const CONFIRM_ICONS = {
+        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        deactivate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="23" y2="14"/><line x1="23" y1="8" x2="17" y2="14"/></svg>',
+        activate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>',
+        archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+        restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7 3 13 9 13"/><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7"/></svg>',
+        remove: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+        exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+        approve: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12.5 11 15.5 16.5 9"/></svg>',
+        reject: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>',
     };
 
     window.showConfirm = function (options) {
@@ -130,6 +143,7 @@
 
         const titleEl = root.querySelector("#confirm-dialog-title");
         const messageEl = root.querySelector("#confirm-dialog-message");
+        const iconEl = root.querySelector("#confirm-dialog-icon");
         const card = root.querySelector(".confirm-dialog-card");
         const okBtn = root.querySelector("[data-confirm-ok]");
         const cancelLabelBtn = root.querySelector("[data-confirm-cancel-btn]");
@@ -139,6 +153,10 @@
         const type = options.type || "warning";
         card.className =
             "confirm-dialog-card " + (CONFIRM_TYPES[type] || CONFIRM_TYPES.warning);
+        if (iconEl) {
+            iconEl.innerHTML =
+                CONFIRM_ICONS[options.icon] || CONFIRM_ICONS[type] || CONFIRM_ICONS.warning;
+        }
         if (titleEl) {
             titleEl.textContent = options.title || "Confirm";
         }
@@ -237,6 +255,8 @@
         initProfileDropdowns();
         initAppSidebar();
         initConfirmForms();
+        initConfirmLinks();
+        initKebabMenus();
         initMobileNavSearch();
         initTopbarHeight();
     }
@@ -265,6 +285,7 @@
                     message: message,
                     title: form.dataset.confirmTitle || "Confirm",
                     type: type,
+                    icon: form.dataset.confirmIcon || "",
                     confirmLabel: form.dataset.confirmLabel || "Confirm",
                     cancelLabel: form.dataset.cancelLabel || "Cancel",
                 }).then(function (ok) {
@@ -275,6 +296,93 @@
                 });
             });
         });
+    }
+
+    function initConfirmLinks() {
+        document.querySelectorAll("a[data-confirm-message]").forEach(function (link) {
+            if (link.dataset.confirmBound) return;
+            link.dataset.confirmBound = "1";
+            link.addEventListener("click", function (event) {
+                if (link.dataset.confirmed === "1") {
+                    link.dataset.confirmed = "0";
+                    return;
+                }
+                event.preventDefault();
+                showConfirm({
+                    message: link.dataset.confirmMessage,
+                    title: link.dataset.confirmTitle || "Leave page?",
+                    type: link.dataset.confirmType || "warning",
+                    icon: link.dataset.confirmIcon || "exit",
+                    confirmLabel: link.dataset.confirmLabel || "Leave",
+                    cancelLabel: link.dataset.cancelLabel || "Stay",
+                }).then(function (ok) {
+                    if (ok) {
+                        link.dataset.confirmed = "1";
+                        window.location.href = link.href;
+                    }
+                });
+            });
+        });
+    }
+
+    function initKebabMenus() {
+        function closeAll(except) {
+            document.querySelectorAll(".account-kebab[open]").forEach(function (details) {
+                if (details !== except) details.removeAttribute("open");
+            });
+        }
+
+        function position(details) {
+            const menu = details.querySelector(".account-kebab__menu");
+            const trigger = details.querySelector("summary");
+            if (!menu || !trigger) return;
+            menu.style.visibility = "hidden";
+            menu.classList.add("account-kebab__menu--floating");
+            const rect = trigger.getBoundingClientRect();
+            const width = menu.offsetWidth || 180;
+            const height = menu.offsetHeight || 120;
+            let left = Math.min(rect.right - width, window.innerWidth - width - 8);
+            left = Math.max(8, left);
+            let top = rect.bottom + 6;
+            if (top + height > window.innerHeight - 8) {
+                top = Math.max(8, rect.top - height - 6);
+            }
+            menu.style.left = left + "px";
+            menu.style.top = top + "px";
+            menu.style.right = "auto";
+            menu.style.visibility = "";
+        }
+
+        function reset(details) {
+            const menu = details.querySelector(".account-kebab__menu");
+            if (!menu) return;
+            menu.classList.remove("account-kebab__menu--floating");
+            menu.style.left = "";
+            menu.style.top = "";
+            menu.style.right = "";
+            menu.style.visibility = "";
+        }
+
+        document.addEventListener(
+            "toggle",
+            function (event) {
+                const details = event.target;
+                if (!details || !details.classList || !details.classList.contains("account-kebab")) return;
+                if (details.open) {
+                    closeAll(details);
+                    position(details);
+                } else {
+                    reset(details);
+                }
+            },
+            true
+        );
+
+        document.addEventListener("click", function (event) {
+            if (!event.target.closest(".account-kebab")) closeAll();
+        });
+        window.addEventListener("resize", function () { closeAll(); });
+        window.addEventListener("scroll", function () { closeAll(); }, true);
     }
 
     function closeAllNavElements() {
