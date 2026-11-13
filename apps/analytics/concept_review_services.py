@@ -14,6 +14,8 @@ from apps.reviews.models import Answer
 from apps.users.models import User
 
 CORRECT_TO_RESOLVE = 3
+#: A concept only surfaces in the student's Review list after this many misses.
+CONCEPT_REVIEW_MISS_THRESHOLD = 3
 RECHECK_DAYS = 7
 FEEDBACK_STYLES = (
     "worked_example",
@@ -139,7 +141,10 @@ def list_concept_reviews(
 ) -> QuerySet[ConceptReview]:
     """Return concept reviews for the student, optionally filtered by status."""
     qs = (
-        ConceptReview.objects.filter(student=student)
+        ConceptReview.objects.filter(
+            student=student,
+            miss_count__gte=CONCEPT_REVIEW_MISS_THRESHOLD,
+        )
         .select_related("topic", "topic__subject", "topic__subject__year_level")
         .annotate(open_attempts=Count("practice_attempts"))
     )
@@ -151,7 +156,10 @@ def list_concept_reviews(
 def concept_status_counts(student: User) -> dict[str, int]:
     """Return counts per status for chip badges."""
     rows = (
-        ConceptReview.objects.filter(student=student)
+        ConceptReview.objects.filter(
+            student=student,
+            miss_count__gte=CONCEPT_REVIEW_MISS_THRESHOLD,
+        )
         .values("status")
         .annotate(c=Count("id"))
     )

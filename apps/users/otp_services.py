@@ -80,11 +80,16 @@ def _send_via_resend_api(
     try:
         import resend
         from resend.exceptions import ResendError
+        from resend.http_client_requests import RequestsClient
     except ImportError:
         logger.warning("resend package missing; falling back to urllib")
         _send_via_resend_urllib(api_key=api_key, payload=payload)
         return
 
+    timeout = max(
+        3, int(getattr(settings, "RESEND_TIMEOUT_SECONDS", 8) or 8)
+    )
+    resend.default_http_client = RequestsClient(timeout=timeout)
     resend.api_key = api_key
     try:
         result = resend.Emails.send(payload)

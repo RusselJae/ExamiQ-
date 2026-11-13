@@ -10,6 +10,7 @@ from apps.analytics.concept_review_services import (
     build_concept_card_context,
     concept_key_for_question,
     ensure_learn_content,
+    list_concept_reviews,
     record_exam_miss_for_concept,
     restart_concept_review,
     start_or_next_practice,
@@ -87,6 +88,20 @@ class TestRecordExamMiss:
         assert review.status == ConceptReview.Status.NEEDS_REVIEW
         assert review.correct_streak == 0
         assert review.miss_count == 2
+
+    def test_concept_review_only_lists_after_third_miss(self, student, mcq_question):
+        question, _ = mcq_question
+        question.concept_tag = "Limits"
+        question.save(update_fields=["concept_tag"])
+        for expected in (1, 2):
+            answer, _, _ = self._wrong_answer(student, mcq_question)
+            review = record_exam_miss_for_concept(student, question, answer)
+            assert review.miss_count == expected
+            assert not list_concept_reviews(student).exists()
+        answer, _, _ = self._wrong_answer(student, mcq_question)
+        review = record_exam_miss_for_concept(student, question, answer)
+        assert review.miss_count == 3
+        assert list_concept_reviews(student).filter(pk=review.pk).exists()
 
 
 @pytest.mark.django_db
@@ -205,14 +220,20 @@ class TestConceptReviewViews:
             topic=question.topic,
             difficulty=question.difficulty,
         )
-        answer = Answer.objects.create(
-            session=session,
-            question=question,
-            selected_choice=wrong,
-            confidence=5,
-            is_correct=False,
-        )
-        log_mistake(student, question, answer)
+        for _ in range(3):
+            session = ReviewSession.objects.create(
+                student=student,
+                topic=question.topic,
+                difficulty=question.difficulty,
+            )
+            answer = Answer.objects.create(
+                session=session,
+                question=question,
+                selected_choice=wrong,
+                confidence=5,
+                is_correct=False,
+            )
+            log_mistake(student, question, answer)
         client.force_login(student)
         response = client.get(
             reverse("analytics_student:mistakes"),

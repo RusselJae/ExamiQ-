@@ -195,9 +195,13 @@ EMAIL_PORT = env.int("EMAIL_PORT", default=587)
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
-EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=15)
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=10)
 # Prefer HTTPS (works on Railway). Falls back to EMAIL_HOST_PASSWORD if it starts with re_.
 RESEND_API_KEY = env("RESEND_API_KEY", default="")
+# Resend's SDK defaults to a 30s HTTP timeout, which can exceed Gunicorn's
+# worker timeout during login-code delivery. Fail fast so the view can show a
+# friendly message instead of being killed mid-request.
+RESEND_TIMEOUT_SECONDS = env.int("RESEND_TIMEOUT_SECONDS", default=8)
 # Password reset throttling (per email address).
 PASSWORD_RESET_COOLDOWN_SECONDS = env.int("PASSWORD_RESET_COOLDOWN_SECONDS", default=30)
 PASSWORD_RESET_DAILY_LIMIT = env.int("PASSWORD_RESET_DAILY_LIMIT", default=3)

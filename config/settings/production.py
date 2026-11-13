@@ -18,6 +18,9 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
     },
 }
+# Never 500 a page because a newly added static file is missing from the
+# manifest (usually collectstatic not run yet). Fall back to the plain URL.
+WHITENOISE_MANIFEST_STRICT = False
 
 # Public https origins only (not *.railway.internal). Set on the host, e.g.:
 # CSRF_TRUSTED_ORIGINS=https://your-app.up.railway.app,https://examiq-v2ic.onrender.com

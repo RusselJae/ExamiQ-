@@ -1,6 +1,7 @@
 """Chairperson teaching assignment views."""
 
 from django.contrib import messages
+from django.db import IntegrityError
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -168,6 +169,10 @@ class ChairpersonAssignmentCreateView(AcademicManagerRequiredMixin, FormView):
     template_name = "chairperson/assignments/list.html"
     success_url = reverse_lazy("analytics_chairperson:assignments")
 
+    def get(self, request, *args, **kwargs):
+        """Assignments are created in the list page dialog, not a standalone page."""
+        return redirect("analytics_chairperson:assignments")
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["chairperson"] = self.request.user
@@ -184,6 +189,13 @@ class ChairpersonAssignmentCreateView(AcademicManagerRequiredMixin, FormView):
             )
         except ValueError as exc:
             messages.error(self.request, str(exc))
+            return redirect("analytics_chairperson:assignments")
+        except IntegrityError:
+            messages.error(
+                self.request,
+                "That assignment conflicts with an existing faculty load. "
+                "Refresh the page and reassign the section instead.",
+            )
             return redirect("analytics_chairperson:assignments")
         created = result["created"]
         skipped = result["skipped"]
@@ -448,28 +460,38 @@ class ChairpersonAssignmentSectionsAPIView(AcademicManagerRequiredMixin, View):
             .select_related("year_level")
             .order_by("year_level__order", "label")
         )
-        assigned_ids = set()
         professor_id = request.GET.get("professor", "")
-        if professor_id.isdigit():
-            assigned_ids = set(
-                TeachingAssignment.objects.filter(
-                    subject=subject,
-                    term=term,
-                    professor_id=int(professor_id),
-                ).values_list("program_section_id", flat=True)
-            )
+        professor_pk = int(professor_id) if professor_id.isdigit() else None
+        existing = {
+            assignment.program_section_id: assignment
+            for assignment in TeachingAssignment.objects.filter(
+                subject=subject, term=term
+            ).select_related("professor")
+        }
 
         groups: dict[str, dict] = {}
         for section in sections:
             year_name = section.year_level.name if section.year_level else "Other"
             if year_name not in groups:
                 groups[year_name] = {"year": year_name, "sections": []}
+            assignment = existing.get(section.pk)
+            holder = ""
+            if assignment is not None:
+                holder = (
+                    assignment.professor.get_full_name() or assignment.professor.email
+                )
             groups[year_name]["sections"].append(
                 {
                     "id": section.pk,
                     "label": section.display_label,
                     "student_count": section.student_count,
-                    "already_assigned": section.pk in assigned_ids,
+                    "already_assigned": assignment is not None,
+                    "assigned_faculty": holder,
+                    "assigned_to_selected": bool(
+                        assignment is not None
+                        and professor_pk is not None
+                        and assignment.professor_id == professor_pk
+                    ),
                 }
             )
         return JsonResponse({"groups": list(groups.values())})

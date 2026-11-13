@@ -470,6 +470,23 @@ def create_teaching_assignment(
     if existing is not None:
         return existing, False
 
+    conflict = (
+        TeachingAssignment.objects.filter(
+            subject=subject,
+            term=term,
+            program_section=program_section,
+        )
+        .exclude(professor=professor)
+        .select_related("professor")
+        .first()
+    )
+    if conflict is not None:
+        holder = conflict.professor.get_full_name() or conflict.professor.email
+        raise ValueError(
+            f"{program_section.display_label} is already assigned to {holder} "
+            f"for {subject.code}. Reassign that section instead."
+        )
+
     _assert_faculty_slot_available(subject, term, professor)
     _assert_section_slot_available(professor, subject, term, program_section)
     validate_assignment_subject(program_section, subject, term)

@@ -155,6 +155,7 @@
     </div>
     <div class="coord-dialog__body">
         <p class="text-sm text-examiq-slate">Select faculty, course, and up to two sections of that course.</p>
+        <p class="text-xs text-examiq-slate mb-2">Sections already assigned to a faculty are disabled — use Reassign from that faculty's row instead.</p>
         {% if assignment_form.errors %}
         <div class="campus-alert mb-3" role="alert">{{ assignment_form.errors.as_text }}</div>
         {% endif %}
@@ -198,6 +199,6 @@
 
 {% block extra_js %}
 <script src="{% static 'js/assignment-reassign.js' %}"></script>
-<script src="{% static 'js/assignment-sections.js' %}?v=20261111"></script>
+<script src="{% static 'js/assignment-sections.js' %}?v=20261113"></script>
 <script src="{% static 'js/faculty-courses.js' %}?v=20261112"></script>
 {% endblock %}

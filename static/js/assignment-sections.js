@@ -154,7 +154,9 @@
                 if (section.already_assigned) {
                     const badge = document.createElement("span");
                     badge.className = "assign-section-row__badge";
-                    badge.textContent = "Assigned";
+                    badge.textContent = section.assigned_to_selected
+                        ? "Assigned to you"
+                        : "Assigned to " + (section.assigned_faculty || "another faculty");
                     label.appendChild(checkbox);
                     label.appendChild(text);
                     label.appendChild(meta);
@@ -191,6 +193,8 @@
                     label: section.label,
                     student_count: section.student_count,
                     already_assigned: section.already_assigned,
+                    assigned_faculty: section.assigned_faculty || "",
+                    assigned_to_selected: !!section.assigned_to_selected,
                     year: group.year,
                 });
             });

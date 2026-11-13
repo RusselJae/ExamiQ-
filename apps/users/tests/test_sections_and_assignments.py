@@ -958,6 +958,53 @@ class TestTwoFacultyPerSubjectTerm:
             == 3
         )
 
+    def test_same_section_cannot_be_assigned_to_another_faculty(
+        self, client, chairperson, professor, program_section, subject, program
+    ):
+        from apps.users.models import AcademicTerm, TeachingAssignment
+
+        dept = program.managing_department
+        chairperson.department = dept
+        chairperson.save(update_fields=["department"])
+        professor.department = dept
+        professor.save(update_fields=["department"])
+        second = self._other_professor("section-conflict@test.edu")
+        second.department = dept
+        second.save(update_fields=["department"])
+        term = AcademicTerm.objects.create(
+            academic_year=program_section.academic_year,
+            name="1st Sem",
+            is_current=True,
+        )
+        TeachingAssignment.objects.create(
+            professor=professor,
+            program_section=program_section,
+            subject=subject,
+            term=term,
+            assigned_by=chairperson,
+        )
+        client.force_login(chairperson)
+        response = client.post(
+            reverse("analytics_chairperson:assignment_create"),
+            {
+                "professor": second.pk,
+                "subject": subject.pk,
+                "term": term.pk,
+                "program_sections": [program_section.pk],
+            },
+        )
+        assert response.status_code == 302
+        from django.contrib.messages import get_messages
+
+        texts = [str(m) for m in get_messages(response.wsgi_request)]
+        assert any("already assigned" in text for text in texts)
+        assert (
+            TeachingAssignment.objects.filter(
+                subject=subject, term=term, program_section=program_section
+            ).count()
+            == 1
+        )
+
     def test_assign_view_shows_friendly_error_instead_of_500(
         self, client, chairperson, professor, program_section, subject, program
     ):
@@ -990,6 +1037,7 @@ class TestTwoFacultyPerSubjectTerm:
         third = self._other_professor("third.prof@test.edu")
         third.department = dept
         third.save(update_fields=["department"])
+        third_section = self._other_section(program_section, label="8Y")
         client.force_login(chairperson)
         response = client.post(
             reverse("analytics_chairperson:assignment_create"),
@@ -997,7 +1045,7 @@ class TestTwoFacultyPerSubjectTerm:
                 "professor": third.pk,
                 "subject": subject.pk,
                 "term": term.pk,
-                "program_sections": [program_section.pk],
+                "program_sections": [third_section.pk],
             },
         )
         assert response.status_code == 302
