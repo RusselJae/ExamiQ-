@@ -58,11 +58,32 @@ def faculty_handles_student_subject(
 
 
 def faculty_handled_section_ids(professor: User) -> set[int]:
-    """ProgramSection PKs covered by this professor's teaching assignments."""
+    """ProgramSection PKs covered by this professor's current-year assignments."""
+    from apps.users.section_services import get_current_academic_year
+
+    current_year = get_current_academic_year()
+    if current_year is None:
+        return set()
     return set(
-        TeachingAssignment.objects.filter(professor=professor).values_list(
-            "program_section_id", flat=True
-        )
+        TeachingAssignment.objects.filter(
+            professor=professor,
+            term__academic_year=current_year,
+        ).values_list("program_section_id", flat=True)
+    )
+
+
+def students_enrolled_in_handled_sections(professor: User) -> set[int]:
+    """Active students whose cohort section is handled by this professor."""
+    section_ids = faculty_handled_section_ids(professor)
+    if not section_ids:
+        return set()
+    return set(
+        User.objects.filter(
+            role=User.Role.STUDENT,
+            section_id__in=section_ids,
+            is_active=True,
+            is_archived=False,
+        ).values_list("id", flat=True)
     )
 
 
@@ -116,7 +137,11 @@ def students_visible_to_faculty(professor: User) -> set[int]:
             student__is_archived=False,
         ).values_list("student_id", flat=True)
     )
-    return assigned_ids | students_with_exams_on_handled_subjects(professor)
+    return (
+        assigned_ids
+        | students_enrolled_in_handled_sections(professor)
+        | students_with_exams_on_handled_subjects(professor)
+    )
 
 
 def handled_subject_ids(professor: User) -> set[int]:

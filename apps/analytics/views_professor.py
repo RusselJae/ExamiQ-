@@ -579,7 +579,9 @@ class CourseDetailView(ProfessorCourseMixin, DetailView):
                 term=self.object.term,
                 academic_year=self.object.academic_year,
                 is_archived=False,
-            ).order_by("section")
+            )
+            .select_related("teaching_assignment__program_section")
+            .order_by("section")
         )
         if not any(offering.pk == self.object.pk for offering in offerings):
             offerings.append(self.object)
@@ -596,15 +598,76 @@ class CourseDetailView(ProfessorCourseMixin, DetailView):
         return ""
 
     def get_section_student_counts(self, offerings: list) -> dict[str, int]:
-        """Distinct practicing students per sibling offering section label."""
+        """Enrolled students per sibling offering section label."""
         from django.db.models import Count
 
+        from apps.users.models import ProgramSection, User
+
+        section_ids: set[int] = set()
+        id_to_label: dict[int, str] = {}
+        for offering in offerings:
+            assignment = getattr(offering, "teaching_assignment", None)
+            section = getattr(assignment, "program_section", None)
+            if section is None:
+                continue
+            label = (offering.section or "").strip()
+            if not label or label == "Catalog":
+                continue
+            section_ids.add(section.pk)
+            id_to_label[section.pk] = label
+
+        missing_labels = {
+            (offering.section or "").strip()
+            for offering in offerings
+            if (offering.section or "").strip() not in {"", "Catalog"}
+        } - set(id_to_label.values())
+        if missing_labels:
+            for section in ProgramSection.objects.filter(
+                program=self.object.program,
+                is_active=True,
+            ).select_related("year_level"):
+                label = section.display_label.strip()
+                if label in missing_labels:
+                    section_ids.add(section.pk)
+                    id_to_label[section.pk] = label
+
+        if not section_ids:
+            return {}
         rows = (
-            ReviewSession.objects.filter(course__in=offerings)
-            .values("course__section")
-            .annotate(students=Count("student_id", distinct=True))
+            User.objects.filter(
+                role=User.Role.STUDENT,
+                section_id__in=section_ids,
+                is_active=True,
+                is_archived=False,
+            )
+            .values("section_id")
+            .annotate(students=Count("id"))
         )
-        return {(row["course__section"] or "").strip(): row["students"] for row in rows}
+        return {
+            id_to_label[row["section_id"]]: row["students"]
+            for row in rows
+            if row["section_id"] in id_to_label
+        }
+
+    def get_enrolled_student_ids(self, offerings: list) -> set[int]:
+        """Student IDs enrolled in the cohort sections of these offerings."""
+        from apps.users.models import User
+
+        section_ids = {
+            offering.teaching_assignment.program_section_id
+            for offering in offerings
+            if getattr(offering, "teaching_assignment", None) is not None
+        }
+        if not section_ids:
+            return set()
+        return set(
+            User.objects.filter(
+                role=User.Role.STUDENT,
+                section_id__in=section_ids,
+                is_active=True,
+                is_archived=False,
+            ).values_list("id", flat=True)
+        )
 
     def get_course_home_stats(self) -> dict:
         """Content + question counts powering the course home cards."""
@@ -688,7 +751,9 @@ class CourseDetailView(ProfessorCourseMixin, DetailView):
         ).select_related("question__topic")
 
         summary = course_performance_summary(self.object, student_ids=handled_ids)
-        summary["enrolled_count"] = len(handled_ids)
+        summary["enrolled_count"] = len(
+            self.get_enrolled_student_ids(scoped_offerings)
+        )
         summary["external_takers"] = external_takers
         context["summary"] = summary
         context["interventions"] = get_intervention_list(

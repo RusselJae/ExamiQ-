@@ -2684,40 +2684,39 @@ def get_roster_summaries(course: Course) -> list[dict]:
 def get_professor_students_with_exams(
     professor: User, *, include_archived: bool = False
 ) -> list[dict]:
-    """Students assigned to this professor who completed exams.
+    """Students the professor handles, including section-enrolled students.
 
-    Uses StudentFacultyAssignment to determine student scope.
+    A student appears even before completing an exam (session counts stay at
+    zero), so the roster matches the coordinator's section enrollment.
     """
-    from apps.users.models import StudentFacultyAssignment
+    from apps.users.assignment_services import (
+        faculty_handled_section_ids,
+        students_visible_to_faculty,
+    )
     from apps.users.section_services import get_current_academic_year
 
     current_year = get_current_academic_year()
     if not current_year:
         return []
 
-    # Get student IDs assigned to this professor
-    assigned_student_ids = set(
-        StudentFacultyAssignment.objects.filter(
-            faculty=professor, academic_year=current_year
-        ).values_list("student_id", flat=True)
-    )
-
-    if not assigned_student_ids:
+    student_ids = students_visible_to_faculty(professor)
+    if include_archived:
+        student_ids |= set(
+            User.objects.filter(
+                role=User.Role.STUDENT,
+                section_id__in=faculty_handled_section_ids(professor),
+            ).values_list("id", flat=True)
+        )
+    if not student_ids:
         return []
 
-    # Exam-touched students stay visible even without an assignment row.
-    from apps.users.assignment_services import (
-        students_with_exams_on_handled_subjects as _session_visible,
-    )
-
-    assigned_student_ids |= _session_visible(professor)
-
-    if not assigned_student_ids:
-        return []
+    students = User.objects.filter(
+        pk__in=student_ids, role=User.Role.STUDENT
+    ).select_related("section", "section__program", "section__year_level")
 
     completed = (
         ReviewSession.objects.filter(
-            student_id__in=assigned_student_ids,
+            student_id__in=student_ids,
             status=ReviewSession.Status.COMPLETED,
         )
         .select_related("student", "course")
@@ -2727,18 +2726,19 @@ def get_professor_students_with_exams(
     if not include_archived:
         completed = completed.filter(student__is_archived=False)
 
-    by_student: dict[int, dict] = {}
+    by_student: dict[int, dict] = {
+        student.pk: {
+            "student": student,
+            "sessions_completed": 0,
+            "last_activity": None,
+            "primary_course": None,
+        }
+        for student in students
+    }
     for session in completed:
         student = session.student
-        if student is None:
+        if student is None or student.pk not in by_student:
             continue
-        if student.pk not in by_student:
-            by_student[student.pk] = {
-                "student": student,
-                "sessions_completed": 0,
-                "last_activity": session.ended_at or session.started_at,
-                "primary_course": session.course,
-            }
         by_student[student.pk]["sessions_completed"] += 1
         activity = session.ended_at or session.started_at
         if activity and (
