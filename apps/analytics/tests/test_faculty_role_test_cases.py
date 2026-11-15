@@ -239,6 +239,31 @@ class TestFacultyStudentRoster:
         response = client.get(reverse("analytics_professor:students"))
 
         assert response.status_code == 200
+        content = response.content.decode()
+        assert "Subjects" not in content
+        assert "data-table-wrap--scroll" not in content
+
+    def test_student_list_paginates_at_ten(self, client, scoped_professor, student):
+        from unittest.mock import patch
+
+        client.force_login(scoped_professor)
+        row = {
+            "student": student,
+            "sessions_completed": 0,
+            "subjects_taken_count": 0,
+            "courses_label": "",
+            "mistake_count": 0,
+            "last_activity": None,
+        }
+        with patch(
+            "apps.analytics.views_professor.get_professor_students_with_exams",
+            return_value=[dict(row) for _ in range(12)],
+        ):
+            response = client.get(reverse("analytics_professor:students"))
+
+        assert response.status_code == 200
+        assert len(response.context["roster"]) == 10
+        assert response.context["page_obj"].paginator.num_pages == 2
 
     def test_course_heatmap_renders(
         self, client, scoped_professor, teaching_assignment

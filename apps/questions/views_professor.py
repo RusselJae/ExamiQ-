@@ -1240,6 +1240,7 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         if not relevance["related"]:
             return JsonResponse(
                 {
+                    "ok": False,
                     "error": relevance.get("reason")
                     or "Uploaded module is not related to this course subject.",
                     "relevance_blocked": True,
@@ -1247,8 +1248,7 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                     or "Uploaded module is not related to this course subject.",
                     "subject_score": relevance.get("subject_score", 0),
                     "topic_score": relevance.get("topic_score", 0),
-                },
-                status=400,
+                }
             )
 
         topic_id = relevance.get("matched_topic_id") or request.POST.get("topic")

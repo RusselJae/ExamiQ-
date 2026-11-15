@@ -342,6 +342,30 @@ class TestFacultyMaterialsUI:
         assert response["Content-Disposition"].startswith("attachment;")
         assert b"Sample module content." in b"".join(response.streaming_content)
 
+    def test_download_restores_missing_file_from_database(
+        self, client, professor, subject
+    ):
+        from apps.ai.material_services import ensure_download_file
+
+        course = get_or_create_catalog_course(professor, subject)
+        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        doc.file.delete(save=False)
+        doc.file_data = b"persistent pdf bytes"
+        doc.save(update_fields=["file_data"])
+        assert ensure_download_file(doc) is True
+        with doc.file.open("rb") as handle:
+            assert handle.read() == b"persistent pdf bytes"
+
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:material_download",
+                kwargs={"course_pk": course.pk, "pk": doc.pk},
+            )
+        )
+        assert response.status_code == 200
+        assert b"persistent pdf bytes" in b"".join(response.streaming_content)
+
     def test_archive_from_list_hides_from_students(
         self, client, professor, student, subject, bsed_program
     ):
@@ -491,6 +515,36 @@ class TestMaterialUploadRelevanceGate:
             follow=True,
         )
 
+    def test_validate_endpoint_rejects_unrelated_before_upload(
+        self, client, professor, subject
+    ):
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        with (
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                _AlwaysUnrelated(),
+            ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(UNRELATED_UPLOAD),
+            ),
+        ):
+            response = client.post(
+                reverse(
+                    "analytics_professor:material_validate_upload",
+                    kwargs={"course_pk": course.pk},
+                ),
+                {
+                    "subject_id": subject.pk,
+                    "source_file": SimpleUploadedFile(
+                        "plant.pdf", UNRELATED_UPLOAD, content_type="application/pdf"
+                    ),
+                },
+            )
+        assert response.status_code == 200
+        assert "does not look related" in response.json()["error"]
+
     def test_upload_over_size_limit_is_rejected(
         self, client, professor, subject, settings
     ):
@@ -609,10 +663,10 @@ class TestMaterialUploadRelevanceGate:
         assert seen["subject"] == subject
         assert "Photosynthesis" in seen["sample"]
 
-    def test_unreadable_upload_is_allowed_with_a_warning(
+    def test_unreadable_upload_is_rejected_before_it_is_saved(
         self, client, professor, subject
     ):
-        """No readable text means we cannot judge; keep the file downloadable."""
+        """No readable text means we cannot prove it belongs to the course."""
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         blob = SimpleUploadedFile(
@@ -626,7 +680,8 @@ class TestMaterialUploadRelevanceGate:
 
         mock_relevance.assert_not_called()
         assert response.status_code == 200
-        assert LearningDocument.objects.filter(course_id=course.pk).count() == 1
+        assert LearningDocument.objects.filter(course_id=course.pk).count() == 0
+        assert "Could not extract enough text" in response.content.decode()
 
     def test_unsupported_extension_is_rejected(self, client, professor, subject):
         """Only PDF may be uploaded to the content library."""
@@ -1249,20 +1304,35 @@ class TestContentModalFlows:
             b"Modal content for algebra.",
             content_type="application/pdf",
         )
-        response = client.post(
-            reverse(
-                "analytics_professor:material_upload",
-                kwargs={"course_pk": course.pk},
+        with (
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=[
+                    {
+                        "page": 1,
+                        "text": "Modal content for algebra with enough readable text.",
+                    }
+                ],
             ),
-            {
-                "title": "Modal notes",
-                "material_type": LearningDocument.MaterialType.MODULE,
-                "subject_id": subject.pk,
-                "original_name": "modal-upload.pdf",
-                "description": "Short summary of the module",
-                "source_file": upload,
-            },
-        )
+            patch(
+                "apps.questions.views_materials.assess_subject_relevance",
+                _AlwaysRelated(),
+            ),
+        ):
+            response = client.post(
+                reverse(
+                    "analytics_professor:material_upload",
+                    kwargs={"course_pk": course.pk},
+                ),
+                {
+                    "title": "Modal notes",
+                    "material_type": LearningDocument.MaterialType.MODULE,
+                    "subject_id": subject.pk,
+                    "original_name": "modal-upload.pdf",
+                    "description": "Short summary of the module",
+                    "source_file": upload,
+                },
+            )
         assert response.status_code == 302
         doc = LearningDocument.objects.filter(course_id=course.pk).latest("created")
         assert doc.title == "Modal notes"

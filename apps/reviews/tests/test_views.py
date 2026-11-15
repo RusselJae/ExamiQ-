@@ -287,7 +287,13 @@ class TestSessionSummaryView:
         assert "calibration-matrix" not in content
         assert "Topics to revisit" not in content
         assert "Answer review" in content
-        assert "Result + pace" in content
+        assert "All 1" in content
+        assert "Missed 1" in content
+        assert "Review this answer" in content
+        assert "session-complete-header" in content
+        assert content.index("session-complete-header") < content.index("session-complete-main")
+        assert topic.name in content
+        assert "From this exam" in content
         assert "answer-review-grid" in content
         assert "ai-tutor-modal" in content
         assert "ai-tutor-modal.js" in content

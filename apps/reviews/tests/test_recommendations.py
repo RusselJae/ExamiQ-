@@ -1,12 +1,12 @@
 import pytest
-from django.utils import timezone
 
 from apps.analytics.models import MistakeRecord
 from apps.questions.models import Question, QuestionChoice
-from apps.reviews.models import Answer, ReviewSession
+from apps.reviews.models import Answer
 from apps.reviews.recommendations import (
     build_session_summary,
     get_review_recommendations,
+    get_session_review_recommendations,
 )
 from apps.reviews.services import complete_session, start_review_session
 
@@ -86,3 +86,37 @@ class TestRecommendations:
         assert recs
         assert recs[0]["topic"].pk == topic.pk
         assert recs[0]["priority"] == "high"
+
+    def test_session_recommendations_come_from_this_exam(self, student, course, topic):
+        session = start_review_session(
+            student=student,
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            course=course,
+        )
+        question = Question.objects.create(
+            topic=topic,
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            stem="Session-specific?",
+            status=Question.Status.APPROVED,
+        )
+        wrong = QuestionChoice.objects.create(
+            question=question, label="B", text="no", is_correct=False
+        )
+        Answer.objects.create(
+            session=session,
+            question=question,
+            selected_choice=wrong,
+            confidence=5,
+            is_correct=False,
+        )
+
+        recs = get_session_review_recommendations(session, limit=3)
+
+        assert len(recs) == 1
+        assert recs[0]["topic_id"] == topic.pk
+        assert recs[0]["subject_id"] == topic.subject_id
+        assert recs[0]["source_label"] == "From this exam"
+        assert recs[0]["priority"] == "high"
+        assert recs[0]["reason"] == "1 of 1 missed in this exam. 1 was marked Sure."

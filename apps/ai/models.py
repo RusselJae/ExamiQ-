@@ -117,6 +117,15 @@ class LearningDocument(models.Model):
     )
     original_name = models.CharField(max_length=255, blank=True, default="")
     file = models.FileField(upload_to="learning_modules/%Y/%m/", blank=True)
+    file_data = models.BinaryField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            "Persistent copy of the uploaded file. Railway's filesystem is "
+            "ephemeral, so downloads can be rebuilt after a redeploy."
+        ),
+    )
     source_text = models.TextField(
         blank=True,
         default="",

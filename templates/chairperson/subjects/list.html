@@ -86,7 +86,7 @@
                     <td class="coord-col-course"><span class="coord-cell-line" title="{{ subject.name }}">{{ subject.name }}</span></td>
                     <td class="coord-col-faculty">
                         {% if subject.faculty_names %}
-                        <span title="{{ subject.faculty_names|join:', ' }}">{{ subject.faculty_names|join:", " }}</span>
+                        <span class="coord-cell-line" title="{{ subject.faculty_names|join:', ' }}">{{ subject.faculty_names|join:", " }}</span>
                         {% else %}
                         <span class="profile-pill">Needs faculty</span>
                         {% endif %}

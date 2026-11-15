@@ -257,12 +257,25 @@ def _upload_too_large(uploaded) -> str:
     return ""
 
 
+def _extraction_rejection(pages: list[dict], error: str) -> str:
+    """Reject an upload when no readable text could be extracted at all."""
+    if pages:
+        return ""
+    return error or (
+        "Could not read any text from that PDF. Upload a text-based PDF "
+        "instead of a scanned image."
+    )
+
+
 def _relevance_sample(pages: list[dict]) -> str:
     """Head + tail text, mirroring ``sample_material_for_relevance``.
 
     The opening carries the title/subject identity and the closing often holds
     the summary; a middle slice of a long chapter tells us much less.
     """
+    pages = [page for page in pages if (page.get("text") or "").strip()]
+    if not pages:
+        return ""
     if len(pages) <= 4:
         return " ".join(page["text"] for page in pages)
     head = " ".join(page["text"] for page in pages[:3])
@@ -374,6 +387,14 @@ class MaterialHubView(ProfessorRequiredMixin, View):
                 ),
                 "content_modal_auto_open": request.GET.get("add_content") == "1",
                 "content_upload_error": request.GET.get("upload_error", ""),
+                "validate_upload_url": (
+                    reverse(
+                        "analytics_professor:material_validate_upload",
+                        kwargs={"course_pk": course.pk},
+                    )
+                    if course
+                    else ""
+                ),
             },
         )
 
@@ -435,8 +456,40 @@ class MaterialListView(ProfessorCourseMixin, View):
                 "draft_count": draft_count,
                 "content_modal_auto_open": request.GET.get("add_content") == "1",
                 "content_upload_error": request.GET.get("upload_error", ""),
+                "validate_upload_url": reverse(
+                    "analytics_professor:material_validate_upload",
+                    kwargs={"course_pk": course_pk},
+                ),
             },
         )
+
+
+class MaterialValidateUploadView(ProfessorCourseMixin, View):
+    """AJAX pre-check: reject an unrelated PDF before it is attached."""
+
+    def post(self, request, course_pk):
+        uploaded = request.FILES.get("source_file")
+        if not uploaded:
+            return JsonResponse({"ok": False, "error": "Choose a PDF first."})
+        subject_id = request.POST.get("subject_id", "")
+        subject = _resolve_upload_subject(self.course, request.user, subject_id)
+        if subject is None:
+            return JsonResponse({"ok": False, "error": MATH_ONLY_UPLOAD_MESSAGE})
+        if not is_allowed_upload(uploaded.name):
+            return JsonResponse(
+                {"ok": False, "error": _unsupported_upload_message(uploaded.name)}
+            )
+        size_error = _upload_too_large(uploaded)
+        if size_error:
+            return JsonResponse({"ok": False, "error": size_error})
+        pages, extraction_error = _extract_upload_pages(uploaded)
+        extraction_rejection = _extraction_rejection(pages, extraction_error)
+        if extraction_rejection:
+            return JsonResponse({"ok": False, "error": extraction_rejection})
+        rejection = _relevance_rejection(subject, pages)
+        if rejection:
+            return JsonResponse({"ok": False, "error": rejection})
+        return JsonResponse({"ok": True})
 
 
 class MaterialUploadView(ProfessorCourseMixin, View):
@@ -490,6 +543,9 @@ class MaterialUploadView(ProfessorCourseMixin, View):
 
         # Extract once, then gate on subject relevance before creating anything.
         pages, extraction_error = _extract_upload_pages(uploaded)
+        extraction_rejection = _extraction_rejection(pages, extraction_error)
+        if extraction_rejection:
+            return _reject(extraction_rejection)
         rejection = _relevance_rejection(subject, pages)
         if rejection:
             return _reject(rejection)

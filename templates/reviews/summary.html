@@ -4,54 +4,65 @@
 {% block title %}Session Complete - EXAMIQ+{% endblock %}
 
 {% block content %}
-<div class="session-complete-header mb-6">
-    {% include "components/page_header.html" with title="Session Complete" subtitle=session.topic.name|add:" — "|add:session.get_difficulty_display %}
-</div>
-
-<div class="bento-grid mb-6">
-
-    <div class="span-full">
-        <div class="bento-card p-6 session-strip-card session-strip-card--full">
-            {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" show_answer_grid=True %}
-        </div>
+<div class="session-complete-page">
+    <div class="session-complete-header">
+        {% include "components/page_header.html" with title="Session Complete" %}
     </div>
 
-    <div class="span-full">
-        <div class="bento-card bento-card--list bento-card-inner h-full flex flex-col session-reviews-card">
-            <p class="session-reviews-card__eyebrow">Next up</p>
-            <h2 class="session-reviews-card__title">Recommended Reviews</h2>
+    <div class="session-complete-shell">
+        <section class="session-complete-main" aria-label="Session result and answer review">
+            {% include "reviews/partials/session_result_summary.html" with session_summary=session_summary %}
+
+            {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" incorrect_count=incorrect_count show_answer_grid=True show_summary=False show_filter_tabs=True show_mode_toggle=False show_review_footer=True review_hint="Click a question to review your answer." %}
+        </section>
+
+        <aside class="session-complete-side" aria-label="Recommended reviews">
+            <div class="session-complete-side__head">
+                <p class="session-complete-side__eyebrow">Next up</p>
+                <h2 class="session-complete-side__title">Recommended reviews</h2>
+            </div>
+
             {% if recommendations %}
-            <ul class="session-reviews-list bento-card-scroll flex-1">
-                {% for rec in recommendations %}
-                <li class="session-reviews-item">
-                    <div class="session-reviews-item__main">
-                        <p class="session-reviews-item__topic">{{ rec.topic_name }}</p>
-                        <p class="session-reviews-item__reason">{{ rec.reason }}</p>
-                        <span class="session-reviews-item__priority session-reviews-item__priority--{{ rec.priority }}">
-                            {{ rec.priority|capfirst }} priority{% if rec.is_due %} — due now{% endif %}
+            <ul class="session-complete-recs">
+                {% for rec in recommendations|slice:":3" %}
+                <li class="session-complete-rec">
+                    <div class="session-complete-rec__top">
+                        <span class="session-complete-rec__priority session-complete-rec__priority--{{ rec.priority }}">
+                            {{ rec.priority|capfirst }} priority
                         </span>
+                        {% if rec.source_label %}
+                        <span class="session-complete-rec__source">{{ rec.source_label }}</span>
+                        {% elif rec.is_due %}
+                        <span class="session-complete-rec__due">Due now</span>
+                        {% endif %}
                     </div>
-                    <a href="{% url 'reviews:setup' %}?subject={{ rec.topic.subject_id }}" class="btn-primary btn-primary-sm shrink-0">Review</a>
+                    <p class="session-complete-rec__topic">{{ rec.topic_name }}</p>
+                    <p class="session-complete-rec__reason">{{ rec.reason }}</p>
+                    <a href="{% url 'reviews:setup' %}?subject={{ rec.subject_id }}" class="session-complete-rec__link">
+                        Start review <span aria-hidden="true">&rarr;</span>
+                    </a>
                 </li>
                 {% endfor %}
             </ul>
             {% else %}
-            {% include "components/empty_state.html" with compact=True title="You're caught up" body="No urgent topics flagged. Keep practicing to stay sharp." %}
+            <div class="session-complete-side__empty">
+                <p class="session-complete-side__empty-title">You're caught up</p>
+                <p class="session-complete-side__empty-body">No urgent topics flagged. Keep practicing to stay sharp.</p>
+            </div>
             {% endif %}
-        </div>
+
+            <div class="session-complete-side__actions">
+                <button type="button" class="session-complete-side__primary" id="open-ai-tutor-btn">AI Tutor</button>
+                <a href="{{ setup_retake_url }}" class="session-complete-side__secondary">Review again</a>
+            </div>
+        </aside>
     </div>
 </div>
-
-<div class="session-complete-actions mb-8">
-    <button type="button" class="btn-primary" id="open-ai-tutor-btn">AI Tutor</button>
-    <a href="{{ setup_retake_url }}" class="btn-secondary">Review Again</a>
-</div>
-
 {% endblock %}
 
 {% block extra_js %}
 {{ session_summary.question_trends|json_script:"answer-review-data" }}
-<script src="{% static 'js/session-answer-review.js' %}"></script>
+<script src="{% static 'js/session-answer-review.js' %}?v=20261115b"></script>
 <script>
 (function () {
     var el = document.getElementById("answer-review-data");
@@ -61,7 +72,8 @@
             wrapEl: "answer-review-wrap",
             emptyEl: "answer-review-empty",
             legend: "answer-review-legend",
-            toggleButtons: "[data-answer-review] [data-review-mode]",
+            filters: "[data-answer-review] [data-review-filter]",
+            selection: "[data-answer-review] [data-review-selection]",
             data: JSON.parse(el.textContent),
             defaultMode: "pace",
         });

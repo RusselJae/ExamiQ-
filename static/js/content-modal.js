@@ -93,12 +93,12 @@
                     event.preventDefault();
                     const files = event.dataTransfer && event.dataTransfer.files;
                     if (files && files.length) fileInput.files = files;
-                    reflectSelectedFile(fileInput, originalNameInput, titleInput);
+                    handleSelectedFile(fileInput, originalNameInput, titleInput);
                 });
             }
 
             fileInput.addEventListener("change", () => {
-                reflectSelectedFile(fileInput, originalNameInput, titleInput);
+                handleSelectedFile(fileInput, originalNameInput, titleInput);
             });
             if (removeBtn) {
                 removeBtn.addEventListener("click", (event) => {
@@ -193,6 +193,99 @@
             helperEl.classList.remove("content-modal__helper--error");
             helperEl.textContent = "Choose a PDF that matches this course subject.";
         }
+    }
+
+    function handleSelectedFile(fileInput, originalNameInput, titleInput) {
+        if (!fileInput.files || !fileInput.files.length) {
+            resetSelectedFile(fileInput.closest(".content-modal"));
+            return;
+        }
+        const file = fileInput.files[0];
+        const modal = fileInput.closest(".content-modal");
+        const helperEl = modal ? modal.querySelector("[data-modal-file-helper]") : null;
+        const maxMb = parseFloat(fileInput.dataset.maxSizeMb || "0");
+        if (maxMb && file.size > maxMb * 1024 * 1024) {
+            try {
+                fileInput.value = "";
+            } catch (e) { /* ignore */ }
+            resetSelectedFile(modal);
+            if (helperEl) {
+                helperEl.classList.add("content-modal__helper--error");
+                helperEl.textContent =
+                    `That PDF is larger than ${maxMb} MB. Compress it and try again.`;
+            }
+            if (window.showToast) {
+                window.showToast(
+                    `That PDF is larger than ${maxMb} MB. Compress it and try again.`,
+                    "error"
+                );
+            }
+            return;
+        }
+
+        const validateUrl = fileInput.dataset.validateUrl;
+        if (!validateUrl) {
+            reflectSelectedFile(fileInput, originalNameInput, titleInput);
+            return;
+        }
+
+        const subjectInput = modal
+            ? modal.querySelector("[data-modal-subject-input]")
+            : null;
+        const csrfInput = modal
+            ? modal.querySelector('input[name="csrfmiddlewaretoken"]')
+            : null;
+        const body = new FormData();
+        body.append("source_file", file);
+        body.append("subject_id", subjectInput ? subjectInput.value : "");
+        if (helperEl) {
+            helperEl.classList.remove("content-modal__helper--error");
+            helperEl.textContent = "Checking whether this PDF matches the course…";
+        }
+        fetch(validateUrl, {
+            method: "POST",
+            headers: {
+                Accept: "application/json",
+                "X-CSRFToken": csrfInput ? csrfInput.value : "",
+            },
+            body: body,
+            credentials: "same-origin",
+        })
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return { error: "Could not check that PDF." };
+                });
+            })
+            .then(function (data) {
+                if (fileInput.files && fileInput.files[0] !== file) return;
+                if (data.error) {
+                    try {
+                        fileInput.value = "";
+                    } catch (e) { /* ignore */ }
+                    resetSelectedFile(modal);
+                    if (helperEl) {
+                        helperEl.classList.add("content-modal__helper--error");
+                        helperEl.textContent = data.error;
+                    }
+                    if (window.showToast) {
+                        window.showToast(data.error, "error");
+                    }
+                    return;
+                }
+                reflectSelectedFile(fileInput, originalNameInput, titleInput);
+            })
+            .catch(function () {
+                if (fileInput.files && fileInput.files[0] !== file) return;
+                try {
+                    fileInput.value = "";
+                } catch (e) { /* ignore */ }
+                resetSelectedFile(modal);
+                if (helperEl) {
+                    helperEl.classList.add("content-modal__helper--error");
+                    helperEl.textContent =
+                        "Could not check that PDF. Try uploading it again.";
+                }
+            });
     }
 
     function reflectSelectedFile(fileInput, originalNameInput, titleInput) {

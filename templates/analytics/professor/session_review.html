@@ -4,38 +4,39 @@
 {% block title %}Session review — {{ student.get_full_name|default:student.email }}{% endblock %}
 
 {% block main_class %}professor-student-detail{% endblock %}
+{% block body_class %}min-h-screen professor-session-review{% endblock %}
 
 {% block content %}
-<div class="overview-header mb-6">
-    <p class="overview-eyebrow">Session review</p>
-    <a href="{{ back_url }}" class="overview-back-link">&larr; {{ back_label }}</a>
-    <div class="overview-header__main">
-        <div class="overview-header__copy student-detail-header__identity">
-            <div class="student-detail-avatar" aria-hidden="true">{{ student_initials }}</div>
-            <div>
-                <h1 class="overview-title">{{ student.get_full_name|default:student.email }}</h1>
-                <p class="overview-as-of">
-                    {{ session.started_at|date:"M j, Y" }}
-                    {% if session.topic %} · {{ session.topic.name }}{% endif %}
-                    · {{ session.get_difficulty_display }}
-                </p>
+<div class="session-complete-page">
+    <div class="overview-header mb-6">
+        <p class="overview-eyebrow">Session review</p>
+        <a href="{{ back_url }}" class="overview-back-link">&larr; {{ back_label }}</a>
+        <div class="overview-header__main">
+            <div class="overview-header__copy student-detail-header__identity">
+                <div class="student-detail-avatar" aria-hidden="true">{{ student_initials }}</div>
+                <div>
+                    <h1 class="overview-title">{{ student.get_full_name|default:student.email }}</h1>
+                    <p class="overview-as-of">
+                        {{ session.started_at|date:"M j, Y" }}
+                        {% if session.topic %} · {{ session.topic.name }}{% endif %}
+                        · {{ session.get_difficulty_display }}
+                    </p>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="bento-grid mb-6">
-    <div class="span-full">
-        <div class="bento-card p-6 session-strip-card session-strip-card--full">
-            {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" review_hint="Click a question to review the student's answer." show_answer_grid=True %}
-        </div>
+    <div class="session-complete-main" aria-label="Student session result and answer review">
+        {% include "reviews/partials/session_result_summary.html" with session_summary=session_summary confidence_subtext="Based on the student's Guessing / Sure ratings." %}
+
+        {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" incorrect_count=incorrect_count show_answer_grid=True show_summary=False show_filter_tabs=True show_mode_toggle=False show_review_footer=True review_hint="Click a question to review the student's answer." %}
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 {{ session_summary.question_trends|json_script:"answer-review-data" }}
-<script src="{% static 'js/session-answer-review.js' %}"></script>
+<script src="{% static 'js/session-answer-review.js' %}?v=20261115b"></script>
 <script>
 (function () {
     var el = document.getElementById("answer-review-data");
@@ -45,7 +46,8 @@
             wrapEl: "answer-review-wrap",
             emptyEl: "answer-review-empty",
             legend: "answer-review-legend",
-            toggleButtons: "[data-answer-review] [data-review-mode]",
+            filters: "[data-answer-review] [data-review-filter]",
+            selection: "[data-answer-review] [data-review-selection]",
             data: JSON.parse(el.textContent),
             defaultMode: "pace",
             clickable: true,

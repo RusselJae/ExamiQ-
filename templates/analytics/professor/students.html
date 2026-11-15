@@ -9,15 +9,14 @@
 <div class="bento-grid">
     {% include "components/filter_bar.html" %}
     <div class="span-full">
-        <div class="data-table-wrap data-table-wrap--scroll shadow-sm">
-            <table class="data-table">
+        <div class="data-table-wrap data-table-wrap--students shadow-sm">
+            <table class="data-table data-table--students">
                 <thead>
                     <tr>
                         <th>Student</th>
                         <th>Section</th>
                         <th>Status</th>
                         <th class="text-center">Sessions</th>
-                        <th class="text-center">Subjects</th>
                         <th class="text-center">Mistakes</th>
                         <th class="text-center">Last activity</th>
                         <th class="text-right">Actions</th>
@@ -29,9 +28,9 @@
                         <td>
                             <div class="flex items-center gap-3">
                                 {% include "components/student_avatar.html" with user=row.student size="sm" %}
-                                <div>
-                                    <div class="font-medium">{{ row.student.get_full_name|default:row.student.email }}</div>
-                                    <div class="text-xs text-examiq-slate">{{ row.student.email }}</div>
+                                <div class="student-cell__identity">
+                                    <div class="font-medium student-cell__name">{{ row.student.get_full_name|default:row.student.email }}</div>
+                                    <div class="text-xs text-examiq-slate student-cell__email" title="{{ row.student.email }}">{{ row.student.email }}</div>
                                 </div>
                             </div>
                         </td>
@@ -46,7 +45,6 @@
                             {% endif %}
                         </td>
                         <td class="text-center text-examiq-slate">{{ row.sessions_completed }}</td>
-                        <td class="text-center text-examiq-slate">{{ row.subjects_taken_count|default:row.courses_label }}</td>
                         <td class="text-center">
                             {% if row.mistake_count %}
                             <span class="font-semibold text-examiq-mistake">{{ row.mistake_count }}</span>
@@ -95,7 +93,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center text-examiq-slate py-8">
+                        <td colspan="7" class="text-center text-examiq-slate py-8">
                             {% if filter_has_active %}No students match your filters.{% else %}No students have completed an exam in your courses yet.{% endif %}
                         </td>
                     </tr>
@@ -103,6 +101,7 @@
                 </tbody>
             </table>
         </div>
+        {% include "components/pagination.html" %}
     </div>
 </div>
 </div>

@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from django.db.models import Avg, Count, Max
+from django.db.models import Avg, Count, Max, Q
 from django.utils import timezone
 
 from apps.ai.helpers import calibration_narrative_from_matrix
@@ -111,6 +111,56 @@ def build_session_summary(session: ReviewSession) -> dict:
         "weak_topics": session_mistakes,
         "question_trends": question_trends,
     }
+
+
+def get_session_review_recommendations(
+    session: ReviewSession, limit: int = 3
+) -> list[dict]:
+    """Return review suggestions drawn only from this session's missed questions."""
+    rows = (
+        session.answers.values(
+            "question__topic_id",
+            "question__topic__name",
+            "question__topic__subject_id",
+        )
+        .annotate(
+            total=Count("id"),
+            missed=Count("id", filter=Q(is_correct=False)),
+            sure_missed=Count(
+                "id",
+                filter=Q(is_correct=False, confidence__gte=4),
+            ),
+        )
+        .filter(missed__gt=0)
+        .order_by("-missed", "-sure_missed", "question__topic__name")[:limit]
+    )
+
+    recommendations = []
+    for row in rows:
+        total = row["total"] or 0
+        missed = row["missed"] or 0
+        sure_missed = row["sure_missed"] or 0
+        miss_rate = missed / total if total else 0
+        priority = (
+            "high" if missed >= 2 or sure_missed or miss_rate >= 0.5 else "medium"
+        )
+        reason = f"{missed} of {total} missed in this exam."
+        if sure_missed:
+            marked_label = "was" if sure_missed == 1 else "were"
+            reason += f" {sure_missed} {marked_label} marked Sure."
+        recommendations.append(
+            {
+                "topic_id": row["question__topic_id"],
+                "topic_name": row["question__topic__name"],
+                "subject_id": row["question__topic__subject_id"],
+                "reason": reason,
+                "priority": priority,
+                "missed_count": missed,
+                "total_count": total,
+                "source_label": "From this exam",
+            }
+        )
+    return recommendations
 
 
 def get_review_recommendations(student: User, limit: int = 5) -> list[dict]:

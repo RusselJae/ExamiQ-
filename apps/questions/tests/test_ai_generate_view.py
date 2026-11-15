@@ -185,7 +185,7 @@ class TestQuestionAIGenerateView:
                 "source_file": _sample_module_file(),
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
         data = response.json()
         assert data["relevance_blocked"] is True
         assert "Not related" in data["error"]
@@ -225,7 +225,7 @@ class TestQuestionAIGenerateView:
                 "ignore_relevance": "1",
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
         data = response.json()
         assert data["relevance_blocked"] is True
         mock_get_generator.assert_not_called()

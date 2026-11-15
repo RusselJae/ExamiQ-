@@ -1,7 +1,9 @@
 {# Shared answer-review summary + optional pace grid. #}
-{# Expects: session_summary. Optional: id_prefix, clickable, show_answer_grid (default true). #}
+{# Expects: session_summary. Optional: id_prefix, clickable, show_answer_grid (default true), #}
+{# show_summary (default true), show_filter_tabs, show_mode_toggle (default true), show_review_footer. #}
 {% with prefix=id_prefix|default:"answer-review" %}
 <div class="answer-review" data-answer-review data-id-prefix="{{ prefix }}">
+    {% if show_summary != False %}
     <div class="answer-review__summary">
         <div class="answer-review__card">
             <p class="answer-review__card-label">Exam result</p>
@@ -35,22 +37,39 @@
         </div>
     </div>
     {% endif %}
+    {% endif %}
 
     {% if show_answer_grid != False %}
     <div class="answer-review__section">
         <div class="answer-review__section-header">
             <h3 class="answer-review__section-title">Answer review</h3>
-            <div class="answer-review__toggle" role="group" aria-label="Answer review display mode">
-                <button type="button"
-                        class="answer-review__toggle-btn is-active"
-                        data-review-mode="pace"
-                        id="{{ prefix }}-mode-pace"
-                        aria-pressed="true">Result + pace</button>
-                <button type="button"
-                        class="answer-review__toggle-btn"
-                        data-review-mode="result"
-                        id="{{ prefix }}-mode-result"
-                        aria-pressed="false">Result only</button>
+            <div class="answer-review__section-tools">
+                {% if show_filter_tabs %}
+                <div class="answer-review__filters" role="group" aria-label="Filter answer review">
+                    <button type="button"
+                            class="answer-review__filter is-active"
+                            data-review-filter="all"
+                            aria-pressed="true">All {{ session_summary.total_questions }}</button>
+                    <button type="button"
+                            class="answer-review__filter"
+                            data-review-filter="missed"
+                            aria-pressed="false">Missed {{ incorrect_count|default:0 }}</button>
+                </div>
+                {% endif %}
+                {% if show_mode_toggle != False %}
+                <div class="answer-review__toggle" role="group" aria-label="Answer review display mode">
+                    <button type="button"
+                            class="answer-review__toggle-btn is-active"
+                            data-review-mode="pace"
+                            id="{{ prefix }}-mode-pace"
+                            aria-pressed="true">Result + pace</button>
+                    <button type="button"
+                            class="answer-review__toggle-btn"
+                            data-review-mode="result"
+                            id="{{ prefix }}-mode-result"
+                            aria-pressed="false">Result only</button>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -92,6 +111,21 @@
             <p class="empty-state-body">Question-level results appear after you answer items.</p>
         </div>
         <p class="answer-review__hint">{{ review_hint|default:"Click a question to review your answer." }}</p>
+        {% if show_review_footer %}
+        <div class="answer-review__selection" data-review-selection aria-live="polite">
+            <div class="answer-review__selection-main">
+                <span class="answer-review__selection-q" data-review-selection-question>Select a question</span>
+                <span class="answer-review__selection-result" data-review-selection-result></span>
+                <span class="answer-review__selection-pace" data-review-selection-pace></span>
+            </div>
+            <button type="button"
+                    class="answer-review__selection-link"
+                    data-review-selection-open
+                    disabled>
+                Review this answer <span aria-hidden="true">&rarr;</span>
+            </button>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>

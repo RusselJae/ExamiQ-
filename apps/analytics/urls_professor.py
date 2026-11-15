@@ -255,6 +255,11 @@ urlpatterns = [
         name="material_upload",
     ),
     path(
+        "courses/<int:course_pk>/materials/validate/",
+        material_views.MaterialValidateUploadView.as_view(),
+        name="material_validate_upload",
+    ),
+    path(
         "courses/<int:course_pk>/materials/<int:pk>/",
         material_views.MaterialDetailView.as_view(),
         name="material_detail",

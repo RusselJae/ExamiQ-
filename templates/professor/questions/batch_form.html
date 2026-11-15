@@ -154,6 +154,8 @@
                         id="ai-source-file"
                         class="sr-only"
                         accept=".pdf,application/pdf"
+                        data-validate-url="{% url 'analytics_professor:material_validate_upload' course.pk %}"
+                        data-subject-id="{{ course_subject.pk|default:'' }}"
                     >
                     <div class="batch-dropzone batch-dropzone--compact hidden" data-dropzone data-dropzone-input="ai-source-file" data-source-dropzone>
                         <button type="button" class="batch-dropzone__choose" data-dropzone-choose>Replace file</button>
@@ -606,7 +608,49 @@
     if (sourceInput) {
         sourceInput.addEventListener("change", function () {
             const file = sourceInput.files && sourceInput.files[0];
-            if (file) registerPendingUpload(file.name);
+            if (!file) return;
+            const validateUrl = sourceInput.dataset.validateUrl;
+            const subjectId = sourceInput.dataset.subjectId;
+            if (!validateUrl || !subjectId) {
+                registerPendingUpload(file.name);
+                return;
+            }
+            const fd = new FormData();
+            fd.append("source_file", file);
+            fd.append("subject_id", subjectId);
+            fetch(validateUrl, {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: fd,
+                credentials: "same-origin",
+            })
+                .then(function (resp) {
+                    return resp.json().catch(function () {
+                        return { error: "Could not check that file." };
+                    });
+                })
+                .then(function (data) {
+                    if (data.error) {
+                        clearPendingUpload();
+                        if (window.showToast) {
+                            window.showToast(data.error, "error");
+                        }
+                        return;
+                    }
+                    registerPendingUpload(file.name);
+                })
+                .catch(function () {
+                    clearPendingUpload();
+                    if (window.showToast) {
+                        window.showToast(
+                            "Could not check that file. Try again.",
+                            "error"
+                        );
+                    }
+                });
         });
     }
 
@@ -1805,7 +1849,7 @@
         showGenerateLoading("Queued…", getGenerateCount());
         try {
             const result = await postGenerate();
-            if (!result.resp.ok && result.data.relevance_blocked) {
+            if (result.data.relevance_blocked) {
                 clearGenerateModal();
                 throw new Error(
                     result.data.reason ||

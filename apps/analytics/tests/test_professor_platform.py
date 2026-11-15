@@ -1513,6 +1513,8 @@ class TestProfessorSessionReview:
         assert "answer-review-grid" in content
         assert "clickable: true" in content
         assert "Average confidence" in content
+        assert "Based on the student's Guessing / Sure ratings." in content
+        assert 'data-review-filter="missed"' in content
         assert "calibration-matrix" not in content
         assert "Topics to revisit" not in content
         assert "ai-tutor-modal" not in content

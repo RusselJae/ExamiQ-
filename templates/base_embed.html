@@ -30,11 +30,14 @@
             },
         };
     </script>
-    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}?v=20261115j">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="embed-body bg-examiq-cream font-sans text-examiq-navy">
+    {% include "components/toast_stack.html" %}
+    {% include "components/confirm_dialog.html" %}
     {% block content %}{% endblock %}
+    <script src="{% static 'js/examiq-ui.js' %}?v=20261115"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

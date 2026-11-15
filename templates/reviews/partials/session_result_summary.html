@@ -1,0 +1,35 @@
+{# Shared result summary for student Session Complete and faculty session review. #}
+{# Expects: session_summary. Optional: confidence_subtext. #}
+<div class="session-complete-result">
+    <div class="session-complete-result__score-block">
+        <p class="session-complete-result__label">Exam result</p>
+        <div class="session-complete-result__score-row">
+            <span class="session-complete-result__score">
+                {{ session_summary.accuracy|floatformat:0 }}<span>%</span>
+            </span>
+            <span class="session-complete-result__badge {% if session_summary.accuracy < 50 %}session-complete-result__badge--warn{% elif session_summary.accuracy < 75 %}session-complete-result__badge--mid{% else %}session-complete-result__badge--good{% endif %}">
+                {{ session_summary.status_label }}
+            </span>
+        </div>
+        <p class="session-complete-result__sub">
+            {{ session_summary.correct_count }} of {{ session_summary.total_questions }} correct
+        </p>
+    </div>
+
+    <div class="session-complete-result__confidence">
+        <div class="session-complete-result__confidence-head">
+            <p class="session-complete-result__label">Average confidence</p>
+            <span class="session-complete-result__confidence-value">{{ session_summary.avg_confidence_label }}</span>
+        </div>
+        <div class="session-complete-confidence-scale session-complete-confidence-scale--{{ session_summary.avg_confidence|floatformat:0 }}">
+            <div class="session-complete-confidence-scale__track" aria-hidden="true">
+                <span class="session-complete-confidence-scale__marker"></span>
+            </div>
+            <div class="session-complete-confidence-scale__labels">
+                <span>Guessing</span>
+                <span>Sure</span>
+            </div>
+        </div>
+        <p class="session-complete-result__sub">{{ confidence_subtext|default:session_summary.estimated_confidence_subtext }}</p>
+    </div>
+</div>

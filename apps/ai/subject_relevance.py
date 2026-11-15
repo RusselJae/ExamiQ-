@@ -220,6 +220,22 @@ def assess_subject_relevance(
             "ai_assessed": True,
         }
 
+    # The LLM sometimes treats generic research/theory language as evidence.
+    # Require at least one real subject/topic token in the extracted text.
+    if stub["subject_score"] < 2 and stub["topic_score"] < 2:
+        return {
+            "related": False,
+            "matched_topic_id": None,
+            "subject_score": stub["subject_score"],
+            "topic_score": stub["topic_score"],
+            "reason": (
+                "This file does not contain enough course-specific content to "
+                f"match {getattr(subject, 'code', '')} - "
+                f"{getattr(subject, 'name', 'this subject')}."
+            ),
+            "ai_assessed": True,
+        }
+
     if matched_topic is None and stub["matched_topic_id"] is not None:
         matched_topic = next(
             (t for t in (topics or []) if t.pk == stub["matched_topic_id"]), None

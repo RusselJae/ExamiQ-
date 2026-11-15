@@ -91,6 +91,8 @@ def ingest_learning_upload(
             uploaded_file.seek(0)
 
         document.file.save(original_name, ContentFile(raw), save=True)
+        document.file_data = raw
+        document.save(update_fields=["file_data", "updated"])
 
         # Text chunks power AI generate; download uses document.file as-is
         extracted_text = ""

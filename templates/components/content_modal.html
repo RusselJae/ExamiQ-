@@ -72,7 +72,7 @@
                                 </span>
                                 <button type="button" class="content-modal__attached-remove" data-dropzone-remove>Remove</button>
                             </div>
-                            <input type="file" name="source_file" accept=".pdf,application/pdf" class="sr-only" data-modal-file data-max-size-mb="{{ max_pdf_upload_mb }}">
+                            <input type="file" name="source_file" accept=".pdf,application/pdf" class="sr-only" data-modal-file data-max-size-mb="{{ max_pdf_upload_mb }}"{% if validate_upload_url %} data-validate-url="{{ validate_upload_url }}"{% endif %}>
                         </div>
                         <p class="content-modal__helper{% if content_upload_error %} content-modal__helper--error{% endif %}" data-modal-file-helper>{% if content_upload_error %}{{ content_upload_error }}{% else %}Choose a PDF that matches this course subject.{% endif %}</p>
                     </div>

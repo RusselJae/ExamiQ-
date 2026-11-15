@@ -22,7 +22,7 @@ from apps.reviews.exam_setup_services import (
 )
 from apps.reviews.recommendations import (
     build_session_summary,
-    get_review_recommendations,
+    get_session_review_recommendations,
 )
 from apps.reviews.forms import AnswerForm, ReviewSetupForm
 from apps.reviews.models import Answer, ReviewSession
@@ -608,8 +608,8 @@ class SessionSummaryView(StudentRequiredMixin, DetailView):
         context["incorrect_count"] = incorrect
         context["score_ring_dasharray"] = f"{circumference:.2f}"
         context["score_ring_dashoffset"] = f"{circumference * (1 - fraction):.2f}"
-        context["recommendations"] = get_review_recommendations(
-            self.request.user, limit=5
+        context["recommendations"] = get_session_review_recommendations(
+            self.object, limit=3
         )
         context["feedback_url"] = reverse(
             "reviews:session_generate_feedback", kwargs={"pk": self.object.pk}

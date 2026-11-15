@@ -271,6 +271,7 @@ class ProfessorStudentsView(ProfessorRequiredMixin, ListView):
 
     template_name = "analytics/professor/students.html"
     context_object_name = "roster"
+    paginate_by = 10
 
     def get_queryset(self):
         show_archived = get_filter_param(self.request, "show_archived") == "1"
@@ -751,9 +752,7 @@ class CourseDetailView(ProfessorCourseMixin, DetailView):
         ).select_related("question__topic")
 
         summary = course_performance_summary(self.object, student_ids=handled_ids)
-        summary["enrolled_count"] = len(
-            self.get_enrolled_student_ids(scoped_offerings)
-        )
+        summary["enrolled_count"] = len(self.get_enrolled_student_ids(scoped_offerings))
         summary["external_takers"] = external_takers
         context["summary"] = summary
         context["interventions"] = get_intervention_list(

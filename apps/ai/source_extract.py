@@ -264,21 +264,28 @@ def _extract_pdf_text_pages(raw: bytes) -> list[str] | None:
 
 
 def _build_ocr_function():
-    """Return an (raw_bytes, page_number) -> text callable, or None when
-    the OCR stack (PyMuPDF + pytesseract + PIL) is not available."""
+    """Return an (raw_bytes, page_number) -> text callable, or None.
+
+    Tesseract is optional. PyMuPDF + PIL are enough to render a page; text is
+    read by Tesseract when its binary exists, otherwise (or when it returns
+    almost nothing) the configured vision model transcribes the rendered page.
+    """
     try:
         try:
             import pymupdf as fitz
         except ImportError:
             import fitz
-        import pytesseract
         from PIL import Image
     except ImportError:
         logger.warning(
-            "OCR stack unavailable (need PyMuPDF + pytesseract); "
+            "PDF OCR unavailable (need PyMuPDF + Pillow); "
             "image-only PDF pages will not be transcribed."
         )
         return None
+    try:
+        import pytesseract
+    except ImportError:  # pragma: no cover - optional dependency
+        pytesseract = None
 
     def _ocr_page(raw: bytes, page_number: int) -> str:  # fitz bound from outer scope
         doc = fitz.open(stream=raw, filetype="pdf")
@@ -286,8 +293,25 @@ def _build_ocr_function():
             if page_number > len(doc):
                 return ""
             pix = doc[page_number - 1].get_pixmap(dpi=OCR_DPI)
-            image = Image.open(io.BytesIO(pix.tobytes("png")))
-            return (pytesseract.image_to_string(image) or "").strip()
+            png_bytes = pix.tobytes("png")
+            text = ""
+            if pytesseract is not None:
+                try:
+                    image = Image.open(io.BytesIO(png_bytes))
+                    text = (pytesseract.image_to_string(image) or "").strip()
+                except Exception as exc:  # noqa: BLE001 - fall through to vision
+                    logger.info(
+                        "Tesseract unavailable for PDF page %s: %s",
+                        page_number,
+                        exc,
+                    )
+            if len(text) < MIN_PAGE_TEXT_CHARS:
+                from apps.ai.vision import extract_text_from_image
+
+                vision_text = extract_text_from_image(png_bytes, "image/png")
+                if vision_text:
+                    text = vision_text
+            return text.strip()
         finally:
             doc.close()
 

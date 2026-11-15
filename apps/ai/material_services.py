@@ -30,8 +30,12 @@ def _pdf_library_only(queryset):
     )
 
 
-def documents_for_course(course_id: int, *, include_archived: bool = False,
-                           include_batch_uploads: bool = False):
+def documents_for_course(
+    course_id: int,
+    *,
+    include_archived: bool = False,
+    include_batch_uploads: bool = False,
+):
     qs = _pdf_library_only(
         LearningDocument.objects.filter(course_id=course_id)
         .select_related("subject", "created_by")
@@ -44,8 +48,9 @@ def documents_for_course(course_id: int, *, include_archived: bool = False,
     return qs
 
 
-def documents_for_courses(course_ids, *, include_archived: bool = False,
-                          include_batch_uploads: bool = False):
+def documents_for_courses(
+    course_ids, *, include_archived: bool = False, include_batch_uploads: bool = False
+):
     """PDF library across several course offerings (newest first)."""
     if not course_ids:
         return LearningDocument.objects.none()
@@ -349,7 +354,8 @@ def _rewrite_download(document: LearningDocument, text: str, html: str) -> bool:
         if document.file:
             document.file.delete(save=False)
         document.file.save(basename, ContentFile(payload), save=False)
-        document.save(update_fields=["file", "updated"])
+        document.file_data = payload
+        document.save(update_fields=["file", "file_data", "updated"])
         return True
     except (OSError, ValueError):
         # The old bytes are already gone; leave the row consistent rather than
@@ -375,6 +381,30 @@ def ensure_download_file(document: LearningDocument) -> bool:
         except (FileNotFoundError, OSError, ValueError):
             document.file = None
             document.save(update_fields=["file", "updated"])
+
+    # Rebuild from the persistent DB copy first (Railway filesystem is
+    # ephemeral). This preserves the original PDF bytes exactly.
+    if document.file_data:
+        import posixpath
+
+        from django.core.files.base import ContentFile
+
+        basename = (
+            posixpath.basename(document.file.name or "")
+            or posixpath.basename(document.original_name or "")
+            or f"material-{document.pk}.pdf"
+        )
+        try:
+            document.file.save(
+                basename, ContentFile(bytes(document.file_data)), save=False
+            )
+            document.save(update_fields=["file", "updated"])
+            return True
+        except (OSError, ValueError):
+            logger.exception(
+                "Could not restore download from file_data for document %s",
+                document.pk,
+            )
 
     if not document_text_is_rewritable(document):
         return False
@@ -412,8 +442,9 @@ def delete_document(document: LearningDocument) -> LearningDocument:
     return document
 
 
-def documents_for_subject(subject, *, include_archived: bool = False,
-                            include_batch_uploads: bool = False):
+def documents_for_subject(
+    subject, *, include_archived: bool = False, include_batch_uploads: bool = False
+):
     """Materials linked to a subject (by subject FK or catalog course)."""
     from apps.reviews.exam_setup_services import course_for_subject
 

@@ -15,12 +15,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.analytics.confidence import (
+    CONFIDENCE_SCALE_0_3_LABELS,
     PACE_BAR_COUNTS,
     PACE_QUICK,
     PACE_SLOW,
     PACE_STEADY,
     answer_is_unanswered,
     confidence_tier_matrix,
+    confidence_to_scale_0_3 as _confidence_to_scale_0_3,
     misconception_topics,
     pace_from_answer,
 )
@@ -929,6 +931,7 @@ def session_question_trends(session: ReviewSession) -> dict:
         label = str(index)
         unanswered = answer_is_unanswered(answer)
         pace = pace_from_answer(answer, seconds_per_question)
+        confidence_value = _confidence_to_scale_0_3(answer.confidence)
         # Unanswered cells are always treated as incorrect in the review grid.
         is_correct = bool(answer.is_correct) and not unanswered
         if pace == PACE_QUICK:
@@ -941,7 +944,7 @@ def session_question_trends(session: ReviewSession) -> dict:
         confidence_points.append(
             {
                 "label": label,
-                "value": confidence_to_scale_0_3(answer.confidence),
+                "value": confidence_value,
                 "answer_id": answer.pk,
             }
         )
@@ -960,6 +963,10 @@ def session_question_trends(session: ReviewSession) -> dict:
                 "unanswered": unanswered,
                 "pace": pace,
                 "pace_bars": PACE_BAR_COUNTS.get(pace, 0),
+                "confidence_value": confidence_value,
+                "confidence_label": CONFIDENCE_SCALE_0_3_LABELS.get(
+                    confidence_value, "No rating"
+                ),
             }
         )
 
