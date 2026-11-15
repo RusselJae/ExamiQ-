@@ -71,7 +71,7 @@ class ConceptReviewAdmin(admin.ModelAdmin):
 class StudentFacultyMessageInline(admin.TabularInline):
     model = StudentFacultyMessage
     extra = 0
-    readonly_fields = ["author", "body", "image", "created_at"]
+    readonly_fields = ["author", "recipient", "body", "image", "created_at"]
     can_delete = False
 
 

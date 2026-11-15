@@ -264,7 +264,7 @@ class StudentFacultyConversation(models.Model):
 
 
 class StudentFacultyMessage(models.Model):
-    """Message in a student–faculty conversation thread."""
+    """Message in a student-faculty conversation thread."""
 
     conversation = models.ForeignKey(
         StudentFacultyConversation,
@@ -275,6 +275,15 @@ class StudentFacultyMessage(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name="faculty_chat_messages",
+    )
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="received_student_chat_messages",
+        limit_choices_to={"role": User.Role.PROFESSOR},
+        help_text="Faculty member a student addressed; blank for general messages.",
     )
     body = models.TextField(blank=True)
     image = models.ImageField(

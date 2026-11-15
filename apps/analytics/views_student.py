@@ -439,48 +439,47 @@ class StudentChatInboxView(StudentRequiredMixin, View):
     def get(self, request):
         url = reverse("analytics_student:dashboard")
         conversation_id = request.GET.get("conversation_id") or ""
+        faculty_id = request.GET.get("faculty_id") or ""
         qs = "open_chat=1"
         if conversation_id:
             qs += f"&conversation_id={conversation_id}"
+        if faculty_id:
+            qs += f"&faculty_id={faculty_id}"
         return redirect(f"{url}?{qs}")
 
 
 class StudentChatConversationsApiView(StudentRequiredMixin, View):
-    """JSON list of the student's faculty chat thread for the Chat modal."""
+    """JSON list of the student's faculty chat contacts for the Chat modal."""
 
     def get(self, request):
         from apps.analytics.chat_services import (
             get_or_create_conversation,
             mark_chat_notifications_read,
-            serialize_conversation,
+            student_chat_inbox_payload,
         )
 
+        payload = student_chat_inbox_payload(
+            request.user,
+            faculty_id=request.GET.get("faculty_id"),
+        )
         conversation = get_or_create_conversation(request.user)
-        items = [serialize_conversation(conversation, viewer=request.user)]
-        active_id = request.GET.get("conversation_id")
-        active_conversation_id = conversation.pk
-        if active_id and str(active_id).isdigit():
-            active_conversation_id = int(active_id)
         mark_chat_notifications_read(
             request.user,
-            conversation_id=active_conversation_id,
+            conversation_id=conversation.pk,
         )
-        return JsonResponse(
-            {
-                "items": items,
-                "active_conversation_id": active_conversation_id,
-            }
-        )
+        return JsonResponse(payload)
 
 
 class StudentChatMessageView(StudentRequiredMixin, View):
-    """Post a student message to the faculty chat thread."""
+    """Post a student message to a faculty contact or the general thread."""
 
     def post(self, request):
         from apps.analytics.chat_services import (
             get_or_create_conversation,
             post_chat_message,
+            professors_for_student_courses,
             serialize_conversation,
+            serialize_student_faculty_thread,
         )
         from apps.analytics.forms import MistakeConcernForm
 
@@ -494,19 +493,43 @@ class StudentChatMessageView(StudentRequiredMixin, View):
                 },
                 status=400,
             )
+
+        faculty = None
+        peer_id = request.POST.get("peer_id")
+        if peer_id:
+            if not str(peer_id).isdigit():
+                return JsonResponse(
+                    {"ok": False, "error": "Invalid faculty member."},
+                    status=400,
+                )
+            faculty = next(
+                (
+                    prof
+                    for prof in professors_for_student_courses(request.user)
+                    if prof.pk == int(peer_id)
+                ),
+                None,
+            )
+            if faculty is None:
+                return JsonResponse(
+                    {"ok": False, "error": "Faculty member is not available."},
+                    status=403,
+                )
+
         post_chat_message(
             conversation,
             request.user,
             body=form.cleaned_data["body"],
             image=form.cleaned_data.get("image"),
+            recipient=faculty,
         )
         conversation.refresh_from_db()
-        return JsonResponse(
-            {
-                "ok": True,
-                "item": serialize_conversation(conversation, viewer=request.user),
-            }
+        item = (
+            serialize_student_faculty_thread(conversation, faculty, viewer=request.user)
+            if faculty is not None
+            else serialize_conversation(conversation, viewer=request.user)
         )
+        return JsonResponse({"ok": True, "item": item})
 
 
 # Backward-compatible alias

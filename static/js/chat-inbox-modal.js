@@ -314,7 +314,9 @@
             if (empty) {
                 empty.textContent = isFacultyTab()
                     ? "No faculty colleagues found."
-                    : "No conversations yet.";
+                    : isFaculty()
+                      ? "No conversations yet."
+                      : "No faculty contacts yet.";
                 empty.classList.remove("hidden");
             }
             return;
@@ -428,7 +430,9 @@
         });
         var search = document.getElementById("examiq-chat-search");
         if (search) {
-            search.placeholder = isFacultyTab() ? "Search faculty…" : "Search students…";
+            search.placeholder = isFaculty() && !isFacultyTab()
+                ? "Search students…"
+                : "Search faculty…";
         }
     }
 
@@ -446,7 +450,11 @@
             thread.innerHTML =
                 '<p class="examiq-chat-modal__thread-empty">Select a conversation to start messaging.</p>';
             setPeerAvatar(avatar, "", "?");
-            if (nameEl) nameEl.textContent = isFaculty() ? "Select a conversation" : "Faculty";
+            if (nameEl) {
+                nameEl.textContent = isFaculty()
+                    ? "Select a conversation"
+                    : "Select a faculty member";
+            }
             if (metaEl) metaEl.textContent = "";
             if (input) {
                 input.value = "";
@@ -462,7 +470,7 @@
         if (metaEl) {
             metaEl.textContent = isFaculty()
                 ? item.peer_email || item.student_email || ""
-                : "";
+                : item.peer_email || "";
         }
         if (input) input.disabled = false;
         syncSendEnabled();
@@ -548,7 +556,7 @@
         thread.scrollTop = thread.scrollHeight;
     }
 
-    async function loadItems(preferredId, studentId) {
+    async function loadItems(preferredId, studentId, facultyId) {
         var url = conversationsUrl();
         if (!url) return;
         var sep = url.indexOf("?") >= 0 ? "&" : "?";
@@ -558,6 +566,11 @@
         }
         if (studentId && !isFacultyTab()) {
             url += sep + "student_id=" + encodeURIComponent(studentId);
+            sep = "&";
+        }
+        if (facultyId && !isFaculty()) {
+            url += sep + "faculty_id=" + encodeURIComponent(facultyId);
+            sep = "&";
         }
         var res = await fetch(url, {
             credentials: "same-origin",
@@ -566,12 +579,16 @@
         if (!res.ok) throw new Error("Could not load conversations");
         var data = await res.json();
         state.items = data.items || [];
-        state.activeConversationId =
-            preferredId ||
-            data.active_conversation_id ||
-            null;
-        state.activePeerId = null;
-        if (!state.activeConversationId) {
+        var preferredMatch =
+            preferredId &&
+            state.items.some(function (item) {
+                return String(item.conversation_id) === String(preferredId);
+            });
+        state.activeConversationId = preferredMatch
+            ? preferredId
+            : data.active_conversation_id || null;
+        state.activePeerId = data.active_peer_id || null;
+        if (!state.activeConversationId && !state.activePeerId) {
             var first = state.items[0];
             if (first) {
                 if (first.conversation_id) {
@@ -595,7 +612,11 @@
         var search = document.getElementById("examiq-chat-search");
         if (search) search.value = "";
         updateTabUi();
-        await loadItems(state.activeConversationId, options.studentId || null);
+        await loadItems(
+            state.activeConversationId,
+            options.studentId || null,
+            options.facultyId || null
+        );
     }
 
     async function sendMessage(event) {
@@ -626,7 +647,10 @@
             var fd = new FormData();
             fd.append("body", body);
             if (imageFile) fd.append("image", imageFile);
-            if (isFacultyTab() && !conversationId && peerId) {
+            if (
+                peerId &&
+                (!isFaculty() || (isFacultyTab() && !conversationId))
+            ) {
                 fd.append("peer_id", String(peerId));
             }
             var res = await fetch(url, {
@@ -672,6 +696,10 @@
                 }
                 state.activeConversationId = data.item.conversation_id;
                 state.activePeerId = null;
+                if (!isFaculty() && data.item.peer_id && !data.item.conversation_id) {
+                    state.activeConversationId = null;
+                    state.activePeerId = data.item.peer_id;
+                }
                 renderList();
                 renderThread();
             } else {
@@ -701,6 +729,7 @@
                 await setTab("students", {
                     conversationId: options.conversationId || null,
                     studentId: options.studentId || null,
+                    facultyId: options.facultyId || null,
                 });
             }
         } catch (err) {
@@ -807,6 +836,7 @@
             openChat({
                 conversationId: params.get("conversation_id"),
                 studentId: params.get("student_id"),
+                facultyId: params.get("faculty_id"),
                 tab: params.get("chat_tab") || "students",
             });
         }

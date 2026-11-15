@@ -6,8 +6,11 @@
      aria-labelledby="examiq-chat-title">
     <div class="examiq-chat-modal__backdrop" data-dismiss-chat-modal></div>
     <div class="examiq-chat-modal__panel">
-        <aside class="examiq-chat-modal__sidebar{% if user.role == 'student' %} hidden{% endif %}">
+        <aside class="examiq-chat-modal__sidebar">
             <h2 id="examiq-chat-title" class="examiq-chat-modal__title">Chat</h2>
+            {% if user.role == 'student' %}
+            <p class="examiq-chat-modal__sidebar-hint">Faculty teaching your courses</p>
+            {% endif %}
             {% if user.role == 'professor' %}
             <div class="examiq-chat-modal__tabs" role="tablist" aria-label="Chat inbox">
                 <button type="button"

@@ -88,7 +88,7 @@
                         {% if subject.faculty_names %}
                         <span class="coord-cell-line" title="{{ subject.faculty_names|join:', ' }}">{{ subject.faculty_names|join:", " }}</span>
                         {% else %}
-                        <span class="profile-pill">Needs faculty</span>
+                        <span class="coord-cell-line coord-cell-line--needs-faculty">Needs faculty</span>
                         {% endif %}
                     </td>
                     <td class="text-examiq-slate">{{ subject.student_count }}</td>

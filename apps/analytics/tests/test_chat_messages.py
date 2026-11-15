@@ -10,7 +10,7 @@ from apps.analytics.chat_services import (
     professor_chat_queryset,
 )
 from apps.analytics.models import StudentFacultyMessage
-from apps.users.models import Notification, ProgramSection, User
+from apps.users.models import Notification, ProgramSection, TeachingAssignment
 
 
 @pytest.mark.django_db
@@ -46,10 +46,11 @@ def test_faculty_reply_notifies_student(student, professor):
     conversation = get_or_create_conversation(student)
     post_chat_message(conversation, student, body="Help")
     post_chat_message(conversation, professor, body="See step 2")
-    assert Notification.objects.filter(
+    notification = Notification.objects.get(
         user=student,
         message__icontains="Faculty replied",
-    ).exists()
+    )
+    assert f"faculty_id={professor.pk}" in notification.link
 
 
 @pytest.mark.django_db
@@ -143,3 +144,66 @@ def test_ai_tutor_modal_has_no_faculty_tab(client, student):
     content = response.content.decode()
     assert 'data-tutor-screen="faculty"' not in content
     assert "Faculty Conversation" not in content
+
+
+@pytest.mark.django_db
+def test_student_chat_lists_faculty_for_current_courses(
+    client, student, professor, subject, academic_term
+):
+    TeachingAssignment.objects.create(
+        professor=professor,
+        program_section=student.section,
+        subject=subject,
+        term=academic_term,
+    )
+    client.force_login(student)
+
+    response = client.get(reverse("analytics_student:chat_conversations_api"))
+
+    assert response.status_code == 200
+    data = response.json()
+    contact = next(
+        item for item in data["items"] if item.get("peer_id") == professor.pk
+    )
+    expected_name = professor.get_full_name() or professor.email
+    assert contact["peer_name"] == expected_name
+    assert contact["messages"] == []
+    assert data["active_peer_id"] == contact["peer_id"]
+
+
+@pytest.mark.django_db
+def test_student_can_send_message_to_a_selected_faculty(
+    client, student, professor, subject, academic_term
+):
+    TeachingAssignment.objects.create(
+        professor=professor,
+        program_section=student.section,
+        subject=subject,
+        term=academic_term,
+    )
+    client.force_login(student)
+
+    response = client.post(
+        reverse("analytics_student:chat_message"),
+        {"body": "Question for you", "peer_id": professor.pk},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["item"]
+    assert item["peer_id"] == professor.pk
+    assert item["conversation_id"] is None
+    assert item["messages"][0]["body"] == "Question for you"
+    message = StudentFacultyMessage.objects.get(author=student)
+    assert message.recipient_id == professor.pk
+    assert Notification.objects.filter(
+        user=professor, message__icontains="sent you a message"
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_student_chat_sidebar_is_not_hidden(client, student):
+    client.force_login(student)
+    response = client.get(reverse("analytics_student:dashboard"))
+    content = response.content.decode()
+    assert '<aside class="examiq-chat-modal__sidebar">' in content
+    assert "Faculty teaching your courses" in content

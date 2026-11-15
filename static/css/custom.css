@@ -17647,10 +17647,7 @@ a.overview-pill.is-selected:hover {
 /* Student view hides the sidebar but the panel still used a 2-column grid,
    so the thread was squeezed into the narrow first column. */
 .examiq-chat-modal--student .examiq-chat-modal__panel {
-    grid-template-columns: 1fr;
-}
-.examiq-chat-modal--student .examiq-chat-modal__main {
-    grid-column: 1 / -1;
+    grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
 }
 .examiq-chat-modal__sidebar {
     display: flex;
@@ -17658,6 +17655,12 @@ a.overview-pill.is-selected:hover {
     border-right: 1px solid #e2e8f0;
     background: #fff;
     min-height: 0;
+}
+.examiq-chat-modal__sidebar-hint {
+    margin: -0.15rem 1.1rem 0.7rem;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: #64748b;
 }
 .examiq-chat-modal__title {
     margin: 0;
@@ -18100,12 +18103,15 @@ a.overview-pill.is-selected:hover {
         border-right: none;
         border-bottom: 1px solid #e2e8f0;
     }
-    /* Show the conversation OR the list, never both (faculty two-pane view;
-       students only ever see the thread). */
-    .examiq-chat-modal:not(.examiq-chat-modal--student).is-thread-view .examiq-chat-modal__sidebar {
+    .examiq-chat-modal:not(.is-thread-view) .examiq-chat-modal__sidebar {
+        max-height: none;
+    }
+    /* Show the conversation OR the list, never both (two-pane view on
+       faculty and student chat). */
+    .examiq-chat-modal.is-thread-view .examiq-chat-modal__sidebar {
         display: none;
     }
-    .examiq-chat-modal:not(.examiq-chat-modal--student):not(.is-thread-view) .examiq-chat-modal__main {
+    .examiq-chat-modal:not(.is-thread-view) .examiq-chat-modal__main {
         display: none;
     }
     .examiq-chat-modal__back {
@@ -26302,6 +26308,11 @@ button.course-count-chip:hover {
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: middle;
+}
+
+.coord-cell-line--needs-faculty {
+    color: #b42318;
+    font-weight: 600;
 }
 
 /* Coordinator toolbar: the search takes the full row; action button docks
