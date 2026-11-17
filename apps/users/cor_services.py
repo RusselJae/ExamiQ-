@@ -232,8 +232,10 @@ def match_cor_rows(rows: list[dict[str, str]]) -> dict:
         .only("id", "code", "name", "year_level_id", "year_level__name")
     )
     by_normalized: dict[str, list] = {}
+    by_title_norm: dict[str, list] = {}
     for subject in catalog:
         by_normalized.setdefault(normalize_code(subject.code), []).append(subject)
+        by_title_norm.setdefault(normalize_code(subject.name), []).append(subject)
 
     matched: list[dict] = []
     unmatched: list[dict] = []
@@ -241,9 +243,9 @@ def match_cor_rows(rows: list[dict[str, str]]) -> dict:
     for row in rows:
         code = (row.get("code") or "").strip().upper()
         title = (row.get("title") or "").strip()
-        if not code:
+        if not code and not title:
             continue
-        schedule_code = is_schedule_code(code)
+        schedule_code = is_schedule_code(code) if code else False
         norm = "" if schedule_code else normalize_code(code)
         subject = None
         confidence = "low"
@@ -261,12 +263,31 @@ def match_cor_rows(rows: list[dict[str, str]]) -> dict:
                     confidence = "medium"
                     break
         if subject is None and title:
+            title_norm = normalize_code(title)
+            exact_title_matches = by_title_norm.get(title_norm) or []
+            if exact_title_matches:
+                subject = exact_title_matches[0]
+                confidence = "high"
+            else:
+                for candidate in catalog:
+                    candidate_norm = normalize_code(candidate.name)
+                    if (
+                        len(title_norm) >= 8
+                        and len(candidate_norm) >= 8
+                        and (
+                            title_norm in candidate_norm or candidate_norm in title_norm
+                        )
+                    ):
+                        subject = candidate
+                        confidence = "medium"
+                        break
+        if subject is None and title:
             best, best_score = None, 0.0
             for candidate in catalog:
                 score = _titles_match(candidate.name, title)
                 if score > best_score:
                     best, best_score = candidate, score
-            if best_score >= 0.7:
+            if best_score >= 0.65:
                 subject = best
                 confidence = "medium" if best_score >= 0.9 else "low"
         if subject is None or subject.id in used_subject_ids:
@@ -301,6 +322,7 @@ def analyze_cor_upload(uploaded_file) -> dict:
             "text_chars": len(text),
             "cor_type": classify_cor_type(text),
             "suggested_year_level": None,
+            "program_mismatch": False,
         }
     result = match_cor_rows(rows)
     result["ok"] = True
@@ -310,6 +332,12 @@ def analyze_cor_upload(uploaded_file) -> dict:
     result["text_chars"] = len(text)
     result["cor_type"] = classify_cor_type(text)
     result["suggested_year_level"] = suggest_year_level(result["matched"])
+    total_rows = len([r for r in rows if r.get("code") or r.get("title")])
+    matched_rows = len(result["matched"])
+    result["program_mismatch"] = bool(
+        total_rows
+        and (matched_rows == 0 or (total_rows >= 3 and matched_rows / total_rows < 0.5))
+    )
     return result
 
 

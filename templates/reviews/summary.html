@@ -9,12 +9,13 @@
         {% include "components/page_header.html" with title="Session Complete" %}
     </div>
 
-    <div class="session-complete-shell">
-        <section class="session-complete-main" aria-label="Session result and answer review">
-            {% include "reviews/partials/session_result_summary.html" with session_summary=session_summary %}
+    <div class="session-complete-panel">
+        <div class="session-complete-shell">
+            <section class="session-complete-main" aria-label="Session result and answer review">
+                {% include "reviews/partials/session_result_summary.html" with session_summary=session_summary %}
 
-            {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" incorrect_count=incorrect_count show_answer_grid=True show_summary=False show_filter_tabs=True show_mode_toggle=False show_review_footer=True review_hint="Click a question to review your answer." %}
-        </section>
+                {% include "reviews/partials/answer_review_grid.html" with session_summary=session_summary id_prefix="answer-review" incorrect_count=incorrect_count show_answer_grid=True show_summary=False show_filter_tabs=True show_mode_toggle=False show_review_footer=True review_hint="Click a question to review your answer." %}
+            </section>
 
         <aside class="session-complete-side" aria-label="Recommended reviews">
             <div class="session-complete-side__head">
@@ -56,6 +57,7 @@
                 <a href="{{ setup_retake_url }}" class="session-complete-side__secondary">Review again</a>
             </div>
         </aside>
+        </div>
     </div>
 </div>
 {% endblock %}

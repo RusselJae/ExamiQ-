@@ -15,8 +15,8 @@
     --font-display: 1.5rem;
     --font-title: 1.125rem;
     --font-body: 0.875rem;
-    --font-sans: "Nunito Sans", system-ui, sans-serif;
-    --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
+    --font-sans: "Figtree", "Inter", system-ui, sans-serif;
+    --font-serif: "Figtree", "Inter", system-ui, sans-serif;
     --font-hand: "Caveat", cursive;
     --color-primary: #1E6B47;
     --color-primary-hover: #174E34;
@@ -3522,6 +3522,16 @@ body {
     /* Cream app canvas. Auth and landing pages override this with their own
        class-based backgrounds (.auth-page / .landing-body in landing.css). */
     background: var(--color-surface);
+    font-family: var(--font-sans);
+}
+
+body.font-sans,
+body .font-sans {
+    font-family: var(--font-sans);
+}
+
+body .font-serif {
+    font-family: var(--font-serif);
 }
 
 .app-layout {
@@ -6465,6 +6475,20 @@ body {
     box-sizing: border-box;
 }
 
+.profile-bento > * {
+    min-width: 0;
+}
+
+.profile-hero-name,
+.profile-hero-email {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.profile-hero-pills .profile-pill {
+    max-width: 100%;
+}
+
 .profile-hero-avatar {
     display: flex;
     flex-direction: column;
@@ -6525,6 +6549,41 @@ body {
 .profile-card {
     padding: var(--space-4);
     border-width: 0.5px;
+}
+
+@media (max-width: 639px) {
+    .profile-page .course-home-panel {
+        padding: 1rem;
+    }
+
+    .profile-bento {
+        gap: 0.75rem;
+    }
+
+    .profile-card {
+        padding: 1rem;
+    }
+
+    .profile-bento-hero {
+        text-align: center;
+    }
+
+    .profile-hero-layout {
+        align-items: center;
+    }
+
+    .profile-hero-copy {
+        width: 100%;
+        text-align: center;
+    }
+
+    .profile-hero-pills {
+        justify-content: center;
+    }
+
+    .profile-hero-pills .profile-pill {
+        text-align: center;
+    }
 }
 
 .profile-card-title {
@@ -8515,6 +8574,71 @@ html.examiq-chat-open .focus-exit-fab {
 .student-session-table,
 .session-history-table {
     min-width: 36rem;
+}
+
+/* Sidebar-style scrollbar for every horizontally scrollable table. */
+@media (max-width: 767px) {
+    .table-scroll-indicator {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+.table-scroll-indicator.is-scrollable-x {
+    overflow-x: scroll;
+}
+
+.table-scroll-indicator,
+.data-table-wrap,
+.session-history-table-wrap,
+.questions-table-wrap,
+.masterlist-card {
+    scrollbar-width: thin;
+    scrollbar-color: #bdbdbd transparent;
+}
+
+.table-scroll-indicator::-webkit-scrollbar,
+.data-table-wrap::-webkit-scrollbar,
+.session-history-table-wrap::-webkit-scrollbar,
+.questions-table-wrap::-webkit-scrollbar,
+.masterlist-card::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.table-scroll-indicator::-webkit-scrollbar-track,
+.data-table-wrap::-webkit-scrollbar-track,
+.session-history-table-wrap::-webkit-scrollbar-track,
+.questions-table-wrap::-webkit-scrollbar-track,
+.masterlist-card::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-scroll-indicator::-webkit-scrollbar-thumb,
+.data-table-wrap::-webkit-scrollbar-thumb,
+.session-history-table-wrap::-webkit-scrollbar-thumb,
+.questions-table-wrap::-webkit-scrollbar-thumb,
+.masterlist-card::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-color: #bdbdbd;
+    background-clip: padding-box;
+}
+
+.table-scroll-indicator::-webkit-scrollbar-thumb:hover,
+.data-table-wrap::-webkit-scrollbar-thumb:hover,
+.session-history-table-wrap::-webkit-scrollbar-thumb:hover,
+.questions-table-wrap::-webkit-scrollbar-thumb:hover,
+.masterlist-card::-webkit-scrollbar-thumb:hover {
+    background-color: #9e9e9e;
+}
+
+.table-scroll-indicator::-webkit-scrollbar-button,
+.data-table-wrap::-webkit-scrollbar-button,
+.session-history-table-wrap::-webkit-scrollbar-button,
+.questions-table-wrap::-webkit-scrollbar-button,
+.masterlist-card::-webkit-scrollbar-button {
+    display: none;
 }
 
 .questions-table-wrap {
@@ -17669,6 +17793,21 @@ a.overview-pill.is-selected:hover {
     font-weight: 700;
     color: #0f172a;
 }
+.examiq-chat-modal__sidebar-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.9rem 0.65rem 0.15rem 1.1rem;
+}
+.examiq-chat-modal__sidebar-head .examiq-chat-modal__title {
+    flex: 1;
+    padding: 0;
+}
+.examiq-chat-modal__sidebar-head .examiq-chat-modal__close {
+    flex-shrink: 0;
+    margin-top: -0.15rem;
+}
 .examiq-chat-modal__tabs {
     display: flex;
     gap: 0.35rem;
@@ -18094,9 +18233,18 @@ a.overview-pill.is-selected:hover {
     cursor: not-allowed;
 }
 @media (max-width: 800px) {
+    .examiq-chat-modal {
+        padding: 0;
+        align-items: stretch;
+    }
     .examiq-chat-modal__panel {
         grid-template-columns: 1fr;
-        height: min(720px, calc(100vh - 1rem));
+        width: 100%;
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100vh;
+        max-height: 100dvh;
+        border-radius: 0;
     }
     .examiq-chat-modal__sidebar {
         max-height: 40%;
@@ -20692,6 +20840,10 @@ a.materials-library__name:hover {
     margin-bottom: 1rem;
 }
 
+.concept-filter-bar .concept-status-chips {
+    margin: 0;
+}
+
 .concept-review-list__note {
     margin-top: 1.25rem;
     font-size: 0.8rem;
@@ -20899,25 +21051,21 @@ body.review-open {
 .review-overlay__close {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    justify-content: center;
+    width: 2.25rem;
     height: 2.25rem;
-    box-sizing: border-box;
-    padding-left: 0.9rem;
-    padding-right: 0.9rem;
-    margin-bottom: 0;
     flex-shrink: 0;
-    font-size: 0.8rem;
-    font-weight: 600;
+    padding: 0;
+    margin-bottom: 0;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
     color: var(--cr-ink);
-    background: var(--cr-surface);
-    border: 1px solid #d8d2c2;
-    border-radius: var(--cr-radius-pill);
     text-decoration: none;
-    white-space: nowrap;
 }
 
 .review-overlay__close:hover {
-    border-color: var(--cr-green);
+    background: #f1eee7;
     color: var(--cr-green);
 }
 
@@ -21065,6 +21213,67 @@ body.review-open {
     font-size: 1em;
 }
 
+.concept-question-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.concept-question-row .concept-question {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.concept-hint-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-top: 0.1rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--cr-muted);
+    cursor: pointer;
+}
+
+.concept-hint-icon:hover,
+.concept-hint-icon:focus-visible {
+    background: #f1eee7;
+    color: var(--cr-green);
+}
+
+/* Answer review at the bottom of Try it / Practice. */
+.concept-answer-review__line {
+    margin: 0 0 0.35rem;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.concept-answer-review__line:last-child {
+    margin-bottom: 0;
+}
+
+.concept-answer-review__line--wrong {
+    color: #b42318;
+}
+
+.concept-answer-review__line--correct {
+    color: #1e6b47;
+}
+
+.concept-answer-review__explanation {
+    margin: 0.6rem 0 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--cr-ink);
+}
+
 /* Answer option cards with letter badges. */
 .concept-options {
     border: none;
@@ -21206,12 +21415,18 @@ body.review-open {
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
 .review-overlay__foot-actions {
     display: inline-flex;
     align-items: center;
+    justify-content: flex-end;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 .review-overlay__back,
@@ -21308,6 +21523,20 @@ body.review-open {
 
     .review-overlay__footer {
         padding: 0.6rem 0;
+    }
+
+    .review-overlay__footer .review-overlay__inner {
+        gap: 0.5rem;
+        padding: 0 1rem;
+    }
+
+    .review-overlay__foot-actions {
+        gap: 0.5rem;
+    }
+
+    .review-overlay__footer .review-overlay__primary {
+        padding-right: 1rem;
+        padding-left: 1rem;
     }
 
     .review-overlay__back {
@@ -21572,7 +21801,7 @@ body.review-open {
 
 .content-modal__title,
 .question-modal__title {
-    font-family: var(--font-serif, "Newsreader", Georgia, serif);
+    font-family: var(--font-serif, "Figtree", system-ui, sans-serif);
     font-size: 1.125rem;
     font-weight: 600;
     margin: 0;
@@ -25897,6 +26126,12 @@ Questions page section wrappers (companion rules for the card styles). */
     color: var(--color-navy, #0f172a);
 }
 
+.cor-upload-zone__result.is-error {
+    color: #b42318;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
 .cor-upload-zone__note {
     margin: 0.4rem 0 0;
     font-size: 0.6875rem;
@@ -26522,6 +26757,13 @@ body.role-professor .app-sidebar.is-collapsed .sidebar-link {
     margin: 0;
 }
 
+.session-complete-panel {
+    padding: 1.5rem;
+    background: #fff;
+    border: 2px solid var(--border-cream, #ece4d3);
+    border-radius: var(--r-lg, 1rem);
+}
+
 .session-complete-shell {
     display: grid;
     grid-template-columns: minmax(0, 1.95fr) minmax(300px, 0.9fr);
@@ -26534,11 +26776,11 @@ body.role-professor .app-sidebar.is-collapsed .sidebar-link {
     flex-direction: column;
     gap: 1.2rem;
     min-width: 0;
-    padding: 1.25rem;
-    background: var(--sc-paper);
-    border: 1px solid var(--sc-line);
-    border-radius: 1.25rem;
-    box-shadow: 0 16px 42px rgba(20, 35, 29, 0.055);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 /* Result summary */
@@ -27189,9 +27431,14 @@ body.role-professor .app-sidebar.is-collapsed .sidebar-link {
 }
 
 @media (max-width: 640px) {
-    .session-complete-main {
+    .session-complete-panel {
         padding: 0.85rem;
         border-radius: 1rem;
+    }
+
+    .session-complete-main {
+        padding: 0;
+        border-radius: 0;
     }
 
     .session-complete-result {

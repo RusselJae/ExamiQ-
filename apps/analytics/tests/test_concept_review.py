@@ -202,6 +202,8 @@ class TestLearnTryPractice:
         card = build_concept_card_context(review)
         assert card["badge"] == "Likely misconception"
         assert "Start review" in card["cta"]
+        assert card["handnote"] == "Marked Sure but Missed 1 time"
+        assert "Same wrong answer" not in card["miss_blurb"]
 
 
 @pytest.mark.django_db
@@ -345,6 +347,61 @@ class TestConceptReviewViews:
         data = response.json()
         assert data["ok"] is True
         assert data["is_correct"] is True
+
+    def test_try_it_wrong_keeps_practice_reachable(self, client, student, mcq_question):
+        question, _ = mcq_question
+        question.concept_tag = "Try it recovery"
+        question.save(update_fields=["concept_tag"])
+        wrong = question.choices.exclude(is_correct=True).first()
+        session = ReviewSession.objects.create(
+            student=student,
+            topic=question.topic,
+            difficulty=question.difficulty,
+        )
+        answer = Answer.objects.create(
+            session=session,
+            question=question,
+            selected_choice=wrong,
+            confidence=5,
+            is_correct=False,
+        )
+        review = record_exam_miss_for_concept(student, question, answer)
+        ensure_learn_content(review)
+        correct_index = review.try_it_payload["correct_index"]
+        wrong_index = (correct_index + 1) % len(
+            review.try_it_payload["first_step_choices"]
+        )
+        client.force_login(student)
+
+        try_page = client.get(
+            reverse("analytics_student:concept_review", kwargs={"pk": review.pk}),
+            {"step": "try_it"},
+        )
+        try_content = try_page.content.decode()
+        assert "concept-hint-icon" in try_content
+        assert 'id="try-it-hint"' in try_content
+        assert "review-overlay__ghost" not in try_content
+
+        response = client.post(
+            reverse(
+                "analytics_student:concept_review_try_it", kwargs={"pk": review.pk}
+            ),
+            data=json.dumps({"choice_index": wrong_index}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_correct"] is False
+        assert data["correct_index"] == correct_index
+        assert data["feedback"]
+        assert data["choices"]
+
+        practice_page = client.get(
+            reverse("analytics_student:concept_review", kwargs={"pk": review.pk}),
+            {"step": "practice"},
+        )
+        assert practice_page.status_code == 200
+        assert "Practice" in practice_page.content.decode()
 
     def test_practice_regenerate_returns_new_question(
         self, client, student, mcq_question

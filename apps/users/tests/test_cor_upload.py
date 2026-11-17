@@ -107,6 +107,16 @@ class TestCorMatching:
         assert result["matched"][0]["code"] == "BSEM 32"
         assert result["unmatched"] == []
 
+    def test_match_uses_course_title_when_code_is_missing(self, catalog_program):
+        program, year_level, _year = catalog_program
+        subject = _make_subject(
+            program, year_level, "BSEM 21", "History of Mathematics"
+        )
+        rows = [{"code": "", "title": "History of Mathematics"}]
+        result = match_cor_rows(rows)
+        assert [m["subject_id"] for m in result["matched"]] == [subject.id]
+        assert result["matched"][0]["printed_code"] == ""
+
     def test_match_does_not_reuse_one_subject_twice(self, catalog_program):
         program, year_level, _year = catalog_program
         subject = _make_subject(
@@ -284,6 +294,55 @@ class TestCorAnalyzeEndpoint:
         assert len(data["matched"]) == 1
         assert data["matched"][0]["subject_id"] == subject.id
         assert "faculty" in data["matched"][0]
+
+    def test_analyze_flags_non_bsed_courses(self, client, catalog_program, monkeypatch):
+        from apps.users import cor_services as cs
+
+        monkeypatch.setattr(cs, "extract_cor_text", lambda f: "BSIT 11 - Computing")
+        fake_analyzer = type(
+            "FakeAnalyzer",
+            (),
+            {
+                "structure_rows": lambda self, text: [
+                    {"code": "BSIT 11", "title": "Introduction to Computing"}
+                ]
+            },
+        )()
+        monkeypatch.setattr(cs, "get_cor_subject_analyzer", lambda: fake_analyzer)
+        response = self.post_cor(client)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["program_mismatch"] is True
+        assert data["matched"] == []
+        assert data["rows"][0]["code"] == "BSIT 11"
+
+    def test_analyze_flags_majority_non_bsed_courses(
+        self, client, catalog_program, monkeypatch
+    ):
+        program, year_level, _year = catalog_program
+        _make_subject(program, year_level, "BSEM 21", "History of Mathematics")
+        from apps.users import cor_services as cs
+
+        monkeypatch.setattr(cs, "extract_cor_text", lambda f: "mixed rows")
+        fake_analyzer = type(
+            "FakeAnalyzer",
+            (),
+            {
+                "structure_rows": lambda self, text: [
+                    {"code": "BSEM 21", "title": "History of Mathematics"},
+                    {"code": "BSIT 11", "title": "Introduction to Computing"},
+                    {"code": "BSIT 12", "title": "Computer Programming"},
+                ]
+            },
+        )()
+        monkeypatch.setattr(cs, "get_cor_subject_analyzer", lambda: fake_analyzer)
+        response = self.post_cor(client)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["matched"]) == 1
+        assert data["program_mismatch"] is True
 
     def test_analyze_rejects_bad_files(self, client):
         file = SimpleUploadedFile("cor.txt", b"zzz", content_type="text/plain")

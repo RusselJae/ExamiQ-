@@ -83,6 +83,7 @@ class CorAnalyzeView(View):
                 "rows": result["rows"],
                 "cor_type": result["cor_type"],
                 "suggested_year_level": result["suggested_year_level"],
+                "program_mismatch": result.get("program_mismatch", False),
                 "review_url": "",
                 "faculty_list_url": "",
                 "signup_url": reverse("account_signup"),

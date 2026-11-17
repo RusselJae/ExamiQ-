@@ -206,6 +206,25 @@
         return (bytes / 1048576).toFixed(1).replace(/\.0$/, "") + " MB";
     }
 
+    function setCorResult(message, isError) {
+        if (!corResult) return;
+        corResult.textContent = message || "";
+        corResult.classList.toggle("is-error", !!isError);
+    }
+
+    function seenRowsText(rows) {
+        return (rows || [])
+            .slice(0, 6)
+            .map(function (row) {
+                var code = (row.code || "").trim();
+                var title = (row.title || "").trim();
+                if (code && title) return code + " — " + title;
+                return code || title;
+            })
+            .filter(Boolean)
+            .join("; ");
+    }
+
     function showCorEmpty() {
         if (corEmpty) corEmpty.classList.remove("hidden");
         if (corFileState) corFileState.classList.add("hidden");
@@ -224,7 +243,10 @@
             corFileStatus.textContent =
                 (size ? size + " · " : "") + "Ready to analyze";
         }
-        if (corResult) corResult.textContent = "";
+        if (corResult) {
+            corResult.textContent = "";
+            corResult.classList.remove("is-error");
+        }
     }
 
     function renderDetectedCourses(courses) {
@@ -276,6 +298,7 @@
             } catch (e) { /* ignore */ }
         }
         resetAnalysis();
+        setCorResult("", false);
         showCorEmpty();
     }
 
@@ -327,15 +350,15 @@
     if (corAnalyzeBtn) {
         corAnalyzeBtn.addEventListener("click", function () {
             if (!corFileInput || !corFileInput.files || !corFileInput.files.length) {
-                corResult.textContent = "Choose your COR file first.";
+                setCorResult("Choose your COR file first.", true);
                 return;
             }
             if (!analyzeUrl) {
-                corResult.textContent = "COR analysis is unavailable right now.";
+                setCorResult("COR analysis is unavailable right now.", true);
                 return;
             }
             corAnalyzeBtn.disabled = true;
-            corResult.textContent = "Reading your COR…";
+            setCorResult("Reading your COR…", false);
             var fd = new FormData();
             fd.append("cor_file", corFileInput.files[0]);
             var csrfInput = document.querySelector("#signup-form input[name=csrfmiddlewaretoken]");
@@ -356,21 +379,52 @@
                 .then(function (data) {
                     corAnalyzeBtn.disabled = false;
                     if (data.error) {
-                        corResult.textContent = data.error;
+                        setCorResult(data.error, true);
                         return;
                     }
                     if (data.cor_type === "regular") {
-                        corResult.textContent =
+                        setCorResult(
                             "This COR shows a regular status. Switch to Regular " +
-                            "and pick your year level and section instead.";
+                                "and pick your year level and section instead.",
+                            true
+                        );
                         resetAnalysis();
                         return;
                     }
                     var matched = data.matched || [];
+                    if (data.program_mismatch) {
+                        var mismatchSeen = seenRowsText(
+                            data.rows || data.unmatched || []
+                        );
+                        setCorResult(
+                            (mismatchSeen
+                                ? "We read " + mismatchSeen + ". "
+                                : "") +
+                                "Those courses do not match the BSED " +
+                                "Mathematics curriculum. Only BSED Math " +
+                                "students can sign up.",
+                            true
+                        );
+                        resetAnalysis();
+                        return;
+                    }
                     if (!matched.length) {
-                        corResult.textContent =
-                            "We could not confidently match any course codes. " +
-                            "Try a clearer photo or PDF of your COR.";
+                        var seen = seenRowsText(data.rows || data.unmatched || []);
+                        if (seen) {
+                            setCorResult(
+                                "We read " + seen + ", but could not " +
+                                    "confidently match them to BSED " +
+                                    "Mathematics courses. Try a clearer photo " +
+                                    "or PDF of your COR.",
+                                true
+                            );
+                        } else {
+                            setCorResult(
+                                "We could not read any course codes or names " +
+                                    "from that COR. Try a clearer photo or PDF.",
+                                true
+                            );
+                        }
                         return;
                     }
                     analyzed = true;
@@ -399,21 +453,27 @@
                     matched.forEach(function (m) {
                         if (m.confidence !== "high") low += 1;
                     });
-                    corResult.textContent =
+                    setCorResult(
                         "Found " + matched.length + " course" +
-                        (matched.length > 1 ? "s" : "") +
-                        " on your COR — pick a faculty for each below" +
-                        (data.unmatched && data.unmatched.length
-                            ? " (" + data.unmatched.length + " code(s) did not match)"
-                            : "") +
-                        (low ? ", " + low + " need a double-check." : ".");
+                            (matched.length > 1 ? "s" : "") +
+                            " on your COR — pick a faculty for each below" +
+                            (data.unmatched && data.unmatched.length
+                                ? " (" +
+                                  data.unmatched.length +
+                                  " code(s) did not match)"
+                                : "") +
+                            (low ? ", " + low + " need a double-check." : "."),
+                        false
+                    );
                     var facultyPicker = document.getElementById("faculty-picker-wrapper");
                     if (facultyPicker) facultyPicker.style.display = "";
                 })
                 .catch(function () {
                     corAnalyzeBtn.disabled = false;
-                    corResult.textContent =
-                        "The analyzer hit a snag. Try again with a clearer file.";
+                    setCorResult(
+                        "The analyzer hit a snag. Try again with a clearer file.",
+                        true
+                    );
                 });
         });
     }
@@ -424,14 +484,12 @@
             if (isIrregular()) {
                 if (!corFileInput || !corFileInput.files || !corFileInput.files.length) {
                     e.preventDefault();
-                    if (corResult) corResult.textContent = "Attach your COR first.";
+                    setCorResult("Attach your COR first.", true);
                     return false;
                 }
                 if (!analyzed) {
                     e.preventDefault();
-                    if (corResult) {
-                        corResult.textContent = "Please click Analyze COR first.";
-                    }
+                    setCorResult("Please click Analyze COR first.", true);
                     return false;
                 }
             }

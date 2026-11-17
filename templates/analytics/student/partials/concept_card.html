@@ -18,9 +18,11 @@
         {% if card.subject_label %}
         <p class="concept-card__meta">{{ card.subject_label }}</p>
         {% endif %}
+        {% if card.miss_blurb %}
         <p class="concept-card__blurb">{{ card.miss_blurb }}</p>
-        {% if card.review.same_wrong_answer_count >= 2 %}
-        <p class="concept-card__handnote" aria-label="Repeated mistake note">same wrong answer, twice!</p>
+        {% endif %}
+        {% if card.handnote %}
+        <p class="concept-card__handnote" aria-label="Concept confidence note">{{ card.handnote }}</p>
         {% endif %}
         <div class="concept-card__progress-row">
             <span class="concept-progress-dots" role="img" aria-label="{{ card.progress_label }}">

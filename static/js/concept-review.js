@@ -79,6 +79,48 @@
     renderMathInElement(el, options);
   }
 
+  function renderAnswerReview(container, parts) {
+    if (!container) return;
+    container.textContent = "";
+    function line(kind, label, text) {
+      if (!text) return;
+      var p = document.createElement("p");
+      p.className = "concept-answer-review__line concept-answer-review__line--" + kind;
+      var strong = document.createElement("strong");
+      strong.textContent = label + ": ";
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(text));
+      container.appendChild(p);
+    }
+    line("wrong", "Your answer", parts.wrong);
+    line("correct", "Correct answer", parts.correct);
+    if (parts.explanation) {
+      var explanation = document.createElement("p");
+      explanation.className = "concept-answer-review__explanation";
+      var label = document.createElement("strong");
+      label.textContent = "Explanation: ";
+      explanation.appendChild(label);
+      explanation.appendChild(document.createTextNode(parts.explanation));
+      container.appendChild(explanation);
+    }
+    container.classList.remove("hidden");
+    renderMath(container);
+  }
+
+  function optionTextByIndex(root, index) {
+    var options = qsa(".concept-option", qs("#try-it-options", root));
+    var option = options[index];
+    if (!option) return "";
+    var textEl = option.querySelector(".concept-option__text");
+    return textEl ? (textEl.dataset.rawText || textEl.textContent || "").trim() : "";
+  }
+
+  function optionTextFromElement(option) {
+    if (!option) return "";
+    var textEl = option.querySelector(".concept-option__text");
+    return textEl ? (textEl.dataset.rawText || textEl.textContent || "").trim() : "";
+  }
+
   function initTryIt(root) {
     var checkBtn = qs("#try-it-check", root);
     var hintBtn = qs("#try-it-hint", root);
@@ -106,12 +148,24 @@
             label.classList.remove("is-wrong", "is-correct");
           });
           var label = selected.closest(".concept-option");
+          var selectedIndex = parseInt(selected.value, 10);
+          var choices = data.choices || [];
+          var chosenText = choices[selectedIndex] || optionTextByIndex(root, selectedIndex);
+          var correctText =
+            typeof data.correct_index === "number"
+              ? choices[data.correct_index] || optionTextByIndex(root, data.correct_index)
+              : "";
           if (data.is_correct) {
             if (label) {
               label.classList.add("is-correct");
             }
-            feedback.classList.add("hidden");
+            if (feedback) {
+              feedback.classList.remove("concept-panel--warn");
+              feedback.classList.add("concept-panel--success");
+              renderAnswerReview(feedback, { correct: correctText });
+            }
             if (continueLink) {
+              continueLink.textContent = "Continue to Practice";
               continueLink.classList.remove("hidden");
             }
             checkBtn.classList.add("hidden");
@@ -125,9 +179,19 @@
             if (label) {
               label.classList.add("is-wrong");
             }
-            feedback.textContent = data.feedback || "Not quite. Try again.";
-            feedback.classList.remove("hidden");
-            renderMath(feedback);
+            if (feedback) {
+              feedback.classList.remove("concept-panel--success");
+              feedback.classList.add("concept-panel--warn");
+              renderAnswerReview(feedback, {
+                wrong: chosenText,
+                correct: correctText,
+                explanation: data.feedback || "",
+              });
+            }
+            if (continueLink) {
+              continueLink.textContent = "Proceed";
+              continueLink.classList.remove("hidden");
+            }
             checkBtn.disabled = false;
           }
         })
@@ -175,6 +239,8 @@
       badge.setAttribute("aria-hidden", "true");
       badge.textContent = ["A", "B", "C", "D"][index] || String(index + 1);
       var span = document.createElement("span");
+      span.className = "concept-option__text";
+      span.dataset.rawText = opt.text;
       span.textContent = opt.text;
       label.appendChild(input);
       label.appendChild(badge);
@@ -240,12 +306,24 @@
               }
             });
             var label = selected.closest(".concept-option");
+            var chosenText = optionTextFromElement(label);
+            var correctLabel = null;
+            qsa(".concept-option", optionsEl).forEach(function (candidate) {
+              if (candidate.dataset.optionId === data.correct_option_id) {
+                correctLabel = candidate;
+              }
+            });
+            var correctText = optionTextFromElement(correctLabel);
             if (data.is_correct) {
               if (label) {
                 label.classList.add("is-correct");
               }
               updateProgress(data.correct_streak);
-              feedback.classList.add("hidden");
+              if (feedback) {
+                feedback.classList.remove("concept-panel--warn");
+                feedback.classList.add("concept-panel--success");
+                renderAnswerReview(feedback, { correct: correctText });
+              }
               if (solution) {
                 var steps = (data.solution_steps || []).join(" ");
                 solution.textContent =
@@ -266,9 +344,15 @@
               if (label) {
                 label.classList.add("is-wrong");
               }
-              feedback.textContent = data.why_wrong || "Not quite. Try another approach.";
-              feedback.classList.remove("hidden");
-              renderMath(feedback);
+              if (feedback) {
+                feedback.classList.remove("concept-panel--success");
+                feedback.classList.add("concept-panel--warn");
+                renderAnswerReview(feedback, {
+                  wrong: chosenText,
+                  correct: correctText,
+                  explanation: data.why_wrong || "Not quite. Try another approach.",
+                });
+              }
               if (data.hint) {
                 hintText.dataset.hint = data.hint;
               }

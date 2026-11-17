@@ -7,7 +7,7 @@
     <title>{% block title %}EXAMIQ+{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -23,14 +23,14 @@
                         },
                     },
                     fontFamily: {
-                        sans: ['"Nunito Sans"', "system-ui", "sans-serif"],
-                        serif: ['"Fraunces"', "Georgia", "serif"],
+                        sans: ['"Figtree"', "system-ui", "sans-serif"],
+                        serif: ['"Figtree"', "system-ui", "sans-serif"],
                     },
                 },
             },
         };
     </script>
-    <link rel="stylesheet" href="{% static 'css/custom.css' %}?v=20261115m">
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}?v=20261118e">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="embed-body bg-examiq-cream font-sans text-examiq-navy">
@@ -38,6 +38,7 @@
     {% include "components/confirm_dialog.html" %}
     {% block content %}{% endblock %}
     <script src="{% static 'js/examiq-ui.js' %}?v=20261115"></script>
+    <script src="{% static 'js/table-scroll-indicator.js' %}?v=20261117c"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

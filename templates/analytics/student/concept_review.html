@@ -12,9 +12,8 @@
      data-step="{{ step }}">
     <header class="review-overlay__header">
         <div class="review-overlay__inner">
-            <a class="review-overlay__close" href="{% url 'analytics_student:mistakes' %}?tab=concepts" aria-label="Close review">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                Close
+            <a class="review-overlay__close" href="{% url 'analytics_student:mistakes' %}?tab=concepts" aria-label="Close review" title="Close review">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </a>
             <div class="review-overlay__heading">
                 <p class="review-overlay__eyebrow">Reviewing concept</p>
@@ -61,14 +60,12 @@
         {% elif step == 'try_it' %}
         <a class="review-overlay__back" href="{% url 'analytics_student:concept_review' review.pk %}?step=learn">&larr; Back to Learn</a>
         <span class="review-overlay__foot-actions">
-            <button type="button" class="review-overlay__ghost" id="try-it-hint">Show hint</button>
             <span class="review-overlay__hint-note" data-hint-note hidden>Pick an answer to continue</span>
             <button type="button" class="review-overlay__primary" id="try-it-check" disabled>Check answer</button>
         </span>
         {% else %}
         <a class="review-overlay__back" href="{% url 'analytics_student:concept_review' review.pk %}?step=try_it">&larr; Back to Try it</a>
         <span class="review-overlay__foot-actions">
-            <button type="button" class="review-overlay__ghost" id="practice-hint">Show hint</button>
             <span class="review-overlay__hint-note" data-hint-note hidden>Pick an answer to continue</span>
             <button type="button" class="review-overlay__primary" id="practice-check" disabled>Check answer</button>
         </span>
@@ -79,5 +76,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/concept-review.js' %}" defer></script>
+<script src="{% static 'js/concept-review.js' %}?v=20261117c" defer></script>
 {% endblock %}

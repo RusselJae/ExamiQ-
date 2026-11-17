@@ -172,28 +172,24 @@ def concept_status_counts(student: User) -> dict[str, int]:
 
 def build_concept_card_context(review: ConceptReview) -> dict[str, Any]:
     """Template-friendly card fields for the Concepts to Review list."""
-    parts: list[str] = [
-        f"Missed {review.miss_count} time" + ("s" if review.miss_count != 1 else "")
-    ]
-    if review.same_wrong_answer_count >= 2:
-        parts.append(
-            f"Same wrong answer picked {review.same_wrong_answer_count} times"
-            if review.same_wrong_answer_count > 2
-            else "Same wrong answer picked twice"
-        )
-    if review.marked_sure_count and not review.marked_guessing_count:
-        parts.append("Marked Sure.")
-    elif review.marked_guessing_count and not review.marked_sure_count:
-        parts.append("Marked Guessing.")
-    elif review.marked_sure_count:
-        parts.append("Marked Sure.")
-
+    parts: list[str] = []
     if review.status == STATUS_PRACTICING and review.correct_streak:
         parts.append(
             f"Passed {review.correct_streak} untimed question"
             + ("s" if review.correct_streak != 1 else "")
             + "."
         )
+
+    marked_label = ""
+    if review.marked_sure_count:
+        marked_label = "Sure"
+    elif review.marked_guessing_count:
+        marked_label = "Unsure"
+    miss_label = "time" if review.miss_count == 1 else "times"
+    if marked_label:
+        handnote = f"Marked {marked_label} but Missed {review.miss_count} {miss_label}"
+    else:
+        handnote = f"Missed {review.miss_count} {miss_label}"
 
     badge = "Needs Review"
     badge_class = "needs-review"
@@ -228,6 +224,7 @@ def build_concept_card_context(review: ConceptReview) -> dict[str, Any]:
         "badge": badge,
         "badge_class": badge_class,
         "miss_blurb": " · ".join(parts),
+        "handnote": handnote,
         "subject_label": subject_label,
         "progress_label": f"{review.correct_streak} of {CORRECT_TO_RESOLVE} correct",
         "cta": cta,

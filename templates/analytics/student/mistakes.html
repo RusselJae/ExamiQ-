@@ -14,20 +14,6 @@
 <div class="student-panel">
 <div class="concept-review-list">
     <h2 class="concept-review-list__title">Concepts review</h2>
-    <div class="concept-status-chips" role="group" aria-label="Concept status">
-        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=needs_review"
-           class="concept-status-chip{% if concept_status == 'needs_review' %} is-active{% endif %}">
-            Needs review · {{ concept_counts.needs_review }}
-        </a>
-        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=practicing"
-           class="concept-status-chip{% if concept_status == 'practicing' %} is-active{% endif %}">
-            Practicing · {{ concept_counts.practicing }}
-        </a>
-        <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=resolved"
-           class="concept-status-chip{% if concept_status == 'resolved' %} is-active{% endif %}">
-            Resolved · {{ concept_counts.resolved }}
-        </a>
-    </div>
 
     {% if concept_cards %}
     <div class="filter-bar concept-filter-bar" data-concept-filter-bar>
@@ -66,6 +52,20 @@
                     </div>
                 </details>
             </div>
+        </div>
+        <div class="concept-status-chips" role="group" aria-label="Concept status">
+            <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=needs_review"
+               class="concept-status-chip{% if concept_status == 'needs_review' %} is-active{% endif %}">
+                Needs review · {{ concept_counts.needs_review }}
+            </a>
+            <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=practicing"
+               class="concept-status-chip{% if concept_status == 'practicing' %} is-active{% endif %}">
+                Practicing · {{ concept_counts.practicing }}
+            </a>
+            <a href="{% url 'analytics_student:mistakes' %}?tab=concepts&amp;status=resolved"
+               class="concept-status-chip{% if concept_status == 'resolved' %} is-active{% endif %}">
+                Resolved · {{ concept_counts.resolved }}
+            </a>
         </div>
     </div>
     <div class="concept-review-layout">
