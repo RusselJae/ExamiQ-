@@ -22,16 +22,20 @@
         }
     }
 
-    function dismissOverlay(modal) {
+    function cancelUrlFor(modal) {
+        return (
+            modal.dataset.cancelUrl ||
+            (modal.querySelector("[data-editor-cancel]") &&
+                modal
+                    .querySelector("[data-editor-cancel]")
+                    .getAttribute("data-cancel-url"))
+        );
+    }
+
+    function leaveModal(modal, cancelUrl) {
         // Dedicated create/edit pages open the modal as the whole page;
         // closing should leave the previous screen, not an empty shell.
         if (modal.dataset.autoOpen === "1") {
-            const cancelUrl =
-                modal.dataset.cancelUrl ||
-                (modal.querySelector("[data-editor-cancel]") &&
-                    modal
-                        .querySelector("[data-editor-cancel]")
-                        .getAttribute("data-cancel-url"));
             if (cancelUrl) {
                 window.location.href = cancelUrl;
                 return;
@@ -46,12 +50,52 @@
         closeModal(modal);
     }
 
+    function dismissOverlay(modal) {
+        const form = modal.querySelector("form[data-question-editor]");
+        const editor = window.ExamiQQuestionEditor;
+        const dirty =
+            form && editor && editor.root === form && editor.isDirty();
+        const cancelUrl = cancelUrlFor(modal);
+
+        if (!dirty) {
+            leaveModal(modal, cancelUrl);
+            return;
+        }
+
+        const leave = function () {
+            if (form) form.dataset.editorAllowUnload = "1";
+            leaveModal(modal, cancelUrl);
+        };
+        if (typeof window.showConfirm === "function") {
+            window
+                .showConfirm({
+                    title: "Leave page?",
+                    message: "Discard your unsaved changes and leave this screen?",
+                    type: "warning",
+                    icon: "exit",
+                    confirmLabel: "Leave",
+                    cancelLabel: "Stay",
+                })
+                .then(function (ok) {
+                    if (ok) leave();
+                });
+            return;
+        }
+        if (window.confirm("Discard your unsaved changes and leave this screen?")) {
+            leave();
+        }
+    }
+
     function setupModal(modal) {
         const form = modal.querySelector(".question-modal__inner");
 
         modal.querySelectorAll("[data-dismiss-content]").forEach((el) => {
             el.addEventListener("click", () => dismissOverlay(modal));
         });
+        const cancelBtn = modal.querySelector("[data-editor-cancel]");
+        if (cancelBtn && (!form || !form.hasAttribute("data-question-editor"))) {
+            cancelBtn.addEventListener("click", () => dismissOverlay(modal));
+        }
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape" && !modal.classList.contains("hidden")) {
                 dismissOverlay(modal);
@@ -86,11 +130,6 @@
                 event.preventDefault();
                 form.requestSubmit();
             });
-        }
-
-        const cancelBtn = modal.querySelector("[data-editor-cancel]");
-        if (cancelBtn) {
-            cancelBtn.addEventListener("click", () => dismissOverlay(modal));
         }
     }
 

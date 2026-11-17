@@ -702,7 +702,8 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
         batch_url = reverse(
             "analytics_professor:question_create", kwargs={"course_pk": course_pk}
         )
-        if request.GET.get("embed") == "1":
+        embed_mode = request.GET.get("embed") == "1"
+        if embed_mode:
             batch_url = f"{batch_url}?embed=1"
         overlay_url = (
             reverse(
@@ -720,9 +721,10 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
             # The draft itself lives in sessionStorage; the page patches the
             # real total in on load.
             "total_questions": None,
-            "embed_mode": request.GET.get("embed") == "1",
-            # Closing (Cancel or Save) returns to the questions list with the
-            # batch overlay reopened — never the standalone add page.
+            "embed_mode": embed_mode,
+            "batch_editor_url": batch_url,
+            # A standalone editor returns to the reopenable list overlay. The
+            # embedded editor must stay on a frameable page instead.
             "batch_overlay_url": overlay_url,
         }
         context.update(
@@ -730,7 +732,7 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
                 self.course,
                 "Edit question",
                 back_label="Back to batch editor",
-                cancel_url=overlay_url,
+                cancel_url=batch_url if embed_mode else overlay_url,
                 breadcrumbs=[
                     {"label": self.course.code, "url": batch_url},
                     {"label": "Add Questions", "url": batch_url},

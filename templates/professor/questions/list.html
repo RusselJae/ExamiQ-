@@ -11,25 +11,33 @@
 <div class="course-home-panel">
     <div class="questions-page">
         <div class="questions-page__toolbar">
-            <div class="questions-page__actions">
-                <button type="button"
-                        class="materials-add-btn"
-                        data-batch-modal
-                        data-batch-modal-src="{{ add_questions_url }}?embed=1">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    Add questions
-                </button>
-                <button type="button"
-                        class="btn-secondary btn-primary-sm"
-                        data-question-modal="add"
-                        data-question-modal-title="Add questions — Manually"
-                        data-question-modal-action="Save all"
-                        data-form-action="{{ add_manual_url }}"
-                        data-course-pk="{{ course.pk }}">
-                    Add manually
-                </button>
+            <div class="questions-page__add-group">
+                <div class="questions-page__actions">
+                    <button type="button"
+                            class="materials-add-btn"
+                            data-batch-modal
+                            data-batch-modal-src="{{ add_questions_url }}?embed=1">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Add questions
+                    </button>
+                    <button type="button"
+                            class="btn-secondary btn-primary-sm"
+                            data-question-modal="add"
+                            data-question-modal-title="Add questions — Manually"
+                            data-question-modal-action="Save all"
+                            data-form-action="{{ add_manual_url }}"
+                            data-course-pk="{{ course.pk }}">
+                        Add manually
+                    </button>
+                </div>
+                {% if draft_count %}
+                <a href="{% url 'analytics_professor:question_create' course.pk %}#draft-batch-card"
+                   class="questions-page__draft-note">
+                    See {{ draft_count }} draft question{{ draft_count|pluralize }}
+                </a>
+                {% endif %}
             </div>
             <p class="questions-page__meta">
                 {{ question_total_count }} question{{ question_total_count|pluralize }}
@@ -169,7 +177,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/question-editor.js' %}?v=20261103a"></script>
+<script src="{% static 'js/question-editor.js' %}?v=20261118c"></script>
 <script src="{% static 'js/question-regenerate.js' %}?v=20261103a"></script>
-<script src="{% static 'js/question-modal.js' %}?v=20261103a"></script>
+<script src="{% static 'js/question-modal.js' %}?v=20261118c"></script>
 {% endblock %}

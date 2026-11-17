@@ -473,6 +473,31 @@ class TestQuestionAdaptiveExplanationEdit:
             question=question, content__contains="ones place"
         ).exists()
 
+    def test_batch_draft_edit_embed_cancels_back_to_batch_editor(
+        self, client, professor, subject
+    ):
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:question_batch_edit",
+                kwargs={"course_pk": course.pk, "question_index": 0},
+            )
+            + "?embed=1"
+        )
+        content = response.content.decode()
+        batch_editor_url = (
+            reverse(
+                "analytics_professor:question_create",
+                kwargs={"course_pk": course.pk},
+            )
+            + "?embed=1"
+        )
+        assert response.status_code == 200
+        assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+        assert f'data-cancel-url="{batch_editor_url}"' in content
+        assert f'var editorUrl = "{batch_editor_url}"' in content
+
     def test_batch_draft_edit_matches_reference_ui(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)

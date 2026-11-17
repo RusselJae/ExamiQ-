@@ -18059,7 +18059,12 @@ a.overview-pill.is-selected:hover {
 }
 .examiq-chat-msg { display: flex; flex-direction: column; max-width: min(92%, 32rem); }
 .examiq-chat-msg--in { align-self: flex-start; align-items: flex-start; }
-.examiq-chat-msg--out { align-self: flex-end; align-items: flex-end; }
+.examiq-chat-msg--out {
+    align-self: stretch;
+    align-items: flex-end;
+    width: 100%;
+    max-width: 100%;
+}
 .examiq-chat-msg__row {
     display: flex;
     align-items: flex-end;
@@ -18067,6 +18072,15 @@ a.overview-pill.is-selected:hover {
 }
 .examiq-chat-msg__row--in { flex-direction: row; }
 .examiq-chat-msg__row--out { flex-direction: row-reverse; }
+.examiq-chat-msg--out .examiq-chat-msg__row {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+.examiq-chat-msg--out .examiq-chat-msg__stack {
+    align-items: flex-end;
+    max-width: min(92%, 32rem);
+}
 .examiq-chat-msg__stack {
     display: flex;
     flex-direction: column;
@@ -18291,6 +18305,9 @@ a.overview-pill.is-selected:hover {
         min-height: 44px;
     }
     .examiq-chat-msg {
+        max-width: 75%;
+    }
+    .examiq-chat-msg--out .examiq-chat-msg__stack {
         max-width: 75%;
     }
     .examiq-chat-bubble {
@@ -21899,9 +21916,10 @@ body.review-open {
 
 .question-modal__main .qe-card {
     box-shadow: none;
-    border: none;
-    background: transparent;
-    padding: 0;
+    border: 2px solid var(--border-cream, #ece4d3);
+    border-radius: var(--r-lg, 1rem);
+    background: #fff;
+    padding: 1.25rem;
 }
 
 .question-modal__sidebar .qe-student,
@@ -24094,6 +24112,26 @@ body.review-open {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+}
+
+.questions-page__add-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+}
+
+.questions-page__draft-note {
+    padding-left: 0.25rem;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.questions-page__draft-note:hover {
+    color: var(--color-primary, #1a5632);
+    text-decoration: underline;
 }
 
 .questions-page__meta {

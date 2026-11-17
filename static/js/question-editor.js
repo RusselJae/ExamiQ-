@@ -243,20 +243,42 @@
         this.refreshDirty();
     };
 
+    Editor.prototype.isDirty = function () {
+        return this.serialize() !== this.baseline;
+    };
+
     Editor.prototype.bindCancel = function () {
         var self = this;
         qsa(this.root, "[data-editor-cancel]").forEach(function (btn) {
             btn.addEventListener("click", function () {
-                if (self.serialize() === self.baseline) {
+                if (!self.isDirty()) {
                     goBack(btn);
                     return;
                 }
-                var ok = window.confirm(
-                    "Discard your unsaved changes and leave this screen?"
-                );
-                if (ok) {
+                var leave = function () {
                     self.root.dataset.editorAllowUnload = "1";
                     goBack(btn);
+                };
+                if (typeof window.showConfirm === "function") {
+                    window
+                        .showConfirm({
+                            title: "Leave page?",
+                            message:
+                                "Discard your unsaved changes and leave this screen?",
+                            type: "warning",
+                            icon: "exit",
+                            confirmLabel: "Leave",
+                            cancelLabel: "Stay",
+                        })
+                        .then(function (ok) {
+                            if (ok) leave();
+                        });
+                } else if (
+                    window.confirm(
+                        "Discard your unsaved changes and leave this screen?"
+                    )
+                ) {
+                    leave();
                 }
             });
         });
@@ -277,11 +299,7 @@
         // explicit URL — e.g. the questions list with the batch overlay
         // reopened — instead of trusting history.
         if (btn && btn.hasAttribute("data-cancel-hard") && fallback) {
-            if (window.top && window.top !== window) {
-                window.top.location.href = fallback;
-            } else {
-                window.location.href = fallback;
-            }
+            window.location.href = fallback;
             return;
         }
         // Prefer real history so we land on whatever screen the user came

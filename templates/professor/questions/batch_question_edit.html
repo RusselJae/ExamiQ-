@@ -354,7 +354,10 @@ data-steps-selector="[data-step-input]"
         // Tell the shared editor guard this navigation is intentional.
         form.dataset.editorAllowUnload = "1";
         var overlayUrl = "{{ batch_overlay_url }}";
-        if (window.top && window.top !== window) {
+        var editorUrl = "{% if embed_mode %}{{ batch_editor_url }}{% endif %}";
+        if (window.top && window.top !== window && editorUrl) {
+            window.location.href = editorUrl;
+        } else if (window.top && window.top !== window) {
             window.top.location.href = overlayUrl;
         } else {
             window.location.href = overlayUrl;
