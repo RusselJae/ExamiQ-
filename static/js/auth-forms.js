@@ -1,5 +1,5 @@
 /**
- * Auth form helpers — password visibility, strength, role cards, phone prefix.
+ * Auth form helpers — password visibility, strength, role cards, section cascade.
  */
 (function () {
     "use strict";
@@ -97,33 +97,6 @@
         setRole(roleSelect.value || "student");
     }
 
-    function initPhonePrefix(root) {
-        const display = root.querySelector("#id_phone_display");
-        const hidden = root.querySelector("#id_phone_number");
-        const form = root.querySelector("#signup-form");
-        if (!display || !hidden) return;
-
-        if (hidden.value && hidden.value.length === 11 && hidden.value.startsWith("0")) {
-            display.value = hidden.value.slice(1);
-        }
-
-        function syncPhone() {
-            const digits = display.value.replace(/\D/g, "");
-            if (digits.length === 10 && digits.startsWith("9")) {
-                hidden.value = "0" + digits;
-            } else if (digits.length === 11 && digits.startsWith("09")) {
-                hidden.value = digits;
-            } else {
-                hidden.value = digits;
-            }
-        }
-
-        display.addEventListener("input", syncPhone);
-        if (form) {
-            form.addEventListener("submit", syncPhone);
-        }
-    }
-
     function initOtpDigits(root) {
         const input = root.querySelector("[data-otp-digits]");
         if (!input) return;
@@ -168,7 +141,6 @@
         initPasswordToggles(page);
         initPasswordStrength(page);
         initSignupRoleCards(page);
-        initPhonePrefix(page);
         initSectionCascade(page);
         initOtpDigits(page);
     }

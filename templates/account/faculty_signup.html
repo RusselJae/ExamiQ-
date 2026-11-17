@@ -29,15 +29,7 @@
     </div>
     {% include "components/auth_field.html" with field=form.employee_id %}
 
-    <div class="auth-form-row auth-form-row--2">
-        <label class="auth-field{% if form.phone_number.errors %} auth-field--error{% endif %}" for="id_phone_display">
-            <span class="auth-field__label">{{ form.phone_number.label }}</span>
-            <div class="auth-phone-wrap">
-                <span class="auth-phone-prefix"><span class="auth-phone-flag" aria-hidden="true">🇵🇭</span><span class="auth-phone-code">+63</span></span>
-                <input type="tel" id="id_phone_display" class="auth-field__input" inputmode="numeric" maxlength="10" placeholder="9XX XXX XXXX" autocomplete="tel" required>
-            </div>
-            {% if form.phone_number.errors %}<p class="auth-field__error">{{ form.phone_number.errors.0 }}</p>{% endif %}
-        </label>
+    <div class="auth-form-row auth-form-row--full">
         {% include "components/auth_field.html" with field=form.email %}
     </div>
 
@@ -50,6 +42,5 @@
 {% endblock %}
 
 {% block auth_footer %}
-<p class="auth-page__footer">Are you a student? <a href="{% url 'account_signup' %}">Create a student account</a></p>
-<p class="auth-page__footer mt-2">Already have an account? <a href="{% url 'account_login' %}">Log in</a></p>
+<p class="auth-page__footer">Already have an account? <a href="{% url 'account_login' %}">Log in</a></p>
 {% endblock %}

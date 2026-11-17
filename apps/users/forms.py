@@ -94,7 +94,6 @@ INPUT_CLASS = (
 AUTH_SELECT_CLASS = "auth-field__input"
 
 STUDENT_NUMBER_RE = re.compile(r"^\d{9}$")
-PHONE_NUMBER_RE = re.compile(r"^\d{11}$")
 EDUCATION_DEPARTMENT_NAME = "College of Education"
 
 
@@ -302,12 +301,6 @@ class ExamiQSignupForm(SignupForm):
             }
         ),
     )
-    phone_number = forms.CharField(
-        max_length=11,
-        required=False,
-        label="Phone number",
-        widget=forms.HiddenInput(),
-    )
     year_level = forms.ModelChoiceField(
         queryset=YearLevel.objects.none(),
         required=False,
@@ -438,19 +431,6 @@ class ExamiQSignupForm(SignupForm):
         if role != User.Role.STUDENT:
             return ""
         return _clean_digits(value, "Student number", 9)
-
-    def clean_phone_number(self):
-        value = self.cleaned_data.get("phone_number", "").strip()
-        digits = re.sub(r"\D", "", value)
-        if len(digits) == 10 and digits.startswith("9"):
-            digits = "0" + digits
-        if len(digits) == 11 and digits.startswith("09"):
-            return digits
-        if not digits:
-            raise forms.ValidationError("Phone number is required.")
-        raise forms.ValidationError(
-            "Enter a valid 10-digit mobile number (9XX XXX XXXX)."
-        )
 
     def clean_employee_id(self):
         value = self.cleaned_data.get("employee_id", "").strip()
@@ -810,7 +790,7 @@ class ExamiQSignupForm(SignupForm):
         user.last_name = self.cleaned_data["last_name"].strip()
         user.middle_name = self.cleaned_data.get("middle_name", "").strip()
         user.suffix = self.cleaned_data.get("suffix", "").strip()
-        user.phone_number = self.cleaned_data["phone_number"]
+        user.phone_number = ""
         user.student_number = self.cleaned_data["student_number"]
         user.home_degree_program = User.HomeDegreeProgram.BSED_MATH
         user.employee_id = ""
@@ -878,7 +858,7 @@ class FacultySignupForm(ExamiQSignupForm):
         user.last_name = self.cleaned_data["last_name"].strip()
         user.middle_name = self.cleaned_data.get("middle_name", "").strip()
         user.suffix = self.cleaned_data.get("suffix", "").strip()
-        user.phone_number = self.cleaned_data["phone_number"]
+        user.phone_number = ""
         user.department = education_department
         user.employee_id = self.cleaned_data["employee_id"]
         user.student_number = None
@@ -938,7 +918,7 @@ class CoordinatorSignupForm(ExamiQSignupForm):
         user.last_name = self.cleaned_data["last_name"].strip()
         user.middle_name = self.cleaned_data.get("middle_name", "").strip()
         user.suffix = self.cleaned_data.get("suffix", "").strip()
-        user.phone_number = self.cleaned_data["phone_number"]
+        user.phone_number = ""
         user.department = self.cleaned_data["department"]
         user.employee_id = self.cleaned_data["employee_id"]
         user.student_number = None
@@ -974,6 +954,19 @@ class ProfileUpdateForm(forms.Form):
     middle_name = forms.CharField(max_length=100, required=False, label="Middle name")
     last_name = forms.CharField(max_length=100, required=False, label="Last name")
     suffix = forms.CharField(max_length=20, required=False, label="Suffix")
+    phone_number = forms.CharField(
+        max_length=20,
+        required=False,
+        label="Phone number",
+        help_text="Optional. Use 09XX XXX XXXX.",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "9XX XXX XXXX",
+                "autocomplete": "tel",
+                "inputmode": "numeric",
+            }
+        ),
+    )
     profile_photo = forms.ImageField(required=False, label="Profile photo")
     year_level = forms.ModelChoiceField(
         queryset=YearLevel.objects.all(),
@@ -989,6 +982,7 @@ class ProfileUpdateForm(forms.Form):
         self.fields["middle_name"].initial = user.middle_name
         self.fields["last_name"].initial = user.last_name
         self.fields["suffix"].initial = user.suffix
+        self.fields["phone_number"].initial = user.phone_number
         _style_fields(self)
         self.fields["profile_photo"].widget.attrs["accept"] = (
             "image/jpeg,image/png,image/webp"
@@ -1027,6 +1021,21 @@ class ProfileUpdateForm(forms.Form):
             required=False,
         )
 
+    def clean_phone_number(self):
+        value = self.cleaned_data.get("phone_number", "").strip()
+        digits = re.sub(r"\D", "", value)
+        if not digits:
+            return ""
+        if len(digits) == 12 and digits.startswith("63"):
+            digits = digits[2:]
+        if len(digits) == 10 and digits.startswith("9"):
+            digits = "0" + digits
+        if len(digits) == 11 and digits.startswith("09"):
+            return digits
+        raise forms.ValidationError(
+            "Enter a valid 10-digit mobile number (9XX XXX XXXX)."
+        )
+
     def clean(self):
         cleaned = super().clean()
         if self.user.role != User.Role.STUDENT or self.user.is_irregular:
@@ -1052,7 +1061,14 @@ class ProfileUpdateForm(forms.Form):
         self.user.middle_name = self.cleaned_data.get("middle_name", "")
         self.user.last_name = self.cleaned_data["last_name"]
         self.user.suffix = self.cleaned_data.get("suffix", "").strip()
-        update_fields = ["first_name", "middle_name", "last_name", "suffix"]
+        self.user.phone_number = self.cleaned_data.get("phone_number", "")
+        update_fields = [
+            "first_name",
+            "middle_name",
+            "last_name",
+            "suffix",
+            "phone_number",
+        ]
         photo = self.cleaned_data.get("profile_photo")
         if photo:
             if self.user.profile_photo:

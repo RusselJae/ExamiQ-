@@ -64,6 +64,9 @@
                     {{ profile_form.middle_name|as_crispy_field }}
                     {{ profile_form.suffix|as_crispy_field }}
                 </div>
+                <div class="mt-3">
+                    {{ profile_form.phone_number|as_crispy_field }}
+                </div>
                 {% if profile_form.year_level or profile_form.section %}
                 <div class="mt-4 pt-4 border-t border-slate-200">
                     <p class="text-sm font-semibold text-examiq-navy mb-3">Enrollment</p>

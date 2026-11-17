@@ -101,7 +101,6 @@ def _student_data(signup_year_level, **extra):
         "middle_name": "",
         "suffix": "",
         "student_number": "123456789",
-        "phone_number": "09123456789",
         "year_level": signup_year_level.pk,
     }
     data.update(extra)
@@ -219,7 +218,6 @@ def _faculty_data(**extra):
         "first_name": "Rico",
         "last_name": "Cruz",
         "employee_id": "EMP-2024-001",
-        "phone_number": "09123456789",
     }
     data.update(extra)
     return data
@@ -410,7 +408,7 @@ class TestSignupRoles:
         user = User.objects.get(email="newstudent@test.edu")
         assert user.role == User.Role.STUDENT
         assert user.student_number == "123456789"
-        assert user.phone_number == "09123456789"
+        assert user.phone_number == ""
         assert user.home_degree_program == User.HomeDegreeProgram.BSED_MATH
         assert user.year_level_id == signup_year_level.pk
         assert user.is_active is False
@@ -423,6 +421,20 @@ class TestSignupRoles:
         html_body = mail.outbox[0].alternatives[0][0]
         assert "Confirm your email" in html_body
         assert "ExamiQ" in html_body
+
+    def test_student_and_faculty_signup_pages_do_not_collect_phone(
+        self, client, bsed_program, signup_year_level
+    ):
+        student_page = client.get(reverse("account_signup")).content.decode()
+        assert "id_phone_display" not in student_page
+        assert 'name="phone_number"' not in student_page
+
+        faculty_page = client.get(
+            reverse("account_faculty_signup", args=[FACULTY_TOKEN])
+        ).content.decode()
+        assert "id_phone_display" not in faculty_page
+        assert 'name="phone_number"' not in faculty_page
+        assert "Create a student account" not in faculty_page
 
     def test_signup_requires_coordinator_registered_number(
         self, client, bsed_program, signup_year_level, monkeypatch
@@ -561,6 +573,7 @@ class TestSignupRoles:
         assert user.department is not None
         assert user.department.name == "College of Education"
         assert user.employee_id == "EMP-2024-001"
+        assert user.phone_number == ""
         assert user.is_active is False
         assert user.approval_status == User.ApprovalStatus.PENDING
         assert user.year_level_id is None
@@ -741,7 +754,6 @@ class TestSignupRoles:
                 "last_name": "Person",
                 "department": "",
                 "employee_id": "EMP-CHAIR-01",
-                "phone_number": "09123456789",
                 "year_level": signup_year_level.pk,
             },
         )

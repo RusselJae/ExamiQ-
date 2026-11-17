@@ -43,6 +43,7 @@ class TestProfileView:
         assert "profile-avatar-camera" in content
         assert "profile-update-form" in content
         assert "Pilot Study" not in content
+        assert "id_phone_number" in content
         assert "id_year_level" in content
         assert "id_section" not in content  # Section field removed
 
@@ -149,6 +150,42 @@ class TestProfileView:
         student.refresh_from_db()
         assert student.suffix == "Jr."
         assert student.get_full_name() == "Alex Student Jr."
+
+    def test_update_phone_number(self, client, student):
+        client.force_login(student)
+        response = client.post(
+            reverse("users:profile"),
+            {
+                "action": "update_profile",
+                "first_name": "Alex",
+                "middle_name": "",
+                "last_name": "Student",
+                "phone_number": "09171234567",
+                **_student_profile_fields(student),
+            },
+        )
+        assert response.status_code == 302
+        student.refresh_from_db()
+        assert student.phone_number == "09171234567"
+
+    def test_update_phone_number_rejects_invalid_value(self, client, student):
+        original = student.phone_number
+        client.force_login(student)
+        response = client.post(
+            reverse("users:profile"),
+            {
+                "action": "update_profile",
+                "first_name": "Alex",
+                "middle_name": "",
+                "last_name": "Student",
+                "phone_number": "12345",
+                **_student_profile_fields(student),
+            },
+        )
+        assert response.status_code == 200
+        assert "Enter a valid 10-digit mobile number" in response.content.decode()
+        student.refresh_from_db()
+        assert student.phone_number == original
 
     def test_upload_profile_photo(self, client, student):
         from io import BytesIO

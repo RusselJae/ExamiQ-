@@ -36,7 +36,6 @@ def _student_signup_payload(year_level, section, **overrides):
         "middle_name": "",
         "suffix": "",
         "student_number": "123456789",
-        "phone_number": "09123456789",
         "year_level": year_level.pk if year_level else "",
         "section": section.pk if section else "",
     }

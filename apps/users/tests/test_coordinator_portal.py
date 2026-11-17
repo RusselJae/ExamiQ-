@@ -29,7 +29,6 @@ def _coordinator_data(department, **extra):
         "middle_name": "",
         "suffix": "",
         "employee_id": "COORD-001",
-        "phone_number": "09123456789",
         "department": department.pk,
     }
     data.update(extra)
