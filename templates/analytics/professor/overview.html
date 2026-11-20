@@ -10,8 +10,6 @@
     <div class="overview-kpi-grid mb-8">
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Courses" icon="book" variant="teal" %}</div>
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.accuracy|floatformat:1 suffix="%" label="Overall accuracy" icon="target" variant="amber" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.total_sessions label="Completed sessions" icon="calendar" variant="neutral" subtext=overview.sessions_subtext %}</div>
 </div>
 
 {% if overview.students_by_year_level %}
@@ -41,8 +39,7 @@
     <a href="{% url 'analytics_professor:students' %}" class="btn-secondary btn-primary-sm">View students</a>
 </div>
 
-<div class="faculty-overview-split mb-8">
-<div class="bento-card bento-card-inner p-6 student-confidence-card" data-confidence-card>
+<div class="bento-card bento-card-inner p-6 mb-8 student-confidence-card" data-confidence-card>
     <div class="overview-trends-card__intro student-confidence-card__intro">
         <div class="student-confidence-card__title-row">
             <h2 class="overview-trends-card__title" id="overview-donut-title">Exam Performance</h2>
@@ -116,34 +113,6 @@
         <p class="empty-state-title">Not enough data yet</p>
         <p class="empty-state-body">Confidence ratings appear once your students complete a session.</p>
     </div>
-</div>
-
-<aside class="bento-card bento-card-inner p-6 faculty-course-panel" aria-labelledby="faculty-course-panel-title">
-    <div class="overview-trends-card__intro">
-        <h2 class="overview-trends-card__title" id="faculty-course-panel-title">Courses handled</h2>
-        <p class="overview-trends-card__subtitle">Accuracy across completed work in each course.</p>
-    </div>
-    {% if handled_course_cards %}
-    <ul class="faculty-course-list">
-        {% for card in handled_course_cards %}
-        <li class="faculty-course-item">
-            <div class="faculty-course-item__head">
-                <span class="course-chip">{{ card.subject.code }}</span>
-                {% if card.total_answers %}
-                <span class="faculty-course-item__accuracy{% if card.accuracy < 50 %} is-low{% elif card.accuracy < 80 %} is-mid{% endif %}">{{ card.accuracy }}%</span>
-                {% else %}
-                <span class="faculty-course-item__muted">No answers yet</span>
-                {% endif %}
-            </div>
-            <p class="faculty-course-item__name">{{ card.subject.name }}</p>
-            <p class="faculty-course-item__meta">{{ card.student_count }} student{{ card.student_count|pluralize }} A· {{ card.sessions_completed }} session{{ card.sessions_completed|pluralize }}</p>
-        </li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-sm text-examiq-slate">No handled courses yet.</p>
-    {% endif %}
-</aside>
 </div>
 
 <div class="bento-card bento-card-inner p-6 mb-6" data-activity-card>

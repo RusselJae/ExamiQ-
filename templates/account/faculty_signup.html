@@ -2,11 +2,14 @@
 
 {% block title %}Faculty Account Request - EXAMIQ+{% endblock %}
 
-{% block auth_nav %}{% include "components/auth_nav_signup.html" %}{% endblock %}
+{% block auth_nav %}{% endblock %}
 
 {% block auth_card_class %} auth-page__card--signup{% endblock %}
 
 {% block auth_content %}
+<div class="auth-form-brand">
+    {% include "components/landing_logo.html" %}
+</div>
 <h2 class="auth-page__heading">Request a faculty account</h2>
 <p class="auth-page__subheading">Verify your email, then your program coordinator will review your request and assign your teaching sections.</p>
 

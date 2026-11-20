@@ -1,18 +1,28 @@
 <label class="auth-field{% if field.errors %} auth-field--error{% endif %}" for="{{ field.id_for_label }}">
     <span class="auth-field__label">{{ field.label }}</span>
-    <input
-        type="{{ field.field.widget.input_type|default:'text' }}"
-        name="{{ field.html_name }}"
-        id="{{ field.id_for_label }}"
-        value="{{ field.value|default:'' }}"
-        class="auth-field__input"
-        {% if field.field.required %}required{% endif %}
-        {% if field.field.widget.attrs.autocomplete %}autocomplete="{{ field.field.widget.attrs.autocomplete }}"{% endif %}
-        {% if field.field.widget.attrs.placeholder %}placeholder="{{ field.field.widget.attrs.placeholder }}"{% endif %}
-        {% if field.field.widget.attrs.inputmode %}inputmode="{{ field.field.widget.attrs.inputmode }}"{% endif %}
-        {% if field.field.widget.attrs.maxlength %}maxlength="{{ field.field.widget.attrs.maxlength }}"{% endif %}
-        {% if field.field.widget.attrs.pattern %}pattern="{{ field.field.widget.attrs.pattern }}"{% endif %}
-    >
+    <div class="auth-input-shell">
+        {% if icon == "mail" %}
+        <span class="auth-input-icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16v12H4z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m4 7 8 6 8-6"/>
+            </svg>
+        </span>
+        {% endif %}
+        <input
+            type="{{ field.field.widget.input_type|default:'text' }}"
+            name="{{ field.html_name }}"
+            id="{{ field.id_for_label }}"
+            value="{{ field.value|default:'' }}"
+            class="auth-field__input{% if icon == 'mail' %} auth-field__input--with-icon{% endif %}"
+            {% if field.field.required %}required{% endif %}
+            {% if field.field.widget.attrs.autocomplete %}autocomplete="{{ field.field.widget.attrs.autocomplete }}"{% endif %}
+            {% if field.field.widget.attrs.placeholder %}placeholder="{{ field.field.widget.attrs.placeholder }}"{% endif %}
+            {% if field.field.widget.attrs.inputmode %}inputmode="{{ field.field.widget.attrs.inputmode }}"{% endif %}
+            {% if field.field.widget.attrs.maxlength %}maxlength="{{ field.field.widget.attrs.maxlength }}"{% endif %}
+            {% if field.field.widget.attrs.pattern %}pattern="{{ field.field.widget.attrs.pattern }}"{% endif %}
+        >
+    </div>
     {% if field.errors %}
     <p class="auth-field__error">{{ field.errors.0 }}</p>
     {% endif %}

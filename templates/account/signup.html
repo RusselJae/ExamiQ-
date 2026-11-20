@@ -3,11 +3,14 @@
 
 {% block title %}Student Sign Up - EXAMIQ+{% endblock %}
 
-{% block auth_nav %}{% include "components/auth_nav_signup.html" %}{% endblock %}
+{% block auth_nav %}{% endblock %}
 
 {% block auth_card_class %} auth-page__card--signup{% endblock %}
 
 {% block auth_content %}
+<div class="auth-form-brand">
+    {% include "components/landing_logo.html" %}
+</div>
 <h2 class="auth-page__heading">Create your student account</h2>
 <p class="auth-page__subheading">Join EXAMIQ+ and start reviewing smarter.</p>
 

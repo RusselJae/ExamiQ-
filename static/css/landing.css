@@ -2075,3 +2075,116 @@ html:has(body.auth-page) {
         background-position: center top;
     }
 }
+
+/* Sign-in/sign-up form head and field icons */
+.auth-form-brand {
+    display: flex;
+    justify-content: center;
+    margin: 0.15rem 0 1rem;
+}
+
+.auth-form-brand .landing-logo {
+    justify-content: center;
+}
+
+.auth-form-brand .landing-logo__name {
+    font-size: 1.25rem;
+}
+
+.auth-form-brand .landing-logo__tagline {
+    font-size: 0.625rem;
+}
+
+.auth-input-shell {
+    position: relative;
+    display: block;
+}
+
+.auth-input-icon {
+    position: absolute;
+    top: 50%;
+    left: 0.8rem;
+    transform: translateY(-50%);
+    display: inline-flex;
+    width: 1.1rem;
+    height: 1.1rem;
+    color: var(--landing-text-muted);
+    pointer-events: none;
+}
+
+.auth-input-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.auth-page .auth-input-shell:focus-within .auth-input-icon,
+.auth-page .auth-password-wrap:focus-within .auth-input-icon {
+    color: var(--landing-primary);
+}
+
+.auth-page .auth-field__input.auth-field__input--with-icon {
+    padding-left: 2.5rem;
+}
+
+.auth-page__card--signup .auth-form-brand {
+    margin-bottom: 0.75rem;
+}
+
+@media (max-width: 639px) {
+    .auth-page:has(.auth-form-brand) .auth-page__main {
+        padding-top: 0.75rem;
+    }
+
+    .auth-form-brand {
+        margin: 0 0 0.75rem;
+    }
+
+    .auth-form-brand .landing-logo__icon {
+        width: 1.9rem;
+        height: 1.9rem;
+    }
+
+    .auth-form-brand .landing-logo__name {
+        font-size: 1.1rem;
+    }
+}
+
+/* A little more room around auth labels and inputs. */
+.auth-page__card:not(.auth-page__card--signup) .auth-field {
+    gap: 0.5rem;
+}
+
+.auth-page__card:not(.auth-page__card--signup) .auth-field__input,
+.auth-page__card:not(.auth-page__card--signup) .auth-field__input--password {
+    height: 2.8rem;
+    min-height: 2.8rem;
+}
+
+/* Slightly smaller form logo. */
+.auth-form-brand {
+    margin: 0.1rem 0 0.9rem;
+}
+
+.auth-form-brand .landing-logo__icon {
+    width: 2rem;
+    height: 2rem;
+}
+
+.auth-form-brand .landing-logo__name {
+    font-size: 1.15rem;
+}
+
+.auth-form-brand .landing-logo__tagline {
+    font-size: 0.58rem;
+}
+
+@media (max-width: 639px) {
+    .auth-form-brand .landing-logo__icon {
+        width: 1.75rem;
+        height: 1.75rem;
+    }
+
+    .auth-form-brand .landing-logo__name {
+        font-size: 1.05rem;
+    }
+}

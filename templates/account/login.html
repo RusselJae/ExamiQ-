@@ -2,9 +2,12 @@
 
 {% block title %}Sign In - EXAMIQ+{% endblock %}
 
-{% block auth_nav %}{% include "components/auth_nav_login.html" %}{% endblock %}
+{% block auth_nav %}{% endblock %}
 
 {% block auth_content %}
+<div class="auth-form-brand">
+    {% include "components/landing_logo.html" %}
+</div>
 <h2 class="auth-page__heading">Welcome back</h2>
 <p class="auth-page__subheading">Log in to continue your review session.</p>
 
@@ -44,8 +47,8 @@
     </div>
     {% endif %}
 
-    {% include "components/auth_field.html" with field=form.login %}
-    {% include "components/auth_password_field.html" with field=form.password %}
+    {% include "components/auth_field.html" with field=form.login icon="mail" %}
+    {% include "components/auth_password_field.html" with field=form.password icon="lock" %}
 
     <div class="auth-form-actions">
         {% if form.remember %}
