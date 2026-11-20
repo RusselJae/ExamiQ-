@@ -195,6 +195,23 @@ class TestReviewSetupPage:
         assert "review_window" not in content
         assert "Open review windows" not in content
 
+    def test_setup_summary_uses_actual_available_questions(
+        self, client, student, mcq_question, bsed_program, subject
+    ):
+        from conftest import make_bsed_student
+
+        make_bsed_student(student, subject=subject, bsed_program=bsed_program)
+        client.force_login(student)
+
+        response = client.get(reverse("reviews:setup"))
+
+        assert response.status_code == 200
+        assert response.context["estimate_questions"] == 1
+        assert response.context["requested_questions"] == 3
+        content = response.content.decode()
+        assert 'data-easy-count="1"' in content
+        assert "exam will contain 1 question" in content
+
 
 @pytest.mark.django_db
 class TestReviewSetupPrefill:
@@ -291,7 +308,9 @@ class TestSessionSummaryView:
         assert "Missed 1" in content
         assert "Review this answer" in content
         assert "session-complete-header" in content
-        assert content.index("session-complete-header") < content.index("session-complete-main")
+        assert content.index("session-complete-header") < content.index(
+            "session-complete-main"
+        )
         assert topic.name in content
         assert "From this exam" in content
         assert "answer-review-grid" in content

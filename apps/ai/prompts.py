@@ -1436,6 +1436,39 @@ SUBJECT_RELEVANCE_JSON_SCHEMA = (
     '"reason": "Covers right-triangle trigonometry."}'
 )
 
+MATH_RELEVANCE_SYSTEM = (
+    f"You are {EXAMIQ_PERSONA} curriculum analyst for mathematics education. "
+    "Return valid JSON only. No markdown fences.\n"
+    "Accept material whose primary content is mathematics or mathematics "
+    "education, including algebra, geometry, trigonometry, calculus, "
+    "statistics, probability, number theory, discrete mathematics, history "
+    "of mathematics, or teaching methods for mathematics.\n"
+    "Reject material that is primarily non-mathematical (for example cooking, "
+    "literature, business, or general study advice). A brief mention of "
+    "mathematics inside an otherwise non-math document is not enough."
+)
+
+MATH_RELEVANCE_JSON_SCHEMA = (
+    '{"related": true, "reason": "Covers a mathematics topic."}'
+)
+
+
+def build_math_relevance_prompt(source_material: str) -> tuple[str, str]:
+    """Return (system, user) prompts for broad mathematics-material screening."""
+    excerpt = (source_material or "").strip()
+    if len(excerpt) > 12000:
+        excerpt = excerpt[:12000] + "\n.[truncated]"
+    user = (
+        "A faculty member uploaded a learning module for a mathematics course.\n"
+        "Decide whether its primary content is mathematics or mathematics "
+        "education. Do not require a specific course code or topic name.\n"
+        "Reject only material that is primarily non-mathematical.\n"
+        "Keep reason to one short sentence.\n\n"
+        f"Module text excerpt:\n{excerpt}\n\n"
+        f"Return JSON only matching:\n{MATH_RELEVANCE_JSON_SCHEMA}"
+    )
+    return MATH_RELEVANCE_SYSTEM, user
+
 
 def build_subject_relevance_prompt(
     source_material: str,

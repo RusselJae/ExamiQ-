@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.ai.subject_relevance import (
+    assess_math_relevance,
     assess_question_subject_relevance,
     assess_subject_relevance,
 )
@@ -31,6 +32,20 @@ def test_subject_relevance_matches_code_and_topic():
     )
     assert result["related"] is True
     assert result["matched_topic_id"] == 1
+
+
+def test_math_relevance_accepts_any_math_branch():
+    result = assess_math_relevance(
+        "History of Mathematics: the Mayan number system and algebra.",
+    )
+    assert result["related"] is True
+
+
+def test_math_relevance_rejects_non_math_material():
+    result = assess_math_relevance(
+        "Introduction to culinary plating and kitchen safety protocols.",
+    )
+    assert result["related"] is False
 
 
 def test_subject_relevance_rejects_unrelated_material():

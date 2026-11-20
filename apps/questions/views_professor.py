@@ -1239,18 +1239,15 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
 
         sample = sample_material_for_relevance(document)
         relevance = assess_subject_relevance(sample, subject, topics)
+        relevance_warning = ""
         if not relevance["related"]:
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "error": relevance.get("reason")
-                    or "Uploaded module is not related to this course subject.",
-                    "relevance_blocked": True,
-                    "reason": relevance.get("reason")
-                    or "Uploaded module is not related to this course subject.",
-                    "subject_score": relevance.get("subject_score", 0),
-                    "topic_score": relevance.get("topic_score", 0),
-                }
+            relevance_warning = (
+                relevance.get("reason")
+                or "The module is not a close match for this course subject."
+            )
+            relevance_warning = (
+                f"{relevance_warning} Questions will be generated from the "
+                "selected course topic instead."
             )
 
         topic_id = relevance.get("matched_topic_id") or request.POST.get("topic")
@@ -1264,13 +1261,17 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         if topic is None:
             topic = topics[0]
 
-        source_material = retrieve_material_for_topic(document=document, topic=topic)
-        if not source_material:
-            source_material = sample
-        if not source_material:
-            return JsonResponse(
-                {"error": "Could not read enough text from the uploaded module."},
-                status=400,
+        source_material = ""
+        if not relevance_warning:
+            source_material = retrieve_material_for_topic(
+                document=document, topic=topic
+            )
+            if not source_material:
+                source_material = sample
+        if not source_material and not relevance_warning:
+            relevance_warning = (
+                "No readable material text was available. Questions will be "
+                "generated from the selected course topic instead."
             )
 
         job = start_question_generation_job(
@@ -1280,7 +1281,7 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
             difficulty=difficulty,
             count=count,
             source_material=source_material,
-            learning_document=document,
+            learning_document=document if not relevance_warning else None,
             question_type=question_type,
         )
         return JsonResponse(
@@ -1292,6 +1293,7 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                 # "Source material" picker instead of re-uploading it each run.
                 "learning_document_id": document.pk if document else None,
                 "learning_document_title": (document.display_title if document else ""),
+                "relevance_warning": relevance_warning,
                 "status_url": reverse(
                     "analytics_professor:question_ai_generate_status",
                     kwargs={"course_pk": self.course.pk, "job_id": job.pk},
@@ -1538,10 +1540,10 @@ class QuestionAIDetectTopicsView(ProfessorCourseMixin, View):
             )
         from django.conf import settings
 
-        max_mb = getattr(settings, "MATERIAL_UPLOAD_MAX_MB", 25)
+        max_mb = getattr(settings, "MATERIAL_UPLOAD_MAX_MB", 100)
         if uploaded.size > max_mb * 1024 * 1024:
             return JsonResponse(
-                {"error": f"That PDF is larger than {max_mb} MB. Compress it first."},
+                {"error": f"That file is larger than {max_mb} MB. Compress it first."},
                 status=400,
             )
         try:

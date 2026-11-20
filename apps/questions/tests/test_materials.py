@@ -128,7 +128,7 @@ class TestBatchUploadVisibility:
         client.force_login(professor)
         with (
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 return_value={"related": False, "reason": "Not about this subject."},
             ),
             patch(
@@ -236,17 +236,17 @@ class TestFacultyMaterialsUI:
         assert "materials-download-btn" in content
         assert "materials-edit-btn" in content
 
-    def test_non_pdf_documents_are_hidden_from_the_library(
+    def test_supported_non_pdf_documents_list_in_the_library(
         self, client, professor, subject
     ):
-        """Only PDF uploads list in the library; legacy files stay hidden."""
+        """Supported math-document formats are visible beside PDFs."""
         course = get_or_create_catalog_course(professor, subject)
-        _make_ready_doc(
+        text_doc = _make_ready_doc(
             course=course,
             subject=subject,
             user=professor,
-            title="Legacy text module",
-            filename="legacy.txt",
+            title="Text module",
+            filename="module.txt",
         )
         pdf = _make_ready_doc(
             course=course,
@@ -265,8 +265,30 @@ class TestFacultyMaterialsUI:
         content = response.content.decode()
         assert response.status_code == 200
         assert "PDF module" in content
-        assert "Legacy text module" not in content
+        assert "Text module" in content
+        assert text_doc.display_title in content
         assert pdf.display_title in content
+
+    def test_student_ready_documents_delete_unrestorable_files(
+        self, professor, subject
+    ):
+        """Broken rows are permanently removed from the student library."""
+        from apps.ai.material_services import ready_documents_for_subject
+
+        course = get_or_create_catalog_course(professor, subject)
+        lost = LearningDocument.objects.create(
+            course_id=course.pk,
+            subject=subject,
+            created_by=professor,
+            title="Lost module",
+            original_name="lost.pdf",
+            status=LearningDocument.Status.READY,
+        )
+
+        docs = ready_documents_for_subject(subject)
+
+        assert lost.pk not in {doc.pk for doc in docs}
+        assert not LearningDocument.objects.filter(pk=lost.pk).exists()
 
     def test_detail_page_opens_full_screen_edit_dialog(
         self, client, professor, subject
@@ -468,31 +490,25 @@ class _AlwaysUnrelated:
     """Patch the relevance gate so tests do not depend on keyword scoring."""
 
     @staticmethod
-    def __call__(sample, subject, topics):
+    def __call__(sample, *args, **kwargs):
         return {
             "related": False,
-            "matched_topic_id": None,
-            "subject_score": 0,
-            "topic_score": 0,
             "reason": "This module does not look related to the selected subject.",
         }
 
 
 class _AlwaysRelated:
     @staticmethod
-    def __call__(sample, subject, topics):
+    def __call__(sample, *args, **kwargs):
         return {
             "related": True,
-            "matched_topic_id": None,
-            "subject_score": 5,
-            "topic_score": 5,
             "reason": "",
         }
 
 
 @pytest.mark.django_db
 class TestMaterialUploadRelevanceGate:
-    """Uploads that do not match the course subject are rejected."""
+    """Uploads are screened for broad mathematics relevance, not exact codes."""
 
     @pytest.fixture(autouse=True)
     def _math_curriculum(self, subject, course, bsed_program):
@@ -522,7 +538,7 @@ class TestMaterialUploadRelevanceGate:
         client.force_login(professor)
         with (
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 _AlwaysUnrelated(),
             ),
             patch(
@@ -571,7 +587,7 @@ class TestMaterialUploadRelevanceGate:
 
         with (
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 _AlwaysUnrelated(),
             ),
             patch(
@@ -603,7 +619,7 @@ class TestMaterialUploadRelevanceGate:
 
         with (
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 _AlwaysRelated(),
             ),
             patch(
@@ -624,6 +640,37 @@ class TestMaterialUploadRelevanceGate:
 
         assert LearningDocument.objects.filter(course_id=course.pk).count() == 1
 
+    def test_text_document_upload_is_accepted(self, client, professor, subject):
+        course = get_or_create_catalog_course(professor, subject)
+        client.force_login(professor)
+
+        with (
+            patch(
+                "apps.questions.views_materials.assess_math_relevance",
+                _AlwaysRelated(),
+            ),
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                return_value=_pdf_pages(RELATED_UPLOAD),
+            ),
+        ):
+            self._post(
+                client,
+                course,
+                subject,
+                {
+                    "source_file": SimpleUploadedFile(
+                        "lesson.txt",
+                        b"Mathematics module: linear equations and slope.",
+                        content_type="text/plain",
+                    )
+                },
+            )
+
+        doc = LearningDocument.objects.get(course_id=course.pk)
+        assert doc.original_name == "lesson.txt"
+        assert doc.status == LearningDocument.Status.READY
+
     def test_relevance_is_assessed_before_anything_is_written(
         self, client, professor, subject
     ):
@@ -631,19 +678,12 @@ class TestMaterialUploadRelevanceGate:
         client.force_login(professor)
         seen = {}
 
-        def _capture(sample, subj, topics):
+        def _capture(sample):
             seen["sample"] = sample
-            seen["subject"] = subj
-            return {
-                "related": False,
-                "matched_topic_id": None,
-                "reason": "nope",
-                "subject_score": 0,
-                "topic_score": 0,
-            }
+            return {"related": False, "reason": "nope"}
 
         with (
-            patch("apps.questions.views_materials.assess_subject_relevance", _capture),
+            patch("apps.questions.views_materials.assess_math_relevance", _capture),
             patch(
                 "apps.questions.views_materials.extract_pages_from_upload",
                 return_value=_pdf_pages(UNRELATED_UPLOAD),
@@ -660,31 +700,37 @@ class TestMaterialUploadRelevanceGate:
                 },
             )
 
-        assert seen["subject"] == subject
         assert "Photosynthesis" in seen["sample"]
 
-    def test_unreadable_upload_is_rejected_before_it_is_saved(
+    def test_unreadable_upload_is_saved_for_download_with_warning(
         self, client, professor, subject
     ):
-        """No readable text means we cannot prove it belongs to the course."""
+        """Scanned/thin files stay downloadable; AI fallback happens later."""
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         blob = SimpleUploadedFile(
             "scan.pdf", b"%PDF-1.4 tiny", content_type="application/pdf"
         )
 
-        with patch(
-            "apps.questions.views_materials.assess_subject_relevance"
-        ) as mock_relevance:
+        with (
+            patch(
+                "apps.questions.views_materials.assess_math_relevance"
+            ) as mock_relevance,
+            patch(
+                "apps.questions.views_materials.extract_pages_from_upload",
+                side_effect=SourceMaterialError("Could not extract enough text"),
+            ),
+        ):
             response = self._post(client, course, subject, {"source_file": blob})
 
         mock_relevance.assert_not_called()
         assert response.status_code == 200
-        assert LearningDocument.objects.filter(course_id=course.pk).count() == 0
-        assert "Could not extract enough text" in response.content.decode()
+        doc = LearningDocument.objects.get(course_id=course.pk)
+        assert doc.status == LearningDocument.Status.READY
+        assert "could not be extracted" in doc.error_message.lower()
 
     def test_unsupported_extension_is_rejected(self, client, professor, subject):
-        """Only PDF may be uploaded to the content library."""
+        """Executable/office formats outside the supported set are rejected."""
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
         blob = SimpleUploadedFile(
@@ -694,7 +740,7 @@ class TestMaterialUploadRelevanceGate:
         )
 
         with patch(
-            "apps.questions.views_materials.assess_subject_relevance",
+            "apps.questions.views_materials.assess_math_relevance",
             _AlwaysRelated(),
         ):
             response = self._post(client, course, subject, {"source_file": blob})
@@ -706,10 +752,18 @@ class TestMaterialUploadRelevanceGate:
     def test_allowed_extensions_are_exactly_the_supported_set(self):
         from apps.ai.ingest import allowed_upload_suffixes, is_allowed_upload
 
-        assert set(allowed_upload_suffixes()) == {".pdf"}
+        assert set(allowed_upload_suffixes()) == {
+            ".pdf",
+            ".docx",
+            ".txt",
+            ".md",
+            ".csv",
+        }
         assert is_allowed_upload("Lesson.PDF") is True
-        assert is_allowed_upload("notes.txt") is False
-        assert is_allowed_upload("notes.docx") is False
+        assert is_allowed_upload("notes.txt") is True
+        assert is_allowed_upload("notes.docx") is True
+        assert is_allowed_upload("notes.md") is True
+        assert is_allowed_upload("notes.csv") is True
         assert is_allowed_upload("deck.pptx") is False
         assert is_allowed_upload("sheet.xlsx") is False
         assert is_allowed_upload("photo.png") is False
@@ -730,7 +784,7 @@ class TestMaterialUploadRelevanceGate:
 
         with (
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 _AlwaysRelated(),
             ),
             patch(
@@ -759,20 +813,12 @@ class TestMaterialUploadRelevanceGate:
         """The course-scoped form omits subject_id; the gate must still run."""
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
-        seen = {}
-
-        def _capture(sample, subj, topics):
-            seen["subject"] = subj
-            return {
-                "related": True,
-                "matched_topic_id": None,
-                "reason": "",
-                "subject_score": 5,
-                "topic_score": 5,
-            }
 
         with (
-            patch("apps.questions.views_materials.assess_subject_relevance", _capture),
+            patch(
+                "apps.questions.views_materials.assess_math_relevance",
+                _AlwaysRelated(),
+            ),
             patch(
                 "apps.questions.views_materials.extract_pages_from_upload",
                 return_value=_pdf_pages(RELATED_UPLOAD),
@@ -789,7 +835,6 @@ class TestMaterialUploadRelevanceGate:
             )
 
         assert response.status_code == 200
-        assert seen["subject"] == subject
         doc = LearningDocument.objects.get(course_id=course.pk)
         assert doc.subject == subject
 
@@ -806,7 +851,7 @@ class TestMaterialUploadRelevanceGate:
                 return_value=Subject.objects.none(),
             ),
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 _AlwaysRelated(),
             ),
             patch(
@@ -844,8 +889,8 @@ class TestMaterialUploadFormTrimmed:
         ).content.decode()
 
         # Supported formats surface inside the Add content modal dropzone.
-        assert "PDF only" in content
-        assert 'accept=".pdf,application/pdf"' in content
+        assert "PDF, DOCX, TXT, MD, CSV" in content
+        assert 'accept=".pdf,.docx,.txt,.md,.csv,' in content
         assert "Upload material" not in content
         assert 'name="material_type"' not in content
         assert 'id="material-type"' not in content
@@ -863,8 +908,8 @@ class TestMaterialUploadFormTrimmed:
         ).content.decode()
 
         # Supported formats surface inside the Add content modal dropzone.
-        assert "PDF only" in content
-        assert 'accept=".pdf,application/pdf"' in content
+        assert "PDF, DOCX, TXT, MD, CSV" in content
+        assert 'accept=".pdf,.docx,.txt,.md,.csv,' in content
         assert "Upload material" not in content
         assert 'name="material_type"' not in content
 
@@ -1240,7 +1285,7 @@ class TestStudentMaterials:
         assert 'id="materials-subjects-table"' in hub_content
         assert ">Open</a>" in hub_content
         assert "materials-subject-grid" not in hub_content
-        assert "entity-card" in hub_content
+        assert "subject-banner-card" in hub_content
 
         listing = client.get(
             reverse(
@@ -1315,7 +1360,7 @@ class TestContentModalFlows:
                 ],
             ),
             patch(
-                "apps.questions.views_materials.assess_subject_relevance",
+                "apps.questions.views_materials.assess_math_relevance",
                 _AlwaysRelated(),
             ),
         ):

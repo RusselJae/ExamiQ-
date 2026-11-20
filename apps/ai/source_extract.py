@@ -67,7 +67,7 @@ def extract_pages_from_upload(uploaded_file) -> list[dict]:
         pages = _extract_pdf_pages(raw)
     else:
         raise SourceMaterialError(
-            "Unsupported file type. Upload a TXT, MD, DOCX, or PDF file."
+            "Unsupported file type. Upload a PDF, DOCX, TXT, MD, or CSV file."
         )
 
     cleaned = []

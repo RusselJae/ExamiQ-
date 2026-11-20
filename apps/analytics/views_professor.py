@@ -92,6 +92,11 @@ class ProfessorDashboardView(ProfessorRequiredMixin, ListView):
             professor=self.request.user, is_archived=False
         ).select_related("program")
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["overview"] = professor_overview_summary(self.request.user)
+        return context
+
 
 class ProfessorOverviewView(ProfessorRequiredMixin, TemplateView):
     template_name = "analytics/professor/overview.html"

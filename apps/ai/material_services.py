@@ -7,27 +7,22 @@ import logging
 
 from django.db.models import Q
 
-from apps.ai.ingest import ingest_learning_upload
+from apps.ai.ingest import LIBRARY_UPLOAD_SUFFIXES, ingest_learning_upload
 from apps.ai.models import LearningChunk, LearningDocument
 from apps.ai.source_extract import SourceMaterialError
 
 # Guardrail so a stray paste cannot rewrite a whole corpus through the editor.
 MAX_EDITABLE_CHARS = 400_000
 
-# The content library lists PDFs only. Legacy mixed-format uploads stay in the
-# database (their chunks still feed AI retrieval) but are hidden from every
-# library view: faculty, student hub, and source-material pickers.
-LIBRARY_FILE_SUFFIX = ".pdf"
-
 logger = logging.getLogger(__name__)
 
 
-def _pdf_library_only(queryset):
-    """Restrict a LearningDocument queryset to PDF uploads."""
-    return queryset.filter(
-        Q(original_name__iendswith=LIBRARY_FILE_SUFFIX)
-        | Q(file__iendswith=LIBRARY_FILE_SUFFIX)
-    )
+def _library_file_only(queryset):
+    """Restrict a LearningDocument queryset to supported library formats."""
+    query = Q()
+    for suffix in LIBRARY_UPLOAD_SUFFIXES:
+        query |= Q(original_name__iendswith=suffix) | Q(file__iendswith=suffix)
+    return queryset.filter(query)
 
 
 def documents_for_course(
@@ -36,7 +31,7 @@ def documents_for_course(
     include_archived: bool = False,
     include_batch_uploads: bool = False,
 ):
-    qs = _pdf_library_only(
+    qs = _library_file_only(
         LearningDocument.objects.filter(course_id=course_id)
         .select_related("subject", "created_by")
         .order_by("-created")
@@ -54,7 +49,7 @@ def documents_for_courses(
     """PDF library across several course offerings (newest first)."""
     if not course_ids:
         return LearningDocument.objects.none()
-    qs = _pdf_library_only(
+    qs = _library_file_only(
         LearningDocument.objects.filter(course_id__in=course_ids)
         .select_related("subject", "created_by")
         .order_by("-created")
@@ -452,7 +447,7 @@ def documents_for_subject(
     query = Q(subject=subject)
     if course is not None:
         query |= Q(course_id=course.pk)
-    qs = _pdf_library_only(
+    qs = _library_file_only(
         LearningDocument.objects.filter(query)
         .select_related("subject", "created_by")
         .distinct()
@@ -466,13 +461,24 @@ def documents_for_subject(
 
 
 def ready_documents_for_subject(subject):
-    """Ready, non-archived materials for a subject (de-duplicated by title)."""
+    """Ready, downloadable materials for a subject (de-duplicated by title).
+
+    Missing files are permanently removed here. ``ensure_download_file`` first
+    tries the persistent database copy (or a text rewrite); a row that cannot
+    be restored is deleted so students never see a download that 404s.
+    """
     docs = list(
         documents_for_subject(subject).filter(status=LearningDocument.Status.READY)
     )
     seen: set[str] = set()
     unique: list[LearningDocument] = []
     for doc in docs:
+        if not ensure_download_file(doc):
+            logger.warning(
+                "Deleting learning document %s: no downloadable file remains", doc.pk
+            )
+            delete_document(doc)
+            continue
         key = (doc.display_title or "").strip().casefold()
         if not key or key in seen:
             continue

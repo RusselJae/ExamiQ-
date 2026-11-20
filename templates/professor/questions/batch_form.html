@@ -1849,13 +1849,8 @@
         showGenerateLoading("Queued…", getGenerateCount());
         try {
             const result = await postGenerate();
-            if (result.data.relevance_blocked) {
-                clearGenerateModal();
-                throw new Error(
-                    result.data.reason ||
-                    result.data.error ||
-                    "Uploaded module is not related to this course subject."
-                );
+            if (result.data.relevance_warning && window.showToast) {
+                window.showToast(result.data.relevance_warning, "warning");
             }
             if (!result.resp.ok || !result.data.status_url) {
                 throw new Error(result.data.error || "Generation failed. Please try again.");

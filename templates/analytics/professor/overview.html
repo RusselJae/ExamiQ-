@@ -8,8 +8,10 @@
 
 <div class="course-home-panel">
     <div class="overview-kpi-grid mb-8">
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Course" icon="book" variant="teal" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Courses" icon="book" variant="teal" %}</div>
     <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.accuracy|floatformat:1 suffix="%" label="Overall accuracy" icon="target" variant="amber" %}</div>
+    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.total_sessions label="Completed sessions" icon="calendar" variant="neutral" subtext=overview.sessions_subtext %}</div>
 </div>
 
 {% if overview.students_by_year_level %}
@@ -33,7 +35,14 @@
 </section>
 {% endif %}
 
-<div class="bento-card bento-card-inner p-6 mb-8 student-confidence-card" data-confidence-card>
+<div class="faculty-quick-actions mb-6">
+    <a href="{% url 'analytics_professor:course_list' %}" class="btn-secondary btn-primary-sm">View all courses</a>
+    <a href="{% url 'analytics_professor:materials_hub' %}" class="btn-secondary btn-primary-sm">Upload content</a>
+    <a href="{% url 'analytics_professor:students' %}" class="btn-secondary btn-primary-sm">View students</a>
+</div>
+
+<div class="faculty-overview-split mb-8">
+<div class="bento-card bento-card-inner p-6 student-confidence-card" data-confidence-card>
     <div class="overview-trends-card__intro student-confidence-card__intro">
         <div class="student-confidence-card__title-row">
             <h2 class="overview-trends-card__title" id="overview-donut-title">Exam Performance</h2>
@@ -51,10 +60,10 @@
             <div class="student-confidence-card__popover" id="overview-donut-info" data-confidence-info hidden>
                 <p class="student-confidence-card__popover-title">How to read this chart</p>
                 <ul class="student-confidence-card__popover-list">
-                    <li><strong>Guessing</strong> — students rated the answer as Guessing.</li>
-                    <li><strong>Sure</strong> — students rated the answer as Sure.</li>
-                    <li><strong>Correct / Incorrect</strong> — whether the answer scored right.</li>
-                    <li><strong>Sure &amp; incorrect</strong> — the misconception to address in class first.</li>
+                    <li><strong>Correct / Incorrect</strong> — the primary chart grouping.</li>
+                    <li><strong>Sure / Guessing</strong> — how students rated their answer.</li>
+                    <li><strong>Incorrect · Sure</strong> — the misconception to address in class first.</li>
+                    <li><strong>Center and legend</strong> — show totals for correct and incorrect answers.</li>
                     <li><strong>Scope</strong> — students assigned to you this year.</li>
                 </ul>
             </div>
@@ -98,7 +107,7 @@
     </div>
     <div class="student-donut-layout">
         <div class="overview-trends-chart-wrap student-donut-wrap" id="overviewDonutWrap">
-            <canvas id="overviewDonutChart" aria-label="Confidence performance donut chart"></canvas>
+            <canvas id="overviewDonutChart" aria-label="Confidence performance donut chart: correct and incorrect answers by confidence"></canvas>
             <div class="student-donut-center" id="overview-donut-center" aria-hidden="true"></div>
         </div>
         <div class="student-donut-legend overview-confidence-legend" id="overview-donut-legend" hidden></div>
@@ -107,6 +116,34 @@
         <p class="empty-state-title">Not enough data yet</p>
         <p class="empty-state-body">Confidence ratings appear once your students complete a session.</p>
     </div>
+</div>
+
+<aside class="bento-card bento-card-inner p-6 faculty-course-panel" aria-labelledby="faculty-course-panel-title">
+    <div class="overview-trends-card__intro">
+        <h2 class="overview-trends-card__title" id="faculty-course-panel-title">Courses handled</h2>
+        <p class="overview-trends-card__subtitle">Accuracy across completed work in each course.</p>
+    </div>
+    {% if handled_course_cards %}
+    <ul class="faculty-course-list">
+        {% for card in handled_course_cards %}
+        <li class="faculty-course-item">
+            <div class="faculty-course-item__head">
+                <span class="course-chip">{{ card.subject.code }}</span>
+                {% if card.total_answers %}
+                <span class="faculty-course-item__accuracy{% if card.accuracy < 50 %} is-low{% elif card.accuracy < 80 %} is-mid{% endif %}">{{ card.accuracy }}%</span>
+                {% else %}
+                <span class="faculty-course-item__muted">No answers yet</span>
+                {% endif %}
+            </div>
+            <p class="faculty-course-item__name">{{ card.subject.name }}</p>
+            <p class="faculty-course-item__meta">{{ card.student_count }} student{{ card.student_count|pluralize }} A· {{ card.sessions_completed }} session{{ card.sessions_completed|pluralize }}</p>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-examiq-slate">No handled courses yet.</p>
+    {% endif %}
+</aside>
 </div>
 
 <div class="bento-card bento-card-inner p-6 mb-6" data-activity-card>
@@ -192,7 +229,7 @@
 {{ overview_donut|json_script:"overview-donut-data" }}
 {{ donut_section_map|json_script:"donut-section-map" }}
 {{ donut_sections|json_script:"donut-all-sections" }}
-<script src="{% static 'js/student-performance-donut.js' %}"></script>
+<script src="{% static 'js/student-performance-donut.js' %}?v=20261120b"></script>
 <script src="{% static 'js/donut-filters.js' %}"></script>
 <script src="{% static 'js/professor-donut-sections.js' %}?v=20261111b"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>

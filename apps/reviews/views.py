@@ -270,10 +270,52 @@ class ReviewSetupView(StudentRequiredMixin, View):
             else form.fields["difficulty"].initial or "easy"
         ) or "easy"
 
-        subject_count = len(selected_year_ids) + len(selected_extra_ids)
+        # Count the exact MCQ pool per subject and difficulty. The old estimate
+        # multiplied subjects by the requested count even when a subject had
+        # fewer approved questions, so the summary disagreed with the exam.
+        from django.db.models import Count
+
+        all_subjects = year_subjects + other_subjects
+        subject_ids = [subject.pk for subject in all_subjects]
+        count_rows = (
+            Question.objects.filter(
+                topic__subject_id__in=subject_ids,
+                is_active=True,
+                status=Question.Status.APPROVED,
+                question_type=Question.QuestionType.MCQ,
+            )
+            .values("topic__subject_id", "difficulty")
+            .annotate(total=Count("id"))
+        )
+        counts_by_subject: dict[int, dict[str, int]] = {}
+        for row in count_rows:
+            counts_by_subject.setdefault(
+                row["topic__subject_id"],
+                {level: 0 for level in Question.Difficulty.values},
+            )[row["difficulty"]] = row["total"]
+        for subject in all_subjects:
+            subject.question_counts = counts_by_subject.get(
+                subject.pk,
+                {level: 0 for level in Question.Difficulty.values},
+            )
+
+        selected_subject_ids = selected_year_ids | selected_extra_ids
+        selected_subjects = [
+            subject for subject in all_subjects if subject.pk in selected_subject_ids
+        ]
+        requested_questions = min(
+            MAX_TOTAL_QUESTIONS,
+            len(selected_subjects) * questions_per_subject,
+        )
         estimate_questions = min(
             MAX_TOTAL_QUESTIONS,
-            max(subject_count, 1) * questions_per_subject,
+            sum(
+                min(
+                    questions_per_subject,
+                    getattr(subject, "question_counts", {}).get(selected_difficulty, 0),
+                )
+                for subject in selected_subjects
+            ),
         )
         # Prefill/lock timer when faculty configured all currently selected subjects.
         preview_subjects = [
@@ -352,6 +394,7 @@ class ReviewSetupView(StudentRequiredMixin, View):
             "total_subjects_count": len(year_subjects) + len(other_subjects),
             "selected_year_ids": selected_year_ids,
             "selected_extra_ids": selected_extra_ids,
+            "selected_subject_count": len(selected_year_ids | selected_extra_ids),
             "show_extra_subjects": show_extra_subjects,
             "selected_question_types": selected_question_types,
             "selected_difficulty": selected_difficulty,
@@ -359,6 +402,7 @@ class ReviewSetupView(StudentRequiredMixin, View):
             "questions_per_subject": questions_per_subject,
             "estimate_seconds": estimate_seconds,
             "estimate_questions": estimate_questions,
+            "requested_questions": requested_questions,
             "estimate_minutes": estimate_minutes,
             "max_total_questions": MAX_TOTAL_QUESTIONS,
             "timer_locked_by_instructor": timer_locked,

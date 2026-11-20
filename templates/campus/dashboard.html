@@ -16,8 +16,11 @@
 </div>
 {% endif %}
 
-{% if sections_near_capacity or sections_full %}
+{% if pending_count or sections_near_capacity or sections_full %}
 <div class="campus-alert mb-6">
+    {% if pending_count %}
+    <p><strong>{{ pending_count }}</strong> account{{ pending_count|pluralize }} awaiting approval. <a href="{% url 'campus:user_list' %}?status=pending" class="text-link">Review accounts</a></p>
+    {% endif %}
     {% if sections_full %}
     <p><strong>{{ sections_full|length }}</strong> section{{ sections_full|length|pluralize }} at full capacity.</p>
     {% endif %}
@@ -34,12 +37,18 @@
     <div class="overview-kpi-grid__item">
         {% include "components/overview_stat_card.html" with value=professor_count label="Faculty" subtext=professor_subtext icon="book" variant="accent" %}
     </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=section_count label="Sections" icon="calendar" variant="teal" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=pending_count label="Pending approvals" icon="users" variant="warning" %}
+    </div>
 </div>
 
 <div class="campus-dashboard-grid">
     <section class="campus-panel">
         <h2 class="campus-panel__title">Quick actions</h2>
-        <div class="campus-action-list">
+        <div class="campus-action-list campus-action-list--compact">
             <a href="{% url 'campus:user_list' %}" class="campus-action-item">
                 <span class="campus-action-item__icon campus-action-item__icon--users" aria-hidden="true">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>

@@ -64,9 +64,9 @@ logger = logging.getLogger(__name__)
 _SAVING_STATUSES = frozenset({_STATUS_READY_FOR_SAVE, _STATUS_FORCE_SAVE})
 from apps.ai.models import LearningDocument
 from apps.ai.source_extract import extract_pages_from_upload
-from apps.ai.subject_relevance import assess_subject_relevance
+from apps.ai.subject_relevance import assess_math_relevance
 from apps.core.mixins import ProfessorCourseMixin, ProfessorRequiredMixin
-from apps.questions.models import Subject, Topic
+from apps.questions.models import Subject
 from apps.questions.views_professor import (
     _subject_for_course,
     subjects_for_course_section,
@@ -249,22 +249,12 @@ def _unsupported_upload_message(name: str) -> str:
 
 
 def _upload_too_large(uploaded) -> str:
-    """Return a message when a upload exceeds the configured PDF size limit."""
-    max_mb = getattr(settings, "MATERIAL_UPLOAD_MAX_MB", 25)
+    """Return a message when an upload exceeds the configured size limit."""
+    max_mb = getattr(settings, "MATERIAL_UPLOAD_MAX_MB", 100)
     limit = max_mb * 1024 * 1024
     if uploaded is not None and uploaded.size > limit:
-        return f"That PDF is larger than {max_mb} MB. Compress it and try again."
+        return f"That file is larger than {max_mb} MB. Compress it and try again."
     return ""
-
-
-def _extraction_rejection(pages: list[dict], error: str) -> str:
-    """Reject an upload when no readable text could be extracted at all."""
-    if pages:
-        return ""
-    return error or (
-        "Could not read any text from that PDF. Upload a text-based PDF "
-        "instead of a scanned image."
-    )
 
 
 def _relevance_sample(pages: list[dict]) -> str:
@@ -284,27 +274,26 @@ def _relevance_sample(pages: list[dict]) -> str:
 
 
 def _relevance_rejection(subject, pages: list[dict]) -> str:
-    """Return a message when the upload does not belong to ``subject``.
+    """Return a message when an upload is not broadly math-related.
 
-    Empty string means the upload passed (or could not be judged because no
-    readable text was available — in that case ingest keeps the file for
-    download with a warning rather than blocking a legitimate scan).
+    Empty string means the upload passed or could not be judged because no
+    readable text was available; in that case ingest keeps the file for
+    download with a warning rather than blocking a legitimate scan.
     """
     if not pages:
         return ""
-    topics = list(Topic.objects.filter(subject=subject))
-    verdict = assess_subject_relevance(_relevance_sample(pages), subject, topics)
+    verdict = assess_math_relevance(_relevance_sample(pages))
     if verdict.get("related"):
         return ""
     reason = str(verdict.get("reason") or "").strip()
-    if not reason:
-        code = getattr(subject, "code", "") or ""
-        name = getattr(subject, "name", "") or "this course subject"
-        reason = (
-            f"That file does not look related to {code} — {name}. "
-            "Upload material that matches this course subject."
-        )
-    return reason
+    if reason:
+        return reason
+    code = getattr(subject, "code", "") or ""
+    name = getattr(subject, "name", "") or "this course subject"
+    return (
+        f"That file does not look like mathematics material for {code} - {name}. "
+        "Upload a math-related document."
+    )
 
 
 class MaterialHubView(ProfessorRequiredMixin, View):
@@ -465,12 +454,12 @@ class MaterialListView(ProfessorCourseMixin, View):
 
 
 class MaterialValidateUploadView(ProfessorCourseMixin, View):
-    """AJAX pre-check: reject an unrelated PDF before it is attached."""
+    """AJAX pre-check: reject a non-math document before it is attached."""
 
     def post(self, request, course_pk):
         uploaded = request.FILES.get("source_file")
         if not uploaded:
-            return JsonResponse({"ok": False, "error": "Choose a PDF first."})
+            return JsonResponse({"ok": False, "error": "Choose a file first."})
         subject_id = request.POST.get("subject_id", "")
         subject = _resolve_upload_subject(self.course, request.user, subject_id)
         if subject is None:
@@ -483,13 +472,17 @@ class MaterialValidateUploadView(ProfessorCourseMixin, View):
         if size_error:
             return JsonResponse({"ok": False, "error": size_error})
         pages, extraction_error = _extract_upload_pages(uploaded)
-        extraction_rejection = _extraction_rejection(pages, extraction_error)
-        if extraction_rejection:
-            return JsonResponse({"ok": False, "error": extraction_rejection})
         rejection = _relevance_rejection(subject, pages)
         if rejection:
             return JsonResponse({"ok": False, "error": rejection})
-        return JsonResponse({"ok": True})
+        warning = ""
+        if not pages:
+            warning = (
+                extraction_error
+                or "No readable text was found. The file will still upload for "
+                "download, and question generation can use the course topic instead."
+            )
+        return JsonResponse({"ok": True, "warning": warning})
 
 
 class MaterialUploadView(ProfessorCourseMixin, View):
@@ -541,11 +534,8 @@ class MaterialUploadView(ProfessorCourseMixin, View):
         if size_error:
             return _reject(size_error)
 
-        # Extract once, then gate on subject relevance before creating anything.
+        # Extract once, then gate on broad math relevance before creating anything.
         pages, extraction_error = _extract_upload_pages(uploaded)
-        extraction_rejection = _extraction_rejection(pages, extraction_error)
-        if extraction_rejection:
-            return _reject(extraction_rejection)
         rejection = _relevance_rejection(subject, pages)
         if rejection:
             return _reject(rejection)
@@ -699,9 +689,9 @@ class MaterialDetailView(ProfessorCourseMixin, View):
                 if result["file_kept_original"]:
                     messages.info(
                         request,
-                        "The download is a PDF, so students still receive the "
-                        "original upload. The content you edited is what AI "
-                        "generate uses.",
+                        "The original file is kept for download, so students "
+                        "still receive the uploaded document. The content you "
+                        "edited is what AI generate uses.",
                     )
             return redirect(
                 "analytics_professor:material_detail", course_pk=course_pk, pk=pk

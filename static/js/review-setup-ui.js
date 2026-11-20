@@ -189,6 +189,7 @@
                     var active = b === btn;
                     b.classList.toggle("is-selected", active);
                 });
+                updateSummary();
             });
         });
     }
@@ -326,8 +327,39 @@
         var seconds = timerInput ? parseInt(timerInput.value, 10) : 15;
         if (isNaN(seconds) || seconds < 0) seconds = 15;
 
-        var checkedSubjects = form.querySelectorAll("[data-subject-checkbox]:checked").length;
-        var totalQuestions = Math.min(maxQ, Math.max(checkedSubjects, 1) * qPerSubj);
+        var checkedCards = form.querySelectorAll(
+            "[data-subject-checkbox]:checked"
+        );
+        var checkedSubjects = checkedCards.length;
+        var diffInput = document.getElementById("id_setup_difficulty");
+        var difficulty = diffInput ? diffInput.value || "easy" : "easy";
+        var totalQuestions = 0;
+        checkedCards.forEach(function (checkbox) {
+            var row = checkbox.closest("[data-subject-row]");
+            if (!row) return;
+            var available = parseInt(
+                row.getAttribute("data-" + difficulty + "-count"),
+                10
+            );
+            if (isNaN(available)) available = qPerSubj;
+            totalQuestions += Math.min(qPerSubj, Math.max(0, available));
+        });
+        totalQuestions = Math.min(maxQ, totalQuestions);
+        var requestedQuestions = Math.min(maxQ, checkedSubjects * qPerSubj);
+        var summaryNote = form.querySelector("[data-summary-note]");
+        if (summaryNote) {
+            var limited = checkedSubjects > 0 && totalQuestions < requestedQuestions;
+            summaryNote.classList.toggle("hidden", !limited);
+            summaryNote.hidden = !limited;
+            if (limited) {
+                summaryNote.textContent =
+                    "Some selected subjects have fewer approved questions at this difficulty. The exam will contain " +
+                    totalQuestions +
+                    " question" +
+                    (totalQuestions === 1 ? "" : "s") +
+                    ".";
+            }
+        }
         var estMinutes =
             seconds === 0
                 ? null
@@ -349,7 +381,6 @@
             selectedCountEl.textContent = String(checkedSubjects);
         }
 
-        var diffInput = document.getElementById("id_setup_difficulty");
         var reviewDiff = form.querySelector("[data-review-difficulty]");
         if (reviewDiff && diffInput) {
             reviewDiff.textContent = DIFF_LABELS[diffInput.value] || diffInput.value;

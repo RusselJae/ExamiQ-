@@ -17,19 +17,19 @@ logger = logging.getLogger(__name__)
 
 # Full multi-page documents are accepted; students download this original file.
 # _EXTRACTABLE_SUFFIXES is what the text extractor understands (kept broad so
-# legacy documents keep working); the library only accepts PDF uploads.
+# legacy documents keep working); the library accepts the same core formats.
 _EXTRACTABLE_SUFFIXES = (".txt", ".md", ".csv", ".pdf", ".docx")
-_LIBRARY_UPLOAD_SUFFIXES = (".pdf",)
+LIBRARY_UPLOAD_SUFFIXES = (".pdf", ".docx", ".txt", ".md", ".csv")
 
 
 def allowed_upload_suffixes() -> tuple[str, ...]:
-    """Extensions accepted for learning-material uploads (PDF only)."""
-    return _LIBRARY_UPLOAD_SUFFIXES
+    """Extensions accepted for learning-material uploads."""
+    return LIBRARY_UPLOAD_SUFFIXES
 
 
 def is_allowed_upload(name: str) -> bool:
     """True when ``name`` may be uploaded as a learning material."""
-    return (name or "").lower().endswith(_LIBRARY_UPLOAD_SUFFIXES)
+    return (name or "").lower().endswith(LIBRARY_UPLOAD_SUFFIXES)
 
 
 # Sentinel: "no extraction attempted yet", so callers that already extracted
@@ -73,7 +73,7 @@ def ingest_learning_upload(
     lower_name = original_name.lower()
     if not lower_name.endswith(_EXTRACTABLE_SUFFIXES):
         raise SourceMaterialError(
-            "Unsupported file type. Upload a TXT, MD, CSV, DOCX, or PDF file."
+            "Unsupported file type. Upload a PDF, DOCX, TXT, MD, or CSV file."
         )
 
     document = LearningDocument.objects.create(

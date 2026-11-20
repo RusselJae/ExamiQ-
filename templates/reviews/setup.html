@@ -159,6 +159,9 @@
                          data-year="{{ subject.year_level_id }}"
                          data-code="{{ subject.code }}"
                          data-name="{{ subject.name }}"
+                         data-easy-count="{{ subject.question_counts.easy }}"
+                         data-medium-count="{{ subject.question_counts.medium }}"
+                         data-hard-count="{{ subject.question_counts.hard }}"
                          data-search="{{ subject.code|lower }} {{ subject.name|lower }}">
                         <span class="exam-subject-chip" aria-hidden="true">{{ subject.name|slice:":1"|upper }}</span>
                         <div class="exam-subject-card__text">
@@ -187,6 +190,9 @@
                          data-year="{{ subject.year_level_id }}"
                          data-code="{{ subject.code }}"
                          data-name="{{ subject.name }}"
+                         data-easy-count="{{ subject.question_counts.easy }}"
+                         data-medium-count="{{ subject.question_counts.medium }}"
+                         data-hard-count="{{ subject.question_counts.hard }}"
                          data-search="{{ subject.code|lower }} {{ subject.name|lower }}"
                          style="display: none;">
                         <span class="exam-subject-chip" aria-hidden="true">{{ subject.name|slice:":1"|upper }}</span>
@@ -328,7 +334,7 @@
 
                 <div class="exam-summary-box exam-setup-summary exam-setup-summary--desktop" aria-live="polite">
                     <div class="exam-summary-stat">
-                        <span class="exam-summary-num" data-summary-subjects>{{ selected_year_ids|length }}</span>
+                        <span class="exam-summary-num" data-summary-subjects>{{ selected_subject_count }}</span>
                         <span class="exam-summary-lbl">Subjects</span>
                     </div>
                     <div class="exam-summary-stat">
@@ -340,6 +346,9 @@
                         <span class="exam-summary-lbl">Est. time</span>
                     </div>
                 </div>
+                <p class="exam-setup-availability-note{% if estimate_questions >= requested_questions %} hidden{% endif %}" data-summary-note>
+                    Some selected subjects have fewer approved questions at this difficulty. The exam will contain {{ estimate_questions }} question{{ estimate_questions|pluralize }}.
+                </p>
 
                 <button type="submit" class="exam-cta-btn exam-cta-btn--desktop exam-cta-btn--big" id="start-exam-btn">
                     Start exam <span aria-hidden="true">→</span>
@@ -349,7 +358,7 @@
 
         <div class="exam-setup-sticky" data-setup-sticky>
             <div class="exam-setup-sticky__summary" aria-live="polite">
-                <span><strong data-summary-subjects>{{ selected_year_ids|length }}</strong> subjects</span>
+                <span><strong data-summary-subjects>{{ selected_subject_count }}</strong> subjects</span>
                 <span><strong data-summary-questions>{{ estimate_questions }}</strong> questions</span>
                 <span><strong data-summary-minutes>~{{ estimate_minutes }} min</strong></span>
             </div>
@@ -371,6 +380,6 @@
 {% block extra_js %}
 {% if setup_eligibility.eligible and not no_exams_available %}
 <script src="{% static 'js/pre-exam-modals.js' %}"></script>
-<script src="{% static 'js/review-setup-ui.js' %}?v=20261112d"></script>
+<script src="{% static 'js/review-setup-ui.js' %}?v=20261120b"></script>
 {% endif %}
 {% endblock %}

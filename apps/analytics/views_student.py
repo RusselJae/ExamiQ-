@@ -62,6 +62,7 @@ class StudentDashboardView(StudentRequiredMixin, TemplateView):
         context["donut_period"] = context["dashboard_trends"].get("period", "all")
         context["donut_period_choices"] = DONUT_PERIOD_CHOICES
         context["summary"] = student_performance_summary(self.request.user)
+        context["concept_counts"] = concept_status_counts(self.request.user)
         context["recommendations"] = get_review_recommendations(
             self.request.user, limit=5
         )

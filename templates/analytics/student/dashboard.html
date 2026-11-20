@@ -7,6 +7,21 @@
 {% include "components/page_header.html" with title="Your Dashboard" subtitle="Track confidence and mistakes across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
 
 <div class="student-panel">
+<div class="overview-kpi-grid mb-6">
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=summary.accuracy|floatformat:1 suffix="%" label="Overall accuracy" icon="target" variant="teal" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=summary.total_answers label="Questions answered" icon="book" variant="blue" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" icon="calendar" variant="amber" %}
+    </div>
+    <div class="overview-kpi-grid__item">
+        {% include "components/overview_stat_card.html" with value=concept_counts.active label="Concepts to review" icon="target" variant="warning" %}
+    </div>
+</div>
+
 <div class="bento-grid mb-6">
     <div class="span-full">
         <div class="bento-card p-6 overview-trends-card h-full student-confidence-card" data-confidence-card>
@@ -27,10 +42,10 @@
                     <div class="student-confidence-card__popover" id="student-confidence-info" data-confidence-info hidden>
                         <p class="student-confidence-card__popover-title">How to read this chart</p>
                         <ul class="student-confidence-card__popover-list">
-                            <li><strong>Guessing</strong> — you rated the answer as Guessing.</li>
-                            <li><strong>Sure</strong> — you rated the answer as Sure.</li>
-                            <li><strong>Correct / Incorrect</strong> — whether the answer scored right.</li>
-                            <li><strong>Included sessions</strong> — completed review sessions in the selected period (practice and timed exams).</li>
+                            <li><strong>Correct / Incorrect</strong> — the primary chart grouping.</li>
+                            <li><strong>Sure / Guessing</strong> — how you rated each answer.</li>
+                            <li><strong>Center and legend</strong> — show totals for correct and incorrect answers.</li>
+                            <li><strong>Included sessions</strong> — completed review sessions in the selected period.</li>
                         </ul>
                     </div>
                 </div>
@@ -53,7 +68,7 @@
             </div>
             <div class="student-donut-layout">
                 <div class="overview-trends-chart-wrap student-donut-wrap" id="studentTrendsChartWrap">
-                    <canvas id="studentTrendsChart" aria-label="Confidence performance donut chart"></canvas>
+                    <canvas id="studentTrendsChart" aria-label="Confidence performance donut chart: correct and incorrect answers by confidence"></canvas>
                     <div class="student-donut-center" id="student-donut-center" aria-hidden="true"></div>
                 </div>
                 <div class="student-donut-legend overview-confidence-legend" id="student-confidence-legend" hidden></div>
@@ -131,7 +146,7 @@
 
 {% block extra_js %}
 {{ dashboard_trends|json_script:"student-trends-data" }}
-<script src="{% static 'js/student-performance-donut.js' %}"></script>
+<script src="{% static 'js/student-performance-donut.js' %}?v=20261120b"></script>
 <script src="{% static 'js/donut-filters.js' %}"></script>
 <script src="{% static 'js/student-confidence-card.js' %}"></script>
 <script>

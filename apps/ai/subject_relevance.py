@@ -153,6 +153,149 @@ def _stub_relevance(source_material: str, subject, topics) -> dict[str, Any]:
     }
 
 
+_MATH_SIGNAL_TOKENS = frozenset(
+    {
+        "arithmetic",
+        "algebra",
+        "algebraic",
+        "angle",
+        "angles",
+        "area",
+        "calculate",
+        "calculus",
+        "circle",
+        "circles",
+        "combination",
+        "combinations",
+        "derivative",
+        "derivatives",
+        "equation",
+        "equations",
+        "exponential",
+        "fraction",
+        "fractions",
+        "function",
+        "functions",
+        "geometric",
+        "geometry",
+        "graph",
+        "graphs",
+        "integral",
+        "integrals",
+        "linear",
+        "logarithm",
+        "logarithms",
+        "math",
+        "mathematics",
+        "mathematical",
+        "matrix",
+        "matrices",
+        "measurement",
+        "number",
+        "numbers",
+        "percent",
+        "percentage",
+        "perimeter",
+        "permutation",
+        "permutations",
+        "polynomial",
+        "polynomials",
+        "probability",
+        "proof",
+        "proofs",
+        "quadratic",
+        "ratio",
+        "ratios",
+        "sequence",
+        "sequences",
+        "series",
+        "simplify",
+        "slope",
+        "solve",
+        "statistical",
+        "statistics",
+        "theorem",
+        "theorems",
+        "triangle",
+        "triangles",
+        "trigonometric",
+        "trigonometry",
+        "vector",
+        "vectors",
+        "volume",
+    }
+)
+
+
+def _stub_math_relevance(source_material: str) -> dict[str, Any]:
+    """Keyword fallback for broad math-material screening."""
+    text = (source_material or "").strip()
+    if not text:
+        return {
+            "related": False,
+            "reason": "No readable text in the uploaded file.",
+            "math_score": 0,
+        }
+    tokens = _tokenize(text.lower())
+    if "math" in tokens or "mathematics" in tokens or "mathematical" in tokens:
+        return {
+            "related": True,
+            "reason": "The material identifies itself as mathematics.",
+            "math_score": 3,
+        }
+    hits = tokens & _MATH_SIGNAL_TOKENS
+    related = len(hits) >= 2
+    return {
+        "related": related,
+        "reason": (
+            ""
+            if related
+            else "This file does not look like mathematics learning material."
+        ),
+        "math_score": len(hits),
+    }
+
+
+def assess_math_relevance(
+    source_material: str,
+    *,
+    use_ai: bool = True,
+) -> dict[str, Any]:
+    """Return whether material is broadly mathematics-related.
+
+    This is intentionally wider than :func:`assess_subject_relevance`: a
+    geometry module may be uploaded for another BSEd Math subject when its
+    primary content is still mathematics. Non-math documents are rejected.
+    """
+    from apps.ai.prompts import build_math_relevance_prompt
+
+    stub = _stub_math_relevance(source_material)
+    if not use_ai or not ai_available():
+        return stub
+
+    system, user = build_math_relevance_prompt(source_material)
+    raw = chat(user, system=system, max_output_tokens=400)
+    parsed = _parse_relevance_json(raw)
+    if parsed is None:
+        return stub
+
+    related = bool(parsed.get("related"))
+    reason = str(parsed.get("reason") or "").strip()
+    if not related:
+        return {
+            "related": False,
+            "reason": reason or stub["reason"],
+            "math_score": stub["math_score"],
+            "ai_assessed": True,
+        }
+    return {
+        "related": True,
+        "reason": reason,
+        "math_score": stub["math_score"],
+        "ai_assessed": True,
+    }
+
+
 def _parse_relevance_json(raw: str) -> dict[str, Any] | None:
     try:
         match = re.search(r"\{.*\}", raw or "", re.DOTALL)

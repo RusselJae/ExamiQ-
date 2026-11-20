@@ -785,24 +785,24 @@ def student_performance_donut(
 
     slices = [
         {
-            "key": "guessing_correct",
-            "label": "Guessing | Correct",
-            "value": buckets["guessing_correct"],
-        },
-        {
-            "key": "guessing_incorrect",
-            "label": "Guessing | Incorrect",
-            "value": buckets["guessing_incorrect"],
-        },
-        {
             "key": "sure_correct",
-            "label": "Sure | Correct",
+            "label": "Correct · Sure",
             "value": buckets["sure_correct"],
         },
         {
+            "key": "guessing_correct",
+            "label": "Correct · Guessing",
+            "value": buckets["guessing_correct"],
+        },
+        {
             "key": "sure_incorrect",
-            "label": "Sure | Incorrect",
+            "label": "Incorrect · Sure",
             "value": buckets["sure_incorrect"],
+        },
+        {
+            "key": "guessing_incorrect",
+            "label": "Incorrect · Guessing",
+            "value": buckets["guessing_incorrect"],
         },
     ]
     for item in slices:
@@ -853,6 +853,7 @@ def student_performance_donut(
         "period": period_key,
         "percent_correct": percent_correct,
         "correct_total": correct_total,
+        "incorrect_total": incorrect_total,
         "session_count": len(session_ids),
         "range_label": range_label,
         "scope_line": (
@@ -1943,24 +1944,24 @@ def professor_confidence_donut(
 
     slices = [
         {
-            "key": "guessing_correct",
-            "label": "Guessing | Correct",
-            "value": buckets["guessing_correct"],
-        },
-        {
-            "key": "guessing_incorrect",
-            "label": "Guessing | Incorrect",
-            "value": buckets["guessing_incorrect"],
-        },
-        {
             "key": "sure_correct",
-            "label": "Sure | Correct",
+            "label": "Correct · Sure",
             "value": buckets["sure_correct"],
         },
         {
+            "key": "guessing_correct",
+            "label": "Correct · Guessing",
+            "value": buckets["guessing_correct"],
+        },
+        {
             "key": "sure_incorrect",
-            "label": "Sure | Incorrect",
+            "label": "Incorrect · Sure",
             "value": buckets["sure_incorrect"],
+        },
+        {
+            "key": "guessing_incorrect",
+            "label": "Incorrect · Guessing",
+            "value": buckets["guessing_incorrect"],
         },
     ]
     for item in slices:
@@ -2001,6 +2002,7 @@ def professor_confidence_donut(
         "subject": subject_id or "",
         "percent_correct": percent_correct,
         "correct_total": correct_total,
+        "incorrect_total": incorrect_total,
         "session_count": len(session_ids),
         "student_count": len(student_ids),
         "range_label": range_label,

@@ -48,6 +48,9 @@ def test_student_performance_donut_counts(
     assert by_key["sure_correct"]["value"] == 1
     assert by_key["guessing_incorrect"]["value"] == 1
     assert by_key["sure_correct"]["percent"] == 50.0
+    assert by_key["sure_correct"]["label"] == "Correct · Sure"
+    assert by_key["guessing_incorrect"]["label"] == "Incorrect · Guessing"
+    assert donut["incorrect_total"] == 1
     assert donut["session_count"] == 1
     assert donut["percent_correct"] == 50.0
     assert "1 answer" in donut["scope_line"] or "2 answers" in donut["scope_line"]
@@ -330,6 +333,8 @@ def test_professor_confidence_donut_spans_scope(
     by_key = {s["key"]: s for s in donut["slices"]}
     assert by_key["sure_correct"]["value"] == 1
     assert by_key["guessing_incorrect"]["value"] == 1
+    assert donut["incorrect_total"] == 1
+    assert by_key["guessing_incorrect"]["label"] == "Incorrect · Guessing"
     assert donut["session_count"] == 2
     assert donut["percent_correct"] == 50.0
     # Faculty view never links into the student area.

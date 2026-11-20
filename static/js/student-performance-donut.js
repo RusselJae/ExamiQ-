@@ -4,7 +4,17 @@
 (function () {
     "use strict";
 
-    var COLORS = ["#0F766E", "#F59E0B", "#1D4ED8", "#DC2626"];
+    var COLORS = ["#0F766E", "#34D399", "#DC2626", "#F59E0B"];
+    var SLICE_COLORS = {
+        sure_correct: "#0F766E",
+        guessing_correct: "#34D399",
+        sure_incorrect: "#DC2626",
+        guessing_incorrect: "#F59E0B",
+    };
+
+    function colorForSlice(slice, index) {
+        return (slice && SLICE_COLORS[slice.key]) || COLORS[index % COLORS.length];
+    }
 
     var STATUS_LABELS = {
         overconfident: "Overconfident",
@@ -83,7 +93,7 @@
         el.hidden = false;
         var items = slices
             .map(function (slice, index) {
-                var color = COLORS[index % COLORS.length];
+                var color = colorForSlice(slice, index);
                 return (
                     '<div class="student-donut-legend__item">' +
                     '<span class="student-donut-legend__swatch" style="background:' +
@@ -190,7 +200,7 @@
             grid +=
                 '<div class="calibration-modal-cell calibration-modal-cell--head">' +
                 '<span class="calibration-modal-dot" style="background:' +
-                COLORS[index % COLORS.length] +
+                colorForSlice(slice, index) +
                 '"></span>' +
                 escapeHtml(slice.label) +
                 "</div>";
@@ -241,7 +251,9 @@
                 : String(total);
         var secondary = typeof pct === "number" ? "correct" : "answers";
         if (typeof pct === "number") {
-            secondary = "correct · " + total + " answers";
+            var correct = parseInt(donut.correct_total, 10) || 0;
+            var incorrect = parseInt(donut.incorrect_total, 10) || 0;
+            secondary = correct + " correct · " + incorrect + " incorrect";
         }
         el.innerHTML =
             '<span class="student-donut-center__value">' +
@@ -326,8 +338,8 @@
                         data: slices.map(function (s) {
                             return s.value;
                         }),
-                        backgroundColor: slices.map(function (_s, i) {
-                            return COLORS[i % COLORS.length];
+                        backgroundColor: slices.map(function (slice, i) {
+                            return colorForSlice(slice, i);
                         }),
                         borderWidth: 2,
                         borderColor: "#ffffff",

@@ -1,28 +1,58 @@
 {% extends "base.html" %}
 
-{% block title %}Faculty Dashboard - EXAMIQ+{% endblock %}
+{% block title %}Your Courses - EXAMIQ+{% endblock %}
 
 {% block content %}
-{% include "components/page_header.html" with title="Your Courses" subtitle="Monitor how your classes are performing." %}
+{% include "components/page_header.html" with title="Your Courses" subtitle="Open a handled course to manage content, questions, and student performance." %}
 
 <div class="course-home-panel">
-{% if courses %}
-<div class="bento-grid">
-    {% for course in courses %}
-    <div class="span-half">
-        <a href="{% url 'analytics_professor:course_detail' course.pk %}"
-           class="bento-card bento-card-inner hover:shadow-md hover:ring-2 hover:ring-sky-100 transition block group h-full">
-            <h2 class="text-xl font-semibold text-examiq-cyan group-hover:text-sky-700">{{ course.code }}</h2>
-            <p class="text-examiq-navy mt-1">{{ course.name }}</p>
-            <p class="text-sm text-examiq-slate mt-2">{{ course.term }} {{ course.academic_year }}</p>
-        </a>
+    <div class="overview-kpi-grid mb-6">
+        <div class="overview-kpi-grid__item">
+            {% include "components/overview_stat_card.html" with value=overview.subject_count label="Courses" icon="book" variant="teal" %}
+        </div>
+        <div class="overview-kpi-grid__item">
+            {% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}
+        </div>
+        <div class="overview-kpi-grid__item">
+            {% include "components/overview_stat_card.html" with value=overview.accuracy|floatformat:1 suffix="%" label="Overall accuracy" icon="target" variant="amber" %}
+        </div>
+        <div class="overview-kpi-grid__item">
+            {% include "components/overview_stat_card.html" with value=overview.total_sessions label="Completed sessions" icon="calendar" variant="neutral" subtext=overview.sessions_subtext %}
+        </div>
     </div>
-    {% endfor %}
-</div>
-{% else %}
-<div class="span-full">
-    {% include "components/empty_state.html" with title="No courses yet" body="Create a course offering to start tracking student performance." cta_url="/professor/courses/create/" cta_label="Create course offering" %}
-</div>
-{% endif %}
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+            <h2 class="text-lg font-semibold text-examiq-navy">Handled courses</h2>
+            <p class="text-sm text-examiq-slate mt-0.5">Each card opens the course workspace.</p>
+        </div>
+        <a href="{% url 'analytics_professor:overview' %}" class="btn-secondary btn-primary-sm">Open dashboard</a>
+    </div>
+
+    {% if courses %}
+    <div class="professor-course-grid">
+        {% for course in courses %}
+        <a href="{% url 'analytics_professor:course_detail' course.pk %}" class="professor-course-card">
+            <div class="professor-course-card__topline">
+                <span class="professor-course-card__code">{{ course.code }}</span>
+                <span class="professor-course-card__term">{{ course.term }} {{ course.academic_year }}</span>
+            </div>
+            <h3 class="professor-course-card__title">{{ course.name }}</h3>
+            <p class="professor-course-card__meta">
+                {% if course.section %}<span>Section {{ course.section }}</span>{% endif %}
+                <span>{{ course.program.name }}</span>
+            </p>
+            <div class="professor-course-card__foot">
+                <span class="text-xs text-examiq-slate">Open course workspace</span>
+                <span class="professor-course-card__open">View &rarr;</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bento-card p-8 text-center">
+        {% include "components/empty_state.html" with title="No courses yet" body="Once your coordinator assigns a teaching load, your handled courses appear here." %}
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -125,7 +125,7 @@
                     if (replaceDropzone) replaceDropzone.classList.remove("hidden");
                     if (replaceHint) {
                         replaceHint.textContent =
-                            "Choose a new PDF to replace the removed file. The title stays the same.";
+                            "Choose a new math-related document to replace the removed file. The title stays the same.";
                     }
                     replaceInput.click();
                 });
@@ -146,7 +146,7 @@
                 if (maxMb && file.size > maxMb * 1024 * 1024) {
                     if (replaceHint) {
                         replaceHint.textContent =
-                            `That PDF is larger than ${maxMb} MB. Compress it first.`;
+                            `That file is larger than ${maxMb} MB. Compress or split it first.`;
                         replaceHint.classList.add("content-modal__helper--error");
                     }
                     try {
@@ -182,16 +182,22 @@
         const helperEl = modal.querySelector("[data-modal-file-helper]");
         const nameEl = modal.querySelector("[data-dropzone-filename]");
         const metaEl = modal.querySelector("[data-dropzone-filemeta]");
+        const extEl = modal.querySelector("[data-dropzone-ext]");
         const originalNameInput = modal.querySelector("[data-modal-original-name]");
         if (empty) empty.classList.remove("hidden");
         if (attached) attached.classList.add("hidden");
         if (dropzone) dropzone.classList.remove("has-file");
         if (nameEl) nameEl.textContent = "";
         if (metaEl) metaEl.textContent = "";
+        if (extEl) {
+            extEl.textContent = "FILE";
+            extEl.className = "content-modal__badge";
+        }
         if (originalNameInput) originalNameInput.value = "";
         if (helperEl) {
             helperEl.classList.remove("content-modal__helper--error");
-            helperEl.textContent = "Choose a PDF that matches this course subject.";
+            helperEl.textContent =
+                "Choose a math-related PDF, DOCX, TXT, MD, or CSV file.";
         }
     }
 
@@ -212,11 +218,11 @@
             if (helperEl) {
                 helperEl.classList.add("content-modal__helper--error");
                 helperEl.textContent =
-                    `That PDF is larger than ${maxMb} MB. Compress it and try again.`;
+                    `That file is larger than ${maxMb} MB. Compress or split it and try again.`;
             }
             if (window.showToast) {
                 window.showToast(
-                    `That PDF is larger than ${maxMb} MB. Compress it and try again.`,
+                    `That file is larger than ${maxMb} MB. Compress or split it and try again.`,
                     "error"
                 );
             }
@@ -240,7 +246,7 @@
         body.append("subject_id", subjectInput ? subjectInput.value : "");
         if (helperEl) {
             helperEl.classList.remove("content-modal__helper--error");
-            helperEl.textContent = "Checking whether this PDF matches the course…";
+            helperEl.textContent = "Checking whether this document is math-related.";
         }
         fetch(validateUrl, {
             method: "POST",
@@ -253,7 +259,7 @@
         })
             .then(function (response) {
                 return response.json().catch(function () {
-                    return { error: "Could not check that PDF." };
+                    return { error: "Could not check that file." };
                 });
             })
             .then(function (data) {
@@ -273,6 +279,10 @@
                     return;
                 }
                 reflectSelectedFile(fileInput, originalNameInput, titleInput);
+                if (data.warning && helperEl) {
+                    helperEl.classList.remove("content-modal__helper--error");
+                    helperEl.textContent = data.warning;
+                }
             })
             .catch(function () {
                 if (fileInput.files && fileInput.files[0] !== file) return;
@@ -283,7 +293,7 @@
                 if (helperEl) {
                     helperEl.classList.add("content-modal__helper--error");
                     helperEl.textContent =
-                        "Could not check that PDF. Try uploading it again.";
+                        "Could not check that file. Try uploading it again.";
                 }
             });
     }
@@ -305,7 +315,7 @@
             if (helperEl) {
                 helperEl.classList.add("content-modal__helper--error");
                 helperEl.textContent =
-                    `That PDF is larger than ${maxMb} MB. Compress it and try again.`;
+                    `That file is larger than ${maxMb} MB. Compress or split it and try again.`;
             }
             return;
         }
@@ -317,6 +327,12 @@
         const attached = modal ? modal.querySelector("[data-dropzone-attached]") : null;
         const nameEl = modal ? modal.querySelector("[data-dropzone-filename]") : null;
         const metaEl = modal ? modal.querySelector("[data-dropzone-filemeta]") : null;
+        const extEl = modal ? modal.querySelector("[data-dropzone-ext]") : null;
+        if (extEl) {
+            const ext = (file.name.split(".").pop() || "FILE").toUpperCase();
+            extEl.textContent = ext.slice(0, 8);
+            extEl.className = `content-modal__badge content-modal__badge--${ext.toLowerCase()}`;
+        }
         if (empty) empty.classList.add("hidden");
         if (attached) attached.classList.remove("hidden");
         if (nameEl) {
@@ -324,7 +340,7 @@
             nameEl.title = file.name;
         }
         if (metaEl) {
-            metaEl.textContent = `${formatBytes(file.size) || "PDF"} · Ready to upload`;
+            metaEl.textContent = `${formatBytes(file.size) || "File"} · Ready to upload`;
         }
         const dropzone = modal ? modal.querySelector("[data-dropzone]") : null;
         if (dropzone) dropzone.classList.add("has-file");
@@ -333,7 +349,7 @@
         if (helperEl) {
             helperEl.classList.remove("content-modal__helper--error");
             helperEl.textContent =
-                "Choose a PDF that matches this course subject.";
+                "Choose a math-related PDF, DOCX, TXT, MD, or CSV file.";
         }
     }
 
