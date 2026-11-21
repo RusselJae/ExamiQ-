@@ -236,10 +236,10 @@ class TestFacultyMaterialsUI:
         assert "materials-download-btn" in content
         assert "materials-edit-btn" in content
 
-    def test_supported_non_pdf_documents_list_in_the_library(
+    def test_non_pdf_documents_are_hidden_from_the_library(
         self, client, professor, subject
     ):
-        """Supported math-document formats are visible beside PDFs."""
+        """Legacy text uploads do not appear now that the library is PDF-only."""
         course = get_or_create_catalog_course(professor, subject)
         text_doc = _make_ready_doc(
             course=course,
@@ -265,9 +265,14 @@ class TestFacultyMaterialsUI:
         content = response.content.decode()
         assert response.status_code == 200
         assert "PDF module" in content
-        assert "Text module" in content
-        assert text_doc.display_title in content
+        assert "Text module" not in content
+        assert text_doc.display_title not in content
         assert pdf.display_title in content
+
+        # The course-picker count must use the same PDF-only library queryset.
+        from apps.questions.views_materials import _course_document_counts
+
+        assert _course_document_counts([course.pk]) == {course.pk: 1}
 
     def test_student_ready_documents_delete_unrestorable_files(
         self, professor, subject
@@ -640,36 +645,26 @@ class TestMaterialUploadRelevanceGate:
 
         assert LearningDocument.objects.filter(course_id=course.pk).count() == 1
 
-    def test_text_document_upload_is_accepted(self, client, professor, subject):
+    def test_non_pdf_upload_is_rejected(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
         client.force_login(professor)
 
-        with (
-            patch(
-                "apps.questions.views_materials.assess_math_relevance",
-                _AlwaysRelated(),
-            ),
-            patch(
-                "apps.questions.views_materials.extract_pages_from_upload",
-                return_value=_pdf_pages(RELATED_UPLOAD),
-            ),
-        ):
-            self._post(
-                client,
-                course,
-                subject,
-                {
-                    "source_file": SimpleUploadedFile(
-                        "lesson.txt",
-                        b"Mathematics module: linear equations and slope.",
-                        content_type="text/plain",
-                    )
-                },
-            )
+        response = self._post(
+            client,
+            course,
+            subject,
+            {
+                "source_file": SimpleUploadedFile(
+                    "lesson.txt",
+                    b"Mathematics module: linear equations and slope.",
+                    content_type="text/plain",
+                )
+            },
+        )
 
-        doc = LearningDocument.objects.get(course_id=course.pk)
-        assert doc.original_name == "lesson.txt"
-        assert doc.status == LearningDocument.Status.READY
+        assert response.status_code == 200
+        assert "not a supported format" in response.content.decode()
+        assert not LearningDocument.objects.filter(course_id=course.pk).exists()
 
     def test_relevance_is_assessed_before_anything_is_written(
         self, client, professor, subject
@@ -752,18 +747,12 @@ class TestMaterialUploadRelevanceGate:
     def test_allowed_extensions_are_exactly_the_supported_set(self):
         from apps.ai.ingest import allowed_upload_suffixes, is_allowed_upload
 
-        assert set(allowed_upload_suffixes()) == {
-            ".pdf",
-            ".docx",
-            ".txt",
-            ".md",
-            ".csv",
-        }
+        assert set(allowed_upload_suffixes()) == {".pdf"}
         assert is_allowed_upload("Lesson.PDF") is True
-        assert is_allowed_upload("notes.txt") is True
-        assert is_allowed_upload("notes.docx") is True
-        assert is_allowed_upload("notes.md") is True
-        assert is_allowed_upload("notes.csv") is True
+        assert is_allowed_upload("notes.txt") is False
+        assert is_allowed_upload("notes.docx") is False
+        assert is_allowed_upload("notes.md") is False
+        assert is_allowed_upload("notes.csv") is False
         assert is_allowed_upload("deck.pptx") is False
         assert is_allowed_upload("sheet.xlsx") is False
         assert is_allowed_upload("photo.png") is False
@@ -889,8 +878,8 @@ class TestMaterialUploadFormTrimmed:
         ).content.decode()
 
         # Supported formats surface inside the Add content modal dropzone.
-        assert "PDF, DOCX, TXT, MD, CSV" in content
-        assert 'accept=".pdf,.docx,.txt,.md,.csv,' in content
+        assert "PDF only" in content
+        assert 'accept=".pdf,application/pdf"' in content
         assert "Upload material" not in content
         assert 'name="material_type"' not in content
         assert 'id="material-type"' not in content
@@ -908,8 +897,8 @@ class TestMaterialUploadFormTrimmed:
         ).content.decode()
 
         # Supported formats surface inside the Add content modal dropzone.
-        assert "PDF, DOCX, TXT, MD, CSV" in content
-        assert 'accept=".pdf,.docx,.txt,.md,.csv,' in content
+        assert "PDF only" in content
+        assert 'accept=".pdf,application/pdf"' in content
         assert "Upload material" not in content
         assert 'name="material_type"' not in content
 
@@ -1102,39 +1091,45 @@ class TestMaterialContentEditing:
         assert "javascript:" not in doc.content_html
         assert "Safe text" in doc.content_html
 
-    def test_ingest_converts_docx_structure_to_html(self, professor, course):
+    def test_docx_html_conversion_preserves_legacy_structure(self):
         import io
 
         import docx as docx_lib
+
+        from apps.ai.document_html import html_from_upload
+        from apps.ai.source_extract import extract_pages_from_upload
 
         source = docx_lib.Document()
         source.add_heading("Unit Circle", level=1)
         para = source.add_paragraph("The ")
         para.add_run("sine").bold = True
         para.add_run(" ratio.")
+        source.add_paragraph(
+            "The unit circle relates angles to sine and cosine values."
+        )
         source.add_paragraph("Bullet item", style="List Bullet")
         buffer = io.BytesIO()
         source.save(buffer)
-        buffer.seek(0)
+        raw = buffer.getvalue()
 
-        upload = SimpleUploadedFile(
-            "trig.docx",
-            buffer.read(),
-            content_type=(
-                "application/vnd.openxmlformats-officedocument."
-                "wordprocessingml.document"
-            ),
+        pages = extract_pages_from_upload(
+            SimpleUploadedFile(
+                "trig.docx",
+                raw,
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                ),
+            )
         )
-        doc = ingest_learning_upload(
-            uploaded_file=upload, course_id=course.pk, user=professor
+        html = html_from_upload(
+            "trig.docx", raw, extracted_text=" ".join(p["text"] for p in pages)
         )
 
-        assert "<h1>Unit Circle</h1>" in doc.content_html
-        assert "<strong>sine</strong>" in doc.content_html
-        assert "<ul><li>Bullet item</li></ul>" in doc.content_html
-        # Plain-text projection is what AI retrieval reads.
-        assert "# Unit Circle" in doc.source_text
-        assert "sine" in doc.source_text
+        assert "<h1>Unit Circle</h1>" in html
+        assert "<strong>sine</strong>" in html
+        assert "<ul><li>Bullet item</li></ul>" in html
+        assert "sine" in pages[0]["text"]
 
     def test_rewritten_file_path_is_not_double_nested(self, client, professor, subject):
         course = get_or_create_catalog_course(professor, subject)
@@ -1221,13 +1216,22 @@ class TestMaterialContentEditing:
 
     def test_ingest_populates_source_text(self, professor, course):
         upload = SimpleUploadedFile(
-            "module.txt",
-            b"Linear equations in one variable. Solve for x carefully.",
-            content_type="text/plain",
+            "module.pdf",
+            b"%PDF-1.4 fake",
+            content_type="application/pdf",
         )
-        doc = ingest_learning_upload(
-            uploaded_file=upload, course_id=course.pk, user=professor
-        )
+        with patch(
+            "apps.ai.ingest.extract_pages_from_upload",
+            return_value=[
+                {
+                    "page": 1,
+                    "text": "Linear equations in one variable. Solve for x.",
+                }
+            ],
+        ):
+            doc = ingest_learning_upload(
+                uploaded_file=upload, course_id=course.pk, user=professor
+            )
         assert "Linear equations" in doc.source_text
         assert doc.status == LearningDocument.Status.READY
 
