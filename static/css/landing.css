@@ -2188,9 +2188,3 @@ html:has(body.auth-page) {
         font-size: 1.05rem;
     }
 }
-
-@media (max-width: 639px) {
-    .auth-page__main:has(.auth-form-brand):not(:has(.auth-page__card--signup)) {
-        justify-content: center;
-    }
-}

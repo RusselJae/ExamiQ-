@@ -15,8 +15,11 @@ from apps.ai.source_extract import (
 
 logger = logging.getLogger(__name__)
 
-# Full PDFs are accepted; students download the original uploaded file.
-LIBRARY_UPLOAD_SUFFIXES = (".pdf",)
+# Full multi-page documents are accepted; students download this original file.
+# _EXTRACTABLE_SUFFIXES is what the text extractor understands (kept broad so
+# legacy documents keep working); the library accepts the same core formats.
+_EXTRACTABLE_SUFFIXES = (".txt", ".md", ".csv", ".pdf", ".docx")
+LIBRARY_UPLOAD_SUFFIXES = (".pdf", ".docx", ".txt", ".md", ".csv")
 
 
 def allowed_upload_suffixes() -> tuple[str, ...]:
@@ -68,8 +71,10 @@ def ingest_learning_upload(
     """
     original_name = getattr(uploaded_file, "name", "") or "module"
     lower_name = original_name.lower()
-    if not lower_name.endswith(LIBRARY_UPLOAD_SUFFIXES):
-        raise SourceMaterialError("Only PDF files can be uploaded.")
+    if not lower_name.endswith(_EXTRACTABLE_SUFFIXES):
+        raise SourceMaterialError(
+            "Unsupported file type. Upload a PDF, DOCX, TXT, MD, or CSV file."
+        )
 
     document = LearningDocument.objects.create(
         course_id=course_id,

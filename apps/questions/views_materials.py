@@ -108,8 +108,8 @@ def _course_document_counts(course_ids):
     if not course_ids:
         return {}
     counts = (
-        documents_for_courses(course_ids)
-        .order_by()
+        LearningDocument.objects.filter(course_id__in=course_ids, is_archived=False)
+        .exclude(origin="batch_upload")
         .values("course_id")
         .annotate(total=Count("id"))
     )

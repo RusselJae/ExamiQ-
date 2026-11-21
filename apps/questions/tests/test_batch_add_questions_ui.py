@@ -205,18 +205,6 @@ class TestBatchAddQuestionsScreen:
                     "reason": "",
                 },
             ),
-            patch(
-                "apps.ai.ingest.extract_pages_from_upload",
-                return_value=[
-                    {
-                        "page": 1,
-                        "text": (
-                            "Test Subject - Algebra: Linear Equations. "
-                            "Solve for x in equations of the form ax + b = c."
-                        ),
-                    }
-                ],
-            ),
         ):
             client.force_login(professor)
             response = client.post(
@@ -229,14 +217,14 @@ class TestBatchAddQuestionsScreen:
                     "difficulty": "medium",
                     "count": "1",
                     "source_file": SimpleUploadedFile(
-                        "module.pdf",
+                        "module.txt",
                         (
                             b"Test Subject - Algebra: Linear Equations\n"
                             b"Solve for x in equations of the form ax + b = c.\n"
                             b"Example: 2x + 3 = 11 implies x = 4.\n"
                             b"Practice applying inverse operations carefully."
                         ),
-                        content_type="application/pdf",
+                        content_type="text/plain",
                     ),
                 },
             )

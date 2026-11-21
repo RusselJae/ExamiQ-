@@ -27650,9 +27650,3 @@ body.professor-session-review .summary-widget {
         height: 100%;
     }
 }
-
-/* Soft sage backing for the KPI strips on faculty, student, and coordinator dashboards. */
-.overview-kpi-grid {
-    background: linear-gradient(180deg, #f7fbf5 0%, #f2f8ee 100%);
-    border-color: rgba(58, 122, 48, 0.14);
-}
