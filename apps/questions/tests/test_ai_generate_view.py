@@ -22,7 +22,7 @@ def _sample_module_file():
         b"Example: 2x + 3 = 11 implies x = 4.\n"
         b"Practice applying inverse operations carefully."
     )
-    return SimpleUploadedFile("module.txt", content, content_type="text/plain")
+    return SimpleUploadedFile("module.pdf", content, content_type="application/pdf")
 
 
 @pytest.fixture
@@ -39,6 +39,23 @@ class TestQuestionAIGenerateView:
     def _disable_ai(self, settings):
         """Keep keyword relevance path deterministic and avoid real API calls in tests."""
         settings.AI_ENABLED = False
+
+    @pytest.fixture(autouse=True)
+    def _extract_pdf_text(self):
+        """Sample uploads use PDF names; provide their text without parsing."""
+        with patch(
+            "apps.ai.ingest.extract_pages_from_upload",
+            return_value=[
+                {
+                    "page": 1,
+                    "text": (
+                        "T101 Test Subject - Algebra: Linear Equations. "
+                        "Solve for x and apply inverse operations."
+                    ),
+                }
+            ],
+        ):
+            yield
 
     @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
     @patch("apps.ai.job_services.get_question_generator")

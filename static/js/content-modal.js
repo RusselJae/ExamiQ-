@@ -125,7 +125,7 @@
                     if (replaceDropzone) replaceDropzone.classList.remove("hidden");
                     if (replaceHint) {
                         replaceHint.textContent =
-                            "Choose a new math-related document to replace the removed file. The title stays the same.";
+                            "Choose a new PDF to replace the removed file. The title stays the same.";
                     }
                     replaceInput.click();
                 });
@@ -197,7 +197,7 @@
         if (helperEl) {
             helperEl.classList.remove("content-modal__helper--error");
             helperEl.textContent =
-                "Choose a math-related PDF, DOCX, TXT, MD, or CSV file.";
+                "Choose a math-related PDF that matches this course subject.";
         }
     }
 
@@ -349,7 +349,7 @@
         if (helperEl) {
             helperEl.classList.remove("content-modal__helper--error");
             helperEl.textContent =
-                "Choose a math-related PDF, DOCX, TXT, MD, or CSV file.";
+                "Choose a math-related PDF that matches this course subject.";
         }
     }
 
