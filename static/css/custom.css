@@ -27656,3 +27656,214 @@ body.professor-session-review .summary-widget {
     background: linear-gradient(180deg, #f7fbf5 0%, #f2f8ee 100%);
     border-color: rgba(58, 122, 48, 0.14);
 }
+
+/* Mobile chat polish */
+.examiq-chat-modal__thread > :first-child:not(.examiq-chat-modal__thread-empty) {
+    margin-top: auto;
+}
+
+@media (max-width: 639px) {
+    .examiq-chat-modal__panel {
+        background: #f7faf4;
+    }
+
+    .examiq-chat-modal__sidebar {
+        background:
+            radial-gradient(circle at 12% 0%, rgba(134, 239, 172, 0.22), transparent 30%),
+            linear-gradient(180deg, #f8fbf5 0%, #ffffff 42%);
+    }
+
+    .examiq-chat-modal__sidebar-head {
+        padding: calc(0.95rem + env(safe-area-inset-top, 0px)) 1.15rem 0.35rem;
+    }
+
+    .examiq-chat-modal__title {
+        font-size: 1.4rem;
+        letter-spacing: -0.03em;
+    }
+
+    .examiq-chat-modal__tabs {
+        margin: 0.15rem 1rem 0.8rem;
+        padding: 0.3rem;
+        background: #edf3e9;
+        box-shadow: inset 0 1px 2px rgba(30, 70, 35, 0.06);
+    }
+
+    .examiq-chat-modal__tab {
+        padding: 0.55rem 0.65rem;
+        border-radius: 0.7rem;
+    }
+
+    .examiq-chat-modal__tab--active {
+        box-shadow: 0 4px 12px rgba(30, 70, 35, 0.1);
+    }
+
+    .examiq-chat-modal__search {
+        margin: 0 1rem 0.7rem;
+    }
+
+    .examiq-chat-modal__search input {
+        height: 2.8rem;
+        border-color: #e4ece0;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 5px 16px rgba(30, 70, 35, 0.05);
+    }
+
+    .examiq-chat-modal__list {
+        padding: 0.2rem 0.75rem 1.1rem;
+    }
+
+    .examiq-chat-item {
+        margin-bottom: 0.55rem;
+        padding: 0.8rem 0.75rem;
+        border: 1px solid #e8eee5;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 5px 14px rgba(30, 70, 35, 0.05);
+    }
+
+    .examiq-chat-item:hover {
+        background: #fff;
+        border-color: #d7e5d1;
+    }
+
+    .examiq-chat-item--active {
+        background: #edf6e8;
+        border-color: #cfe3c8;
+        box-shadow: 0 5px 16px rgba(30, 70, 35, 0.09);
+    }
+
+    .examiq-chat-item__avatar {
+        box-shadow: 0 0 0 3px rgba(220, 235, 213, 0.7);
+    }
+
+    .examiq-chat-item__preview {
+        font-size: 0.78rem;
+    }
+
+    .examiq-chat-modal__header {
+        padding: calc(0.7rem + env(safe-area-inset-top, 0px)) 0.85rem 0.7rem;
+        background: linear-gradient(135deg, #ffffff 0%, #f3f9ee 100%);
+        border-bottom-color: #e6eee1;
+    }
+
+    .examiq-chat-modal__back {
+        width: 2.5rem;
+        height: 2.5rem;
+        background: #fff;
+        border: 1px solid #e3ebe0;
+        box-shadow: 0 4px 12px rgba(30, 70, 35, 0.06);
+    }
+
+    .examiq-chat-modal__peer {
+        flex: 1;
+        gap: 0.65rem;
+    }
+
+    .examiq-chat-modal__avatar {
+        width: 2.75rem;
+        height: 2.75rem;
+        box-shadow: 0 0 0 4px rgba(220, 235, 213, 0.65);
+    }
+
+    .examiq-chat-modal__peer-name {
+        font-size: 1.02rem;
+        letter-spacing: -0.015em;
+    }
+
+    .examiq-chat-modal__peer-meta {
+        font-size: 0.7rem;
+    }
+
+    .examiq-chat-modal__thread {
+        padding: 0.9rem 0.85rem 1.05rem;
+        background:
+            radial-gradient(circle at 8% 4%, rgba(134, 239, 172, 0.18), transparent 30%),
+            radial-gradient(circle at 92% 20%, rgba(233, 185, 73, 0.08), transparent 24%),
+            linear-gradient(180deg, #f7faf4 0%, #fbfcf9 100%);
+    }
+
+    .examiq-chat-date-sep span {
+        padding: 0.3rem 0.8rem;
+        background: #fff;
+        color: #6f7f6c;
+        box-shadow: 0 4px 12px rgba(30, 70, 35, 0.06);
+    }
+
+    .examiq-chat-msg {
+        max-width: 82%;
+    }
+
+    .examiq-chat-msg--out .examiq-chat-msg__stack {
+        max-width: 82%;
+    }
+
+    .examiq-chat-bubble {
+        padding: 0.7rem 0.95rem;
+        border-radius: 1.15rem;
+        box-shadow: 0 5px 14px rgba(30, 70, 35, 0.06);
+    }
+
+    .examiq-chat-bubble--in {
+        background: #fff;
+        border: 1px solid #e6efe1;
+        border-bottom-left-radius: 0.4rem;
+        color: #17251b;
+    }
+
+    .examiq-chat-bubble--out {
+        background: linear-gradient(135deg, #237348 0%, #154d31 100%);
+        border-bottom-right-radius: 0.4rem;
+        box-shadow: 0 7px 18px rgba(21, 77, 49, 0.22);
+    }
+
+    .examiq-chat-msg__time {
+        padding: 0 0.15rem;
+        font-size: 0.68rem;
+        color: #849184;
+    }
+
+    .examiq-chat-modal__composer {
+        padding: 0.65rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+        background: #fff;
+        border-top-color: #e6eee1;
+        box-shadow: 0 -8px 24px rgba(30, 70, 35, 0.05);
+    }
+
+    .examiq-chat-modal__composer-field {
+        padding: 0.2rem 0.4rem 0.2rem 0.25rem;
+        border-color: #e1eadc;
+        border-radius: 1.4rem;
+        background: #f7faf5;
+        box-shadow: inset 0 1px 2px rgba(30, 70, 35, 0.04);
+    }
+
+    .examiq-chat-modal__attach {
+        width: 2.2rem;
+        height: 2.2rem;
+        min-width: 40px;
+        min-height: 40px;
+        background: #eaf3e5;
+        color: #426a4b;
+    }
+
+    .examiq-chat-modal__composer textarea {
+        padding: 0.55rem 0.45rem;
+    }
+
+    .examiq-chat-modal__send {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+        min-height: 48px;
+        background: linear-gradient(135deg, #2b7a4b, #14512f);
+        box-shadow: 0 8px 18px rgba(21, 77, 49, 0.25);
+    }
+
+    .examiq-chat-modal__send:disabled {
+        opacity: 0.45;
+        box-shadow: none;
+    }
+}
+
