@@ -209,7 +209,10 @@ class User(AbstractUser):
     class HomeDegreeProgram(models.TextChoices):
         CS = "cs", "Computer Science"
         IT = "it", "Information Technology"
-        BSED_MATH = "bsed_math", "BSEd Mathematics"
+        BSED_MATH = (
+            "bsed_math",
+            "Bachelor of Secondary Education major in Mathematics",
+        )
         PSYCHOLOGY = "psychology", "Psychology"
         MARKETING = "marketing", "Marketing"
         HR = "hr", "Human Resources"

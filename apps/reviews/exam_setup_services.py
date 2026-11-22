@@ -46,7 +46,10 @@ def get_or_create_program_exam_setup(
     if program is None:
         program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
     if program is None:
-        raise ValueError("BSED Math program is not configured.")
+        raise ValueError(
+            "Bachelor of Secondary Education major in Mathematics program is "
+            "not configured."
+        )
     setup, created = ProgramExamSetup.objects.get_or_create(
         program=program,
         defaults={
@@ -71,7 +74,10 @@ def student_setup_eligibility(student: User) -> dict:
         return {
             "eligible": False,
             "reason": "program",
-            "message": "Exam practice is available for BSEd Mathematics students.",
+            "message": (
+                "Exam practice is available for Bachelor of Secondary Education "
+                "major in Mathematics students."
+            ),
         }
     if not student.year_level_id:
         return {

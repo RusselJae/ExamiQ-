@@ -195,7 +195,10 @@ class ProgramExamSetupForm(forms.ModelForm):
             }
         ),
         label="Courses available for exams",
-        help_text="Students pick at least 1 from this list. Leave empty to allow the full BSED Math catalog.",
+        help_text=(
+            "Students pick at least 1 from this list. Leave empty to allow the "
+            "full Bachelor of Secondary Education major in Mathematics catalog."
+        ),
     )
     allowed_difficulties = forms.MultipleChoiceField(
         choices=Question.Difficulty.choices,

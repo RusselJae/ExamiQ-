@@ -10,6 +10,12 @@ from apps.users.models import AcademicYear, Department, Program, ProgramSection
 User = get_user_model()
 
 
+def test_home_degree_program_label_is_the_full_degree_name():
+    assert User.HomeDegreeProgram.BSED_MATH.label == (
+        "Bachelor of Secondary Education major in Mathematics"
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_rate_limit_cache():
     """Keep allauth's signup rate limit from leaking across tests (429s)."""
@@ -54,7 +60,10 @@ def bsed_program(db):
     edu, _ = Department.objects.get_or_create(name="College of Education")
     program, _ = Program.objects.get_or_create(
         slug=User.HomeDegreeProgram.BSED_MATH,
-        defaults={"name": "BSEd Mathematics", "managing_department": edu},
+        defaults={
+            "name": User.HomeDegreeProgram.BSED_MATH.label,
+            "managing_department": edu,
+        },
     )
     return program
 

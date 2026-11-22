@@ -19,7 +19,11 @@ HOME_PROGRAM_DEPARTMENT_NAMES: dict[str, str] = {
 PROGRAM_DEFINITIONS: list[tuple[str, str, str]] = [
     (User.HomeDegreeProgram.CS, "Computer Science", "Department of Computer Studies"),
     (User.HomeDegreeProgram.IT, "Information Technology", "Information Technology"),
-    (User.HomeDegreeProgram.BSED_MATH, "BSEd Mathematics", "College of Education"),
+    (
+        User.HomeDegreeProgram.BSED_MATH,
+        User.HomeDegreeProgram.BSED_MATH.label,
+        "College of Education",
+    ),
     (User.HomeDegreeProgram.PSYCHOLOGY, "Psychology", "Psychology"),
     (User.HomeDegreeProgram.MARKETING, "Marketing", "Business Administration"),
     (User.HomeDegreeProgram.HR, "Human Resources", "Business Administration"),

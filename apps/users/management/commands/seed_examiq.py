@@ -70,10 +70,16 @@ FACULTY_EMAIL = "prof_educmath@examiq.edu"
 
 
 class Command(BaseCommand):
-    help = "Seed EXAMIQ with BSEd Mathematics demo data only."
+    help = (
+        "Seed EXAMIQ with Bachelor of Secondary Education major in Mathematics "
+        "demo data only."
+    )
 
     def handle(self, *args, **options):
-        self.stdout.write("Seeding EXAMIQ (BSEd Math only)...")
+        self.stdout.write(
+            "Seeding EXAMIQ (Bachelor of Secondary Education major in "
+            "Mathematics only)..."
+        )
         self._cleanup_non_bsed_demo_data()
 
         year_levels = {}
@@ -121,13 +127,19 @@ class Command(BaseCommand):
         program, _ = Program.objects.get_or_create(
             slug=User.HomeDegreeProgram.BSED_MATH,
             defaults={
-                "name": "BSEd Mathematics",
+                "name": User.HomeDegreeProgram.BSED_MATH.label,
                 "managing_department": edu,
             },
         )
+        program_updates = []
+        if program.name != User.HomeDegreeProgram.BSED_MATH.label:
+            program.name = User.HomeDegreeProgram.BSED_MATH.label
+            program_updates.append("name")
         if program.managing_department_id != edu.pk:
             program.managing_department = edu
-            program.save(update_fields=["managing_department"])
+            program_updates.append("managing_department")
+        if program_updates:
+            program.save(update_fields=program_updates)
 
         for order, yl in year_levels.items():
             for label in ("1M", "2M"):

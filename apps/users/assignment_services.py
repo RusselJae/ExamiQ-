@@ -337,7 +337,10 @@ def create_catalog_subject(
 
     program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
     if not program:
-        raise ValueError("BSED Math program is not configured.")
+        raise ValueError(
+            "Bachelor of Secondary Education major in Mathematics program is "
+            "not configured."
+        )
 
     subject, created = Subject.objects.get_or_create(
         program=program,

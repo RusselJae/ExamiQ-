@@ -62,7 +62,10 @@ def bsed_program(db):
     edu, _ = Department.objects.get_or_create(name="College of Education")
     prog, _ = Program.objects.get_or_create(
         slug=User.HomeDegreeProgram.BSED_MATH,
-        defaults={"name": "BSEd Mathematics", "managing_department": edu},
+        defaults={
+            "name": User.HomeDegreeProgram.BSED_MATH.label,
+            "managing_department": edu,
+        },
     )
     return prog
 
@@ -73,7 +76,10 @@ def make_bsed_student(student, *, subject=None, course=None, bsed_program=None):
         edu, _ = Department.objects.get_or_create(name="College of Education")
         bsed_program, _ = Program.objects.get_or_create(
             slug=User.HomeDegreeProgram.BSED_MATH,
-            defaults={"name": "BSEd Mathematics", "managing_department": edu},
+            defaults={
+                "name": User.HomeDegreeProgram.BSED_MATH.label,
+                "managing_department": edu,
+            },
         )
     student.home_degree_program = User.HomeDegreeProgram.BSED_MATH
     student.save(update_fields=["home_degree_program"])

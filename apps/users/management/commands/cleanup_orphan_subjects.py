@@ -10,7 +10,8 @@ from apps.users.models import Course, Program, User
 class Command(BaseCommand):
     help = (
         "Delete subjects, topics, questions, and courses that are not under "
-        "the current BSED Math program subjects."
+        "the current Bachelor of Secondary Education major in Mathematics "
+        "program subjects."
     )
 
     def add_arguments(self, parser):
@@ -24,7 +25,10 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         bsed = Program.objects.filter(slug=User.HomeDegreeProgram.BSED_MATH).first()
         if not bsed:
-            self.stderr.write("BSED Math program not found; nothing to clean.")
+            self.stderr.write(
+                "Bachelor of Secondary Education major in Mathematics program "
+                "not found; nothing to clean."
+            )
             return
 
         keep_subject_ids = set(

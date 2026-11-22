@@ -319,7 +319,7 @@ Content is organized by **degree program**. Each of the eight programs owns its 
 |------|---------|
 | `cs` | Computer Science |
 | `it` | Information Technology |
-| `bsed_math` | BSEd Mathematics |
+| `bsed_math` | Bachelor of Secondary Education major in Mathematics |
 | `psychology` | Psychology |
 | `marketing` | Marketing |
 | `hr` | Human Resources |

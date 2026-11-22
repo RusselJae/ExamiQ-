@@ -793,7 +793,10 @@ class TestMaterialUploadRelevanceGate:
             )
 
         assert response.status_code == 200
-        assert "BSEd Mathematics subjects only" in response.content.decode()
+        assert (
+            "Bachelor of Secondary Education major in Mathematics subjects only"
+            in response.content.decode()
+        )
         assert LearningDocument.objects.filter(course_id=course.pk).count() == 0
 
     def test_blank_subject_falls_back_to_the_course_subject(
@@ -862,7 +865,10 @@ class TestMaterialUploadRelevanceGate:
 
         assert response.status_code == 200
         content = response.content.decode()
-        assert "Select a BSEd Mathematics course subject" not in content
+        assert (
+            "Select a Bachelor of Secondary Education major in Mathematics "
+            "course subject" not in content
+        )
         doc = LearningDocument.objects.get(course_id=course.pk)
         assert doc.subject_id == subject.pk
 

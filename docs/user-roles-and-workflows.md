@@ -2,7 +2,7 @@
 
 ExamiQ is a **math-only** review platform. Content is organized by **degree program** — each of the eight programs owns its own math topics and question bank. There is no shared "General Education Math" pool.
 
-Students' **home degree programs** (CS, IT, BSEd Math, Psychology, Marketing, HR, Hospitality Management, Criminology) scope which course offerings appear in review setup and feed department-level analytics for chairpersons.
+Students' **home degree programs** (CS, IT, Bachelor of Secondary Education major in Mathematics, Psychology, Marketing, HR, Hospitality Management, Criminology) scope which course offerings appear in review setup and feed department-level analytics for chairpersons.
 
 ## Domain model
 
@@ -20,7 +20,7 @@ flowchart LR
 
 | Entity | Examples | Who manages |
 |--------|----------|-------------|
-| **Program** | CS, IT, BSEd Math, Psychology, … | Chairperson of program's managing department |
+| **Program** | CS, IT, Bachelor of Secondary Education major in Mathematics, Psychology, … | Chairperson of program's managing department |
 | **Course offering** | MATH101-CS, 1st Sem 2026 | Program Coordinator assigns Faculty to sections |
 | **Topics & questions** | Discrete Math, Business Math, … | Per program; professor proposes, chair approves |
 
@@ -30,7 +30,7 @@ flowchart LR
 |------|---------|
 | `cs` | Computer Science |
 | `it` | Information Technology |
-| `bsed_math` | BSEd Mathematics |
+| `bsed_math` | Bachelor of Secondary Education major in Mathematics |
 | `psychology` | Psychology |
 | `marketing` | Marketing |
 | `hr` | Human Resources |

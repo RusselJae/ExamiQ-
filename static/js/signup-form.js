@@ -400,9 +400,10 @@
                             (mismatchSeen
                                 ? "We read " + mismatchSeen + ". "
                                 : "") +
-                                "Those courses do not match the BSED " +
-                                "Mathematics curriculum. Only BSED Math " +
-                                "students can sign up.",
+                                "Those courses do not match the Bachelor of " +
+                                "Secondary Education major in Mathematics " +
+                                "curriculum. Only students in this program " +
+                                "can sign up.",
                             true
                         );
                         resetAnalysis();
@@ -413,9 +414,10 @@
                         if (seen) {
                             setCorResult(
                                 "We read " + seen + ", but could not " +
-                                    "confidently match them to BSED " +
-                                    "Mathematics courses. Try a clearer photo " +
-                                    "or PDF of your COR.",
+                                    "confidently match them to Bachelor of " +
+                                    "Secondary Education major in Mathematics " +
+                                    "courses. Try a clearer photo or PDF of " +
+                                    "your COR.",
                                 true
                             );
                         } else {

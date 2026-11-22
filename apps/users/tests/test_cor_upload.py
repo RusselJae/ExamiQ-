@@ -46,7 +46,10 @@ def _bsed_program():
     edu, _ = Department.objects.get_or_create(name="College of Education")
     program, _ = Program.objects.get_or_create(
         slug=User.HomeDegreeProgram.BSED_MATH,
-        defaults={"name": "BSEd Mathematics", "managing_department": edu},
+        defaults={
+            "name": User.HomeDegreeProgram.BSED_MATH.label,
+            "managing_department": edu,
+        },
     )
     return program
 

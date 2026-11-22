@@ -57,7 +57,10 @@ def get_or_create_student_section(
     """Ensure a BSED Math ProgramSection exists for year + block label."""
     program = Program.for_home_degree(User.HomeDegreeProgram.BSED_MATH)
     if program is None:
-        raise ValidationError("BSEd Mathematics program is not configured.")
+        raise ValidationError(
+            "Bachelor of Secondary Education major in Mathematics program is "
+            "not configured."
+        )
     academic_year = get_current_academic_year()
     if academic_year is None:
         raise ValidationError("No academic year is configured.")

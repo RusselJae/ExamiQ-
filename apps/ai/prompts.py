@@ -555,8 +555,9 @@ def build_question_generation_prompt(
     year_hint = (
         f"Year level: {year_label}"
         + (f" (year {year_order})" if year_order != "" else "")
-        + ". Match college-level BSEd Mathematics expectations for this year — "
-        "not high school review and not graduate-level depth.\n"
+        + ". Match college-level Bachelor of Secondary Education major in "
+        "Mathematics expectations for this year — not high school review and "
+        "not graduate-level depth.\n"
     )
 
     user_prompt = (

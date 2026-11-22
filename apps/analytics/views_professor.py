@@ -202,7 +202,11 @@ class ExamSetupHubView(ProfessorRequiredMixin, View):
         if program is None:
             from django.contrib import messages
 
-            messages.error(request, "BSED Math program is not configured.")
+            messages.error(
+                request,
+                "Bachelor of Secondary Education major in Mathematics program "
+                "is not configured.",
+            )
             return redirect("analytics_professor:overview")
         self.program = program
         self.setup = get_or_create_program_exam_setup(program)

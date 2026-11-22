@@ -146,7 +146,10 @@ def _subjects_for_material_detail(course, professor, document):
     )
 
 
-MATH_ONLY_UPLOAD_MESSAGE = "Content management accepts BSEd Mathematics subjects only."
+MATH_ONLY_UPLOAD_MESSAGE = (
+    "Content management accepts Bachelor of Secondary Education major in "
+    "Mathematics subjects only."
+)
 
 
 def _is_math_subject(subject) -> bool:
@@ -521,8 +524,8 @@ class MaterialUploadView(ProfessorCourseMixin, View):
             if requested is not None and not _is_math_subject(requested):
                 return _reject(MATH_ONLY_UPLOAD_MESSAGE)
             return _reject(
-                "Select a BSEd Mathematics course subject before uploading a "
-                "learning material."
+                "Select a Bachelor of Secondary Education major in Mathematics "
+                "course subject before uploading a learning material."
             )
         if not _is_math_subject(subject):
             return _reject(MATH_ONLY_UPLOAD_MESSAGE)

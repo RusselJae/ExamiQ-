@@ -2030,24 +2030,39 @@ html:has(body.auth-page) {
 }
 
 /* Landing and auth background artwork */
-.landing-body,
-.auth-page {
+.landing-body {
     margin: 0;
     background-color: var(--landing-bg);
     background-image:
         linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08)),
         url("../assets/landingpage_bg.jpg");
     background-repeat: no-repeat;
+    background-position: center top;
     background-size: cover;
     background-attachment: fixed;
 }
 
-.landing-body {
-    background-position: center top;
+.auth-page {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--landing-bg);
 }
 
-.auth-page {
+/* A fixed layer keeps the artwork covering the whole screen while the
+   signup form scrolls, including on mobile browsers with dynamic toolbars. */
+.auth-page::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-color: var(--landing-bg);
+    background-image:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08)),
+        url("../assets/landingpage_bg.jpg");
+    background-repeat: no-repeat;
     background-position: center center;
+    background-size: cover;
 }
 
 /* Keep the form readable against the illustrated backdrop. */
@@ -2066,13 +2081,13 @@ html:has(body.auth-page) {
 }
 
 @media (max-width: 639px) {
-    .landing-body,
-    .auth-page {
+    .landing-body {
         background-attachment: scroll;
+        background-position: center top;
     }
 
-    .landing-body {
-        background-position: center top;
+    .auth-page::before {
+        background-position: center center;
     }
 }
 

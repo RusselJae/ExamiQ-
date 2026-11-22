@@ -15,7 +15,7 @@ calibration tracking, mistake logging, adaptive question selection, and
 role-based analytics for faculty and department leadership.
 
 The system is organized around degree programs. Each program (for example,
-Computer Science, Information Technology, BSEd Mathematics, Psychology,
+Computer Science, Information Technology, Bachelor of Secondary Education major in Mathematics, Psychology,
 Marketing, Human Resources, Hospitality Management, and Criminology) has
 its own math subjects, topics, and question bank. Students review content
 matched to their home degree program and section.
