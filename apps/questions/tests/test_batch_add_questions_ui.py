@@ -130,6 +130,44 @@ class TestBatchAddQuestionsScreen:
         assert "question bank" in content
         assert Question.objects.filter(stem="What is 3 + 3?").exists()
 
+    def test_saved_drafts_move_from_question_page_to_batch_overlay(
+        self, client, professor, course, subject, topic
+    ):
+        subject.code = course.code
+        subject.save(update_fields=["code"])
+        draft = Question.objects.create(
+            topic=topic,
+            stem="Draft that should stay off the question page",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            status=Question.Status.DRAFT,
+        )
+        client.force_login(professor)
+
+        content = client.get(
+            reverse(
+                "analytics_professor:question_list",
+                kwargs={"course_pk": course.pk},
+            )
+        ).content.decode()
+        assert "Needs review" not in content
+        assert draft.stem not in content
+        assert "See 1 draft question" in content
+        assert "questions/create/?embed=1" in content
+
+        overlay = client.get(
+            self.url(course) + "?embed=1",
+        ).content.decode()
+        assert "Saved drafts" in overlay
+        assert draft.stem in overlay
+        assert "submitted-question-stems" in overlay
+
+        draft.status = Question.Status.APPROVED
+        draft.save(update_fields=["status"])
+        refreshed = client.get(self.url(course) + "?embed=1").content.decode()
+        assert "Saved drafts" not in refreshed
+        assert f">{draft.stem}<" not in refreshed
+
     def test_batch_actions_include_validate_and_delete_selected(
         self, client, professor, course
     ):

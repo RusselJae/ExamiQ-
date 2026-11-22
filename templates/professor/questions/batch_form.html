@@ -268,6 +268,40 @@
     <div id="validate-modal-container"></div>
 
     {% if embed_mode %}<div class="batch-embed-main">{% endif %}
+    {% if saved_drafts %}
+    <section class="bento-card p-4 mb-4 batch-saved-drafts max-h-72 overflow-y-auto" aria-labelledby="batch-saved-drafts-heading">
+        <div class="flex items-center justify-between gap-3 mb-2">
+            <h2 id="batch-saved-drafts-heading" class="batch-draft-title">Saved drafts</h2>
+            <span class="questions-section__count">{{ saved_draft_count }}</span>
+        </div>
+        <p class="text-xs text-examiq-slate mb-3">
+            These questions are already saved but not published. Publish one to
+            remove it from this list.
+        </p>
+        <ul class="questions-draft-list">
+            {% for question in saved_drafts %}
+            <li class="questions-draft-card">
+                <div class="questions-draft-card__body">
+                    <p class="questions-draft-card__title">{{ question.stem|truncatechars:110 }}</p>
+                    <p class="questions-draft-card__meta">
+                        {{ question.topic.name }}
+                        &middot; {{ question.get_difficulty_display }}
+                        &middot; Draft
+                    </p>
+                </div>
+                <a class="btn-primary btn-primary-sm"
+                   target="_top"
+                   href="{% url 'analytics_professor:question_edit' course.pk question.pk %}">Review</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% if saved_draft_count > saved_drafts|length %}
+        <p class="text-xs text-examiq-slate mt-3">
+            Showing {{ saved_drafts|length }} of {{ saved_draft_count }} saved drafts.
+        </p>
+        {% endif %}
+    </section>
+    {% endif %}
     <div class="bento-card p-6 overflow-x-auto shadow-sm" id="draft-batch-card">
         <div class="batch-questions-toolbar">
             <div class="batch-questions-toolbar__copy">
@@ -353,6 +387,7 @@
 </div>
 {% endif %}
 
+{{ submitted_stems|json_script:"submitted-question-stems" }}
 {% endblock %}
 
 {% block extra_js %}
@@ -1220,6 +1255,35 @@
 
     function restoreDraft() {
         const draft = window.ExamiQBatch.loadDraft(coursePk);
+        // A question that already reached the saved-drafts list must not stay
+        // in the client batch as a duplicate.
+        const savedStemsEl = document.getElementById("submitted-question-stems");
+        let savedStems = [];
+        try {
+            savedStems = JSON.parse(
+                savedStemsEl ? savedStemsEl.textContent || "[]" : "[]"
+            );
+        } catch (e) {
+            savedStems = [];
+        }
+        if (savedStems.length && draft.questions.length) {
+            const savedKeys = new Set(
+                savedStems.map(function (stem) {
+                    return String(stem || "").trim().toLowerCase();
+                })
+            );
+            const before = draft.questions.length;
+            draft.questions = draft.questions.filter(function (question) {
+                const key = String((question && question.stem) || "")
+                    .trim()
+                    .toLowerCase();
+                return !savedKeys.has(key);
+            });
+            draft.questionIndex = draft.questions.length;
+            if (draft.questions.length !== before) {
+                window.ExamiQBatch.saveDraft(coursePk, draft);
+            }
+        }
         if (!draft.questions.length && !draft.settings.topicId) return;
 
         restoring = true;

@@ -33,8 +33,10 @@
                     </button>
                 </div>
                 {% if draft_count %}
-                <a href="{% url 'analytics_professor:question_create' course.pk %}#draft-batch-card"
-                   class="questions-page__draft-note">
+                <a href="{{ add_questions_url }}"
+                   class="questions-page__draft-note"
+                   data-batch-modal
+                   data-batch-modal-src="{{ add_questions_url }}?embed=1">
                     See {{ draft_count }} draft question{{ draft_count|pluralize }}
                 </a>
                 {% endif %}
@@ -42,41 +44,13 @@
             <p class="questions-page__meta">
                 {{ question_total_count }} question{{ question_total_count|pluralize }}
                 · {{ saved_count }} saved
-                · <a href="{% url 'analytics_professor:question_create' course.pk %}#draft-batch-card"
+                · <a href="{{ add_questions_url }}"
                       class="questions-meta-pill"
-                      title="Open the draft batch"> {{ draft_count }} draft{{ draft_count|pluralize }}</a>
+                      title="Open the draft batch"
+                      data-batch-modal
+                      data-batch-modal-src="{{ add_questions_url }}?embed=1"> {{ draft_count }} draft{{ draft_count|pluralize }}</a>
             </p>
         </div>
-
-        {% if draft_questions %}
-        <section class="questions-section" aria-labelledby="needs-review-heading">
-            <div class="questions-section__header">
-                <h2 id="needs-review-heading" class="questions-section__title">Needs review</h2>
-                <span class="questions-section__count">{{ draft_count }}</span>
-            </div>
-            <ul class="questions-draft-list">
-                {% for question in draft_questions %}
-                <li class="questions-draft-card">
-                    <div class="questions-draft-card__body">
-                        <p class="questions-draft-card__title">{{ question.stem|truncatechars:90 }}</p>
-                        <p class="questions-draft-card__meta">
-                            {{ question.topic.name }}
-                            · {{ question.get_difficulty_display }}
-                            · Draft
-                        </p>
-                    </div>
-                    <a class="btn-primary btn-primary-sm"
-                       href="{% url 'analytics_professor:question_edit' course.pk question.pk %}">Review</a>
-                </li>
-                {% endfor %}
-            </ul>
-            {% if draft_count > draft_questions|length %}
-            <p class="questions-section__more text-sm text-examiq-slate mt-2">
-                Showing {{ draft_questions|length }} of {{ draft_count }} drafts.
-            </p>
-            {% endif %}
-        </section>
-        {% endif %}
 
         <section class="questions-section" aria-labelledby="saved-questions-heading">
             <div class="questions-section__header">

@@ -192,11 +192,6 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         context["question_total_count"] = base_qs.count()
         context["draft_count"] = base_qs.filter(status=Question.Status.DRAFT).count()
         context["saved_count"] = base_qs.exclude(status=Question.Status.DRAFT).count()
-        context["draft_questions"] = list(
-            base_qs.filter(status=Question.Status.DRAFT)
-            .select_related("topic")
-            .order_by("-modified", "-pk")[:8]
-        )
         context["difficulty_counts"] = {
             "all": context["saved_count"],
             "easy": base_qs.filter(
@@ -775,6 +770,24 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
         topics = topics_for_course_section(self.course, self.request.user)
         subject = _subject_for_course(self.course)
+        saved_drafts_qs = Question.objects.none()
+        if subject is not None:
+            saved_drafts_qs = (
+                Question.objects.filter(
+                    topic__subject=subject,
+                    status=Question.Status.DRAFT,
+                )
+                .select_related("topic")
+                .order_by("-modified", "-pk")
+            )
+        saved_draft_count = saved_drafts_qs.count()
+        submitted_stems = []
+        if subject is not None:
+            submitted_stems = list(
+                Question.objects.filter(topic__subject=subject).values_list(
+                    "stem", flat=True
+                )
+            )
         return {
             "course": self.course,
             "active_tab": "questions",
@@ -782,6 +795,9 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             "topics": topics,
             "course_subject": subject,
             "learning_documents": ready_documents_for_course(self.course.pk),
+            "saved_drafts": list(saved_drafts_qs[:20]),
+            "saved_draft_count": saved_draft_count,
+            "submitted_stems": submitted_stems,
             "difficulty_choices": [
                 (Question.Difficulty.EASY, "Beginner"),
                 (Question.Difficulty.MEDIUM, "Intermediate"),
