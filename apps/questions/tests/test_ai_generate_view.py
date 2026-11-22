@@ -307,15 +307,24 @@ class TestQuestionAIGenerateView:
             {
                 "topic": topic.pk,
                 "difficulty": ["easy", "medium", "hard"],
-                "count": "9",
+                "count": "3",
                 "source_file": _sample_module_file(),
             },
         )
         assert response.status_code == 202
-        job = AIGenerationJob.objects.get(pk=response.json()["job_id"])
+        data = response.json()
+        assert data["per_difficulty_count"] == 3
+        assert data["count"] == 9
+        job = AIGenerationJob.objects.get(pk=data["job_id"])
         assert job.difficulty == "easy,medium,hard"
+        assert job.count == 9
         assert job.status == AIGenerationJob.Status.SUCCEEDED
         assert generator.generate.call_count == 3
+        assert [call.kwargs["count"] for call in generator.generate.call_args_list] == [
+            3,
+            3,
+            3,
+        ]
         stamped = [v["difficulty"] for v in job.result["variations"]]
         assert stamped == ["easy"] * 3 + ["medium"] * 3 + ["hard"] * 3
 
@@ -329,3 +338,40 @@ class TestQuestionAIGenerateView:
         assert 'data-difficulty="easy"' in html
         assert 'data-difficulty="medium"' in html
         assert 'data-difficulty="hard"' in html
+
+    @patch("apps.ai.job_services.threading.Thread", side_effect=_run_thread_inline)
+    @patch("apps.ai.job_services.get_question_generator")
+    def test_auto_difficulty_keeps_count_as_total(
+        self,
+        mock_get_generator,
+        _mock_thread,
+        client,
+        professor,
+        course_with_subject,
+        topic,
+    ):
+        generator = mock_get_generator.return_value
+        generator.generate.return_value = []
+        client.force_login(professor)
+        url = reverse(
+            "analytics_professor:question_ai_generate",
+            kwargs={"course_pk": course_with_subject.pk},
+        )
+        response = client.post(
+            url,
+            {
+                "topic": topic.pk,
+                "difficulty": "auto",
+                "count": "3",
+                "source_file": _sample_module_file(),
+            },
+        )
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["count"] == 3
+        assert data["per_difficulty_count"] == 3
+        job = AIGenerationJob.objects.get(pk=data["job_id"])
+        assert job.count == 3
+        assert generator.generate.call_args.args[1] == "auto"
+        assert generator.generate.call_args.kwargs["count"] == 3

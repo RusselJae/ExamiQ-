@@ -743,6 +743,27 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
         return render(request, self.template_name, context)
 
 
+def _batch_saved_embed_response(url: str) -> HttpResponse:
+    """Frame-safe success handoff for the batch modal iframe.
+
+    The question list is protected by X-Frame-Options: DENY, so redirecting
+    the iframe there renders Chrome's "refused to connect" page. Navigate the
+    top-level window instead.
+    """
+    import json
+
+    from django.utils.html import escape
+
+    return HttpResponse(
+        "<!doctype html><html><body>"
+        f'<p>Questions saved. <a href="{escape(url)}" target="_top">'
+        "Continue to the question bank</a>.</p>"
+        f"<script>window.top.location.replace({json.dumps(url)});</script>"
+        "</body></html>",
+        content_type="text/html",
+    )
+
+
 @method_decorator(xframe_options_sameorigin, name="dispatch")
 class QuestionBatchCreateView(ProfessorCourseMixin, View):
     """Batch question builder with AI generate/validate workflow."""
@@ -982,9 +1003,13 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     request,
                     f"Saved {created} draft question(s). Attest and publish when ready for students.",
                 )
-            return redirect(
-                "analytics_professor:question_list", course_pk=self.course.pk
+            target = reverse(
+                "analytics_professor:question_list",
+                kwargs={"course_pk": self.course.pk},
             )
+            if request.POST.get("embed") == "1":
+                return _batch_saved_embed_response(target)
+            return redirect(target)
         if not skipped_invalid and not skipped_duplicates:
             messages.warning(
                 request, "No questions were saved. Add at least one complete question."
@@ -1178,6 +1203,16 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
         count = max(1, count)
         if max_count > 0:
             count = min(count, max_count)
+        # The count field applies to each selected difficulty band. Keep the
+        # job's stored count as the total so progress and result truncation
+        # still use one consistent number.
+        difficulty_count = 1 if difficulty == "auto" else len(difficulties)
+        per_difficulty_count = count
+        if difficulty != "auto":
+            count = per_difficulty_count * difficulty_count
+            if max_count > 0 and count > max_count:
+                per_difficulty_count = max(1, max_count // difficulty_count)
+                count = per_difficulty_count * difficulty_count
 
         subject = _subject_for_course(self.course)
         if not subject:
@@ -1289,6 +1324,8 @@ class QuestionAIGenerateView(ProfessorCourseMixin, View):
                 "job_id": job.pk,
                 "status": job.status,
                 "topic_id": topic.pk,
+                "count": job.count,
+                "per_difficulty_count": per_difficulty_count,
                 # Lets the batch UI promote a just-uploaded file into the saved
                 # "Source material" picker instead of re-uploading it each run.
                 "learning_document_id": document.pk if document else None,

@@ -6,6 +6,8 @@ import pytest
 from django.urls import reverse
 
 from apps.ai.models import LearningDocument
+from apps.questions.models import Question
+from apps.users.models import Course
 
 
 @pytest.fixture
@@ -57,6 +59,7 @@ class TestBatchAddQuestionsScreen:
         # Band pills are still there next to the new control.
         assert 'id="settings-difficulty"' in content
         assert 'data-pill-max="3"' in content
+        assert "Questions per difficulty" in content
 
     def test_no_difficulty_is_selected_by_default(self, client, professor, course):
         """Switching courses must not pre-fill a difficulty band."""
@@ -93,6 +96,39 @@ class TestBatchAddQuestionsScreen:
             "Select a course subject to save questions.",
         ):
             assert removed not in markup
+
+    def test_embedded_submit_navigates_top_level_to_question_list(
+        self, client, professor, program, subject, topic
+    ):
+        course = Course.objects.create(
+            program=program,
+            code=subject.code,
+            name="Embed Batch Course",
+            professor=professor,
+        )
+        client.force_login(professor)
+        response = client.post(
+            self.url(course),
+            {
+                "embed": "1",
+                "topic": topic.pk,
+                "difficulty": Question.Difficulty.EASY,
+                "question_count": 1,
+                "stem_0": "What is 3 + 3?",
+                "correct_0": "A",
+                "concept_tag_0": "Addition",
+                "choice_0_A": "6",
+                "choice_0_B": "5",
+                "choice_0_C": "7",
+                "choice_0_D": "8",
+            },
+        )
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "window.top.location.replace" in content
+        assert "question bank" in content
+        assert Question.objects.filter(stem="What is 3 + 3?").exists()
 
     def test_batch_actions_include_validate_and_delete_selected(
         self, client, professor, course

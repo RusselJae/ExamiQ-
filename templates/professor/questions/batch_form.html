@@ -208,7 +208,7 @@
                 </div>
 
                 <div class="batch-settings-field question-modal__sidebar-section">
-                    <span class="batch-setup-label question-modal__sidebar-title" id="generate-count-label">Questions</span>
+                    <span class="batch-setup-label question-modal__sidebar-title" id="generate-count-label">Questions per difficulty</span>
                     <div class="batch-generate-count batch-generate-count--inline">
                         <div class="batch-stepper" data-stepper data-stepper-min="1" data-stepper-max="50">
                             <button type="button" class="batch-stepper__btn" data-stepper-dec aria-label="Decrease count">−</button>
@@ -407,6 +407,7 @@
     const sourceDropzone = document.querySelector("[data-source-dropzone]");
     const sourceClearBtn = document.querySelector("[data-source-clear-upload]");
     const generateCountInput = document.getElementById("ai-generate-count");
+    const generateCountLabel = document.getElementById("generate-count-label");
 
     const UPLOAD_PREFIX = "upload:";
     const UPLOAD_TRIGGER = "__upload__";
@@ -427,11 +428,24 @@
             n = 50;
             if (generateCountInput) generateCountInput.value = "50";
             if (window.showToast) {
-                window.showToast("Maximum is 50 questions per generate run.", "warning");
+                window.showToast("Maximum is 50 questions per difficulty.", "warning");
             }
         }
         if (generateCountInput) generateCountInput.value = String(n);
         return n;
+    }
+
+    function getGenerateTargetCount() {
+        const perDifficulty = getGenerateCount();
+        if (isAutoDifficulty()) return perDifficulty;
+        return perDifficulty * Math.max(1, selectedDifficulties().length);
+    }
+
+    function syncGenerateCountLabel() {
+        if (!generateCountLabel) return;
+        generateCountLabel.textContent = isAutoDifficulty()
+            ? "Questions"
+            : "Questions per difficulty";
     }
     let questionIndex = 0;
     let restoring = false;
@@ -1355,6 +1369,7 @@
     }
 
     function onSettingsChange() {
+        syncGenerateCountLabel();
         if (restoring) return;
         markDirty();
         window.ExamiQBatch.persist(batchConfig);
@@ -1846,7 +1861,7 @@
         if (window.ExamiQUI && window.ExamiQUI.setButtonLoading) {
             window.ExamiQUI.setButtonLoading(generateBtn, true, "Generating…");
         }
-        showGenerateLoading("Queued…", getGenerateCount());
+        showGenerateLoading("Queued…", getGenerateTargetCount());
         try {
             const result = await postGenerate();
             if (result.data.relevance_warning && window.showToast) {
@@ -1854,6 +1869,10 @@
             }
             if (!result.resp.ok || !result.data.status_url) {
                 throw new Error(result.data.error || "Generation failed. Please try again.");
+            }
+            if (result.data.count) {
+                generateTargetCount = result.data.count;
+                updateGenerateProgress(0, generateTargetCount, "pending");
             }
             if (result.data.topic_id) {
                 setTopicId(result.data.topic_id);
@@ -2241,6 +2260,7 @@
     });
 
     restoreDraft();
+    syncGenerateCountLabel();
     if (!questionIndex) syncCountInput();
 
     var embedClose = document.querySelector("[data-batch-embed-close]");
