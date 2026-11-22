@@ -334,6 +334,8 @@ data-steps-selector="[data-step-input]"
             choices: {},
             validation: null,
             faculty_attest: !!data.faculty_attest,
+            draft_id: data.draft_id || "",
+            topic_id: data.topic_id || "",
         };
         LETTERS.forEach(function(letter) {
             updated.choices[letter] = document.getElementById("edit-choice-" + letter).value;

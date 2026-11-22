@@ -268,40 +268,6 @@
     <div id="validate-modal-container"></div>
 
     {% if embed_mode %}<div class="batch-embed-main">{% endif %}
-    {% if saved_drafts %}
-    <section class="bento-card p-4 mb-4 batch-saved-drafts max-h-72 overflow-y-auto" aria-labelledby="batch-saved-drafts-heading">
-        <div class="flex items-center justify-between gap-3 mb-2">
-            <h2 id="batch-saved-drafts-heading" class="batch-draft-title">Saved drafts</h2>
-            <span class="questions-section__count">{{ saved_draft_count }}</span>
-        </div>
-        <p class="text-xs text-examiq-slate mb-3">
-            These questions are already saved but not published. Publish one to
-            remove it from this list.
-        </p>
-        <ul class="questions-draft-list">
-            {% for question in saved_drafts %}
-            <li class="questions-draft-card">
-                <div class="questions-draft-card__body">
-                    <p class="questions-draft-card__title">{{ question.stem|truncatechars:110 }}</p>
-                    <p class="questions-draft-card__meta">
-                        {{ question.topic.name }}
-                        &middot; {{ question.get_difficulty_display }}
-                        &middot; Draft
-                    </p>
-                </div>
-                <a class="btn-primary btn-primary-sm"
-                   target="_top"
-                   href="{% url 'analytics_professor:question_edit' course.pk question.pk %}">Review</a>
-            </li>
-            {% endfor %}
-        </ul>
-        {% if saved_draft_count > saved_drafts|length %}
-        <p class="text-xs text-examiq-slate mt-3">
-            Showing {{ saved_drafts|length }} of {{ saved_draft_count }} saved drafts.
-        </p>
-        {% endif %}
-    </section>
-    {% endif %}
     <div class="bento-card p-6 overflow-x-auto shadow-sm" id="draft-batch-card">
         <div class="batch-questions-toolbar">
             <div class="batch-questions-toolbar__copy">
@@ -388,6 +354,7 @@
 {% endif %}
 
 {{ submitted_stems|json_script:"submitted-question-stems" }}
+{{ draft_batch_questions|json_script:"draft-batch-data" }}
 {% endblock %}
 
 {% block extra_js %}
@@ -1070,12 +1037,28 @@
                 '<input type="hidden" name="steps_' + index + '" value="">' +
                 '<input type="hidden" name="adaptive_explanation_' + index + '" value="">' +
                 '<input type="hidden" name="solution_summary_' + index + '" value="">' +
-                '<input type="hidden" name="faculty_attest_' + index + '" value="0">';
+                '<input type="hidden" name="faculty_attest_' + index + '" value="0">' +
+                '<input type="hidden" name="draft_id_' + index + '" value="">' +
+                '<input type="hidden" name="topic_id_' + index + '" value="">';
             fieldsStore.appendChild(wrapper);
             return;
         }
         // Backfill validation fields for drafts created before per-row checkboxes.
         const wrapper = getField("stem_" + index).closest("[data-index]") || getField("stem_" + index).parentElement;
+        if (!getField("draft_id_" + index)) {
+            const draftId = document.createElement("input");
+            draftId.type = "hidden";
+            draftId.name = "draft_id_" + index;
+            draftId.value = "";
+            wrapper.appendChild(draftId);
+        }
+        if (!getField("topic_id_" + index)) {
+            const topicId = document.createElement("input");
+            topicId.type = "hidden";
+            topicId.name = "topic_id_" + index;
+            topicId.value = "";
+            wrapper.appendChild(topicId);
+        }
         if (!getField("faculty_attest_" + index)) {
             const attest = document.createElement("input");
             attest.type = "hidden";
@@ -1119,6 +1102,8 @@
             ai_generated: getField("ai_generated_" + index).value === "1",
             solution_summary: getField("solution_summary_" + index).value || "",
             faculty_attest: getField("faculty_attest_" + index).value === "1",
+            draft_id: getField("draft_id_" + index).value || "",
+            topic_id: getField("topic_id_" + index).value || "",
             steps: Array.isArray(steps) ? steps : [],
             adaptive_explanation: parseAdaptiveExplanation(
                 getField("adaptive_explanation_" + index).value
@@ -1149,6 +1134,10 @@
         getField("ai_generated_" + index).value = data.ai_generated ? "1" : "0";
         getField("solution_summary_" + index).value = data.solution_summary || "";
         getField("faculty_attest_" + index).value = data.faculty_attest ? "1" : "0";
+        getField("draft_id_" + index).value =
+            data.draft_id != null ? String(data.draft_id) : "";
+        getField("topic_id_" + index).value =
+            data.topic_id != null ? String(data.topic_id) : "";
         getField("steps_" + index).value = JSON.stringify(data.steps || []);
         getField("adaptive_explanation_" + index).value = JSON.stringify(
             data.adaptive_explanation || {}
@@ -1281,6 +1270,73 @@
             });
             draft.questionIndex = draft.questions.length;
             if (draft.questions.length !== before) {
+                window.ExamiQBatch.saveDraft(coursePk, draft);
+            }
+        }
+
+        const serverDraftsEl = document.getElementById("draft-batch-data");
+        let serverDrafts = [];
+        try {
+            serverDrafts = JSON.parse(
+                serverDraftsEl ? serverDraftsEl.textContent || "[]" : "[]"
+            );
+        } catch (e) {
+            serverDrafts = [];
+        }
+        if (Array.isArray(serverDrafts) && serverDrafts.length) {
+            let changed = false;
+            const stemKey = function (value) {
+                return String(value || "").trim().toLowerCase();
+            };
+            const byStem = new Map();
+            const byDraftId = new Set();
+            draft.questions.forEach(function (question) {
+                const key = stemKey(question && question.stem);
+                if (key) byStem.set(key, question);
+                if (question && question.draft_id) {
+                    byDraftId.add(String(question.draft_id));
+                }
+            });
+            serverDrafts.forEach(function (serverDraft) {
+                if (!serverDraft || !serverDraft.stem) return;
+                if (
+                    serverDraft.draft_id &&
+                    byDraftId.has(String(serverDraft.draft_id))
+                ) {
+                    return;
+                }
+                const key = stemKey(serverDraft.stem);
+                const existing = key ? byStem.get(key) : null;
+                if (existing) {
+                    if (!existing.draft_id && serverDraft.draft_id) {
+                        existing.draft_id = serverDraft.draft_id;
+                        byDraftId.add(String(serverDraft.draft_id));
+                        changed = true;
+                    }
+                    if (!existing.topic_id && serverDraft.topic_id) {
+                        existing.topic_id = serverDraft.topic_id;
+                        changed = true;
+                    }
+                    return;
+                }
+                draft.questions.push(serverDraft);
+                if (key) byStem.set(key, serverDraft);
+                if (serverDraft.draft_id) {
+                    byDraftId.add(String(serverDraft.draft_id));
+                }
+                changed = true;
+            });
+            if (!draft.settings.topicId) {
+                const withTopic = serverDrafts.find(function (item) {
+                    return item && item.topic_id;
+                });
+                if (withTopic) {
+                    draft.settings.topicId = String(withTopic.topic_id);
+                    changed = true;
+                }
+            }
+            draft.questionIndex = draft.questions.length;
+            if (changed) {
                 window.ExamiQBatch.saveDraft(coursePk, draft);
             }
         }
@@ -1547,9 +1603,11 @@
         return stems;
     }
 
-    async function postDraftStemsForExclusion(stems) {
+    async function postDraftStemsForExclusion(stems, draftIds) {
         // Record deleted/discarded stems so AI generation never exact-repeats them.
-        if (!stems || !stems.length) return true;
+        if ((!stems || !stems.length) && (!draftIds || !draftIds.length)) {
+            return true;
+        }
         if (!draftDeleteUrl) {
             if (window.showToast) {
                 window.showToast(
@@ -1572,7 +1630,10 @@
         const fd = new FormData();
         fd.append("csrfmiddlewaretoken", csrfToken);
         fd.append("topic_id", String(topicId));
-        fd.append("stems_json", JSON.stringify(stems));
+        fd.append("stems_json", JSON.stringify(stems || []));
+        if (draftIds && draftIds.length) {
+            fd.append("draft_ids_json", JSON.stringify(draftIds));
+        }
         try {
             let resp = await fetch(draftDeleteUrl, {
                 method: "POST",
@@ -1625,7 +1686,7 @@
             showConfirm({
                 title: "Delete " + picked.length + " question(s)?",
                 message:
-                    "This removes the selected questions from the batch. They are not saved yet.",
+                    "This removes the selected questions from the batch.",
                 type: "warning",
                 confirmLabel: "Delete",
             }).then(async function (ok) {
@@ -1638,7 +1699,12 @@
                         return (getQuestionData(index).stem || "").trim();
                     })
                     .filter(function (stem) { return stem; });
-                await postDraftStemsForExclusion(stems);
+                const draftIds = picked
+                    .map(function (index) {
+                        return getQuestionData(index).draft_id;
+                    })
+                    .filter(function (draftId) { return draftId; });
+                await postDraftStemsForExclusion(stems, draftIds);
                 picked
                     .slice()
                     .reverse()

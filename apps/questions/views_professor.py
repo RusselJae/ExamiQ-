@@ -44,6 +44,7 @@ from apps.questions.services import (
     generation_fit_meta,
     mistake_student_threshold,
     question_feedback_summary,
+    update_question,
 )
 from apps.questions.validation import validate_question_for_submit
 from apps.questions.views_curriculum import (
@@ -623,7 +624,19 @@ class QuestionDraftRemoveView(ProfessorCourseMixin, View):
                 reason=ExcludedQuestion.Reason.DRAFT_REMOVED,
             ):
                 excluded += 1
-        return JsonResponse({"topic_id": topic.pk, "excluded": excluded})
+        draft_ids = form.cleaned_data.get("draft_ids_json") or []
+        deleted = 0
+        if draft_ids:
+            draft_qs = Question.objects.filter(
+                pk__in=draft_ids,
+                topic__subject=subject,
+                status=Question.Status.DRAFT,
+            )
+            deleted = draft_qs.count()
+            draft_qs.delete()
+        return JsonResponse(
+            {"topic_id": topic.pk, "excluded": excluded, "deleted": deleted}
+        )
 
 
 class QuestionPublishView(ProfessorCourseMixin, View):
@@ -738,6 +751,36 @@ class QuestionBatchEditView(ProfessorCourseMixin, View):
         return render(request, self.template_name, context)
 
 
+def _draft_batch_payload(question: Question) -> dict:
+    """Serialize a saved DB draft into the client batch row shape."""
+    choices = list(question.choices.all())
+    choice_map = {choice.label: choice.text for choice in choices}
+    correct = next((c.label for c in choices if c.is_correct), "A")
+    steps = [
+        step.content
+        for step in question.explanation_steps.all()
+        if step.content.strip()
+    ]
+    adaptive = question.adaptive_explanation
+    return {
+        "draft_id": question.pk,
+        "topic_id": question.topic_id,
+        "stem": question.stem,
+        "correct": correct,
+        "concept": question.concept_tag,
+        "difficulty": question.difficulty,
+        "question_type": question.question_type,
+        "expected_answer": question.expected_answer,
+        "ai_generated": False,
+        "faculty_attest": False,
+        "solution_summary": "",
+        "steps": steps,
+        "adaptive_explanation": adaptive if isinstance(adaptive, dict) else {},
+        "choices": {label: choice_map.get(label, "") for label in ("A", "B", "C", "D")},
+        "validation": None,
+    }
+
+
 def _batch_saved_embed_response(url: str) -> HttpResponse:
     """Frame-safe success handoff for the batch modal iframe.
 
@@ -778,15 +821,18 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     status=Question.Status.DRAFT,
                 )
                 .select_related("topic")
+                .prefetch_related("choices", "explanation_steps")
                 .order_by("-modified", "-pk")
             )
-        saved_draft_count = saved_drafts_qs.count()
+        draft_batch_questions = [
+            _draft_batch_payload(question) for question in saved_drafts_qs[:50]
+        ]
         submitted_stems = []
         if subject is not None:
             submitted_stems = list(
-                Question.objects.filter(topic__subject=subject).values_list(
-                    "stem", flat=True
-                )
+                Question.objects.filter(topic__subject=subject)
+                .exclude(status=Question.Status.DRAFT)
+                .values_list("stem", flat=True)
             )
         return {
             "course": self.course,
@@ -795,8 +841,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             "topics": topics,
             "course_subject": subject,
             "learning_documents": ready_documents_for_course(self.course.pk),
-            "saved_drafts": list(saved_drafts_qs[:20]),
-            "saved_draft_count": saved_draft_count,
+            "draft_batch_questions": draft_batch_questions,
             "submitted_stems": submitted_stems,
             "difficulty_choices": [
                 (Question.Difficulty.EASY, "Beginner"),
@@ -817,14 +862,13 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
     def post(self, request, course_pk):
         topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.MEDIUM)
-        topic = (
-            topics_for_course_section(self.course, request.user)
-            .filter(pk=topic_id)
-            .first()
-        )
+        topics = list(topics_for_course_section(self.course, request.user))
+        topic = next((item for item in topics if str(item.pk) == str(topic_id)), None)
         if not topic:
             messages.error(request, "Select a valid topic before submitting.")
             return render(request, self.template_name, self.get_context_data())
+        topic_by_id = {str(item.pk): item for item in topics}
+        subject = _subject_for_course(self.course)
 
         try:
             count = int(request.POST.get("question_count", 0))
@@ -847,6 +891,23 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             stem = request.POST.get(f"stem_{index}", "").strip()
             if not stem:
                 continue
+            draft_id_raw = request.POST.get(f"draft_id_{index}", "").strip()
+            existing_draft = None
+            if draft_id_raw:
+                if not draft_id_raw.isdigit():
+                    skipped_invalid += 1
+                    continue
+                existing_draft = Question.objects.filter(
+                    pk=int(draft_id_raw),
+                    topic__subject=subject,
+                    status=Question.Status.DRAFT,
+                ).first()
+                if existing_draft is None:
+                    skipped_invalid += 1
+                    continue
+            row_topic = topic_by_id.get(
+                request.POST.get(f"topic_id_{index}", "").strip(), topic
+            )
             concept_tag = request.POST.get(f"concept_tag_{index}", "").strip()
             question_type = request.POST.get(
                 f"question_type_{index}", Question.QuestionType.MCQ
@@ -879,7 +940,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
             validation = validate_question_for_submit(
                 stem,
                 choices_data,
-                topic,
+                row_topic,
                 row_difficulty,
                 correct_label,
                 ai_enabled=False,
@@ -890,7 +951,11 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 skipped_invalid += 1
                 continue
 
-            normalized = find_duplicate_question(topic.pk, stem)
+            normalized = find_duplicate_question(
+                row_topic.pk,
+                stem,
+                exclude_pk=existing_draft.pk if existing_draft else None,
+            )
             if normalized:
                 skipped_duplicates.append(stem[:60])
                 continue
@@ -930,7 +995,7 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                     solution_summary=solution_summary,
                 )
             question_payload = {
-                "topic": topic,
+                "topic": row_topic,
                 "difficulty": row_difficulty,
                 "question_type": question_type,
                 "stem": stem,
@@ -953,11 +1018,19 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
                 ),
             }
 
-            question = create_question(
-                question_payload,
-                choices_data if question_type == Question.QuestionType.MCQ else [],
-                steps,
-            )
+            if existing_draft is not None:
+                question = update_question(
+                    existing_draft,
+                    question_payload,
+                    choices_data if question_type == Question.QuestionType.MCQ else [],
+                    steps,
+                )
+            else:
+                question = create_question(
+                    question_payload,
+                    choices_data if question_type == Question.QuestionType.MCQ else [],
+                    steps,
+                )
             if faculty_attest:
                 publish_question_as_faculty(
                     question,
@@ -974,8 +1047,15 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
 
             log_audit_event(
                 request.user,
-                AuditLog.Action.QUESTION_CREATE,
-                message=f"Created question #{question.pk}",
+                (
+                    AuditLog.Action.QUESTION_UPDATE
+                    if existing_draft is not None
+                    else AuditLog.Action.QUESTION_CREATE
+                ),
+                message=(
+                    f"{'Updated' if existing_draft is not None else 'Created'} "
+                    f"question #{question.pk}"
+                ),
                 target_type="Question",
                 target_id=question.pk,
             )

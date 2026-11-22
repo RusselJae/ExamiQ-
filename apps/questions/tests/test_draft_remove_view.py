@@ -5,7 +5,7 @@ import json
 import pytest
 from django.urls import reverse
 
-from apps.questions.models import ExcludedQuestion
+from apps.questions.models import ExcludedQuestion, Question
 from apps.questions.services import exclusion_set_for_topic, stem_fingerprint
 from apps.users.models import User
 
@@ -56,6 +56,7 @@ class TestQuestionDraftRemoveView:
         assert response.json() == {
             "topic_id": topic.pk,
             "excluded": 2,
+            "deleted": 0,
         }
         rows = list(
             ExcludedQuestion.objects.filter(topic=topic).values_list(
@@ -67,6 +68,29 @@ class TestQuestionDraftRemoveView:
             row.excluded_by_id == professor.pk
             for row in ExcludedQuestion.objects.filter(topic=topic)
         )
+
+    def test_saved_draft_ids_are_deleted_from_the_batch(
+        self, client, professor, course_with_subject, topic
+    ):
+        draft = Question.objects.create(
+            topic=topic,
+            stem="Saved draft to remove",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            status=Question.Status.DRAFT,
+        )
+        response = self._post(
+            client,
+            professor,
+            course_with_subject,
+            topic,
+            topic_id=str(topic.pk),
+            stems_json="[]",
+            draft_ids_json=json.dumps([draft.pk]),
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 1
+        assert not Question.objects.filter(pk=draft.pk).exists()
 
     def test_empty_stems_are_ignored(
         self, client, professor, course_with_subject, topic

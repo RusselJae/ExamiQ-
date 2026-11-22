@@ -1,5 +1,6 @@
 """Add-questions batch screen: source picker + draft batch actions."""
 
+import json
 import re
 
 import pytest
@@ -8,6 +9,16 @@ from django.urls import reverse
 from apps.ai.models import LearningDocument
 from apps.questions.models import Question
 from apps.users.models import Course
+
+
+def _json_script(content: str, element_id: str):
+    match = re.search(
+        rf'<script id="{element_id}" type="application/json">(.*?)</script>',
+        content,
+        re.DOTALL,
+    )
+    assert match, f"{element_id} JSON script missing"
+    return json.loads(match.group(1))
 
 
 @pytest.fixture
@@ -158,15 +169,56 @@ class TestBatchAddQuestionsScreen:
         overlay = client.get(
             self.url(course) + "?embed=1",
         ).content.decode()
-        assert "Saved drafts" in overlay
-        assert draft.stem in overlay
+        assert "Saved drafts" not in overlay
         assert "submitted-question-stems" in overlay
+        batch_data = _json_script(overlay, "draft-batch-data")
+        assert [item["draft_id"] for item in batch_data] == [draft.pk]
+        assert batch_data[0]["stem"] == draft.stem
 
         draft.status = Question.Status.APPROVED
         draft.save(update_fields=["status"])
         refreshed = client.get(self.url(course) + "?embed=1").content.decode()
         assert "Saved drafts" not in refreshed
-        assert f">{draft.stem}<" not in refreshed
+        assert _json_script(refreshed, "draft-batch-data") == []
+
+    def test_saved_draft_submission_updates_instead_of_duplicating(
+        self, client, professor, course, subject, topic
+    ):
+        subject.code = course.code
+        subject.save(update_fields=["code"])
+        draft = Question.objects.create(
+            topic=topic,
+            stem="Old draft stem",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            status=Question.Status.DRAFT,
+        )
+        client.force_login(professor)
+        response = client.post(
+            self.url(course),
+            {
+                "embed": "1",
+                "topic": topic.pk,
+                "difficulty": Question.Difficulty.EASY,
+                "question_count": 1,
+                "draft_id_0": draft.pk,
+                "topic_id_0": topic.pk,
+                "stem_0": "Updated draft stem",
+                "correct_0": "A",
+                "concept_tag_0": "Updated concept",
+                "faculty_attest_0": "1",
+                "choice_0_A": "1",
+                "choice_0_B": "2",
+                "choice_0_C": "3",
+                "choice_0_D": "4",
+            },
+        )
+
+        assert response.status_code == 200
+        draft.refresh_from_db()
+        assert draft.stem == "Updated draft stem"
+        assert draft.status == Question.Status.APPROVED
+        assert Question.objects.filter(topic=topic).count() == 1
 
     def test_batch_actions_include_validate_and_delete_selected(
         self, client, professor, course

@@ -252,6 +252,29 @@ class QuestionDraftRemoveForm(forms.Form):
 
     topic_id = forms.IntegerField(min_value=1)
     stems_json = forms.CharField()
+    draft_ids_json = forms.CharField(required=False)
+
+    def clean_draft_ids_json(self) -> list[int]:
+        import json
+
+        raw = (self.cleaned_data.get("draft_ids_json") or "").strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            raise forms.ValidationError("draft_ids_json must be a JSON array.")
+        if not isinstance(parsed, list):
+            raise forms.ValidationError("draft_ids_json must be a JSON array.")
+        ids: list[int] = []
+        for item in parsed[:MAX_DRAFT_REMOVE_STEMS]:
+            try:
+                value = int(item)
+            except (TypeError, ValueError):
+                continue
+            if value > 0 and value not in ids:
+                ids.append(value)
+        return ids
 
     def clean_stems_json(self) -> list[str]:
         import json
