@@ -1492,15 +1492,49 @@
 
     function findDuplicateStemsInQueue() {
         const seen = {};
+        const bank = {};
+        const savedStemsEl = document.getElementById("submitted-question-stems");
+        let savedStems = [];
+        try {
+            savedStems = JSON.parse(
+                savedStemsEl ? savedStemsEl.textContent || "[]" : "[]"
+            );
+        } catch (e) {
+            savedStems = [];
+        }
+        savedStems.forEach(function(savedStem) {
+            const key = normalizeStem(savedStem);
+            if (key) bank[key] = true;
+        });
+
         const duplicates = [];
         for (let i = 0; i < questionIndex; i++) {
             const stem = normalizeStem(getQuestionData(i).stem);
             if (!stem) continue;
-            if (seen[stem] !== undefined) {
+            let duplicateLabel = "";
+            if (bank[stem]) {
+                duplicateLabel = "the saved question bank";
+            } else if (seen[stem] !== undefined) {
+                duplicateLabel = "row " + (seen[stem] + 1);
+            }
+            if (duplicateLabel) {
                 duplicates.push(i + 1);
+                validationState[i] = {
+                    is_valid: false,
+                    feedback:
+                        "Duplicate question: matches " + duplicateLabel +
+                        ". Delete this row or edit the stem before submitting.",
+                    checked_at: Date.now(),
+                };
+                setFacultyAttest(i, false);
+                renderTableRow(i);
             } else {
                 seen[stem] = i;
             }
+        }
+        if (duplicates.length) {
+            syncBatchChrome();
+            window.ExamiQBatch.persist(batchConfig);
         }
         return duplicates;
     }
@@ -1792,7 +1826,11 @@
         if (dupes.length) {
             e.preventDefault();
             if (window.showToast) {
-                window.showToast("Duplicate questions in queue (rows: " + dupes.join(", ") + ").", "warning");
+                window.showToast(
+                    "Duplicate questions are marked Needs review (rows: " +
+                    dupes.join(", ") + "). Delete them before submitting.",
+                    "warning"
+                );
             }
             return;
         }
@@ -2040,9 +2078,6 @@
         showGenerateLoading("Queued…", getGenerateTargetCount());
         try {
             const result = await postGenerate();
-            if (result.data.relevance_warning && window.showToast) {
-                window.showToast(result.data.relevance_warning, "warning");
-            }
             if (!result.resp.ok || !result.data.status_url) {
                 throw new Error(result.data.error || "Generation failed. Please try again.");
             }
@@ -2312,11 +2347,28 @@
             const existingStems = {};
             for (let i = 0; i < questionIndex; i++) {
                 const key = normalizeStem(getQuestionData(i).stem);
-                if (key) existingStems[key] = true;
+                if (key) existingStems[key] = i;
             }
+            // Saved bank questions are duplicates too. Keep generated matches
+            // in the batch so faculty can review and delete them explicitly.
+            const savedStemsEl = document.getElementById("submitted-question-stems");
+            let savedStems = [];
+            try {
+                savedStems = JSON.parse(
+                    savedStemsEl ? savedStemsEl.textContent || "[]" : "[]"
+                );
+            } catch (e) {
+                savedStems = [];
+            }
+            savedStems.forEach(function(savedStem) {
+                const key = normalizeStem(savedStem);
+                if (key && existingStems[key] === undefined) {
+                    existingStems[key] = "bank";
+                }
+            });
             let nextIndex = findNextEmptyIndex();
             let applied = 0;
-            let skipped = 0;
+            let duplicates = 0;
             checked.forEach(function(cb) {
                 let steps = [];
                 if (cb.dataset.steps) {
@@ -2324,11 +2376,25 @@
                 }
                 const stem = cb.dataset.stem || "";
                 const stemKey = normalizeStem(stem);
-                if (stemKey && existingStems[stemKey]) {
-                    skipped += 1;
-                    return;
+                const duplicateMatch =
+                    stemKey && existingStems[stemKey] !== undefined
+                        ? existingStems[stemKey]
+                        : null;
+                let validation = null;
+                if (duplicateMatch !== null) {
+                    const duplicateLabel =
+                        duplicateMatch === "bank"
+                            ? "the saved question bank"
+                            : "row " + (duplicateMatch + 1);
+                    validation = {
+                        is_valid: false,
+                        feedback:
+                            "Duplicate question: matches " + duplicateLabel +
+                            ". Delete this row or edit the stem before submitting.",
+                        checked_at: Date.now(),
+                    };
+                    duplicates += 1;
                 }
-                if (stemKey) existingStems[stemKey] = true;
                 const data = {
                     stem: stem,
                     concept: cb.dataset.concept || "",
@@ -2351,33 +2417,39 @@
                     ),
                     expected_answer: cb.dataset.expected || "",
                     ai_generated: true,
+                    validation: validation,
                 };
                 ["A", "B", "C", "D"].forEach(function(letter) {
                     data.choices[letter] = cb.dataset["choice" + letter] || "";
                 });
+                let targetIndex;
                 if (nextIndex < questionIndex && !getQuestionData(nextIndex).stem.trim()) {
-                    setQuestionData(nextIndex, data);
-                    renderTableRow(nextIndex);
+                    targetIndex = nextIndex;
+                    setQuestionData(targetIndex, data);
+                    renderTableRow(targetIndex);
                     nextIndex += 1;
                 } else {
-                    addQuestion(data, false);
+                    targetIndex = addQuestion(data, false);
                     nextIndex = questionIndex;
+                }
+                if (stemKey && duplicateMatch === null) {
+                    existingStems[stemKey] = targetIndex;
                 }
                 applied += 1;
             });
+            syncBatchChrome();
             clearGenerateModal();
             window.ExamiQBatch.persist(batchConfig);
             applyInFlight = false;
             if (window.showToast) {
-                if (applied && skipped) {
+                if (applied && duplicates) {
                     window.showToast(
-                        "Applied " + applied + " question(s); skipped " + skipped + " duplicate(s).",
-                        "success"
+                        "Applied " + applied + " question(s); " + duplicates +
+                        " duplicate(s) marked Needs review.",
+                        "warning"
                     );
                 } else if (applied) {
                     window.showToast("Applied " + applied + " question(s) to the form.", "success");
-                } else if (skipped) {
-                    window.showToast("Skipped " + skipped + " duplicate question(s).", "info");
                 }
             }
             return;
@@ -2437,6 +2509,7 @@
     });
 
     restoreDraft();
+    findDuplicateStemsInQueue();
     syncGenerateCountLabel();
     if (!questionIndex) syncCountInput();
 

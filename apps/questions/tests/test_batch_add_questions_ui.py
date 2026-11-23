@@ -108,6 +108,18 @@ class TestBatchAddQuestionsScreen:
         )
         assert "syncBatchChrome();" in content
 
+    def test_generated_duplicates_stay_in_batch_for_review(
+        self, client, professor, course
+    ):
+        """Duplicates are added as Needs review rows instead of skipped."""
+        client.force_login(professor)
+        content = client.get(self.url(course)).content.decode()
+
+        assert "duplicate(s) marked Needs review" in content
+        assert "findDuplicateStemsInQueue();" in content
+        # The module/subject relevance warning is no longer surfaced as a toast.
+        assert "relevance_warning" not in content
+
     def test_ai_decides_sends_auto_flag(self):
         """AI decides submits a single "auto" difficulty, not all three bands."""
         from apps.ai.job_services import parse_job_difficulties, split_counts_across
