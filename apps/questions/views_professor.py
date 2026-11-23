@@ -1,9 +1,12 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -121,6 +124,9 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         elif active == "no":
             queryset = queryset.filter(is_active=False)
 
+        if get_filter_param(self.request, "recent") == "1":
+            queryset = queryset.filter(created__gte=timezone.now() - timedelta(days=7))
+
         # Saved questions list excludes drafts (shown in Needs review).
         queryset = queryset.exclude(status=Question.Status.DRAFT)
 
@@ -139,7 +145,7 @@ class QuestionListView(ProfessorCourseMixin, ListView):
             question.q_label = q_labels.get(question.pk, "")
         topics = topics_for_course_subject(self.course, self.request.user)
         context["course_subject"] = course_subject
-        filter_names = ["q", "topic", "difficulty", "active", "sort"]
+        filter_names = ["q", "topic", "difficulty", "active", "recent", "sort"]
         context["filter_form_fields"] = build_filter_fields(
             self.request,
             [
@@ -183,6 +189,9 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         )
         context["filter_has_active"] = has_active_filters(self.request, filter_names)
         context["filter_bar_compact"] = True
+        context["filter_preserve_params"] = (
+            [("recent", "1")] if get_filter_param(self.request, "recent") == "1" else []
+        )
         context["filter_bar_single_row"] = True
 
         base_qs = Question.objects.all()
@@ -193,6 +202,11 @@ class QuestionListView(ProfessorCourseMixin, ListView):
         context["question_total_count"] = base_qs.count()
         context["draft_count"] = base_qs.filter(status=Question.Status.DRAFT).count()
         context["saved_count"] = base_qs.exclude(status=Question.Status.DRAFT).count()
+        context["recent_count"] = (
+            base_qs.exclude(status=Question.Status.DRAFT)
+            .filter(created__gte=timezone.now() - timedelta(days=7))
+            .count()
+        )
         context["difficulty_counts"] = {
             "all": context["saved_count"],
             "easy": base_qs.filter(
@@ -860,20 +874,37 @@ class QuestionBatchCreateView(ProfessorCourseMixin, View):
         return render(request, self.template_name, self.get_context_data())
 
     def post(self, request, course_pk):
-        topic_id = request.POST.get("topic")
         difficulty = request.POST.get("difficulty", Question.Difficulty.MEDIUM)
-        topics = list(topics_for_course_section(self.course, request.user))
-        topic = next((item for item in topics if str(item.pk) == str(topic_id)), None)
-        if not topic:
-            messages.error(request, "Select a valid topic before submitting.")
-            return render(request, self.template_name, self.get_context_data())
-        topic_by_id = {str(item.pk): item for item in topics}
         subject = _subject_for_course(self.course)
 
         try:
             count = int(request.POST.get("question_count", 0))
         except (TypeError, ValueError):
             count = 0
+
+        topics = list(topics_for_course_section(self.course, request.user))
+        topic_by_id = {str(item.pk): item for item in topics}
+        # Saved drafts can carry a topic that is not in the top-level picker
+        # (for example a sub-topic). Keep those rows on their saved topic.
+        if subject is not None and professor_can_access_subject(
+            request.user, subject, course=self.course
+        ):
+            for item in Topic.objects.filter(subject=subject):
+                topic_by_id.setdefault(str(item.pk), item)
+
+        topic_id = (request.POST.get("topic") or "").strip()
+        topic = topic_by_id.get(topic_id)
+        if topic is None:
+            # Submitting existing drafts must not require the generation setup.
+            # Fall back to the first row topic so faculty can submit immediately.
+            for index in range(count):
+                row_topic_id = request.POST.get(f"topic_id_{index}", "").strip()
+                if row_topic_id in topic_by_id:
+                    topic = topic_by_id[row_topic_id]
+                    break
+        if not topic:
+            messages.error(request, "Select a valid topic before submitting.")
+            return render(request, self.template_name, self.get_context_data())
 
         created = 0
         skipped_invalid = 0

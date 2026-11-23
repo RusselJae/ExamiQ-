@@ -87,6 +87,10 @@
             </select>
         </div>
 
+        {% if document.description %}
+        <p class="materials-doc__description">{{ document.description|linebreaksbr }}</p>
+        {% endif %}
+
         <div class="materials-doc__rename hidden" data-doc-rename-row>
             <label class="materials-doc__rename-label" for="materials-doc-filename">File name</label>
             <input id="materials-doc-filename" name="original_name" value="{{ document.original_name }}"

@@ -9,12 +9,6 @@
 <div class="student-panel">
 <div class="overview-kpi-grid mb-6">
     <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.accuracy|floatformat:1 suffix="%" label="Overall accuracy" icon="target" variant="teal" %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.total_answers label="Questions answered" icon="book" variant="blue" %}
-    </div>
-    <div class="overview-kpi-grid__item">
         {% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" icon="calendar" variant="amber" %}
     </div>
     <div class="overview-kpi-grid__item">

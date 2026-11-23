@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 # Letters (incl. common accented Latin), spaces, hyphens, and apostrophes.
 NAME_PATTERN = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[ '\-][A-Za-zÀ-ÖØ-öø-ÿ]+)*$")
 NAME_MAX_LENGTH = 100
+PLACEHOLDER_NAMES = {"n/a", "none", "null", "-"}
 
 
 def clean_person_name(
@@ -16,7 +17,7 @@ def clean_person_name(
 ) -> str:
     """Normalize and validate a person name; raise ValidationError on failure."""
     cleaned = (value or "").strip()
-    if not cleaned:
+    if not cleaned or cleaned.casefold() in PLACEHOLDER_NAMES:
         if required:
             raise ValidationError(f"{field_label} is required.")
         return ""

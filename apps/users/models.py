@@ -338,10 +338,20 @@ class User(AbstractUser):
         return f"{self.email} ({self.get_role_display()})"
 
     def get_full_name(self) -> str:
+        placeholders = {"n/a", "none", "null", "-"}
         parts = [self.first_name, self.middle_name, self.last_name]
-        name = " ".join(part for part in parts if part).strip()
-        if self.suffix:
-            name = f"{name} {self.suffix}".strip()
+        clean_parts = [
+            ""
+            if (part or "").strip().casefold() in placeholders
+            else (part or "").strip()
+            for part in parts
+        ]
+        name = " ".join(part for part in clean_parts if part).strip()
+        suffix = (self.suffix or "").strip()
+        if suffix.casefold() in placeholders:
+            suffix = ""
+        if suffix:
+            name = f"{name} {suffix}".strip()
         return name
 
     @property

@@ -57,22 +57,27 @@
                 <h2 id="saved-questions-heading" class="questions-section__title">Saved questions</h2>
             </div>
 
-            <div class="questions-difficulty-chips" role="group" aria-label="Difficulty filters">
-                <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}{% if request.GET.topic %}topic={{ request.GET.topic }}&{% endif %}{% if request.GET.active %}active={{ request.GET.active }}&{% endif %}{% if request.GET.sort %}sort={{ request.GET.sort }}{% endif %}"
-                   class="questions-difficulty-chip{% if not request.GET.difficulty %} is-active{% endif %}">
-                    All · {{ difficulty_counts.all }}
+            <div class="questions-difficulty-chips" role="group" aria-label="Question filters">
+                <a href="{% querystring difficulty=None page=None %}"
+                   class="questions-difficulty-chip{% if not request.GET.difficulty and request.GET.recent != '1' %} is-active{% endif %}">
+                    All &middot; {{ difficulty_counts.all }}
                 </a>
-                <a href="?difficulty=easy{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.topic %}&topic={{ request.GET.topic }}{% endif %}{% if request.GET.active %}&active={{ request.GET.active }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+                <a href="{% querystring difficulty='easy' page=None %}"
                    class="questions-difficulty-chip{% if request.GET.difficulty == 'easy' %} is-active{% endif %}">
-                    Beginner · {{ difficulty_counts.easy }}
+                    Beginner &middot; {{ difficulty_counts.easy }}
                 </a>
-                <a href="?difficulty=medium{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.topic %}&topic={{ request.GET.topic }}{% endif %}{% if request.GET.active %}&active={{ request.GET.active }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+                <a href="{% querystring difficulty='medium' page=None %}"
                    class="questions-difficulty-chip{% if request.GET.difficulty == 'medium' %} is-active{% endif %}">
-                    Intermediate · {{ difficulty_counts.medium }}
+                    Intermediate &middot; {{ difficulty_counts.medium }}
                 </a>
-                <a href="?difficulty=hard{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.topic %}&topic={{ request.GET.topic }}{% endif %}{% if request.GET.active %}&active={{ request.GET.active }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+                <a href="{% querystring difficulty='hard' page=None %}"
                    class="questions-difficulty-chip{% if request.GET.difficulty == 'hard' %} is-active{% endif %}">
-                    Advanced · {{ difficulty_counts.hard }}
+                    Advanced &middot; {{ difficulty_counts.hard }}
+                </a>
+                <a href="{% if request.GET.recent == '1' %}{% querystring recent=None page=None %}{% else %}{% querystring recent='1' page=None %}{% endif %}"
+                   class="questions-difficulty-chip questions-difficulty-chip--recent{% if request.GET.recent == '1' %} is-active{% endif %}"
+                   title="Questions added in the last 7 days">
+                    Recently added &middot; {{ recent_count }}
                 </a>
             </div>
 

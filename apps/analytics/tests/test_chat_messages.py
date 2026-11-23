@@ -136,6 +136,18 @@ def test_student_dashboard_has_confidence_donut_without_mistakes_panel(client, s
 
 
 @pytest.mark.django_db
+def test_student_dashboard_hides_accuracy_and_answered_kpis(client, student):
+    client.force_login(student)
+    response = client.get(reverse("analytics_student:dashboard"))
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Overall accuracy" not in content
+    assert "Questions answered" not in content
+    assert "Sessions completed" in content
+    assert "Concepts to review" in content
+
+
+@pytest.mark.django_db
 def test_ai_tutor_modal_has_no_faculty_tab(client, student):
     client.force_login(student)
     response = client.get(reverse("analytics_student:dashboard"))

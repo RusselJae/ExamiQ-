@@ -332,7 +332,9 @@ class TestFacultyMaterialsUI:
         subject.program = bsed_program
         subject.save(update_fields=["program"])
         course = get_or_create_catalog_course(professor, subject)
-        _make_ready_doc(course=course, subject=subject, user=professor)
+        doc = _make_ready_doc(course=course, subject=subject, user=professor)
+        doc.description = "A short summary shown in the content library"
+        doc.save(update_fields=["description"])
 
         client.force_login(professor)
         response = client.get(
@@ -342,6 +344,7 @@ class TestFacultyMaterialsUI:
         assert response.status_code == 200
         assert "materials-library" in content
         assert "materials-download-btn" in content
+        assert doc.description in content
         # PDFs open the full-screen Edit content dialog.
         assert "materials-edit-btn" in content
         # Add/Edit happen in the shared content modal; Add content lives in

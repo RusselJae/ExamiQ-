@@ -28039,3 +28039,35 @@ body.professor-session-review .summary-widget {
         max-width: 100%;
     }
 }
+
+/* Material descriptions in Content Management and the material detail page. */
+.materials-library__description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    margin: 0.28rem 0 0;
+    color: #475569;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.materials-doc__description {
+    max-width: 75ch;
+    margin: 0.65rem 0 0;
+    color: var(--color-slate);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+    .materials-library__description {
+        -webkit-line-clamp: 3;
+    }
+}
+
+.questions-difficulty-chip--recent {
+    border-color: rgba(58, 122, 48, 0.22);
+}

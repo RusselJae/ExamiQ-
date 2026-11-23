@@ -172,7 +172,6 @@
                     <select id="settings-difficulty"
                             name="difficulty"
                             multiple
-                            required
                             class="sr-only"
                             aria-labelledby="difficulty-label"
                             tabindex="-1"
@@ -1237,6 +1236,24 @@
         return questionIndex;
     }
 
+    function firstRowTopicId() {
+        for (let i = 0; i < questionIndex; i++) {
+            const topicId = String(getQuestionData(i).topic_id || "").trim();
+            if (topicId) return topicId;
+        }
+        return "";
+    }
+
+    function ensureSubmitTopic() {
+        if (topicSelect && topicSelect.value) return true;
+        const fallbackTopicId = firstRowTopicId();
+        if (fallbackTopicId && topicSelect) {
+            topicSelect.value = fallbackTopicId;
+            return true;
+        }
+        return false;
+    }
+
     function setTopicId(id) {
         if (!topicSelect || !id) return;
         topicSelect.value = String(id);
@@ -1738,9 +1755,9 @@
             if (window.showToast) window.showToast("Select a course subject to save questions.", "warning");
             return;
         }
-        if (!topicSelect || !topicSelect.value) {
+        if (!ensureSubmitTopic()) {
             e.preventDefault();
-            if (window.showToast) window.showToast("No topic available for this course subject.", "warning");
+            if (window.showToast) window.showToast("No topic is available for these questions.", "warning");
             return;
         }
         const dupes = findDuplicateStemsInQueue();

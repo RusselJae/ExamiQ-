@@ -8,8 +8,11 @@ rows TC-F03 to TC-F05:
 * TC-F05 Publish question (faculty attestation)
 """
 
+from datetime import timedelta
+
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.questions.models import Question, Topic
 
@@ -118,6 +121,45 @@ class TestFacultyCreateQuestion:
         )
 
         assert response.status_code == 200
+
+    def test_recently_added_pill_filters_to_the_last_seven_days(
+        self, client, professor, course, topic
+    ):
+        recent = Question.objects.create(
+            topic=topic,
+            stem="Recently added question",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            status=Question.Status.APPROVED,
+            is_active=True,
+        )
+        old = Question.objects.create(
+            topic=topic,
+            stem="Older question",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            status=Question.Status.APPROVED,
+            is_active=True,
+        )
+        Question.objects.filter(pk=old.pk).update(
+            created=timezone.now() - timedelta(days=8)
+        )
+
+        client.force_login(professor)
+        response = client.get(
+            reverse(
+                "analytics_professor:question_list",
+                kwargs={"course_pk": course.pk},
+            )
+            + "?recent=1"
+        )
+
+        listed_ids = {question.pk for question in response.context["questions"]}
+        assert response.status_code == 200
+        assert recent.pk in listed_ids
+        assert old.pk not in listed_ids
+        assert response.context["recent_count"] == 1
+        assert "Recently added" in response.content.decode()
 
     def test_create_question_saves_a_draft(self, client, professor, course, topic):
         client.force_login(professor)

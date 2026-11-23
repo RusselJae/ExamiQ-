@@ -133,6 +133,29 @@ class TestProfileView:
         assert student.middle_name == "Q"
         assert student.get_full_name() == "Alex Q Student"
 
+    def test_update_middle_name_placeholder_clears_it(self, client, student):
+        client.force_login(student)
+        response = client.post(
+            reverse("users:profile"),
+            {
+                "action": "update_profile",
+                "first_name": "Alex",
+                "middle_name": "N/A",
+                "last_name": "Student",
+                **_student_profile_fields(student),
+            },
+        )
+        assert response.status_code == 302
+        student.refresh_from_db()
+        assert student.middle_name == ""
+        assert student.get_full_name() == "Alex Student"
+
+    def test_full_name_skips_a_stored_placeholder_middle_name(self, student):
+        student.first_name = "Alex"
+        student.middle_name = "N/A"
+        student.last_name = "Student"
+        assert student.get_full_name() == "Alex Student"
+
     def test_update_suffix(self, client, student):
         client.force_login(student)
         response = client.post(

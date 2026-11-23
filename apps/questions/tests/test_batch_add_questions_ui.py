@@ -83,6 +83,18 @@ class TestBatchAddQuestionsScreen:
         markup = re.sub(r"<script\b.*?</script>", "", content, flags=re.DOTALL)
         assert "Select at least one difficulty before generating." not in markup
 
+    def test_difficulty_is_not_required_for_submit(self, client, professor, course):
+        """Existing drafts must submit without touching generation settings."""
+        client.force_login(professor)
+        content = client.get(self.url(course)).content.decode()
+        select = re.search(
+            r'<select id="settings-difficulty".*?</select>',
+            content,
+            re.DOTALL,
+        )
+        assert select
+        assert "required" not in select.group(0)
+
     def test_ai_decides_sends_auto_flag(self):
         """AI decides submits a single "auto" difficulty, not all three bands."""
         from apps.ai.job_services import parse_job_difficulties, split_counts_across
@@ -218,6 +230,44 @@ class TestBatchAddQuestionsScreen:
         draft.refresh_from_db()
         assert draft.stem == "Updated draft stem"
         assert draft.status == Question.Status.APPROVED
+        assert Question.objects.filter(topic=topic).count() == 1
+
+    def test_saved_draft_submission_can_infer_topic_from_row(
+        self, client, professor, course, subject, topic
+    ):
+        """Submit all should not require the generation setup for saved drafts."""
+        subject.code = course.code
+        subject.save(update_fields=["code"])
+        draft = Question.objects.create(
+            topic=topic,
+            stem="Draft with its own topic",
+            difficulty=Question.Difficulty.EASY,
+            question_type=Question.QuestionType.MCQ,
+            status=Question.Status.DRAFT,
+        )
+        client.force_login(professor)
+        response = client.post(
+            self.url(course),
+            {
+                "embed": "1",
+                "question_count": 1,
+                "draft_id_0": draft.pk,
+                "topic_id_0": topic.pk,
+                "difficulty_0": Question.Difficulty.EASY,
+                "stem_0": "Draft submitted from its row topic",
+                "correct_0": "A",
+                "concept_tag_0": "Row topic concept",
+                "choice_0_A": "1",
+                "choice_0_B": "2",
+                "choice_0_C": "3",
+                "choice_0_D": "4",
+            },
+        )
+
+        assert response.status_code == 200
+        draft.refresh_from_db()
+        assert draft.stem == "Draft submitted from its row topic"
+        assert draft.topic_id == topic.pk
         assert Question.objects.filter(topic=topic).count() == 1
 
     def test_batch_actions_include_validate_and_delete_selected(

@@ -102,6 +102,9 @@
                 {% else %}
                 <p class="materials-library__name">{{ doc.display_title }}</p>
                 {% endif %}
+                {% if doc.description %}
+                <p class="materials-library__description" title="{{ doc.description }}">{{ doc.description|truncatechars:220 }}</p>
+                {% endif %}
                 <p class="materials-library__meta">
                     {% if doc.file_size_bytes %}<span>{{ doc.file_size_bytes|filesizeformat }}</span><span aria-hidden="true">·</span>{% endif %}
                     {% if doc.page_count %}<span>{{ doc.page_count }} page{{ doc.page_count|pluralize }}</span><span aria-hidden="true">·</span>{% endif %}
