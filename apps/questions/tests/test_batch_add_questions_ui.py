@@ -95,6 +95,19 @@ class TestBatchAddQuestionsScreen:
         assert select
         assert "required" not in select.group(0)
 
+    def test_validation_marks_rows_for_publish_before_submit(
+        self, client, professor, course
+    ):
+        """A validated row must not be re-saved as a draft on Submit all."""
+        client.force_login(professor)
+        content = client.get(self.url(course)).content.decode()
+
+        assert "markValidatedRowsForPublish();" in content
+        assert (
+            "if (!publishOptOut.has(index)) setFacultyAttest(index, true);" in content
+        )
+        assert "syncBatchChrome();" in content
+
     def test_ai_decides_sends_auto_flag(self):
         """AI decides submits a single "auto" difficulty, not all three bands."""
         from apps.ai.job_services import parse_job_difficulties, split_counts_across

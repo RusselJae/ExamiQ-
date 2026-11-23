@@ -452,6 +452,7 @@
     let restoring = false;
     let formDirty = false;
     const validationState = {};
+    const publishOptOut = new Set();
     const selectedRows = new Set();
     const showGenerateModalBtn = document.getElementById("show-generate-modal-btn");
     let generateModalHidden = false;
@@ -461,9 +462,30 @@
         formDirty = true;
     }
 
+    function setFacultyAttest(index, publish) {
+        ensureFieldsForIndex(index);
+        const attest = getField("faculty_attest_" + index);
+        if (attest) attest.value = publish ? "1" : "0";
+        const attestBox = tableBody.querySelector(
+            '[data-faculty-attest="' + index + '"]'
+        );
+        if (attestBox) attestBox.checked = publish;
+    }
+
+    function markValidatedRowsForPublish() {
+        for (let i = 0; i < questionIndex; i++) {
+            if (!validationState[i] || validationState[i].is_valid !== true) {
+                continue;
+            }
+            if (publishOptOut.has(i)) continue;
+            setFacultyAttest(i, true);
+        }
+    }
+
     function invalidateValidation(index) {
         if (validationState[index]) {
             delete validationState[index];
+            setFacultyAttest(index, false);
             renderTableRow(index);
         }
         syncBatchChrome();
@@ -1437,12 +1459,22 @@
         })
             .then(function(r) { return r.json(); })
             .then(function(result) {
+                const isValid = !!result.is_valid;
                 validationState[index] = {
-                    is_valid: !!result.is_valid,
+                    is_valid: isValid,
                     feedback: result.feedback || "",
                     checked_at: Date.now(),
                 };
+                // Validation is the faculty review gate. Once a row passes,
+                // mark it for publish so Submit all does not save it back as
+                // a draft. The Publish checkbox can still be unchecked.
+                if (isValid) {
+                    if (!publishOptOut.has(index)) setFacultyAttest(index, true);
+                } else {
+                    setFacultyAttest(index, false);
+                }
                 renderTableRow(index);
+                syncBatchChrome();
                 window.ExamiQBatch.persist(batchConfig);
                 if (showModal) showValidateModal(result);
                 return result;
@@ -1578,12 +1610,8 @@
             const data = getQuestionData(i);
             if (!data.stem.trim()) continue;
             if (!validationState[i] || validationState[i].is_valid !== true) continue;
-            ensureFieldsForIndex(i);
-            getField("faculty_attest_" + i).value = "1";
-            const attestBox = tableBody.querySelector(
-                '[data-faculty-attest="' + i + '"]'
-            );
-            if (attestBox) attestBox.checked = true;
+            publishOptOut.delete(i);
+            setFacultyAttest(i, true);
             count += 1;
         }
         if (!count) {
@@ -1784,6 +1812,7 @@
             }
             return;
         }
+        markValidatedRowsForPublish();
         formDirty = false;
         window.ExamiQBatch.clearDraft(coursePk);
         batchForm.submit();
@@ -2101,8 +2130,9 @@
         const attest = e.target.closest("[data-faculty-attest]");
         if (attest) {
             const index = parseInt(attest.getAttribute("data-faculty-attest"), 10);
-            ensureFieldsForIndex(index);
-            getField("faculty_attest_" + index).value = attest.checked ? "1" : "0";
+            setFacultyAttest(index, attest.checked);
+            if (attest.checked) publishOptOut.delete(index);
+            else publishOptOut.add(index);
             markDirty();
             window.ExamiQBatch.persist(batchConfig);
             return;
