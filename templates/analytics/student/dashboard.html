@@ -7,14 +7,7 @@
 {% include "components/page_header.html" with title="Your Dashboard" subtitle="Track confidence and mistakes across your practice sessions." cta_url="/student/review/setup/" cta_label="Start Review" %}
 
 <div class="student-panel">
-<div class="overview-kpi-grid mb-6">
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=summary.sessions_completed label="Sessions completed" icon="calendar" variant="amber" %}
-    </div>
-    <div class="overview-kpi-grid__item">
-        {% include "components/overview_stat_card.html" with value=concept_counts.active label="Concepts to review" icon="target" variant="warning" %}
-    </div>
-</div>
+{% include "components/student_kpi_panel.html" %}
 
 <div class="bento-grid mb-6">
     <div class="span-full">

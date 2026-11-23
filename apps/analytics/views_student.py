@@ -63,6 +63,9 @@ class StudentDashboardView(StudentRequiredMixin, TemplateView):
         context["donut_period_choices"] = DONUT_PERIOD_CHOICES
         context["summary"] = student_performance_summary(self.request.user)
         context["concept_counts"] = concept_status_counts(self.request.user)
+        session_count = context["summary"]["sessions_completed"]
+        context["student_session_dots"] = list(range(min(session_count, 12)))
+        context["student_session_dots_extra"] = max(session_count - 12, 0)
         context["recommendations"] = get_review_recommendations(
             self.request.user, limit=5
         )

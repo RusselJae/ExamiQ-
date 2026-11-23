@@ -7,31 +7,7 @@
 {% include "components/page_header.html" with title="Dashboard" show_live=True %}
 
 <div class="course-home-panel">
-    <div class="overview-kpi-grid mb-8">
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.subject_count|default:overview.course_count label="Courses" icon="book" variant="teal" %}</div>
-    <div class="overview-kpi-grid__item">{% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}</div>
-</div>
-
-{% if overview.students_by_year_level %}
-<section class="overview-year-levels mb-8" aria-labelledby="overview-year-levels-heading">
-    <h2 id="overview-year-levels-heading" class="overview-year-levels__title">Students by year level · Students handled</h2>
-    <ul class="overview-year-levels__list">
-        {% for row in overview.students_by_year_level %}
-        {% if row.count > 0 %}
-        <li>
-            <a href="{% url 'analytics_professor:students' %}?year_level={{ row.id }}"
-               class="overview-year-levels__item overview-year-levels__link"
-               aria-label="{{ row.count }} students in {{ row.name }}">
-                <span class="overview-year-levels__count">{{ row.count }}</span>
-                <span class="overview-year-levels__name">{{ row.name }}</span>
-                <svg class="overview-year-levels__arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-            </a>
-        </li>
-        {% endif %}
-        {% endfor %}
-    </ul>
-</section>
-{% endif %}
+    {% include "components/faculty_kpi_panel.html" %}
 
 <div class="faculty-quick-actions mb-6">
     <a href="{% url 'analytics_professor:course_list' %}" class="btn-secondary btn-primary-sm">View all courses</a>

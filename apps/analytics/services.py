@@ -1169,10 +1169,13 @@ def professor_overview_summary(professor: User) -> dict:
     )
 
     student_count = len(professor_scope_student_ids(professor))
+    course_dot_count = min(subject_count, 12)
 
     return {
         "course_count": subject_count,
         "subject_count": subject_count,
+        "course_dots": list(range(course_dot_count)),
+        "course_dots_extra": max(subject_count - course_dot_count, 0),
         "expected_students": enrolled_bsed_student_count(),
         "students_by_year_level": handled_students_by_year_level(professor),
         "student_count": student_count,

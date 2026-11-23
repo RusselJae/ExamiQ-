@@ -6,20 +6,7 @@
 {% include "components/page_header.html" with title="Your Courses" subtitle="Open a handled course to manage content, questions, and student performance." %}
 
 <div class="course-home-panel">
-    <div class="overview-kpi-grid mb-6">
-        <div class="overview-kpi-grid__item">
-            {% include "components/overview_stat_card.html" with value=overview.subject_count label="Courses" icon="book" variant="teal" %}
-        </div>
-        <div class="overview-kpi-grid__item">
-            {% include "components/overview_stat_card.html" with value=overview.student_count label="Students handled" icon="users" variant="blue" %}
-        </div>
-        <div class="overview-kpi-grid__item">
-            {% include "components/overview_stat_card.html" with value=overview.accuracy|floatformat:1 suffix="%" label="Overall accuracy" icon="target" variant="amber" %}
-        </div>
-        <div class="overview-kpi-grid__item">
-            {% include "components/overview_stat_card.html" with value=overview.total_sessions label="Completed sessions" icon="calendar" variant="neutral" subtext=overview.sessions_subtext %}
-        </div>
-    </div>
+    {% include "components/faculty_kpi_panel.html" %}
 
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>

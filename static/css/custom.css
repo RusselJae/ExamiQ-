@@ -28071,3 +28071,242 @@ body.professor-session-review .summary-widget {
 .questions-difficulty-chip--recent {
     border-color: rgba(58, 122, 48, 0.22);
 }
+
+/* Unified dashboard KPI strip: faculty teaching load + student practice. */
+.dashboard-kpi-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+    background:
+        radial-gradient(circle at 22% -20%, rgba(134, 239, 172, 0.14), transparent 40%),
+        linear-gradient(135deg, #194d37 0%, #123c2b 66%, #0f3324 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1.1rem;
+    box-shadow: 0 16px 32px rgba(15, 51, 36, 0.14);
+}
+
+.dashboard-kpi {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+    padding: 1.35rem 1.5rem 1.25rem;
+}
+
+.dashboard-kpi--secondary {
+    border-left: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.dashboard-kpi__body {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.dashboard-kpi__watermark {
+    position: absolute;
+    top: 0.75rem;
+    right: 1rem;
+    width: 7.5rem;
+    height: 7.5rem;
+    color: #d8f3e3;
+    opacity: 0.10;
+    pointer-events: none;
+}
+
+.dashboard-kpi__watermark svg {
+    width: 100%;
+    height: 100%;
+}
+
+.dashboard-kpi__label {
+    margin: 0 0 0.55rem;
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.dashboard-kpi__value-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.55rem 1rem;
+}
+
+.dashboard-kpi__value {
+    margin: 0;
+    color: #fff;
+    font-family: var(--font-serif);
+    font-size: clamp(2.3rem, 4vw, 3.15rem);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+}
+
+.dashboard-kpi__context {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.dashboard-kpi--secondary .dashboard-kpi__context {
+    margin-top: 0.65rem;
+}
+
+.dashboard-kpi__bar {
+    display: flex;
+    gap: 0.28rem;
+    width: 100%;
+    height: 0.4rem;
+    margin-top: 1rem;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+}
+
+.dashboard-kpi__bar-seg {
+    display: block;
+    min-width: 0.25rem;
+    border-radius: 999px;
+}
+
+.dashboard-kpi__bar-seg--1,
+.dashboard-kpi__legend-dot--1 {
+    background: #86efac;
+}
+
+.dashboard-kpi__bar-seg--2,
+.dashboard-kpi__legend-dot--2 {
+    background: #7dd3fc;
+}
+
+.dashboard-kpi__bar-seg--3,
+.dashboard-kpi__legend-dot--3 {
+    background: #c4b5fd;
+}
+
+.dashboard-kpi__bar-seg--4,
+.dashboard-kpi__legend-dot--4 {
+    background: #fcd34d;
+}
+
+.dashboard-kpi__bar-seg--5,
+.dashboard-kpi__legend-dot--5 {
+    background: #fdba74;
+}
+
+.dashboard-kpi__bar-seg--warning,
+.dashboard-kpi__legend-dot--warning {
+    background: #fcd34d;
+}
+
+.dashboard-kpi__bar-seg--info,
+.dashboard-kpi__legend-dot--info {
+    background: #7dd3fc;
+}
+
+.dashboard-kpi__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.1rem;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashboard-kpi__legend li {
+    min-width: 0;
+}
+
+.dashboard-kpi__legend-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    text-decoration: none;
+}
+
+.dashboard-kpi__legend-link:hover {
+    color: #fff;
+}
+
+.dashboard-kpi__legend-dot {
+    flex-shrink: 0;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+}
+
+.dashboard-kpi__legend-count {
+    color: rgba(255, 255, 255, 0.52);
+}
+
+.dashboard-kpi__legend-count::before {
+    content: "\00b7";
+    margin-right: 0.3rem;
+    color: rgba(255, 255, 255, 0.36);
+}
+
+.dashboard-kpi__dots {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 0.45rem;
+    margin-top: 0.7rem;
+}
+
+.dashboard-kpi__dot {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-kpi__dots-more {
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 0.72rem;
+    line-height: 1;
+}
+
+@media (max-width: 760px) {
+    .dashboard-kpi-panel {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dashboard-kpi {
+        padding: 1.15rem 1.2rem;
+    }
+
+    .dashboard-kpi--secondary {
+        border-top: 1px solid rgba(255, 255, 255, 0.16);
+        border-left: none;
+    }
+
+    .dashboard-kpi__watermark {
+        width: 5.5rem;
+        height: 5.5rem;
+        opacity: 0.08;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-kpi__value {
+        font-size: 2.35rem;
+    }
+
+    .dashboard-kpi__legend {
+        gap: 0.4rem 0.75rem;
+    }
+}
