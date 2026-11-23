@@ -28029,3 +28029,13 @@ body.professor-session-review .summary-widget {
     color: var(--color-navy);
     font-weight: 500;
 }
+
+/* Outgoing chat messages span the row; only the bubble is capped, so the
+   conversation sits against the right edge instead of the 75% breakpoint. */
+@media (max-width: 639px) {
+    .examiq-chat-msg--out {
+        align-self: stretch;
+        width: 100%;
+        max-width: 100%;
+    }
+}
